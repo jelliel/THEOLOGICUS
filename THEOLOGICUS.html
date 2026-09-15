@@ -18243,6 +18243,20 @@ initTafsirVerseTooltip();
   function getBubble(){ return document.getElementById('atc-bubble'); }
   function hideBubble(){ const b = getBubble(); if (b) b.style.display = 'none'; }
 
+  /* v41 — interface tactile ? (telephone, tablette, APK)
+     Deux consequences, toutes liees au fait que le survol n'existe pas au
+     doigt et qu'un tap emet un evenement `mouseover` :
+       1. la bulle de selection est reduite a « Add to chat » ;
+       2. l'infobulle d'annotation ne s'ouvre plus au survol.
+     Globale volontairement : les deux points d'usage ne sont pas forcement
+     dans la meme portee. */
+  window.__THEO_TOUCH_UI = function(){
+    try {
+      if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return true;
+      return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    } catch(e){ return false; }
+  };
+
   /* ── Menu de couleurs du surlignage ── */
   const MARK_COLORS = [
     { key:'yellow', css:'#ffeb3b', label:'Jaune' },
@@ -18460,15 +18474,29 @@ initTafsirVerseTooltip();
   function showBubble(){
     const s = window._atcSel; if (!s) return;
     const b = ensureBubble(); b.style.display = 'flex';
-    /* Sélection hors message (mode universel) : on masque les actions qui
-       exigent un message porteur (annotation, note, surlignage, formes). */
     const universal = !s.msgTs;
-    const hideIfUniversal = ['.atc-note-btn', '.atc-act[data-act="hl"]', '.atc-act[data-act="insert"]'];
-    hideIfUniversal.forEach(function(q){
-      const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
-    });
-    const delBtn = b.querySelector('.atc-del-ann');
-    if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
+    /* v41 — au doigt, on ne garde que « Add to chat ». Les 11 autres actions
+       (Note, Google, Wikipedia, Bible, Bible Hub, Surligner, Partager,
+       Encadrer, Lire, Question, Traduire) sont trop serrees pour le doigt et
+       un double tap ouvrait « Encadrer » au lieu d'ajouter au chat. */
+    const touch = !!(window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI());
+    if (touch) {
+      b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
+        .forEach(function(n){ n.style.display = 'none'; });
+      const only = b.querySelector('.atc-main:not(.atc-note-btn)');
+      if (only) only.style.display = '';
+    } else {
+      b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
+        .forEach(function(n){ n.style.display = ''; });
+      /* Sélection hors message (mode universel) : on masque les actions qui
+         exigent un message porteur (annotation, note, surlignage, formes). */
+      ['.atc-note-btn', '.atc-act[data-act="hl"]', '.atc-act[data-act="insert"]']
+        .forEach(function(q){
+          const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
+        });
+      const delBtn = b.querySelector('.atc-del-ann');
+      if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
+    }
     const w = b.offsetWidth || 160;
     let x = s.rect.left + s.rect.width/2 - w/2;
     x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
@@ -19637,6 +19665,11 @@ initTafsirVerseTooltip();
   }
 
   cc && cc.addEventListener('mouseover', function(e){
+    /* v41 — au doigt, le navigateur emet un `mouseover` a chaque tap : toucher
+       un passage annote ouvrait l'infobulle au lieu de laisser selectionner le
+       texte. Le survol n'a pas de sens au doigt, on ne l'utilise plus comme
+       declencheur. Le bureau (souris) garde le comportement d'origine. */
+    if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) return;
     const hl = e.target.closest ? e.target.closest('.atc-hl') : null;
     if (hl) showTipFor(hl);
   });
@@ -24128,6 +24161,14 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }
   #atc-bubble { padding: 10px 14px; }
   #atc-bubble button { min-height: 40px; min-width: 40px; }
+  /* v41 — les actions de la bulle sont des <span>, pas des <button> : la
+     regle ci-dessus ne les touchait pas. « Add to chat » est desormais la
+     seule action au doigt, elle doit faire 44 px et rester lisible. */
+  #atc-bubble .atc-main {
+    min-height: 44px; min-width: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 14px; font-size: 14px;
+  }
   /* Neutralise les tailles ID+!important trop petites pour le tactile */
   #tpai-arch-search { font-size: 16px !important; }
   #v6-palette input { font-size: 16px !important; }
