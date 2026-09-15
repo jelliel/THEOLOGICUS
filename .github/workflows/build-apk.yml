@@ -59,6 +59,8 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Prepare web assets (mobile/www)
+        env:
+          APK_VERSION_NAME: '1.0.${{ github.run_number }}'
         run: python3 tools/prepare_mobile.py
 
       - name: Capacitor sync
@@ -112,8 +114,69 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-v1.0.${{ github.run_number }}
-          name: THEOLOGICUS APK v1.0.${{ github.run_number }}
+          name: THEOLOGICUS v1.0.${{ github.run_number }}
           files: output/*.apk
+          overwrite_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller pywebview pythonnet clr-loader
+
+      - name: Build exe (PyInstaller)
+        run: >-
+          python -m PyInstaller --noconfirm --clean --windowed --name THEOLOGICUS
+          --icon THEOLOGICUS.ico
+          --hidden-import webview.platforms.winforms
+          --hidden-import webview.platforms.edgechromium
+          --hidden-import clr_loader
+          --hidden-import pythonnet
+          --collect-all webview --collect-all pythonnet --collect-all clr_loader
+          app.py
+
+      - name: Copy data files + version stamp
+        shell: pwsh
+        run: |
+          Copy-Item THEOLOGICUS.html dist/THEOLOGICUS/
+          foreach ($d in 'bible','quran','tafsir','libs') { Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force }
+          Copy-Item THEOLOGICUS.ico dist/THEOLOGICUS/
+          Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
+          python tools/stamp_version.py dist/THEOLOGICUS
+
+      - name: Zip portable build into output/
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output | Out-Null
+          Compress-Archive -Path dist/THEOLOGICUS -DestinationPath output/THEOLOGICUS-portable-win64.zip -Force
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: THEOLOGICUS-windows
+          path: output/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Windows build to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-v1.0.${{ github.run_number }}
+          name: THEOLOGICUS v1.0.${{ github.run_number }}
+          files: output/THEOLOGICUS-portable-win64.zip
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -41,6 +41,9 @@ rem a chaque build — les destinataires collent leur propre cle dans l'app.
 rem (Votre cle de developpement reste dans .\theologicus_keys.json.)
 py -3.12 -c "import json; json.dump({'mistral': ''}, open('dist/THEOLOGICUS/theologicus_keys.json', 'w', encoding='utf-8'), indent=2)" || goto :err
 
+rem v40 : tampon de version (VERSION -> HTML + version.txt dans dist)
+py -3.12 tools\stamp_version.py || goto :err
+
 echo [3/5] Signature de l'exe...
 if exist "%SIGNTOOL%" (
   "%SIGNTOOL%" sign /f %PFX% /p %PFP% /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com "dist\THEOLOGICUS\THEOLOGICUS.exe" || goto :err

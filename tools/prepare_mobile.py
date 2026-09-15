@@ -54,6 +54,19 @@ def main() -> int:
     if old_vp not in src:
         print("AVERTISSEMENT : viewport standard non trouve — copie sans patch viewport")
     html_out = src.replace(old_vp, new_vp, 1)
+    # Tampon de version : APK_VERSION_NAME (CI) sinon fichier VERSION a la racine.
+    version = os.environ.get("APK_VERSION_NAME", "").strip()
+    if not version:
+        try:
+            with open(os.path.join(ROOT, "VERSION"), encoding="utf-8") as vf:
+                version = vf.read().strip()
+        except OSError:
+            version = ""
+    if version:
+        html_out = html_out.replace("__THEO_VERSION__", version, 1)
+        with open(os.path.join(OUT, "version.txt"), "w", encoding="utf-8") as vf:
+            vf.write(version + "\n")
+        print("  version : " + version)
     with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8", newline="") as f:
         f.write(html_out)
 

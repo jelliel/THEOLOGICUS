@@ -24178,6 +24178,46 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }, 250);
 })();
 </script>
+<script id="v40-version">
+/* THEOLOGICUS v40 — numéro de version affiché dans PARAMÈTRES.
+   Source : window.__APK_VERSION__ (mobile, tamponné par prepare_mobile.py)
+   sinon version.txt à côté de la page (desktop build) sinon « dev ». */
+(function () {
+  'use strict';
+  var STAMPED = '__THEO_VERSION__';
+  function detect(cb) {
+    if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
+    if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'version.txt?_=' + Date.now(), true);
+      xhr.onload = function () { cb(xhr.status === 200 ? String(xhr.responseText).trim() : 'dev'); };
+      xhr.onerror = function () { cb('dev'); };
+      xhr.send();
+    } catch (e) { cb('dev'); }
+  }
+  function render(v) {
+    if (!v) return;
+    window.THEO_VERSION = v;
+    var host = document.getElementById('tpai-version-row');
+    if (host) host.textContent = 'THEOLOGICUS v' + v;
+  }
+  detect(render);
+  var tries = 0;
+  var t = setInterval(function () {
+    tries++;
+    var body = document.querySelector('[data-acc="params"] .tpai-acc-body');
+    if (!body) { if (tries > 160) clearInterval(t); return; }
+    if (document.getElementById('tpai-version-row')) { clearInterval(t); return; }
+    var row = document.createElement('div');
+    row.id = 'tpai-version-row';
+    row.style.cssText = 'margin:10px 4px 2px;padding:8px 10px;text-align:center;font-size:10px;color:var(--text-dim);border-top:1px solid var(--glass-border, rgba(255,255,255,0.12));letter-spacing:.4px';
+    body.appendChild(row);
+    render(window.THEO_VERSION || 'dev');
+    clearInterval(t);
+  }, 250);
+})();
+</script>
 <style id="theo-force-text-select">
   html, body { user-select: text !important; -webkit-user-select: text !important; }
   .message, .message-content, .atc-hl, .atc-mark { user-select: text !important; -webkit-user-select: text !important; }
