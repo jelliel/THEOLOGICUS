@@ -95,16 +95,27 @@
    logiciel, le layout viewport (vh) reste parfois plus petit que
    l'ecran visible, ce qui ecrase l'app dans une bande au milieu de
    l'ecran (zones noires au-dessus et en-dessous). On force donc
-   --app-h sur le visual viewport (window.innerHeight) qui se
-   restaure apres la fermeture du du. Inerte hors coque native. */
+   --app-h sur le visual viewport (window.visualViewport.height),
+   qui se restaure apres la fermeture du du. innerHeight peut etre
+   corrompu aussi sur certains WebView, donc on le garde seulement
+   en repli. Inerte hors coque native. */
 (function () {
   if (!window.Capacitor || !window.Capacitor.isNativePlatform || !window.Capacitor.isNativePlatform()) return;
+  function readH() {
+    try { return (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0; }
+    catch (e) { return window.innerHeight || 0; }
+  }
   function setH() {
-    try { document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px'); } catch (e) {}
+    var h = readH();
+    if (!h) return;
+    try { document.documentElement.style.setProperty('--app-h', h + 'px'); } catch (e) {}
   }
   setH();
   window.addEventListener('resize', setH);
   window.addEventListener('orientationchange', setH);
+  if (window.visualViewport && window.visualViewport.addEventListener) {
+    window.visualViewport.addEventListener('resize', setH);
+  }
 })();
 </script>
 <link rel="icon" type="image/x-icon" href="THEOLOGICUS.ico">
