@@ -155,7 +155,8 @@ jobs:
           foreach ($d in 'bible','quran','tafsir','libs') { Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force }
           Copy-Item THEOLOGICUS.ico dist/THEOLOGICUS/
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
-          python tools/stamp_version.py dist/THEOLOGICUS
+          $v = "1.0.$($env:GITHUB_RUN_NUMBER)"
+          python tools/stamp_version.py dist/THEOLOGICUS $v
 
       - name: Zip portable build into output/
         shell: pwsh
