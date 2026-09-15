@@ -8242,8 +8242,23 @@ function apiEndpoint(endpoint) {
     if (!endpoint) return endpoint;
     if (location.protocol === 'file:') return endpoint;
     if (endpoint.startsWith('http://127.0.0.1') || endpoint.startsWith('http://localhost')) return endpoint;
+    /* v43 — APK : le proxy CORS local (proxy_server.py) n'existe pas sur le
+       telephone. Sans ce cas, l'appel partait sur https://localhost/proxy/...
+       et echouait -> « Erreur API ». Or ce proxy ne fait que relayer les
+       en-tetes (Authorization / x-api-key) et le corps : il n'injecte aucune
+       cle. Appeler le fournisseur directement est donc equivalent. */
+    if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return endpoint;
     return '/proxy/' + endpoint;
   } catch (e) { return endpoint; }
+}
+/* Anthropic refuse un appel navigateur sans cet en-tete explicite. Sur
+   desktop tout passait par le proxy (cote serveur), d'ou son absence. */
+function anthropicHeaders(cfg) {
+  const h = { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' };
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    h['anthropic-dangerous-direct-browser-access'] = 'true';
+  }
+  return h;
 }
 
 async function callLLM(cfg, messages, opts) {
@@ -8258,7 +8273,7 @@ async function callLLM(cfg, messages, opts) {
     const url = apiEndpoint(cfg.endpoint);
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: anthropicHeaders(cfg),
       body: JSON.stringify(Object.assign({ model: cfg.model, max_tokens: maxTok, temperature: temp, messages: hist }, sysObj))
     });
     if (!res.ok) { await throwApiError(res, cfg.model); }
@@ -8314,7 +8329,7 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
     const url = apiEndpoint(cfg.endpoint);
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'x-api-key': cfg.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      headers: anthropicHeaders(cfg),
       body: JSON.stringify(Object.assign({ model: cfg.model, max_tokens: maxTok, temperature: temp, messages: hist, stream: true }, sysObj))
     });
     if (!res.ok) { await throwApiError(res, cfg.model); }
@@ -20512,6 +20527,28 @@ body{ margin:0; }
 }
 #v6-more-menu .hud-btn:hover{ background:var(--accent-dim); border-color:transparent; color:var(--accent); }
 #v6-more-menu .hud-btn[data-v6-danger]:hover{ color:var(--danger); background:rgba(255,69,58,.1); }
+/* v43 — portrait : « recherche » et « Plus » etaient pousses hors de l'ecran
+   (mesure : bord droit a 414 px pour un ecran de 412). On leur reserve la
+   place et on laisse le reste de la barre se comprimer. Le menu lui-meme
+   recoit une hauteur max : sans elle, sur un ecran court, les dernieres
+   entrees (STATS, zone critique) deviennent inatteignables. */
+@media screen and (max-width: 640px) {
+  /* La barre a plus de contenu que l'ecran n'a de place : laisser les
+     elements se comprimer ne suffit pas (le groupe glissait a 437 px pour
+     un ecran de 412). On reserve la place a droite et on ancre le groupe
+     en absolu : il reste atteignable quel que soit le contenu. */
+  #v6-topbar { position: relative; gap: 4px; padding: 0 104px 0 8px; }
+  #v6-topbar .v6-grp { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  #v6-topbar #v6-right-grp {
+    position: absolute; right: 6px; top: 0; bottom: 0;
+    flex: none; display: flex; align-items: center; gap: 4px; overflow: visible;
+  }
+  #v6-more-menu {
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    max-height: calc(100vh - 70px);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+}
 
 /* ── 3. rail lateral persistent (desktop) ── */
 @media (min-width:901px){
@@ -20641,6 +20678,11 @@ body{ margin:0; }
   /* groupe droit : statut + thème + recherche + plus */
   var grp = document.createElement('div');
   grp.className = 'v6-grp';
+  /* v43 — en portrait ce groupe (recherche + "Plus") etait pousse hors de
+     l'ecran : mesure a 414 px de large pour un ecran de 412. Comme v6 y a
+     deplace tous les boutons de modals, ils devenaient inaccessibles.
+     L'id permet au CSS de lui reserver sa place. */
+  grp.id = 'v6-right-grp';
 
   var apiStatus = $('api-status');
   if (apiStatus) grp.appendChild(apiStatus);
