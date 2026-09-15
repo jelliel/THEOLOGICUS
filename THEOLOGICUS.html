@@ -18479,24 +18479,20 @@ initTafsirVerseTooltip();
        (Note, Google, Wikipedia, Bible, Bible Hub, Surligner, Partager,
        Encadrer, Lire, Question, Traduire) sont trop serrees pour le doigt et
        un double tap ouvrait « Encadrer » au lieu d'ajouter au chat. */
-    const touch = !!(window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI());
-    if (touch) {
-      b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
-        .forEach(function(n){ n.style.display = 'none'; });
-      const only = b.querySelector('.atc-main:not(.atc-note-btn)');
-      if (only) only.style.display = '';
-    } else {
-      b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
-        .forEach(function(n){ n.style.display = ''; });
-      /* Sélection hors message (mode universel) : on masque les actions qui
-         exigent un message porteur (annotation, note, surlignage, formes). */
-      ['.atc-note-btn', '.atc-act[data-act="hl"]', '.atc-act[data-act="insert"]']
-        .forEach(function(q){
-          const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
-        });
-      const delBtn = b.querySelector('.atc-del-ann');
-      if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
-    }
+    /* v42 — la bulle retrouve TOUTES ses actions, y compris au doigt. Le
+       probleme n'etait pas leur presence mais leur taille : cibles a 44 px
+       et bulle repliable sur plusieurs lignes (CSS v42) au lieu d'un rabot
+       qui supprime des fonctions. */
+    b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
+      .forEach(function(n){ n.style.display = ''; });
+    /* Sélection hors message (mode universel) : on masque les actions qui
+       exigent un message porteur (annotation, note, surlignage, formes). */
+    const hideIfUniversal = ['.atc-note-btn', '.atc-act[data-act="hl"]', '.atc-act[data-act="insert"]'];
+    hideIfUniversal.forEach(function(q){
+      const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
+    });
+    const delBtn = b.querySelector('.atc-del-ann');
+    if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
     const w = b.offsetWidth || 160;
     let x = s.rect.left + s.rect.width/2 - w/2;
     x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
@@ -18551,6 +18547,34 @@ initTafsirVerseTooltip();
     clearTimeout(_scTimer);
     _scTimer = setTimeout(detectSelectionAndShow, 220);
   });
+
+  /* v42 — double-tap = encadrer la selection.
+     Detecte a la main : `dblclick` est deja utilise ailleurs (renommage d'une
+     conversation) et n'est pas toujours emis par WebView Android. Reserve au
+     tactile, pour ne rien changer aux usages du double-clic au bureau. */
+  var _tapT = 0, _tapX = 0, _tapY = 0;
+  document.addEventListener('touchend', function(e){
+    if (!window.__THEO_TOUCH_UI || !window.__THEO_TOUCH_UI()) return;
+    var t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    var now = Date.now();
+    if (now - _tapT < 350 && Math.abs(t.clientX - _tapX) < 40 && Math.abs(t.clientY - _tapY) < 40) {
+      _tapT = 0;
+      setTimeout(function(){
+        detectSelectionAndShow();          /* remplit window._atcSel */
+        var s = window._atcSel;
+        if (!s || !s.msgTs) return;        /* l'encadrement exige un message */
+        hideBubble();
+        openInsertMenuAt({ msgTs: s.msgTs, selRect: s.rect,
+          clientX: (s.rect ? s.rect.left + s.rect.width / 2 : 10),
+          clientY: (s.rect ? s.rect.top + s.rect.height / 2 : 10) });
+        /* le timer selectionchange peut rafficher la bulle juste apres */
+        setTimeout(hideBubble, 300);
+      }, 200);
+    } else {
+      _tapT = now; _tapX = t.clientX; _tapY = t.clientY;
+    }
+  }, { passive: true });
 
   document.addEventListener('mousedown', function(e){ if (!e.target.closest || !e.target.closest('#atc-bubble')) hideBubble(); });
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape'){ hideBubble(); closeAtcTip(); } });
@@ -24161,14 +24185,23 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }
   #atc-bubble { padding: 10px 14px; }
   #atc-bubble button { min-height: 40px; min-width: 40px; }
-  /* v41 — les actions de la bulle sont des <span>, pas des <button> : la
-     regle ci-dessus ne les touchait pas. « Add to chat » est desormais la
-     seule action au doigt, elle doit faire 44 px et rester lisible. */
-  #atc-bubble .atc-main {
-    min-height: 44px; min-width: 44px;
-    display: inline-flex; align-items: center; justify-content: center;
-    padding: 0 14px; font-size: 14px;
+  /* v42 — la bulle garde TOUTES ses actions au doigt. Elles debordaient de
+     l'ecran etaient donc trop petites : la bulle se replie desormais sur
+     plusieurs lignes et chaque cible fait 44 px. Les separateurs
+     deviennent inutiles une fois replie. */
+  #atc-bubble {
+    flex-wrap: wrap; justify-content: center; row-gap: 6px;
+    max-width: calc(100vw - 16px);
   }
+  #atc-bubble .atc-main,
+  #atc-bubble .atc-act,
+  #atc-bubble .atc-share {
+    min-height: 44px; min-width: 44px; font-size: 15px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 10px;
+  }
+  #atc-bubble .atc-main { padding: 0 14px; font-size: 14px; }
+  #atc-bubble .atc-sep { display: none; }
   /* Neutralise les tailles ID+!important trop petites pour le tactile */
   #tpai-arch-search { font-size: 16px !important; }
   #v6-palette input { font-size: 16px !important; }
