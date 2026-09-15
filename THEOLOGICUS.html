@@ -3393,6 +3393,7 @@ body {
   backdrop-filter: blur(10px);
 }
 #setup-wizard-overlay.active { display: flex; animation: overlayIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+#setup-wizard-overlay:not(.active) { pointer-events: none; }
 .wizard-box {
   background: var(--deep);
   border: var(--hud-border);
@@ -16460,7 +16461,7 @@ if (document.readyState === 'loading') {
   const $id = id => document.getElementById(id);
   const clickIf = id => { const e = $id(id); if (e) { e.click(); return true; } return false; };
   const focusIf = id => { const e = $id(id); if (e) { e.focus(); return true; } return false; };
-  const closeSidebarMobile = () => { if (window.innerWidth <= 820) $id('tpai-shell')?.classList.remove('sidebar-open'); };
+  const closeSidebarMobile = () => { if (window.innerWidth <= 1023) $id('tpai-shell')?.classList.remove('sidebar-open'); };
 
   // Show a single view (chat | hero | features | contact | archives) in the content area
   const setView = v => {
@@ -20854,7 +20855,7 @@ body{ margin:0; }
   });
 
   /* ── rail : conversations en premier ── */
-  shell.classList.add('sidebar-open');
+  if (window.innerWidth >= 1024) shell.classList.add('sidebar-open');
   var side = $('tpai-sidebar');
   if (side) {
     var arch = $('tpai-arch');
@@ -24110,6 +24111,73 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }
 }
 </style>
+<script id="v39-mobile-fixes">
+/* THEOLOGICUS v39 — correctifs mobile sidebar + acces MODE PERFORMANCES.
+   1. Filet de secu : cliquer une conversation / « Chat » ferme la sidebar
+      en overlay (<= 1023px), meme si un autre module rouvre le rail.
+   2. Interrupteur ⚡ MODE PERFORMANCES dans le menu « Plus » (v6),
+      meme cle localStorage que le panneau Personnaliser (v35). */
+(function () {
+  'use strict';
+  var KEY = 'theologicus-reduce-fx';
+  var CLS = 'v35-reduce-fx';
+
+  /* ── 1. fermeture sidebar : conversation/Chat choisi, ou clic hors du rail ── */
+  document.addEventListener('click', function (e) {
+    if (window.innerWidth > 1023) return;
+    var sh = document.getElementById('tpai-shell');
+    if (!sh || !sh.classList.contains('sidebar-open')) return;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    /* sélection d'une conversation ou retour Chat → fermer le tiroir */
+    if (t.closest('.archive-item') || t.closest('[data-act="view-chat"]')) {
+      sh.classList.remove('sidebar-open');
+      return;
+    }
+    /* on laisse passer : le rail lui-meme, la barre de (burger/menus), le menu Plus */
+    if (t.closest('.tpai-sidebar')) return;
+    if (t.closest('#v6-topbar')) return;
+    if (t.closest('#v6-more-menu')) return;
+    sh.classList.remove('sidebar-open');
+  }, true);
+
+  /* ── 2. interrupteur dans le menu Plus ── */
+  function isOn() {
+    try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+  }
+  function set(v) {
+    try { localStorage.setItem(KEY, v ? '1' : '0'); } catch (e) {}
+    if (v) document.documentElement.classList.add(CLS);
+    else document.documentElement.classList.remove(CLS);
+    if (window.__V35 && window.__V35.refresh) window.__V35.refresh();
+    var b = document.getElementById('v39-fx-toggle');
+    if (b) b.textContent = '\u26A1 MODE PERFORMANCES : ' + (isOn() ? 'ON' : 'OFF');
+  }
+  var tries = 0;
+  var t = setInterval(function () {
+    tries++;
+    var m = document.getElementById('v6-more-menu');
+    if (!m) { if (tries > 160) clearInterval(t); return; }
+    if (document.getElementById('v39-fx-toggle')) { clearInterval(t); return; }
+    var l = document.createElement('div');
+    l.className = 'mm-label';
+    l.textContent = 'Performance';
+    var b = document.createElement('button');
+    b.className = 'hud-btn';
+    b.type = 'button';
+    b.id = 'v39-fx-toggle';
+    b.title = 'Coupe flous, ombres et animations (GPU faible)';
+    b.textContent = '\u26A1 MODE PERFORMANCES : ' + (isOn() ? 'ON' : 'OFF');
+    b.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      set(!isOn());
+    });
+    m.appendChild(l);
+    m.appendChild(b);
+    clearInterval(t);
+  }, 250);
+})();
+</script>
 <style id="theo-force-text-select">
   html, body { user-select: text !important; -webkit-user-select: text !important; }
   .message, .message-content, .atc-hl, .atc-mark { user-select: text !important; -webkit-user-select: text !important; }
