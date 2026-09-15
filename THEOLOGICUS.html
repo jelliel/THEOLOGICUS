@@ -23948,11 +23948,139 @@ html[data-theme="v6-cyber"] #v37-tip{ background:rgba(18,12,28,.96); }
 
 </script>
 
+<script id="v35-reduce-fx-js">
+/* THEOLOGICUS v35 — mode performances (GPU faible / mobile).
+   html.v35-reduce-fx pose avant le premier rendu ; interrupteur
+   injecte dans Personnaliser l'interface (au-dessus de Enregistrer). */
+(function () {
+  'use strict';
+  var KEY = 'theologicus-reduce-fx';
+  var CLS = 'v35-reduce-fx';
+  function isOn() {
+    try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; }
+  }
+  function apply() {
+    if (isOn()) document.documentElement.classList.add(CLS);
+    else document.documentElement.classList.remove(CLS);
+    var lab = document.getElementById('v35-reduce-fx-toggle');
+    if (lab) lab.textContent = '⚡ MODE PERFORMANCES : ' + (isOn() ? 'ON' : 'OFF');
+  }
+  function set(v) {
+    try { localStorage.setItem(KEY, v ? '1' : '0'); } catch (e) {}
+    apply();
+  }
+  if (isOn()) document.documentElement.classList.add(CLS); /* avant 1er rendu */
+  window.__V35 = { isOn: isOn, set: set, refresh: apply };
+  var tries = 0;
+  var t = setInterval(function () {
+    tries++;
+    var host = document.querySelectorAll('.tpai-cz-actions');
+    host = host.length ? host[host.length - 1] : null; /* celui d Enregistrer */
+    if (!host) { if (tries > 160) clearInterval(t); return; }
+    if (document.getElementById('v35-reduce-fx-toggle')) { clearInterval(t); return; }
+    var row = document.createElement('label');
+    row.className = 'v35-fx-row';
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = isOn();
+    cb.addEventListener('change', function () { set(cb.checked); });
+    var lab = document.createElement('span');
+    lab.id = 'v35-reduce-fx-toggle';
+    lab.textContent = '⚡ MODE PERFORMANCES : ' + (isOn() ? 'ON' : 'OFF');
+    row.appendChild(cb);
+    row.appendChild(lab);
+    host.parentNode.insertBefore(row, host);
+    clearInterval(t);
+  }, 250);
+})();
+</script>
 <!-- Garde-fou anti user-select:none : pywebview (text_select=False par défaut)
      injecte body{user-select:none} qui tue la sélection de texte dans toute
      l'app (bulle AddToChat, surlignage, copies de versets). Ce style chargé
      en dernier rétablit la sélection partout, sauf sur les éléments d'UI
      volontairement non sélectionnables (bulles, menus, watermarks). -->
+<style id="v35-reduce-fx">
+/* v35 — Mode performances : coupe flous, ombres et animations couteuses.
+   Active via html.v35-reduce-fx (interrupteur "MODE PERFORMANCES"). */
+html.v35-reduce-fx, html.v35-reduce-fx *,
+html.v35-reduce-fx *::before, html.v35-reduce-fx *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.v35-reduce-fx * { text-shadow: none !important; }
+html.v35-reduce-fx .message, html.v35-reduce-fx .tpai-cz-panel,
+html.v35-reduce-fx .section, html.v35-reduce-fx [class*="glass"] {
+  box-shadow: none !important;
+}
+html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after {
+  animation-duration: .001s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001s !important;
+  scroll-behavior: auto !important;
+}
+/* Respect du reglage OS "reduire les animations" */
+@media (prefers-reduced-motion: reduce) {
+  html *, html *::before, html *::after {
+    animation-duration: .001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001s !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Ligne interrupteur injectee dans Personnaliser l'interface */
+.v35-fx-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; margin: 10px 0;
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15); cursor: pointer;
+  font-size: 13px; color: var(--text-primary); user-select: none;
+}
+</style>
+<style id="v35-touch-css">
+/* v35 — Tactile : cibles >= 44px + safe-area (telephones / tablettes).
+   Gate : pointer:coarse → zero effet souris/desktop. */
+@media (pointer: coarse) {
+  .btn-ghost, .tpai-cz-btn, .bg-type-btn, .hud-btn, .archives-back-btn,
+  .tpai-cz-presets button, .gl-gen-toggle, .bg-controls label {
+    min-height: 44px;
+  }
+  .btn-ghost, .tpai-cz-btn, .bg-type-btn, .hud-btn, .archives-back-btn {
+    min-width: 44px;
+    padding: 12px 18px;
+    font-size: 15px;
+  }
+  .gl-gen-toggle, .bg-controls label { cursor: pointer; }
+  input[type="checkbox"] { width: 22px; height: 22px; }
+  input[type="range"] { min-height: 28px; }
+  .tpai-cz-slider input[type="range"] { height: 30px; }
+  input[type="text"], input[type="search"], input[type="email"],
+  input[type="password"], select, textarea {
+    min-height: 44px;
+    font-size: 16px !important; /* 16px = pas de zoom auto au focus sur mobile */
+  }
+  #atc-bubble { padding: 10px 14px; }
+  #atc-bubble button { min-height: 40px; min-width: 40px; }
+  /* Neutralise les tailles ID+!important trop petites pour le tactile */
+  #tpai-arch-search { font-size: 16px !important; }
+  #v6-palette input { font-size: 16px !important; }
+  /* Barre HUD v12 : 34px → 40px (cible tactile) */
+  .v12-bar > button:not(#send-btn):not(#export-chat-btn) {
+    width: 40px !important; height: 40px !important; min-width: 40px !important;
+  }
+  .v12-bar > #send-btn {
+    width: 40px !important; height: 40px !important; min-width: 40px !important;
+  }
+  .v12-bar > #export-chat-btn { height: 40px !important; font-size: 13px !important; }
+}
+@supports (padding: max(0px)) {
+  @media (pointer: coarse) {
+    body {
+      padding-left: max(env(safe-area-inset-left), 0px);
+      padding-right: max(env(safe-area-inset-right), 0px);
+    }
+  }
+}
+</style>
 <style id="theo-force-text-select">
   html, body { user-select: text !important; -webkit-user-select: text !important; }
   .message, .message-content, .atc-hl, .atc-mark { user-select: text !important; -webkit-user-select: text !important; }
