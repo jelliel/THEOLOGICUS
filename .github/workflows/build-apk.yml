@@ -1,5 +1,14 @@
 name: Build Android APK
 
+# Construit THEOLOGICUS.apk (debug + release signe si le keystore est fourni).
+#
+# Secrets attendus (Settings > Secrets and variables > Actions) :
+#   APK_KEYSTORE_B64   keystore JKS encode en base64  (optionnel)
+#   APK_KEYSTORE_PASS  mot de passe du keystore       (optionnel)
+#   APK_KEYSTORE_ALIAS alias de la cle                  (defaut : theologicus)
+#
+# Sans ces secrets, seule la variante debug est produite.
+
 on:
   workflow_dispatch:
   push:
@@ -11,7 +20,10 @@ on:
       - 'tafsir/**'
       - 'libs/**'
       - 'android/**'
-      - 'tools/prepare_mobile.py'
+      - 'tools/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -27,8 +39,16 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Prepare web assets (mobile/www)
         run: python3 tools/prepare_mobile.py
@@ -53,6 +73,8 @@ jobs:
           APK_KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_B64 }}
           APK_KEYSTORE_PASS: ${{ secrets.APK_KEYSTORE_PASS }}
           APK_KEYSTORE_ALIAS: ${{ secrets.APK_KEYSTORE_ALIAS }}
+          APK_VERSION_CODE: ${{ github.run_number }}
+          APK_VERSION_NAME: '1.0.${{ github.run_number }}'
         run: |
           cd android
           chmod +x gradlew
@@ -70,3 +92,4 @@ jobs:
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
+          retention-days: 30
