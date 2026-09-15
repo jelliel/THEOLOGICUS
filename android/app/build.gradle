@@ -1,0 +1,75 @@
+apply plugin: 'com.android.application'
+
+// Signature release optionnelle : fournies par CI (secrets GitHub) ou environnement local.
+// Sans APK_KEYSTORE_B64, la release est simplement non signee (debug APK toujours produite).
+def keystoreB64 = System.getenv("APK_KEYSTORE_B64")
+def keystorePass = System.getenv("APK_KEYSTORE_PASS")
+def keystoreAlias = System.getenv("APK_KEYSTORE_ALIAS") ?: "theologicus"
+
+android {
+    signingConfigs {
+        release {
+            if (keystoreB64) {
+                def ksFile = file("${rootDir}/release.keystore")
+                new FileOutputStream(ksFile).write(keystoreB64.decodeBase64())
+                storeFile ksFile
+                storePassword keystorePass
+                keyAlias keystoreAlias
+                keyPassword keystorePass
+            }
+        }
+    }
+    namespace = "com.theologicus.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.theologicus.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode (System.getenv("APK_VERSION_CODE") ? System.getenv("APK_VERSION_CODE").toInteger() : 1)
+        versionName System.getenv("APK_VERSION_NAME") ?: "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystoreB64) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
