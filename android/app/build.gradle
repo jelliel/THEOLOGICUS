@@ -6,6 +6,25 @@ def keystoreB64 = System.getenv("APK_KEYSTORE_B64")
 def keystorePass = System.getenv("APK_KEYSTORE_PASS")
 def keystoreAlias = System.getenv("APK_KEYSTORE_ALIAS") ?: "theologicus"
 
+// Version automatique : le versionCode est derive du nombre de commits git,
+// donc il s'incremente tout seul a chaque commit. APK_VERSION_CODE (CI ou
+// lancement manuel) garde la priorite. Repli sur 1 si git est indisponible.
+def gitCommitCount = {
+    try {
+        def out = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-list', '--count', 'HEAD'
+            standardOutput = out
+            errorOutput = new ByteArrayOutputStream()
+        }
+        return out.toString().trim().toInteger()
+    } catch (Exception e) {
+        logger.info("git indisponible, versionCode de repli = 1")
+        return 1
+    }
+}
+def autoVersionCode = System.getenv("APK_VERSION_CODE") ? System.getenv("APK_VERSION_CODE").toInteger() : gitCommitCount()
+
 android {
     signingConfigs {
         release {
@@ -25,8 +44,8 @@ android {
         applicationId "com.theologicus.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (System.getenv("APK_VERSION_CODE") ? System.getenv("APK_VERSION_CODE").toInteger() : 1)
-        versionName System.getenv("APK_VERSION_NAME") ?: "1.0"
+        versionCode autoVersionCode
+        versionName System.getenv("APK_VERSION_NAME") ?: "1.0.${autoVersionCode}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

@@ -35,6 +35,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # profondeur complete : le versionCode vient de `git rev-list --count HEAD`
+          fetch-depth: 0
+
+      - name: Compute version from commit count
+        run: |
+          N=$(git rev-list --count HEAD)
+          echo "VERSION_CODE=$N" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=1.0.$N" >> "$GITHUB_ENV"
+          echo "Version : code=$N nom=1.0.$N"
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -60,7 +70,7 @@ jobs:
 
       - name: Prepare web assets (mobile/www)
         env:
-          APK_VERSION_NAME: '1.0.${{ github.run_number }}'
+          APK_VERSION_NAME: '${{ env.VERSION_NAME }}'
         run: python3 tools/prepare_mobile.py
 
       - name: Capacitor sync
@@ -83,8 +93,8 @@ jobs:
           APK_KEYSTORE_B64: ${{ secrets.APK_KEYSTORE_B64 }}
           APK_KEYSTORE_PASS: ${{ secrets.APK_KEYSTORE_PASS }}
           APK_KEYSTORE_ALIAS: ${{ secrets.APK_KEYSTORE_ALIAS }}
-          APK_VERSION_CODE: ${{ github.run_number }}
-          APK_VERSION_NAME: '1.0.${{ github.run_number }}'
+          APK_VERSION_CODE: ${{ env.VERSION_CODE }}
+          APK_VERSION_NAME: '${{ env.VERSION_NAME }}'
         run: |
           cd android
           chmod +x gradlew
@@ -113,8 +123,8 @@ jobs:
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk-v1.0.${{ github.run_number }}
-          name: THEOLOGICUS v1.0.${{ github.run_number }}
+          tag_name: apk-v${{ env.VERSION_NAME }}
+          name: THEOLOGICUS v${{ env.VERSION_NAME }}
           files: output/*.apk
           overwrite_files: true
         env:
@@ -126,6 +136,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute version from commit count
+        shell: bash
+        run: |
+          N=$(git rev-list --count HEAD)
+          echo "VERSION_NAME=1.0.$N" >> "$GITHUB_ENV"
+          echo "Version : nom=1.0.$N"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -155,7 +174,7 @@ jobs:
           foreach ($d in 'bible','quran','tafsir','libs') { Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force }
           Copy-Item THEOLOGICUS.ico dist/THEOLOGICUS/
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
-          $v = "1.0.$($env:GITHUB_RUN_NUMBER)"
+          $v = "$env:VERSION_NAME"
           python tools/stamp_version.py dist/THEOLOGICUS $v
 
       - name: Zip portable build into output/
@@ -175,8 +194,8 @@ jobs:
       - name: Publish Windows build to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk-v1.0.${{ github.run_number }}
-          name: THEOLOGICUS v1.0.${{ github.run_number }}
+          tag_name: apk-v${{ env.VERSION_NAME }}
+          name: THEOLOGICUS v${{ env.VERSION_NAME }}
           files: output/THEOLOGICUS-portable-win64.zip
           overwrite_files: true
         env:
