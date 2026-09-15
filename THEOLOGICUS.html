@@ -18508,6 +18508,16 @@ initTafsirVerseTooltip();
     });
     const delBtn = b.querySelector('.atc-del-ann');
     if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
+    /* v44 — la traduction passe par un serveur LibreTranslate auto-heberge
+       (http://localhost:5000). Sur le telephone « localhost » est le
+       telephone et le HTTP clair est bloque : l'action echoue toujours.
+       On la masque sur natif plutot que de laisser un bouton mort.
+       Pour la reactiver : heberger LibreTranslate sur une URL joignable et
+       rendre cette URL configurable. */
+    if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) {
+      const tr = b.querySelector('.atc-act[data-act="translate"]');
+      if (tr) tr.style.display = 'none';
+    }
     const w = b.offsetWidth || 160;
     let x = s.rect.left + s.rect.width/2 - w/2;
     x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
