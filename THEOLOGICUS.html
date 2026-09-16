@@ -410,7 +410,7 @@
     });
   }
 
-  function openPopup(text, rect){
+  function openPopup(text, rect, opts){
     var old = document.getElementById('lt-pop'); if (old) old.remove();
     var pop = document.createElement('div');
     pop.id = 'lt-pop';
@@ -422,7 +422,7 @@
       + '<select id="lt-lang" style="flex:1;background:#0d1626;color:#eaf4ff;border:1px solid rgba(245,197,66,.4);border-radius:8px;padding:6px;font:12px Consolas,monospace;"></select>'
       + '</div>'
       + '<div id="lt-out" style="color:#fff;font-weight:900;min-height:20px;white-space:pre-wrap;">…</div>'
-      + '<div style="display:flex;gap:8px;margin-top:8px;">'
+      + '<div id="lt-foot" style="display:flex;gap:8px;margin-top:8px;">'
       + '<button id="lt-copy" style="flex:1;background:#1c3a78;color:#d6e4ff;border:1px solid #3d6fd8;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:11px;">📋 Copier</button>'
       + '<button id="lt-close" style="flex:1;background:#f5c542;color:#000;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:900;font-size:11px;">Fermer</button>'
       + '</div>';
@@ -435,6 +435,30 @@
     pop.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     pop.addEventListener('mouseup', function(e){ e.stopPropagation(); });
     pop.querySelector('#lt-close').addEventListener('click', function(){ pop.remove(); });
+
+    /* v61 — ouvert depuis la barre de saisie : bouton « remplacer » qui
+       réinjecte la traduction dans le champ (envoyer la traduction à l'IA
+       plutôt que le texte original). */
+    if (opts && opts.replaceTarget) {
+      var foot = pop.querySelector('#lt-foot');
+      if (foot) {
+        var rb = document.createElement('button');
+        rb.id = 'lt-replace';
+        rb.textContent = '↩️ REMPLACER LA SAISIE';
+        rb.style.cssText = 'flex:1.4;background:#1c5c3e;color:#d6f5e3;border:1px solid #3fae7a;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:900;font-size:11px;';
+        rb.addEventListener('click', function(){
+          var tgt = document.querySelector(opts.replaceTarget);
+          if (!tgt) return;
+          if (out.dataset.ok !== '1') { notify('Attendez la fin de la traduction.', 'error'); return; }
+          tgt.value = out.textContent || '';
+          try { tgt.dispatchEvent(new Event('input', { bubbles: true })); } catch(e){}
+          tgt.focus();
+          pop.remove();
+          notify('Saisie remplacée par la traduction.', 'success');
+        });
+        foot.insertBefore(rb, foot.firstChild);
+      }
+    }
 
     var selLang = pop.querySelector('#lt-lang');
     var out = pop.querySelector('#lt-out');
@@ -453,6 +477,7 @@
 
     function doTranslate(){
       out.textContent = '…';
+      out.dataset.ok = '';
       resolveEndpoint().then(function(ep){
         if (!ep) {
           out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Serveur introuvable sur le réseau.</span>';
@@ -468,8 +493,8 @@
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: text, source: 'auto', target: current, format: 'text' })
         }).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-          .then(function(d){ out.textContent = (d && d.translatedText) || '(vide)'; })
-          .catch(function(e){ out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Erreur : ' + esc(e && e.message || e) + '</span>'; });
+          .then(function(d){ out.textContent = (d && d.translatedText) || '(vide)'; out.dataset.ok = '1'; })
+          .catch(function(e){ out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Erreur : ' + esc(e && e.message || e) + '</span>'; out.dataset.ok = ''; });
       });
     }
 
@@ -512,7 +537,7 @@
         return fetch(ep + '/languages').then(function(r){ return r.json(); });
       });
     },
-    translate: function(text, rect){ return openPopup(String(text || ''), rect || null); },
+    translate: function(text, rect, opts){ return openPopup(String(text || ''), rect || null, opts || null); },
     configure: openConfig
   };
 })();
@@ -6521,6 +6546,7 @@ window.__ensureTafsirSurah = function(p){
     <button id="tts-btn" title="Lecture vocale des réponses">🔊</button>
     <button id="tts-all-btn" title="Lire depuis le début (ou cliquez ▶ LIRE sur un message)">▶️</button>
     <button id="auto-continue-btn" title="Suite automatique: desactivee">🔁</button>
+    <button id="chat-lt-btn" title="Traduire le texte saisi (LibreTranslate)">🌐</button>
     <button id="folder-upload-btn" title="Importer un dossier complet">📁</button>
     <input type="file" id="file-input" accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.zip" style="display:none">
     <input type="file" id="folder-input" webkitdirectory style="display:none">
@@ -25351,6 +25377,37 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
   window.__ltRefresh = refresh;
+})();
+</script>
+<script id="v61-chat-lt">
+/* ═══ v61 — 🌐 dans la barre de saisie : traduire le texte tapé sans
+   sélection. Ouvre la popup LibreTranslate v58 avec un bouton
+   « remplacer la saisie » qui réinjecte la traduction dans le champ.
+   Desktop et APK : le serveur est résolu par la découverte v58. ═══ */
+(function(){
+  'use strict';
+  function boot(){
+    var btn = document.getElementById('chat-lt-btn');
+    var input = document.getElementById('user-input');
+    if (!btn || !input || btn.dataset.ltWired) return;
+    btn.dataset.ltWired = '1';
+    btn.addEventListener('click', function(){
+      var t = String(input.value || '').trim();
+      if (!t) {
+        if (window.toast) toast('Tapez d’abord le texte à traduire.', 'error');
+        input.focus();
+        return;
+      }
+      if (window.__LT && typeof window.__LT.translate === 'function') {
+        window.__LT.translate(t, null, { replaceTarget: '#user-input' });
+      } else {
+        if (window.toast) toast('Module de traduction indisponible.', 'error');
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  setTimeout(boot, 800);
 })();
 </script>
 </body>
