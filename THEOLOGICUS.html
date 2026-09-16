@@ -102,21 +102,36 @@
     try { window.dispatchEvent(new Event('voiceschanged')); } catch (e) {}
   }
 
-  /* ═══ v54 — Dictee push-to-talk : le WebView n'a pas SpeechRecognition.
-     Polyfill deleguant au SpeechRecognizer natif IN-APP (partiels en direct,
-     sans panneau plein ecran). Contrat :
-       start() -> ecoute ; partiels/finaux via l'evenement natif 'speech'
-       stop()  -> arrete l'ecoute ; le final arrive puis onend()
-     Affichage : le shim ecrit lui-meme dans #voice-transcript (remplace,
-     jamais concatene) -> aucun doublon. L'app insere le final dans la
-     zone de saisie a onend, comme avec la vraie API. */
+  /* ═══ v55 — Dictee push-to-talk, anti-doublons par architecture. ═══
+     Principe de l'ECRIVAIN UNIQUE : seul le shim ecrit le transcript.
+     - les partiels natifs (NON cumulatifs) sont fusionnes cote shim
+       (si le nouveau partiel prolonge l'ancien -> on remplace ; sinon on
+       concatene le fragment nouveau seulement) : fini 'job 1' -> 'jobjob'.
+     - un seul final par session : les doubles onResults natifs sont ignores.
+     - l'app recoit un unique onresult(final) + onend : son accumulateur
+       ne peut plus dupliquer quoi que ce soit. */
   if (SB && !window.SpeechRecognition && !window.webkitSpeechRecognition) {
     var Rec = function () {
       this.lang = 'fr-FR'; this.continuous = true; this.interimResults = true;
       this.onresult = null; this.onend = null; this.onerror = null;
       this._listening = false;
-      this._lastText = '';
+      this._shown = '';      /* texte affiche (partiel courant) */
+      this._finalSent = false;
       var self = this;
+      function render(txt, isFinal) {
+        var vt = (typeof document !== 'undefined' ? document.getElementById('voice-transcript') : null);
+        if (vt) vt.innerHTML = isFinal
+          ? txt
+          : '<span class="interim">' + txt.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
+      }
+      function mergePartial(prev, next) {
+        if (!prev) return next;
+        if (next === prev) return prev;
+        if (next.indexOf(prev) === 0) return next;            /* prolongation */
+        if (prev.indexOf(next) === 0) return prev;            /* retour arriere du moteur */
+        /* fragment disjoint : on concatene avec espace si besoin */
+        return prev + (/[\s’'-]$/.test(prev) || !next ? '' : ' ') + next;
+      }
       try {
         SB.addListener('speech', function (ev) {
           if (!self._listening) return;
@@ -126,32 +141,45 @@
             if (typeof self.onend === 'function') self.onend();
             return;
           }
-          var txt = String(ev.text || '');
-          if (txt === self._lastText && !ev.final) return;
-          self._lastText = txt;
-          var vt = document.getElementById('voice-transcript');
-          if (vt) {
-            vt.innerHTML = ev.final
-              ? txt
-              : '<span class="interim">' + txt.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
-            vt.scrollTop = vt.scrollHeight;
+          if (self._finalSent && !ev.final) return;  /* apres le final : silence */
+          var txt = String(ev.text || '').trim();
+          if (!txt) return;
+          if (!ev.final) {
+            var merged = mergePartial(self._shown, txt);
+            self._shown = merged;
+            render(merged, false);
+            if (typeof self.onresult === 'function') {
+              self.onresult({ resultIndex: 0,
+                results: { length: 1, 0: { isFinal: false, 0: { transcript: merged }, length: 1 } } });
+            }
+            return;
           }
+          /* FINAL : un seul par session */
+          if (self._finalSent) return;
+          self._finalSent = true;
+          /* le final natif est la phrase COMPLETE : il remplace tout partiel */
+          if (txt.length < self._shown.replace(/\s+/g,'').length * 0.6) {
+            /* final aberrant trop court face a ce qui etait affiche :
+               on garde l'affiche (le moteur a reconverge a tort) */
+            txt = self._shown;
+          }
+          self._shown = txt;
+          render(txt, true);
           if (typeof self.onresult === 'function') {
             self.onresult({ resultIndex: 0,
-              results: { length: 1, 0: { isFinal: !!ev.final, 0: { transcript: txt }, length: 1 } } });
+              results: { length: 1, 0: { isFinal: true, 0: { transcript: txt }, length: 1 } } });
           }
-          if (ev.final) {
-            self._listening = false;
-            if (typeof self.onend === 'function') self.onend();
-          }
+          self._listening = false;
+          if (typeof self.onend === 'function') self.onend();
         });
       } catch (e) {}
     };
     Rec.prototype.start = function () {
       var self = this;
       self._listening = true;
-      self._lastText = '';
-      var vt = document.getElementById('voice-transcript');
+      self._shown = '';
+      self._finalSent = false;
+      var vt = (typeof document !== 'undefined' ? document.getElementById('voice-transcript') : null);
       if (vt) vt.innerHTML = '';
       SB.listenStart({ lang: self.lang || 'fr-FR' }).catch(function (e) {
         self._listening = false;
@@ -164,10 +192,28 @@
     };
     Rec.prototype.stop = function () {
       var self = this;
-      self._listening = false;
+      if (!self._listening) return;
       SB.listenStop().catch(function () {});
+      /* garde-fou : si aucun final n'arrive (moteur muet), cloture propre
+         avec ce qui est affiche pour ne pas perdre la dictee */
+      setTimeout(function () {
+        if (self._listening) {
+          self._listening = false;
+          if (self._shown && typeof self.onresult === 'function') {
+            self.onresult({ resultIndex: 0,
+              results: { length: 1, 0: { isFinal: true, 0: { transcript: self._shown }, length: 1 } } });
+          }
+          if (typeof self.onend === 'function') self.onend();
+        }
+      }, 1500);
     };
-    Rec.prototype.abort = function () { this.stop(); };
+    Rec.prototype.abort = function () {
+      var self = this;
+      self._listening = false; self._finalSent = true; /* annule tout */
+      SB.listenStop().catch(function () {});
+      var vt = (typeof document !== 'undefined' ? document.getElementById('voice-transcript') : null);
+      if (vt) vt.innerHTML = '';
+    };
     window.SpeechRecognition = Rec;
     window.webkitSpeechRecognition = Rec;
   }
@@ -7034,25 +7080,24 @@ window.__ensureTafsirSurah = function(p){
 
 <!-- ═══ REALTIME VOICE OVERLAY ═══ -->
 <div id="voice-overlay">
-  <div class="voice-ring-outer">
-    <div class="voice-ring-pulse"></div>
-    <div class="voice-ring-pulse"></div>
-    <div class="voice-ring-pulse"></div>
-    <button class="voice-mic-btn" id="voice-mic-btn" title="Cliquer pour arrêter">🎤</button>
+  <div class="vo-card" id="vo-card">
+    <div class="vo-head">
+      <span class="vo-dot" id="vo-dot"></span>
+      <span class="vo-title" id="voice-status">ÉCOUTE… RELÂCHEZ POUR ENVOYER</span>
+      <button class="vo-close" id="vo-close" aria-label="Annuler">✕</button>
+    </div>
+    <div class="vo-wave" id="voice-wave" aria-hidden="true">
+      <span class="vo-bar"></span><span class="vo-bar"></span><span class="vo-bar"></span>
+      <span class="vo-bar vo-center"></span>
+      <span class="vo-bar"></span><span class="vo-bar"></span><span class="vo-bar"></span>
+    </div>
+    <div class="vo-transcript" id="voice-transcript"></div>
+    <div class="vo-foot">
+      <span class="vo-kbd">APPUIS LONG</span>
+      <span class="vo-sep"></span>
+      <span>Relâchez pour envoyer · touchez ✕ pour annuler</span>
+    </div>
   </div>
-  <div class="voice-status" id="voice-status">ÉCOUTE EN COURS</div>
-  <div class="voice-wave" id="voice-wave">
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-    <div class="voice-wave-bar"></div>
-  </div>
-  <div class="voice-transcript-box" id="voice-transcript"></div>
-  <div class="voice-hint">CLIQUEZ N'IMPORTE OÙ POUR ARRÊTER</div>
 </div>
 
 <!-- ═══════════════════ SETUP WIZARD ═══════════════════ -->
@@ -24761,6 +24806,122 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   setTimeout(apply, 1500);
 })();
 </script>
+
+<style id="v55-voice-ui">
+/* ═══ v55 — overlay vocal moderne (glassmorphisme, waveform live) ═══
+   S'applique aux memes ids que l'ancien overlay (#voice-overlay,
+   #voice-status, #voice-wave, #voice-transcript) : aucun JS a changer.
+   Les anciens styles restent en amont ; tout ce bloc les surcharge. */
+#voice-overlay{
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(3,7,15,.72);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  backdrop-filter: blur(14px) saturate(1.2);
+  cursor: default;
+  animation: voIn .22s cubic-bezier(.4,0,.2,1) both;
+}
+#voice-overlay.active{ display: flex; }
+@keyframes voIn{ from{ opacity:0 } to{ opacity:1 } }
+
+.vo-card{
+  width: min(430px, 92vw);
+  border-radius: 26px;
+  padding: 22px 22px 16px;
+  background: linear-gradient(160deg, rgba(16,26,44,.92), rgba(8,13,24,.94));
+  border: 1px solid rgba(108,160,255,.22);
+  box-shadow: 0 30px 90px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  display: flex; flex-direction: column; gap: 14px;
+  animation: voCard .3s cubic-bezier(.34,1.4,.64,1) both;
+}
+@keyframes voCard{ from{ transform: translateY(16px) scale(.97); opacity:0 } to{ transform:none; opacity:1 } }
+
+.vo-head{ display:flex; align-items:center; gap:10px; }
+.vo-dot{
+  width:9px; height:9px; border-radius:50%; flex:none;
+  background:#ff4d6d; box-shadow:0 0 10px #ff4d6d;
+  animation: voBlink 1.1s ease-in-out infinite;
+}
+@keyframes voBlink{ 0%,100%{opacity:1} 50%{opacity:.35} }
+.vo-title{
+  flex:1; min-width:0;
+  font-family: var(--font-display,'Orbitron',sans-serif);
+  font-size: 11.5px; letter-spacing: 1.6px; text-transform: uppercase;
+  color: #cfe0ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vo-close{
+  flex:none; width:34px; height:34px; border-radius:12px;
+  border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05);
+  color:#cfe0ff; font-size:14px; cursor:pointer; display:grid; place-items:center;
+  transition:.15s;
+}
+.vo-close:hover{ background:rgba(255,77,109,.16); border-color:rgba(255,77,109,.4); color:#fff; }
+
+/* ── waveform live ── */
+.vo-wave{
+  height: 54px; display:flex; align-items:center; justify-content:center; gap:5px;
+}
+.vo-bar{
+  width:5px; height:26px; border-radius:3px;
+  background:linear-gradient(180deg,#6ea8ff,#4f8ef7);
+  opacity:.85;
+  animation: voBar 1s ease-in-out infinite;
+  transform-origin: center;
+}
+.vo-bar.vo-center{ width:7px; height:40px; background:linear-gradient(180deg,#9cc4ff,#4f8ef7); }
+.vo-bar:nth-child(1){ animation-delay:-.35s } .vo-bar:nth-child(2){ animation-delay:-.2s }
+.vo-bar:nth-child(3){ animation-delay:-.55s } .vo-bar:nth-child(4){ animation-delay:0s }
+.vo-bar:nth-child(5){ animation-delay:-.45s } .vo-bar:nth-child(6){ animation-delay:-.15s }
+.vo-bar:nth-child(7){ animation-delay:-.3s }
+@keyframes voBar{ 0%,100%{ transform:scaleY(.35) } 50%{ transform:scaleY(1) } }
+/* rythme accompagne la parole : la classe .live perturbe la periode */
+.vo-wave.live .vo-bar{ animation-duration:.62s; }
+.vo-wave.transcribing .vo-bar{ background:linear-gradient(180deg,#ffd166,#ff9f43); animation-duration:.4s; }
+.vo-wave.idle .vo-bar{ animation:none; transform:scaleY(.18); opacity:.35; }
+
+/* ── transcript ── */
+.vo-transcript{
+  min-height:64px; max-height:170px; overflow-y:auto;
+  border-radius:16px; padding:14px 16px;
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(108,160,255,.14);
+  font-family: var(--font-body,'Exo 2',sans-serif);
+  font-size:16.5px; line-height:1.55; text-align:center;
+  color:#f2f7ff; word-break:break-word;
+}
+.vo-transcript:empty::before{
+  content:'Parlez naturellement…';
+  color:#7d8da6; font-style:italic; font-size:14px;
+}
+.vo-transcript .interim{ color:#8fb8ff; }
+.vo-transcript .interim::after{
+  content:'▍'; margin-left:2px; color:#4f8ef7;
+  animation: voCaret .8s steps(1) infinite;
+}
+@keyframes voCaret{ 50%{ opacity:0 } }
+
+.vo-foot{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  font-size:10.5px; letter-spacing:.6px; color:#7d8da6;
+}
+.vo-kbd{
+  font-family: var(--font-mono,monospace); font-size:9px; letter-spacing:1.2px;
+  padding:3px 8px; border-radius:6px;
+  border:1px solid rgba(108,160,255,.3); color:#9cc4ff;
+  background:rgba(79,142,247,.08);
+}
+.vo-sep{ width:1px; height:12px; background:rgba(255,255,255,.14); }
+
+/* mode performances : tout tombe a zero animation */
+html.v35-reduce-fx #voice-overlay,
+html.v35-reduce-fx .vo-card{ animation:none; -webkit-backdrop-filter:none; backdrop-filter:none; }
+html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
+@media (prefers-reduced-motion: reduce){
+  .vo-card, #voice-overlay{ animation:none; }
+  .vo-bar, .vo-dot{ animation:none; }
+}
+</style>
 
 </body>
 </html>
