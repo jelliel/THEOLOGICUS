@@ -19046,7 +19046,14 @@ initTafsirVerseTooltip();
       return;
     }
     // Clic droit sur le texte d'un message -> insérer une figure à cet endroit
-    const mc = e.target.closest ? e.target.closest('.message-content') : null;
+    /* v45 — au doigt, l'appui long émet `contextmenu` : sélectionner un mot ou
+       une phrase ouvrait donc le menu d'encadrement à la place de la bulle
+       « Add to chat ». L'encadrement ne doit se lancer qu'au double-tap (v42).
+       On garde les menus surlignage/figure ci-dessus : l'appui long est leur
+       seul moyen d'accès sur mobile. */
+    const mc = (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI())
+      ? null
+      : (e.target.closest ? e.target.closest('.message-content') : null);
     if (mc) {
       e.preventDefault();
       hideBubble();
