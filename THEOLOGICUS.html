@@ -21090,16 +21090,25 @@ body{ margin:0; }
    recoit une hauteur max : sans elle, sur un ecran court, les dernieres
    entrees (STATS, zone critique) deviennent inatteignables. */
 @media screen and (max-width: 640px) {
-  /* La barre a plus de contenu que l'ecran n'a de place : laisser les
-     elements se comprimer ne suffit pas (le groupe glissait a 437 px pour
-     un ecran de 412). On reserve la place a droite et on ancre le groupe
-     en absolu : il reste atteignable quel que soit le contenu. */
-  #v6-topbar { position: relative; gap: 4px; padding: 0 104px 0 8px; }
+  /* v62 — le groupe droit contient 4 boutons (recherche + archives + hermes +
+     Plus), total ~188 px (40+6+44+6+44+6+40) au lieu des ~84 px reserves par
+     v43. La reservation d'origine (104 px) etait trop courte : le groupe
+     absolu debordait de 84 px sur la zone du titre de conversation, et
+     `#v7-conv` (116→261) finissait sous les boutons au lieu d'etre rogne.
+     On reserve la place reelle (196 px = 188 + 8 de tampon) et l'on coupe
+     `#v7-conv` pour qu'il ne deborde jamais dans la zone reservee. */
+  #v6-topbar { position: relative; gap: 4px; padding: 0 196px 0 8px; }
   #v6-topbar .v6-grp { flex: 0 1 auto; min-width: 0; overflow: hidden; }
   #v6-topbar #v6-right-grp {
     position: absolute; right: 6px; top: 0; bottom: 0;
     flex: none; display: flex; align-items: center; gap: 4px; overflow: visible;
   }
+  /* 412 - 196 - 8 - 40 (burger) - 46 (brand) - 2*4 (gaps) = 100 px dispo pour v7-conv */
+  #v7-conv { max-width: calc(100vw - 312px); min-width: 0; flex: 0 1 auto; }
+  #v7-conv-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 320 px : 320 - 196 - 8 - 40 - 46 - 8 = 24 px — titre quasi invisible, ok.
+     360 px : 360 - 312 = 48 px — titre a 1-2 mots ; ok. */
+}
   #v6-more-menu {
     top: calc(52px + env(safe-area-inset-top, 0px));
     max-height: calc(100vh - 70px);
