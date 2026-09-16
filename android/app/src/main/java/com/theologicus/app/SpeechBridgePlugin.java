@@ -150,7 +150,8 @@ public class SpeechBridgePlugin extends Plugin {
             call.resolve(ret);
             return;
         }
-        ArrayList<String> res = result.getData().getStringArrayList(RecognizerIntent.EXTRA_RESULTS);
+        android.os.Bundle extras = result.getData().getExtras();
+        ArrayList<String> res = extras != null ? extras.getStringArrayList(RecognizerIntent.EXTRA_RESULTS) : null;
         JSObject ret = new JSObject();
         ret.put("text", res != null && !res.isEmpty() ? res.get(0) : "");
         call.resolve(ret);
