@@ -438,7 +438,18 @@
 
     var selLang = pop.querySelector('#lt-lang');
     var out = pop.querySelector('#lt-out');
-    var current = 'fr';
+    /* v60 — la dernière langue cible est MÉMORISÉE PAR UTILISATEUR
+       (identité = state.aiConfig.name posée par le wizard). Clé :
+       theologicus_lt_lang::<nom>. Repli global si aucun nom n'est défini. */
+    function ltUserKey(){
+      var n = '';
+      try { n = (window.state && state.aiConfig && state.aiConfig.name) || ''; } catch(e){}
+      n = String(n).trim();
+      return 'theologicus_lt_lang' + (n ? '::' + n.toLowerCase() : '');
+    }
+    function ltSavedLang(){ try { return localStorage.getItem(ltUserKey()) || 'fr'; } catch(e){ return 'fr'; } }
+    function ltRememberLang(code){ try { localStorage.setItem(ltUserKey(), code); } catch(e){} }
+    var current = ltSavedLang() || 'fr';
 
     function doTranslate(){
       out.textContent = '…';
@@ -468,11 +479,15 @@
         var arr = (langs || []).filter(function(l){ return l && l.code; });
         arr.sort(function(a,b){ return a.code === 'fr' ? -1 : b.code === 'fr' ? 1 : a.code < b.code ? -1 : 1; });
         var opts = '';
-        arr.forEach(function(l){ opts += '<option value="' + esc(l.code) + '"' + (l.code === 'fr' ? ' selected' : '') + '>' + esc(l.code.toUpperCase() + ' — ' + (l.name || '')) + '</option>'; });
+        var remember = ltSavedLang();
+        var hasRemember = arr.some(function(l){ return l.code === remember; });
+        arr.forEach(function(l){ opts += '<option value="' + esc(l.code) + '"' + (l.code === remember ? ' selected' : '') + '>' + esc(l.code.toUpperCase() + ' — ' + (l.name || '')) + '</option>'; });
         selLang.innerHTML = opts || '<option value="fr">FR</option>';
+        /* mémorisée uniquement si le serveur la propose encore ; sinon retour FR */
+        current = hasRemember ? remember : 'fr';
       }).catch(function(){ selLang.innerHTML = '<option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option><option value="de">DE</option><option value="it">IT</option>'; });
     });
-    selLang.addEventListener('change', function(){ current = selLang.value; doTranslate(); });
+    selLang.addEventListener('change', function(){ current = selLang.value; ltRememberLang(current); doTranslate(); });
     pop.querySelector('#lt-copy').addEventListener('click', function(){
       var t = out.textContent || '';
       if (!t || t === '…') return;
