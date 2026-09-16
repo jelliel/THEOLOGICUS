@@ -24444,5 +24444,73 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   .message, .message-content, .atc-hl, .atc-mark { user-select: text !important; -webkit-user-select: text !important; }
 </style>
 
+<style id="v49-topbar-fit">
+/* ═══ v49 — le header ne se chevauche plus ═══
+   Causes mesurees (paysage telephone ~500px) :
+   (1) boutons tactiles 44px + border-radius 99px = cercles geants qui
+       debordent de la barre de 56px et se peignent les uns sur les autres ;
+   (2) groupes shrinkables (min-width:0) laissant leur contenu nowrap
+       peindre par-dessus le voisin ;
+   (3) elements v8 (anneau, point, avatar, Ref, Notes) appendes APRES le
+       groupe droit : hors de la place reservee ;
+   (4) la regle v43 ciblait .v8-ring/.v8-dot qui n'existent pas (vraies
+       classes : .ring/.dot) -> l'anneau restait affiche et mangeait la place. */
+
+/* 1. cibles tactibles : 40px DANS la barre, finis les cercles hors barre */
+@media (pointer: coarse) {
+  #v6-topbar .v6-iconbtn{
+    width: 40px; height: 40px; min-width: 40px; min-height: 40px;
+    border-radius: 12px;
+  }
+  #v6-topbar .hud-btn{ min-height: 36px; }
+  #v6-topbar select.hud-select{ min-height: 36px; }
+}
+
+/* 2. aucun groupe ne peint sur son voisin : on clampe, on tronque */
+#v6-topbar{ min-width: 0; }
+#v6-topbar .v6-grp{ flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#v6-topbar .v6-sp{ flex: 1 1 0; min-width: 4px; }
+#v6-topbar #v6-brand{ min-width: 0; overflow: hidden; }
+#v6-topbar #v7-conv{ overflow: hidden; flex: 0 1 auto; min-width: 0; }
+#v6-topbar #v7-conv-title{ max-width: 36vw; }
+#v6-topbar #v7-conv-meta{ max-width: 20vw; overflow: hidden; text-overflow: ellipsis; }
+
+/* 3. ecran etroit (<1023) : on alleger — le statut texte doublonne avec le
+   point v8 ; l'avatar et Ref/Notes restent accessibles ailleurs (cartes du
+   rail, menu Plus). Desktop >=1024 : rien ne change. */
+@media screen and (max-width: 1023px) {
+  #v6-topbar #api-status{ display: none; }
+  #v6-topbar .avatar,
+  #v6-topbar .v6-iconbtn[title="Références"],
+  #v6-topbar .v6-iconbtn[title="Notes de conception"]{ display: none; }
+}
+
+/* 4. <=640 : correctif v43 REPARÉ — bons selecteurs (.ring/.dot), groupe
+   droit alleger (le theme reste dans PARAMÈTRES), titre plus court.
+   Le menu « Plus » reste AU-DESSUS de la barre HUD v12 (il glissait
+   dessous : son dernier item etait incliquable en portrait). */
+@media screen and (max-width: 640px) {
+  #v6-topbar #v6-right-grp select.hud-select{ display: none; }
+  #v6-topbar .ring,
+  #v6-topbar .dot{ display: none; }
+  #v6-topbar #v7-conv-title{ max-width: 30vw; }
+  #v6-topbar #v7-conv-meta{ display: none; }
+  #v6-topbar #v6-right-grp{ gap: 6px; }
+}
+
+/* 5. ecran COURT ou etroit : le menu « Plus » est contraint a l'ecran et
+   scrollable — sinon il degorge sous l'ecran et les dernieres modals
+   (PARAMÈTRES, STATS…) deviennent inatteignables. Double declaration vh
+   puis dvh : les moteurs sans unite dvh gardent le premier calcul. */
+@media screen and (max-width: 640px), screen and (max-height: 500px) {
+  #v6-more-menu{
+    top: calc(52px + env(safe-area-inset-top, 0px));
+    max-height: calc(100vh - 150px);
+    max-height: calc(100dvh - 150px);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+}
+</style>
+
 </body>
 </html>
