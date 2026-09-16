@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
        ignore (c'etait la cause du plugin inexistant en v1.0.26). */
     registerPlugin(SavePickerPlugin.class);
     registerPlugin(SpeechBridgePlugin.class);
+    registerPlugin(NetBridgePlugin.class);   /* v58 : decouverte LibreTranslate LAN */
     super.onCreate(savedInstanceState);
   }
 }

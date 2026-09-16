@@ -3,6 +3,7 @@
   "appName": "THEOLOGICUS",
   "webDir": "mobile/www",
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": true,
+    "webContentsDebuggingEnabled": true
   }
 }

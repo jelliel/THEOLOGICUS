@@ -285,6 +285,223 @@
   };
 })();
 </script>
+<script id="v58-libretranslate">
+/* ═══ v58 — LibreTranslate intégré complètement ═══
+   Le serveur tourne sur le PC (tools/start_libretranslate.py, écoute
+   0.0.0.0:5000) ou toute URL compatible LibreTranslate.
+
+   Résolution de l'endpoint, dans l'ordre :
+     1. URL sauvegardée (localStorage « theologicus_lt_url ») si /languages répond
+     2. découverte auto sur le Wi-Fi : passerelle (plugin natif NetBridge) puis
+        les .1/.2 du sous-réseau de l'IP locale du téléphone
+     3. http://localhost:5000 (desktop Windows)
+
+   Le bouton 🌐 de la bulle Add-to-chat est réactivé partout (le masque v44
+   est retiré) : le HTTP clair LAN est autorisé par le manifest (v58).
+   Popup avec sélecteur de langue cible (alimenté par /languages), copie,
+   et écran de configuration + test si aucun serveur n'est trouvé. */
+(function(){
+  'use strict';
+  var LS_KEY = 'theologicus_lt_url';
+  var _resolved = null;
+  var _probing = null;
+
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k,v){ try { if (v) localStorage.setItem(k,v); else localStorage.removeItem(k); } catch(e){} }
+
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+  function probe(url, timeoutMs){
+    return new Promise(function(res){
+      var done = false;
+      var t = setTimeout(function(){ if(!done){ done = true; res(null); } }, timeoutMs || 1200);
+      fetch(String(url).replace(/\/+$/,'') + '/languages', { method:'GET' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if (done) return; done = true; clearTimeout(t);
+          res((Array.isArray(j) && j.length) ? String(url).replace(/\/+$/,'') : null);
+        })
+        .catch(function(){ if(!done){ done = true; clearTimeout(t); res(null); } });
+    });
+  }
+
+  function candidateUrls(){
+    var list = [];
+    var saved = lsGet(LS_KEY);
+    if (saved) list.push(saved.replace(/\/+$/,''));
+    list.push('http://localhost:5000');
+    var native = false;
+    try { native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch(e){}
+    if (native && window.Capacitor.Plugins && window.Capacitor.Plugins.NetBridge) {
+      return window.Capacitor.Plugins.NetBridge.gateway().then(function(g){
+        var gw = String((g && g.gateway) || '').trim();
+        var lip = String((g && g.localIp) || '').trim();
+        if (gw) list.push('http://' + gw + ':5000');
+        var o = lip.split('.');
+        if (o.length === 4) {
+          list.push('http://' + o[0] + '.' + o[1] + '.' + o[2] + '.1:5000');
+          list.push('http://' + o[0] + '.' + o[1] + '.' + o[2] + '.2:5000');
+        }
+        return list;
+      }).catch(function(){ return list; });
+    }
+    return Promise.resolve(list);
+  }
+
+  function resolveEndpoint(){
+    if (_resolved) return Promise.resolve(_resolved);
+    if (_probing) return _probing;
+    _probing = candidateUrls().then(function(list){
+      var i = 0;
+      function next(){
+        if (i >= list.length) { _probing = null; return null; }
+        var u = list[i++];
+        return probe(u, 1200).then(function(ok){
+          if (ok) { _resolved = ok; _probing = null; return ok; }
+          return next();
+        });
+      }
+      return next();
+    });
+    return _probing;
+  }
+
+  function notify(msg, kind){
+    try { if (typeof window.toast === 'function') { window.toast(msg, kind || 'info'); return; } } catch(e){}
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;right:14px;bottom:64px;z-index:100002;background:rgba(13,22,38,.95);color:#eaf4ff;border:1px solid rgba(79,142,247,.4);border-radius:10px;padding:8px 12px;font:12px Consolas,monospace;box-shadow:0 6px 20px rgba(0,0,0,.5);';
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 2600);
+  }
+
+  function openConfig(){
+    var old = document.getElementById('lt-cfg'); if (old) old.remove();
+    var pop = document.createElement('div');
+    pop.id = 'lt-cfg';
+    pop.style.cssText = 'position:fixed;z-index:100001;left:50%;top:16%;transform:translateX(-50%);width:min(430px,94vw);background:rgba(8,12,18,0.98);border:1px solid #f5c542;border-radius:12px;padding:14px;color:#fdf3d0;font:13px Consolas,Monaco,monospace;box-shadow:0 0 24px rgba(245,197,66,.4);';
+    var saved = lsGet(LS_KEY) || '';
+    pop.innerHTML = '<div style="font-size:11px;color:#f5c542;margin-bottom:8px;letter-spacing:1px;text-transform:uppercase;">⚙️ Serveur LibreTranslate</div>'
+      + '<div style="opacity:.85;font-size:11px;margin-bottom:8px;line-height:1.5;">Sur le PC : <b>py tools\\start_libretranslate.py</b><br>— ou une URL compatible (ex. https://libretranslate.com) :</div>'
+      + '<input id="lt-url" placeholder="http://192.168.1.50:5000" value="' + esc(saved).replace(/"/g,'&quot;') + '" style="width:100%;box-sizing:border-box;background:#0d1626;color:#eaf4ff;border:1px solid rgba(245,197,66,.4);border-radius:8px;padding:8px;font:12px Consolas,monospace;margin-bottom:8px;" />'
+      + '<div style="display:flex;gap:8px;">'
+      + '<button id="lt-test" style="flex:1;background:#1c3a78;color:#d6e4ff;border:1px solid #3d6fd8;padding:8px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;">Tester</button>'
+      + '<button id="lt-save" style="flex:1;background:#1c5c3e;color:#d6f5e3;border:1px solid #3fae7a;padding:8px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;">Enregistrer</button>'
+      + '<button id="lt-x" style="flex:1;background:#333;color:#ccc;border:none;padding:8px;border-radius:8px;cursor:pointer;font-size:12px;">Fermer</button>'
+      + '</div>'
+      + '<div id="lt-st" style="margin-top:8px;font-size:11px;min-height:16px;line-height:1.5;"></div>';
+    document.body.appendChild(pop);
+    var st = pop.querySelector('#lt-st');
+    pop.querySelector('#lt-x').addEventListener('click', function(){ pop.remove(); });
+    pop.querySelector('#lt-test').addEventListener('click', function(){
+      var u = pop.querySelector('#lt-url').value.trim().replace(/\/+$/,'');
+      if (!u) { st.textContent = 'Entrez une URL.'; return; }
+      st.textContent = 'Test en cours…';
+      probe(u, 2500).then(function(ok){
+        st.innerHTML = ok ? '<span style="color:#7fe0a0;">✔ Serveur joint : ' + esc(ok) + '</span>'
+                          : '<span style="color:#ff8a8a;">✖ Injoignable — PC allumé ? même Wi-Fi ? pare-feu Windows ?</span>';
+      });
+    });
+    pop.querySelector('#lt-save').addEventListener('click', function(){
+      var u = pop.querySelector('#lt-url').value.trim().replace(/\/+$/,'');
+      _resolved = u || null;
+      lsSet(LS_KEY, u || null);
+      st.textContent = u ? 'Enregistré ✔' : 'Effacé — découverte automatique.';
+    });
+  }
+
+  function openPopup(text, rect){
+    var old = document.getElementById('lt-pop'); if (old) old.remove();
+    var pop = document.createElement('div');
+    pop.id = 'lt-pop';
+    pop.style.cssText = 'position:fixed;z-index:99999;width:min(400px,94vw);background:rgba(8,12,18,0.97);border:1px solid #f5c542;border-radius:12px;padding:12px;color:#fdf3d0;font:13px Consolas,Monaco,monospace;line-height:1.5;box-shadow:0 0 18px rgba(245,197,66,0.35);';
+    pop.innerHTML = '<div style="font-size:11px;color:#f5c542;margin-bottom:8px;letter-spacing:1px;text-transform:uppercase;">🌐 Traduction</div>'
+      + '<div style="margin-bottom:8px;opacity:.85;max-height:70px;overflow:auto;">« ' + esc(String(text).slice(0,200)) + ' »</div>'
+      + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">'
+      + '<label style="font-size:11px;opacity:.8;">Vers</label>'
+      + '<select id="lt-lang" style="flex:1;background:#0d1626;color:#eaf4ff;border:1px solid rgba(245,197,66,.4);border-radius:8px;padding:6px;font:12px Consolas,monospace;"></select>'
+      + '</div>'
+      + '<div id="lt-out" style="color:#fff;font-weight:900;min-height:20px;white-space:pre-wrap;">…</div>'
+      + '<div style="display:flex;gap:8px;margin-top:8px;">'
+      + '<button id="lt-copy" style="flex:1;background:#1c3a78;color:#d6e4ff;border:1px solid #3d6fd8;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:11px;">📋 Copier</button>'
+      + '<button id="lt-close" style="flex:1;background:#f5c542;color:#000;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:900;font-size:11px;">Fermer</button>'
+      + '</div>';
+    document.body.appendChild(pop);
+    var pw = Math.min(400, window.innerWidth - 20);
+    var pr = rect || { left: window.innerWidth/2, top: window.innerHeight/3, width: 0, height: 0 };
+    var x = Math.max(10, Math.min((pr.left || 10) + (pr.width || 0)/2 - pw/2, window.innerWidth - pw - 10));
+    var y = Math.max(10, Math.min((pr.top || 10) + 10, window.innerHeight - 220));
+    pop.style.left = x + 'px'; pop.style.top = y + 'px';
+    pop.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    pop.addEventListener('mouseup', function(e){ e.stopPropagation(); });
+    pop.querySelector('#lt-close').addEventListener('click', function(){ pop.remove(); });
+
+    var selLang = pop.querySelector('#lt-lang');
+    var out = pop.querySelector('#lt-out');
+    var current = 'fr';
+
+    function doTranslate(){
+      out.textContent = '…';
+      resolveEndpoint().then(function(ep){
+        if (!ep) {
+          out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Serveur introuvable sur le réseau.</span>';
+          var cfg = document.createElement('button');
+          cfg.textContent = '⚙️ Configurer le serveur';
+          cfg.style.cssText = 'margin-top:6px;background:#f5c542;color:#000;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:900;font-size:11px;';
+          cfg.addEventListener('click', function(){ pop.remove(); openConfig(); });
+          out.appendChild(document.createElement('br'));
+          out.appendChild(cfg);
+          return;
+        }
+        return fetch(ep + '/translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: text, source: 'auto', target: current, format: 'text' })
+        }).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function(d){ out.textContent = (d && d.translatedText) || '(vide)'; })
+          .catch(function(e){ out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Erreur : ' + esc(e && e.message || e) + '</span>'; });
+      });
+    }
+
+    resolveEndpoint().then(function(ep){
+      if (!ep) { selLang.innerHTML = '<option value="fr">FR</option>'; return; }
+      fetch(ep + '/languages').then(function(r){ return r.json(); }).then(function(langs){
+        var arr = (langs || []).filter(function(l){ return l && l.code; });
+        arr.sort(function(a,b){ return a.code === 'fr' ? -1 : b.code === 'fr' ? 1 : a.code < b.code ? -1 : 1; });
+        var opts = '';
+        arr.forEach(function(l){ opts += '<option value="' + esc(l.code) + '"' + (l.code === 'fr' ? ' selected' : '') + '>' + esc(l.code.toUpperCase() + ' — ' + (l.name || '')) + '</option>'; });
+        selLang.innerHTML = opts || '<option value="fr">FR</option>';
+      }).catch(function(){ selLang.innerHTML = '<option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option><option value="de">DE</option><option value="it">IT</option>'; });
+    });
+    selLang.addEventListener('change', function(){ current = selLang.value; doTranslate(); });
+    pop.querySelector('#lt-copy').addEventListener('click', function(){
+      var t = out.textContent || '';
+      if (!t || t === '…') return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function(){ notify('Traduction copiée.', 'success'); });
+      } else {
+        var ta = document.createElement('textarea'); ta.value = t;
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); notify('Traduction copiée.', 'success'); } catch(e){}
+        ta.remove();
+      }
+    });
+    doTranslate();
+  }
+
+  window.__LT = {
+    resolve: resolveEndpoint,
+    save: function(url){ _resolved = url ? String(url).replace(/\/+$/,'') : null; lsSet(LS_KEY, _resolved); },
+    languages: function(){
+      return resolveEndpoint().then(function(ep){
+        if (!ep) throw new Error('no-server');
+        return fetch(ep + '/languages').then(function(r){ return r.json(); });
+      });
+    },
+    translate: function(text, rect){ return openPopup(String(text || ''), rect || null); },
+    configure: openConfig
+  };
+})();
+</script>
 <script>
 /* THEOLOGICUS v38 — correctif viewport Android (WebView).
    Sur Android WebView (Capacitor), apres interaction avec le clavier
@@ -18728,16 +18945,10 @@ initTafsirVerseTooltip();
     });
     const delBtn = b.querySelector('.atc-del-ann');
     if (delBtn) delBtn.style.display = (!universal && s.hlId) ? '' : 'none';
-    /* v44 — la traduction passe par un serveur LibreTranslate auto-heberge
-       (http://localhost:5000). Sur le telephone « localhost » est le
-       telephone et le HTTP clair est bloque : l'action echoue toujours.
-       On la masque sur natif plutot que de laisser un bouton mort.
-       Pour la reactiver : heberger LibreTranslate sur une URL joignable et
-       rendre cette URL configurable. */
-    if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) {
-      const tr = b.querySelector('.atc-act[data-act="translate"]');
-      if (tr) tr.style.display = 'none';
-    }
+    /* v58 — le bouton 🌐 Traduire est RÉACTIVÉ partout : le module
+       LibreTranslate intégré découvre le serveur sur le LAN (plugin
+       NetBridge) et le manifest autorise désormais le HTTP clair local.
+       Le masque v44 (bouton mort sur mobile) est supprimé. */
     const w = b.offsetWidth || 160;
     const h = b.offsetHeight || 44;   /* v57 : vraie hauteur (bulle multi-lignes) */
     let x = s.rect.left + s.rect.width/2 - w/2;
@@ -19350,42 +19561,15 @@ initTafsirVerseTooltip();
 
   /* ── Traduction via LibreTranslate ── */
   async function translateSelection(s){
+    /* v58 — délègue au module LibreTranslate intégré (endpoint auto-détecté
+       sur le LAN, sélecteur de langue, config intégrée). */
     const text = (s && s.text || '').trim();
     if (!text) { toast('Sélection vide.', 'error'); return; }
-    const source = detectChunkLang(text) === 'francais' ? 'fr' : 'auto';
-    const target = 'fr';
-    toast('🌐 Traduction en cours…', 'info');
-    try {
-      const res = await fetch('http://localhost:5000/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: text, source: source, target: target, format: 'text' })
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      const translated = (data && data.translatedText) ? data.translatedText : '';
-      if (!translated) { toast('Traduction vide.', 'error'); return; }
-      const tip = document.createElement('div');
-      tip.style.cssText = 'position:fixed;z-index:99999;max-width:360px;background:rgba(8,12,18,0.97);border:1px solid #f5c542;border-radius:10px;padding:12px;color:#fdf3d0;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;box-shadow:0 0 18px rgba(245,197,66,0.35);';
-      tip.innerHTML = '<div style="font-size:11px;color:#f5c542;margin-bottom:6px;letter-spacing:1px;text-transform:uppercase;">🌐 Traduction</div>'
-        + '<div style="margin-bottom:6px;opacity:.85;">« ' + esc(text.slice(0,200)) + ' »</div>'
-        + '<div style="color:#fff;font-weight:900;">' + esc(translated) + '</div>'
-        + '<button id="lt-close" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">Fermer</button>';
-      document.body.appendChild(tip);
-      const r = (s && s.rect && s.rect.left != null) ? s.rect : { left: window.innerWidth/2 - 180, top: window.innerHeight/2 - 60 };
-      let x = Math.max(10, Math.min((r.left || 10) + (r.width || 0)/2 - 180, window.innerWidth - 380));
-      let y = Math.max(10, ((r.top || 10) + 8));
-      if (y + 160 > window.innerHeight) y = Math.max(10, (r.top || 10) - 160);
-      tip.style.left = x + 'px';
-      tip.style.top = y + 'px';
-      const close = function(){ tip.remove(); };
-      tip.addEventListener('mousedown', function(e){ e.stopPropagation(); });
-      tip.addEventListener('mouseup', function(e){ e.stopPropagation(); });
-      tip.querySelector('#lt-close').addEventListener('click', function(e){ e.stopPropagation(); close(); });
-    } catch (e) {
-      console.warn('[LibreTranslate] erreur:', e);
-      toast('Impossible de traduire. Vérifiez LibreTranslate.', 'error');
+    if (window.__LT && typeof window.__LT.translate === 'function') {
+      window.__LT.translate(text, s && s.rect);
+      return;
     }
+    toast('Module de traduction indisponible.', 'error');
   }
 
   /* ── Clic « Add to chat » : demande un commentaire, SANS toucher au fil du chat ── */

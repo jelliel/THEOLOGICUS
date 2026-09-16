@@ -3,6 +3,7 @@
 
     <application
         android:allowBackup="true"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -41,4 +42,9 @@
     <!-- v53 : micro (dictée vocale + enregistrement audio du chat vocal) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+    <!-- v58 : LibreTranslate auto-hébergé sur le PC parle en HTTP clair sur le
+         réseau local. Android bloque le cleartext par défaut (API 28+) ; on
+         l'autorise pour toute l'app (pas d'URL fixe : le serveur est découvert
+         dynamiquement sur le LAN). Aucune donnée ne sort du réseau local. -->
 </manifest>
