@@ -152,6 +152,8 @@ public class SpeechBridgePlugin extends Plugin {
                             notifyListeners("speech", r);
                         }
                     });
+                    lastEmitted = "";           /* v56 : reset anti-doublon par session */
+                    lastWasFinal = false;
                     recognizer.startListening(intent);
                     call.resolve();
                 } catch (Exception e) {
@@ -166,11 +168,22 @@ public class SpeechBridgePlugin extends Plugin {
         ArrayList<String> res = bundle.getStringArrayList(
                 fin ? RecognizerIntent.EXTRA_RESULTS : RecognizerIntent.EXTRA_PARTIAL_RESULTS);
         if (res == null || res.isEmpty() || res.get(0).trim().isEmpty()) return;
+        String text = res.get(0).trim();
+        /* v56 — filtre anti-doublon cote natif : les moteurs reenvoient souvent
+           le meme instantane (partiels repetes, final identique au dernier
+           partiel, double onResults). On n'emettre que si le texte change,
+           sauf passage partiel -> final. */
+        if (text.equals(lastEmitted) && !(fin && !lastWasFinal)) return;
+        lastEmitted = text;
+        lastWasFinal = fin;
         JSObject r = new JSObject();
-        r.put("text", res.get(0));
+        r.put("text", text);
         r.put("final", fin);
         notifyListeners("speech", r);
     }
+
+    private String lastEmitted = "";
+    private boolean lastWasFinal = false;
 
     @PluginMethod
     public void listenStop(PluginCall call) {

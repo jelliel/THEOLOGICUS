@@ -136,14 +136,12 @@
           ? txt
           : '<span class="interim">' + txt.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
       }
-      function mergePartial(prev, next) {
-        if (!prev) return next;
-        if (next === prev) return prev;
-        if (next.indexOf(prev) === 0) return next;            /* prolongation */
-        if (prev.indexOf(next) === 0) return prev;            /* retour arriere du moteur */
-        /* fragment disjoint : on concatene avec espace si besoin */
-        return prev + (/[\s’'-]$/.test(prev) || !next ? '' : ' ') + next;
-      }
+      /* v56 — PAS de fusion : les partiels natifs sont des INSTANTANES
+         cumulatifs (la meilleure transcription complete du moment).
+         Toute heuristique de fusion echoue sur les micro-variations
+         ('donne moi' -> 'donne-moi') et recree les doublons — c'etait
+         exactement le bug 'donne-moidonne-moidonne-moi'. On AFFICHE
+         le dernier instantane, point. */
       try {
         SB.addListener('speech', function (ev) {
           if (!self._listening) return;
@@ -157,12 +155,11 @@
           var txt = String(ev.text || '').trim();
           if (!txt) return;
           if (!ev.final) {
-            var merged = mergePartial(self._shown, txt);
-            self._shown = merged;
-            render(merged, false);
+            self._shown = txt;                      /* remplacement pur */
+            render(txt, false);
             if (typeof self.onresult === 'function') {
               self.onresult({ resultIndex: 0,
-                results: { length: 1, 0: { isFinal: false, 0: { transcript: merged }, length: 1 } } });
+                results: { length: 1, 0: { isFinal: false, 0: { transcript: txt }, length: 1 } } });
             }
             return;
           }
@@ -170,7 +167,7 @@
           if (self._finalSent) return;
           self._finalSent = true;
           /* le final natif est la phrase COMPLETE : il remplace tout partiel */
-          if (txt.length < self._shown.replace(/\s+/g,'').length * 0.6) {
+          if (txt.replace(/\s+/g,'').length < self._shown.replace(/\s+/g,'').length * 0.4) {
             /* final aberrant trop court face a ce qui etait affiche :
                on garde l'affiche (le moteur a reconverge a tort) */
             txt = self._shown;
