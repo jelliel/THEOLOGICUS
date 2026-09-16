@@ -56,11 +56,26 @@
     var b = {};
     try { b = JSON.parse((init && init.body) || '{}'); } catch (e) {}
     var fname = String(b.filename || 'theologicus-backup.json');
+    var data64 = String(b.data64 || '');
+    /* v51 — le choix du repertoire d'abord : plugin natif SavePicker (SAF).
+       Replis : Documents (Filesystem) puis Download public. */
+    var Picker = cap.Plugins && cap.Plugins.SavePicker;
+    if (Picker && typeof Picker.saveAs === 'function') {
+      try {
+        Picker.saveAs({ name: fname, data64: data64 })
+          .then(function (r) { resolve(jsonRes({ ok: true, path: String(r && r.display || 'dossier choisi') })); })
+          .catch(function () { legacySave(fname, data64, resolve); });
+        return;
+      } catch (e) { legacySave(fname, data64, resolve); return; }
+    }
+    legacySave(fname, data64, resolve);
+  }
+  function legacySave(fname, data64, resolve) {
     var dirs = ['DOCUMENTS', 'EXTERNAL_STORAGE', 'DATA'];
     var i = 0;
     function attempt() {
       if (i >= dirs.length) { resolve(jsonRes({ ok: false, error: 'no writable directory' }, 500)); return; }
-      FS.writeFile({ path: fname, directory: dirs[i], data: String(b.data64 || '') })
+      FS.writeFile({ path: fname, directory: dirs[i], data: data64 })
         .then(function (w) { resolve(jsonRes({ ok: true, path: String(w.uri || dirs[i] + '/' + fname) })); })
         .catch(function () { i++; attempt(); });
     }
