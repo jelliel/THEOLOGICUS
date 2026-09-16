@@ -306,10 +306,68 @@
   var _resolved = null;
   var _probing = null;
 
+  /* v64 — la liste /languages est mise en cache 10 minutes. Sans ce cache,
+     chaque ouverture de popup refaisait un aller-retour complet. */
+  var _langs = null;
+  var _langsAt = 0;
+  var LANGS_TTL = 10 * 60 * 1000;
+
+  /* v64 — liste affichée AVANT la réponse du serveur. Le <select> était créé
+     vide et n'était rempli qu'après resolveEndpoint() + fetch('/languages') :
+     sur un réseau lent, un serveur qui charge ses modèles, ou une URL
+     enregistrée périmée (chaque essai attend son timeout), il restait vide
+     plusieurs secondes. L'utilisateur ne voyait jamais « FR » arriver et
+     rouvrait la popup en boucle — « je dois cliquer en plusieurs fois ».
+     Ces codes existent tous sur le serveur local (vérifié : 34 langues). */
+  var FALLBACK_LANGS = [
+    { code:'fr', name:'French' },   { code:'en', name:'English' },
+    { code:'de', name:'German' },   { code:'it', name:'Italian' },
+    { code:'el', name:'Greek' },    { code:'he', name:'Hebrew' },
+    { code:'ar', name:'Arabic' },   { code:'nl', name:'Dutch' },
+    { code:'ja', name:'Japanese' }, { code:'ko', name:'Korean' }
+  ];
+
   function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function lsSet(k,v){ try { if (v) localStorage.setItem(k,v); else localStorage.removeItem(k); } catch(e){} }
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+  /* v64 — tri : la langue voulue en tête, puis l'ordre alphabétique des codes. */
+  function sortLangs(arr, first){
+    var a = (arr || []).slice();
+    a.sort(function(x, y){
+      if (x.code === first) return -1;
+      if (y.code === first) return 1;
+      return x.code < y.code ? -1 : x.code > y.code ? 1 : 0;
+    });
+    return a;
+  }
+
+  /* v64 — remplit le <select>. Appelé deux fois : tout de suite avec la liste
+     en cache ou le repli, puis à nouveau quand la vraie liste arrive. */
+  function renderLangs(sel, arr, selected){
+    if (!sel) return;
+    var html = '';
+    arr.forEach(function(l){
+      html += '<option value="' + esc(l.code) + '"' + (l.code === selected ? ' selected' : '')
+            + '>' + esc(String(l.code).toUpperCase() + ' — ' + (l.name || '')) + '</option>';
+    });
+    sel.innerHTML = html;
+    if (selected) sel.value = selected;
+  }
+
+  /* v64 — /languages avec cache mémoire. Renvoie null en cas d'échec : l'appelant
+     garde alors la liste de repli au lieu de vider le sélecteur. */
+  function fetchLangs(ep){
+    if (_langs && (Date.now() - _langsAt) < LANGS_TTL) return Promise.resolve(_langs);
+    return fetch(ep + '/languages').then(function(r){ return r.json(); })
+      .then(function(j){
+        var arr = (j || []).filter(function(l){ return l && l.code; });
+        if (arr.length) { _langs = arr; _langsAt = Date.now(); }
+        return arr.length ? arr : null;
+      })
+      .catch(function(){ return null; });
+  }
 
   function probe(url, timeoutMs){
     return new Promise(function(res){
@@ -356,7 +414,12 @@
       function next(){
         if (i >= list.length) { _probing = null; return null; }
         var u = list[i++];
-        return probe(u, 1200).then(function(ok){
+        /* v64 — l'URL ENREGISTRÉE (1er essai) mérite plus de patience : c'est
+           elle qui réussit presque toujours, et 1200 ms ne suffisent pas quand
+           le serveur répond lentement au premier appel. Les candidats de
+           découverte restent à 1200 ms pour ne pas traîner s'il est éteint. */
+        var tmo = (i === 1) ? 3000 : 1200;
+        return probe(u, tmo).then(function(ok){
           if (ok) { _resolved = ok; _probing = null; return ok; }
           return next();
         });
@@ -405,6 +468,7 @@
     pop.querySelector('#lt-save').addEventListener('click', function(){
       var u = pop.querySelector('#lt-url').value.trim().replace(/\/+$/,'');
       _resolved = u || null;
+      forgetLangs();   /* v64 — la liste mise en cache venait de l'ancien serveur */
       lsSet(LS_KEY, u || null);
       st.textContent = u ? 'Enregistré ✔' : 'Effacé — découverte automatique.';
     });
@@ -498,21 +562,28 @@
       });
     }
 
+    /* v64 — le sélecteur n'est PLUS JAMAIS vide : on le remplit tout de suite
+       avec la liste en cache, ou à défaut avec FALLBACK_LANGS (FR en tête).
+       La vraie liste du serveur vient se substituer ensuite, sans jamais
+       effacer un choix que l'utilisateur aurait déjà fait entre-temps. */
+    var userPicked = false;
+    renderLangs(selLang, sortLangs(_langs || FALLBACK_LANGS, current), current);
     resolveEndpoint().then(function(ep){
-      if (!ep) { selLang.innerHTML = '<option value="fr">FR</option>'; return; }
-      fetch(ep + '/languages').then(function(r){ return r.json(); }).then(function(langs){
-        var arr = (langs || []).filter(function(l){ return l && l.code; });
-        arr.sort(function(a,b){ return a.code === 'fr' ? -1 : b.code === 'fr' ? 1 : a.code < b.code ? -1 : 1; });
-        var opts = '';
+      if (!ep) return;                       /* pas de serveur : on garde le repli */
+      fetchLangs(ep).then(function(arr){
+        if (!arr) return;                    /* échec réseau : on garde le repli */
         var remember = ltSavedLang();
         var hasRemember = arr.some(function(l){ return l.code === remember; });
-        arr.forEach(function(l){ opts += '<option value="' + esc(l.code) + '"' + (l.code === remember ? ' selected' : '') + '>' + esc(l.code.toUpperCase() + ' — ' + (l.name || '')) + '</option>'; });
-        selLang.innerHTML = opts || '<option value="fr">FR</option>';
-        /* mémorisée uniquement si le serveur la propose encore ; sinon retour FR */
-        current = hasRemember ? remember : 'fr';
-      }).catch(function(){ selLang.innerHTML = '<option value="fr">FR</option><option value="en">EN</option><option value="es">ES</option><option value="de">DE</option><option value="it">IT</option>'; });
+        /* si l'utilisateur a déjà choisi dans la liste de repli, on respecte
+           son choix plutôt que de le remplacer sous ses yeux */
+        var wanted = userPicked ? current : (hasRemember ? remember : 'fr');
+        renderLangs(selLang, sortLangs(arr, wanted), wanted);
+        /* langue mémorisée absente du serveur → retour à FR : la traduction
+           affichée ne correspond plus, on relance */
+        if (wanted !== current) { current = wanted; doTranslate(); }
+      });
     });
-    selLang.addEventListener('change', function(){ current = selLang.value; ltRememberLang(current); doTranslate(); });
+    selLang.addEventListener('change', function(){ userPicked = true; current = selLang.value; ltRememberLang(current); doTranslate(); });
     pop.querySelector('#lt-copy').addEventListener('click', function(){
       var t = out.textContent || '';
       if (!t || t === '…') return;
@@ -528,9 +599,27 @@
     doTranslate();
   }
 
+  /* v64 — changement de serveur : la liste en cache appartient à l'ancien. */
+  function forgetLangs(){ _langs = null; _langsAt = 0; }
+
+  /* v64 — préchauffage en tâche de fond. Si une URL est enregistrée, on
+     résout le serveur et on charge /languages peu après le démarrage : la
+     première popup affiche alors directement la vraie liste au lieu
+     d'attendre le réseau. Rien n'est tenté si aucune URL n'est configurée,
+     pour ne pas générer de trafic de découverte inutile. */
+  setTimeout(function(){
+    try { if (!lsGet(LS_KEY)) return; } catch(e){ return; }
+    resolveEndpoint().then(function(ep){ if (ep) return fetchLangs(ep); })
+      .catch(function(){ /* silencieux : simple optimisation */ });
+  }, 4000);
+
   window.__LT = {
     resolve: resolveEndpoint,
-    save: function(url){ _resolved = url ? String(url).replace(/\/+$/,'') : null; lsSet(LS_KEY, _resolved); },
+    save: function(url){
+      _resolved = url ? String(url).replace(/\/+$/,'') : null;
+      forgetLangs();
+      lsSet(LS_KEY, _resolved);
+    },
     languages: function(){
       return resolveEndpoint().then(function(ep){
         if (!ep) throw new Error('no-server');
