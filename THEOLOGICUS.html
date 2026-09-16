@@ -18583,6 +18583,8 @@ initTafsirVerseTooltip();
      selection produit un second `touchend` : les deux pouvaient former une
      fausse paire et ouvrir l'encadrement pendant la selection. */
   var _downT = 0, _downX = 0, _downY = 0, _tapMoved = false;
+  var _tipTimer = 0;   /* v47 — infobulle d'annotation differee au doigt */
+  var _tapPairAt = 0;  /* v47 — instant du dernier double-tap detecte */
   document.addEventListener('touchstart', function(e){
     var t0 = e.touches && e.touches[0];
     _downT = Date.now(); _tapMoved = false;
@@ -18601,6 +18603,8 @@ initTafsirVerseTooltip();
     var now = Date.now();
     if (now - _tapT < 350 && Math.abs(t.clientX - _tapX) < 40 && Math.abs(t.clientY - _tapY) < 40) {
       _tapT = 0;
+      clearTimeout(_tipTimer);              /* v47 : c'est un double-tap, pas une demande d'infobulle */
+      _tapPairAt = Date.now();              /* le `click` qui suit ne doit pas la reprogrammer */
       setTimeout(function(){
         detectSelectionAndShow();          /* remplit window._atcSel */
         var s = window._atcSel;
@@ -18709,6 +18713,12 @@ initTafsirVerseTooltip();
     const im = document.getElementById('atc-insert-menu');
     if (im && im.style.display !== 'none' && (!e.target.closest || !e.target.closest('#atc-insert-menu'))) {
       im.style.display = 'none';
+    }
+    /* v47 — l'infobulle se fermait au `mouseleave`, evenement qui n'existe pas
+       au doigt : sans cela elle restait affichee indefiniment. */
+    const tp = document.getElementById('atc-tip');
+    if (tp && (!e.target.closest || !e.target.closest('#atc-tip'))) {
+      clearTimeout(_tipTimer); closeAtcTip();
     }
   }, { passive: true });
 
@@ -19762,6 +19772,21 @@ initTafsirVerseTooltip();
       const ts = msgEl ? parseInt(msgEl.dataset.msgId, 10) : null;
       if (id) removeFigure(id, ts);
       return;
+    }
+    /* v47 — au doigt, un TAP sur un passage annote affiche son commentaire.
+       v41 avait supprime le declenchement au survol (un tap emet `mouseover`,
+       ce qui ouvrait l'infobulle au lieu de laisser selectionner le texte)
+       sans le remplacer : le commentaire etait devenu inaccessible sur mobile.
+       Delai de 400 ms pour laisser un double-tap (= encadrer) l'annuler. */
+    const hlAnn = e.target.closest ? e.target.closest('.atc-hl') : null;
+    if (hlAnn) {
+      if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) {
+        if (Date.now() - _tapPairAt < 700) return;   /* v47 : double-tap = encadrer, pas d'infobulle */
+        clearTimeout(_tipTimer);
+        _tipTimer = setTimeout(function(){ showTipFor(hlAnn); }, 400);
+      } else {
+        showTipFor(hlAnn);
+      }
     }
     const del = e.target.closest ? e.target.closest('.mk-del') : null;
     if (!del) return;
