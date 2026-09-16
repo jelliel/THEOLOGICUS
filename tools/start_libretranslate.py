@@ -53,6 +53,22 @@ def lan_ips():
     return ips
 
 
+def lt_command(port):
+    """Commande de lancement du serveur.
+
+    LibreTranslate 1.9.x n'expose PAS de `__main__.py` : lancer
+    `python -m libretranslate` echoue avec
+      « No module named libretranslate.__main__; 'libretranslate' is a package
+         and cannot be directly executed ».
+    Le point d'entree officiel est `libretranslate.main:main` (declare dans
+    entry_points.txt, expose aussi par le script `libretranslate.exe`).
+    On passe par `-c` : independant du PATH et du dossier Scripts, donc fiable
+    que l'installation soit globale, --user ou dans un venv.
+    """
+    return [sys.executable, "-c", "from libretranslate.main import main; main()",
+            "--host", "0.0.0.0", "--port", str(port)]
+
+
 def main():
     if not have_module("libretranslate"):
         print("LibreTranslate n'est pas installe sur ce PC.")
@@ -80,7 +96,7 @@ def main():
     print("=" * 56)
     print()
 
-    cmd = [sys.executable, "-m", "libretranslate", "--host", "0.0.0.0", "--port", str(PORT)]
+    cmd = lt_command(PORT)
     env = dict(os.environ)
     env["PYTHONUNBUFFERED"] = "1"
     try:
