@@ -102,28 +102,59 @@
     try { window.dispatchEvent(new Event('voiceschanged')); } catch (e) {}
   }
 
-  /* ═══ v53 — Dictee : le WebView n'a pas SpeechRecognition. Polyfill qui
-     delegue au panneau vocal Google (SpeechBridge.dictate). L'app recoit
-     onresult(onerror=aborted) + onend, comme avec la vraie API. ═══ */
+  /* ═══ v54 — Dictee push-to-talk : le WebView n'a pas SpeechRecognition.
+     Polyfill deleguant au SpeechRecognizer natif IN-APP (partiels en direct,
+     sans panneau plein ecran). Contrat :
+       start() -> ecoute ; partiels/finaux via l'evenement natif 'speech'
+       stop()  -> arrete l'ecoute ; le final arrive puis onend()
+     Affichage : le shim ecrit lui-meme dans #voice-transcript (remplace,
+     jamais concatene) -> aucun doublon. L'app insere le final dans la
+     zone de saisie a onend, comme avec la vraie API. */
   if (SB && !window.SpeechRecognition && !window.webkitSpeechRecognition) {
     var Rec = function () {
-      this.lang = 'fr-FR'; this.continuous = false; this.interimResults = false;
+      this.lang = 'fr-FR'; this.continuous = true; this.interimResults = true;
       this.onresult = null; this.onend = null; this.onerror = null;
-      this._started = false;
+      this._listening = false;
+      this._lastText = '';
+      var self = this;
+      try {
+        SB.addListener('speech', function (ev) {
+          if (!self._listening) return;
+          if (ev.error) {
+            self._listening = false;
+            if (typeof self.onerror === 'function') self.onerror({ error: 'aborted' });
+            if (typeof self.onend === 'function') self.onend();
+            return;
+          }
+          var txt = String(ev.text || '');
+          if (txt === self._lastText && !ev.final) return;
+          self._lastText = txt;
+          var vt = document.getElementById('voice-transcript');
+          if (vt) {
+            vt.innerHTML = ev.final
+              ? txt
+              : '<span class="interim">' + txt.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>';
+            vt.scrollTop = vt.scrollHeight;
+          }
+          if (typeof self.onresult === 'function') {
+            self.onresult({ resultIndex: 0,
+              results: { length: 1, 0: { isFinal: !!ev.final, 0: { transcript: txt }, length: 1 } } });
+          }
+          if (ev.final) {
+            self._listening = false;
+            if (typeof self.onend === 'function') self.onend();
+          }
+        });
+      } catch (e) {}
     };
     Rec.prototype.start = function () {
       var self = this;
-      self._started = true;
-      SB.dictate().then(function (r) {
-        self._started = false;
-        var txt = (r && r.text) || '';
-        if (txt && typeof self.onresult === 'function') {
-          self.onresult({ resultIndex: 0,
-            results: { length: 1, 0: { isFinal: true, 0: { transcript: txt }, length: 1 } } });
-        }
-        if (typeof self.onend === 'function') self.onend();
-      }).catch(function (e) {
-        self._started = false;
+      self._listening = true;
+      self._lastText = '';
+      var vt = document.getElementById('voice-transcript');
+      if (vt) vt.innerHTML = '';
+      SB.listenStart({ lang: self.lang || 'fr-FR' }).catch(function (e) {
+        self._listening = false;
         var msg = String(e && e.message || '');
         if (typeof self.onerror === 'function') {
           self.onerror({ error: /refuse|denied/i.test(msg) ? 'not-allowed' : 'aborted' });
@@ -131,8 +162,12 @@
         if (typeof self.onend === 'function') self.onend();
       });
     };
-    Rec.prototype.stop = function () { /* one-shot : le panneau se ferme seul */ };
-    Rec.prototype.abort = function () { try { SB.stop(); } catch (e) {} };
+    Rec.prototype.stop = function () {
+      var self = this;
+      self._listening = false;
+      SB.listenStop().catch(function () {});
+    };
+    Rec.prototype.abort = function () { this.stop(); };
     window.SpeechRecognition = Rec;
     window.webkitSpeechRecognition = Rec;
   }
@@ -15756,7 +15791,13 @@ function bindEvents() {
           const inp = $("#user-input");
           inp.value += (inp.value ? ' ' : '') + finalTranscript.trim();
           autoResizeTextarea();
-          toast("Dictée capturée", "success");
+          /* v54 — en coque native (APK) : push-to-talk, la question part seule */
+          if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+            const sb = $("#send-btn");
+            if (sb) { toast("Question envoyée", "success"); sb.click(); }
+          } else {
+            toast("Dictée capturée", "success");
+          }
         }
       };
 
@@ -15787,18 +15828,37 @@ function bindEvents() {
         toast("Dictée vocale : erreur " + e.error, "error");
       };
 
-      voiceBtn.onclick = () => {
-        if (isRecording) { stopRecording(); return; }
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          stream.getTracks().forEach(t => t.stop());
-          isRecording = true;
-          voiceBtn.classList.add('recording');
-          openOverlay('ÉCOUTE EN COURS');
-          try { recognition.start(); } catch(e) { closeOverlay(); }
-        }).catch(() => {
-          toast("Microphone refusé — autorisez l'accès", "error");
-        });
-      };
+      /* v54 — push-to-talk : APPUI = écoute, RELÂCHEMENT = envoi auto.
+         En coque native on ne passe PAS par getUserMedia : le SpeechRecognizer
+         natif gère sa capture (évite la double demande de permission et les
+         sessions multiples qui cumulaient le texte = mots en double). */
+      const nativeShell = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      function beginListen() {
+        if (isRecording) return;
+        isRecording = true;
+        voiceBtn.classList.add('recording');
+        openOverlay('ÉCOUTE… RELÂCHEZ POUR ENVOYER');
+        try { recognition.start(); } catch(e) { closeOverlay(); }
+      }
+      function endListen() {
+        if (!isRecording) return;
+        try { recognition.stop(); } catch(e) { closeOverlay(); }
+      }
+      if (nativeShell) {
+        voiceBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); beginListen(); });
+        voiceBtn.addEventListener('pointerup', (e) => { e.preventDefault(); endListen(); });
+        voiceBtn.addEventListener('pointercancel', () => endListen());
+      } else {
+        voiceBtn.onclick = () => {
+          if (isRecording) { stopRecording(); return; }
+          navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+            stream.getTracks().forEach(t => t.stop());
+            beginListen();
+          }).catch(() => {
+            toast("Microphone refusé — autorisez l'accès", "error");
+          });
+        };
+      }
 
     } else {
       // ══════════════════════════════════

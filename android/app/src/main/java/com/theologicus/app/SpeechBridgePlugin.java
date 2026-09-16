@@ -1,20 +1,18 @@
 package com.theologicus.app;
 
 import android.app.Activity;
-import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
+import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.widget.Toast;
-
-import androidx.activity.result.ActivityResult;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
@@ -23,24 +21,25 @@ import java.util.ArrayList;
 import java.util.Locale;
 
 /**
- * v53 — pont vocal natif :
+ * v54 — pont vocal natif :
  *  - speak/stop/status : TextToSpeech Android (moteur du telephone).
- *    Le WebView n'expose pas window.speechSynthesis ; le shim JS rebranche
- *    l'API standard sur ce plugin.
- *  - dictate : reconnaissance vocale via l'activity Google (RecognizerIntent),
- *    sans dependance externe ni cle API.
+ *  - listenStart/listenStop : SpeechRecognizer IN-APP (pas le panneau plein
+ *    ecran) -> resultats PARTIELS en direct pendant l'appui, final au
+ *    relachement. Pousse les evenements sur le canal "speech" :
+ *      { text, final:false }  partiel        { text, final:true }  final
+ *      { error:"6" }          timeout/silence (6=no-speech, 7=no match)
  */
 @CapacitorPlugin(name = "SpeechBridge", permissions = {
         @Permission(strings = { android.Manifest.permission.RECORD_AUDIO }, alias = "micro")
 })
 public class SpeechBridgePlugin extends Plugin {
 
+    /* ── TTS ── */
     private TextToSpeech tts;
     private volatile boolean ttsReady = false;
     private String pendingText = "";
     private float pendingRate = 1.0f;
     private float pendingPitch = 1.0f;
-    private String pendingLang = "fr";
 
     private void doSpeak() {
         try {
@@ -75,17 +74,13 @@ public class SpeechBridgePlugin extends Plugin {
                 @Override
                 public void onInit(int status) {
                     ttsReady = (status == TextToSpeech.SUCCESS);
-                    if (ttsReady) {
-                        setLang(lang);
-                        doSpeak();
-                    }
+                    if (ttsReady) { setLang(lang); doSpeak(); }
                 }
             });
         } else if (ttsReady) {
             setLang(lang);
             doSpeak();
         }
-        /* reponse immediate : la synthese demarre en asynchrone (init moteur) */
         call.resolve(new JSObject().put("started", true));
     }
 
@@ -103,58 +98,92 @@ public class SpeechBridgePlugin extends Plugin {
         call.resolve(ret);
     }
 
-    /** Dictee : panneau vocal Google (RecognizerIntent). */
-    @PluginMethod
-    public void dictate(final PluginCall call) {
-        try {
-            if (!hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
-                requestAllPermissions(call, "micResult");
-                return;
-            }
-            launchRecognizer(call);
-        } catch (Exception e) {
-            call.reject("dictate failed: " + e.getMessage(), e);
-        }
-    }
+    /* ── Dictée push-to-talk (SpeechRecognizer in-app) ── */
+    private SpeechRecognizer recognizer;
 
-    private void launchRecognizer(final PluginCall call) {
-        Activity act = bridge.getActivity();
-        try {
-            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fr-FR");
-            startActivityForResult(call, intent, "speechResult");
-        } catch (ActivityNotFoundException e) {
+    @PluginMethod
+    public void listenStart(final PluginCall call) {
+        final Activity act = bridge.getActivity();
+        if (!SpeechRecognizer.isRecognitionAvailable(act.getApplicationContext())) {
             call.reject("no recognizer installed");
+            return;
         }
+        if (!hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
+            requestAllPermissions(call, "micStart");
+            return;
+        }
+        startRecognizer(call);
     }
 
     @PermissionCallback
-    private void micResult(PluginCall call) {
+    private void micStart(PluginCall call) {
         if (call == null) return;
-        if (hasPermission(android.Manifest.permission.RECORD_AUDIO)) {
-            launchRecognizer(call);
-        } else {
-            call.reject("micro refuse");
-        }
+        if (hasPermission(android.Manifest.permission.RECORD_AUDIO)) startRecognizer(call);
+        else call.reject("micro refuse");
     }
 
-    @ActivityCallback
-    private void speechResult(PluginCall call, ActivityResult result) {
-        if (call == null) return;
-        if (result == null || result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {
-            JSObject ret = new JSObject();
-            ret.put("text", "");
-            ret.put("cancelled", true);
-            call.resolve(ret);
-            return;
+    private void startRecognizer(final PluginCall call) {
+        final Activity act = bridge.getActivity();
+        act.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (recognizer != null) { try { recognizer.destroy(); } catch (Exception ignore) {} }
+                    recognizer = SpeechRecognizer.createSpeechRecognizer(act.getApplicationContext());
+
+                    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, call.getString("lang", "fr-FR"));
+                    intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                    intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+
+                    recognizer.setRecognitionListener(new RecognitionListener() {
+                        @Override public void onReadyForSpeech(Bundle params) {}
+                        @Override public void onBeginningOfSpeech() {}
+                        @Override public void onRmsChanged(float rmsdB) {}
+                        @Override public void onBufferReceived(byte[] buffer) {}
+                        @Override public void onEndOfSpeech() {}
+                        @Override public void onEvent(int eventType, Bundle params) {}
+                        @Override public void onPartialResults(Bundle partialResults) { emit(partialResults, false); }
+                        @Override public void onResults(Bundle results) { emit(results, true); }
+                        @Override public void onError(int error) {
+                            JSObject r = new JSObject();
+                            r.put("error", String.valueOf(error));
+                            notifyListeners("speech", r);
+                        }
+                    });
+                    recognizer.startListening(intent);
+                    call.resolve();
+                } catch (Exception e) {
+                    call.reject("listenStart failed: " + e.getMessage(), e);
+                }
+            }
+        });
+    }
+
+    private void emit(Bundle bundle, boolean fin) {
+        if (bundle == null) return;
+        ArrayList<String> res = bundle.getStringArrayList(
+                fin ? RecognizerIntent.EXTRA_RESULTS : RecognizerIntent.EXTRA_PARTIAL_RESULTS);
+        if (res == null || res.isEmpty() || res.get(0).trim().isEmpty()) return;
+        JSObject r = new JSObject();
+        r.put("text", res.get(0));
+        r.put("final", fin);
+        notifyListeners("speech", r);
+    }
+
+    @PluginMethod
+    public void listenStop(PluginCall call) {
+        final SpeechRecognizer rec = recognizer;
+        if (rec != null) {
+            bridge.getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try { rec.stopListening(); } catch (Exception ignore) {}
+                }
+            });
         }
-        android.os.Bundle extras = result.getData().getExtras();
-        ArrayList<String> res = extras != null ? extras.getStringArrayList(RecognizerIntent.EXTRA_RESULTS) : null;
-        JSObject ret = new JSObject();
-        ret.put("text", res != null && !res.isEmpty() ? res.get(0) : "");
-        call.resolve(ret);
+        call.resolve();
     }
 
     @Override
@@ -163,6 +192,10 @@ public class SpeechBridgePlugin extends Plugin {
             try { tts.stop(); tts.shutdown(); } catch (Exception ignore) {}
             tts = null;
             ttsReady = false;
+        }
+        if (recognizer != null) {
+            try { recognizer.destroy(); } catch (Exception ignore) {}
+            recognizer = null;
         }
     }
 }
