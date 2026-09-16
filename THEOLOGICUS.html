@@ -64,10 +64,11 @@
       try {
         Picker.saveAs({ name: fname, data64: data64 })
           .then(function (r) { resolve(jsonRes({ ok: true, path: String(r && r.display || 'dossier choisi') })); })
-          .catch(function () { legacySave(fname, data64, resolve); });
+          .catch(function (err) { console.warn('[shim] picker refuse/echec, repli Documents :', err); legacySave(fname, data64, resolve); });
         return;
-      } catch (e) { legacySave(fname, data64, resolve); return; }
+      } catch (e) { console.warn('[shim] picker indisponible :', e); legacySave(fname, data64, resolve); return; }
     }
+    console.warn('[shim] SavePicker absent du bridge, repli Documents');
     legacySave(fname, data64, resolve);
   }
   function legacySave(fname, data64, resolve) {

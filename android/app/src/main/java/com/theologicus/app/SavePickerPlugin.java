@@ -3,6 +3,7 @@ package com.theologicus.app;
 import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.util.Base64;
 import android.widget.Toast;
 
@@ -18,9 +19,13 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.OutputStream;
 
 /**
- * v51 — « Enregistrer sous » natif : ouvre le sélecteur de répertoire Android
+ * v52 — « Enregistrer sous » natif : ouvre le sélecteur de répertoire Android
  * (SAF), écrit le backup dans le dossier choisi par l'utilisateur et affiche
  * un Toast de confirmation. Repli : dossier Download si le picker est annulé.
+ *
+ * NB : createDocument exige une URI de type DOCUMENT — on convertit l'URI
+ * "tree" renvoyée par le sélecteur via buildDocumentUriUsingTree (écrire
+ * directement dans l'URI tree échoue avec SecurityException/ Illinois).
  */
 @CapacitorPlugin(name = "SavePicker")
 public class SavePickerPlugin extends Plugin {
@@ -54,12 +59,16 @@ public class SavePickerPlugin extends Plugin {
             byte[] bytes = Base64.decode(pendingData, Base64.DEFAULT);
 
             Uri target = tree;
-            if (target == null) {
+            if (target != null) {
+                // l'URI du sélecteur est un TREE : la convertir en DOCUMENT racine
+                target = DocumentsContract.buildDocumentUriUsingTree(
+                        tree, DocumentsContract.getTreeDocumentId(tree));
+            } else {
                 // repli : Download public (pas de permission requise)
                 target = Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload");
             }
 
-            Uri doc = android.provider.DocumentsContract.createDocument(
+            Uri doc = DocumentsContract.createDocument(
                     act.getContentResolver(), target, "application/json", pendingName);
             if (doc == null) throw new IllegalStateException("createDocument a échoué");
 
