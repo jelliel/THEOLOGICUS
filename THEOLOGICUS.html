@@ -24512,5 +24512,89 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 }
 </style>
 
+<style id="v50-sel-menu-css">
+/* v50 — modeles/agents/theme retrouvent une maison sur ecran etroit :
+   deplaces dans le menu « Plus » (la barre les cachait, ils n'existaient
+   nulle part ailleurs en portrait). Styles de menu pour les selects. */
+#v6-more-menu .hud-select{
+  width: 100%; height: 40px; margin: 2px 0 6px; padding: 0 12px;
+  border-radius: 99px; border: 1px solid var(--glass-border);
+  background: transparent; color: var(--text-primary);
+  font-size: 13px; letter-spacing: .3px; appearance: none;
+}
+#v6-more-menu .hud-select:focus{ border-color: var(--accent); outline: none; }
+</style>
+<script id="v50-sel-menu-js">
+/* v50 — deplacement responsive des selects du header vers le menu « Plus ».
+   - #model-select / #agent-select : la regle historique @media 768px cachait
+     .header-controls -> en portrait ils disparaissaient totalement.
+   - #theme-select : cache <=640px (v49, place manque).
+   Sur ecran etroit ils sont DEPLACES dans le menu (meme noeud DOM : tous les
+   handlers et remplissages d'options continuent de fonctionner) ; des que
+   l'ecran redevient large ils retournent a leur place d'origine. */
+(function(){
+  if (window.__v50SelMove) return; window.__v50SelMove = true;
+
+  var IDS = ['model-select', 'agent-select', 'theme-select'];
+  var stash = {};
+  function capture(){
+    IDS.forEach(function(id){
+      var el = document.getElementById(id);
+      if (el && !stash[id]) stash[id] = { el: el, parent: el.parentNode, next: el.nextSibling };
+    });
+  }
+
+  function label(txt){
+    var d = document.createElement('div');
+    d.className = 'mm-label v50-sel-label';
+    d.textContent = txt;
+    return d;
+  }
+
+  function toMenu(){
+    capture();
+    var menu = document.getElementById('v6-more-menu');
+    if (!menu) return;
+    var frag = document.createDocumentFragment();
+    frag.appendChild(label('MODÈLE'));
+    if (stash['model-select']) frag.appendChild(stash['model-select'].el);
+    frag.appendChild(label('AGENT'));
+    if (stash['agent-select']) frag.appendChild(stash['agent-select'].el);
+    frag.appendChild(label('THÈME'));
+    if (stash['theme-select']) frag.appendChild(stash['theme-select'].el);
+    menu.insertBefore(frag, menu.firstChild);
+  }
+
+  function restore(){
+    IDS.forEach(function(id){
+      var s = stash[id];
+      if (s && s.el && s.parent && s.parent.isConnected) {
+        s.parent.insertBefore(s.el, s.next);
+      }
+    });
+    document.querySelectorAll('#v6-more-menu .v50-sel-label').forEach(function(n){ n.remove(); });
+  }
+
+  function apply(){
+    var narrow = window.matchMedia('(max-width: 768px)').matches
+              || window.matchMedia('(max-width: 640px)').matches;
+    if (narrow) toMenu(); else restore();
+  }
+
+  if (window.matchMedia) {
+    try {
+      window.matchMedia('(max-width: 768px)').addEventListener('change', apply);
+      window.matchMedia('(max-width: 640px)').addEventListener('change', apply);
+    } catch(e) {
+      /* vieux WebView : polling leger en repli */
+      setInterval(apply, 1200);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+  setTimeout(apply, 1500);
+})();
+</script>
+
 </body>
 </html>
