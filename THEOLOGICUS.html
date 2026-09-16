@@ -18578,10 +18578,26 @@ initTafsirVerseTooltip();
      conversation) et n'est pas toujours emis par WebView Android. Reserve au
      tactile, pour ne rien changer aux usages du double-clic au bureau. */
   var _tapT = 0, _tapX = 0, _tapY = 0;
+  /* v46 — seuls deux taps francs comptent. Un appui long (qui sert a
+     selectionner un mot) dure ~500 ms, et le glissement d'une poignee de
+     selection produit un second `touchend` : les deux pouvaient former une
+     fausse paire et ouvrir l'encadrement pendant la selection. */
+  var _downT = 0, _downX = 0, _downY = 0, _tapMoved = false;
+  document.addEventListener('touchstart', function(e){
+    var t0 = e.touches && e.touches[0];
+    _downT = Date.now(); _tapMoved = false;
+    if (t0) { _downX = t0.clientX; _downY = t0.clientY; }
+  }, { passive: true });
+  document.addEventListener('touchmove', function(e){
+    var t0 = e.touches && e.touches[0]; if (!t0) return;
+    if (Math.abs(t0.clientX - _downX) > 12 || Math.abs(t0.clientY - _downY) > 12) _tapMoved = true;
+  }, { passive: true });
   document.addEventListener('touchend', function(e){
     if (!window.__THEO_TOUCH_UI || !window.__THEO_TOUCH_UI()) return;
     var t = e.changedTouches && e.changedTouches[0];
     if (!t) return;
+    /* appui long ou glissement : ce n'est pas un tap, on oublie la paire */
+    if (_tapMoved || (Date.now() - _downT) > 250) { _tapT = 0; return; }
     var now = Date.now();
     if (now - _tapT < 350 && Math.abs(t.clientX - _tapX) < 40 && Math.abs(t.clientY - _tapY) < 40) {
       _tapT = 0;
@@ -18686,6 +18702,15 @@ initTafsirVerseTooltip();
     const im = document.getElementById('atc-insert-menu');
     if (im && (!e.target.closest || !e.target.closest('#atc-insert-menu'))) im.style.display = 'none';
   });
+  /* v46 — au doigt, l'appui long n'emet pas de `mousedown` : le menu
+     d'encadrement restait donc affiche quand on selectionnait un mot juste
+     apres l'avoir ouvert. On le ferme aussi au toucher en dehors. */
+  document.addEventListener('touchstart', function(e){
+    const im = document.getElementById('atc-insert-menu');
+    if (im && im.style.display !== 'none' && (!e.target.closest || !e.target.closest('#atc-insert-menu'))) {
+      im.style.display = 'none';
+    }
+  }, { passive: true });
 
   /* ── Figures insérées (option Insert depuis la sélection) ── */
   function ensureInsertMenu(){
