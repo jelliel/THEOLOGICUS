@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
        plugins connus a cet instant ; un enregistrement apres coup est
        ignore (c'etait la cause du plugin inexistant en v1.0.26). */
     registerPlugin(SavePickerPlugin.class);
+    registerPlugin(SpeechBridgePlugin.class);
     super.onCreate(savedInstanceState);
   }
 }

@@ -45,7 +45,97 @@
 (function () {
   var cap = window.Capacitor;
   if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return; /* desktop/navigateur : ne rien faire */
-  var FS = cap.Plugins && cap.Plugins.Filesystem;
+  var P = cap.Plugins || {};
+  var FS = P.Filesystem;
+  var SB = P.SpeechBridge;
+
+  /* ═══ v53 — TTS : le WebView n'a pas window.speechSynthesis. Polyfill
+     minimaal branché sur le plugin natif SpeechBridge (moteur Google du
+     téléphone) : speak/cancel/getVoices/speaking suffisent a l'app. ═══ */
+  if (SB && !window.speechSynthesis) {
+    var chromeErr = function(){ /* silence : l'app ecoute onerror */ };
+    var Synth = function () {
+      this.pending = false;
+      this.speaking = false;
+    };
+    Synth.prototype.speak = function (u) {
+      var self = this;
+      self.speaking = true;
+      try {
+        SB.speak({
+          text: String(u.text || ''),
+          lang: (u.lang || 'fr-FR').slice(0, 2).toLowerCase(),
+          rate: u.rate || 1, pitch: u.pitch || 1
+        }).catch(function () {
+          self.speaking = false;
+          if (u && typeof u.onerror === 'function') u.onerror({ error: 'synthesis-failed' });
+          if (u && typeof u.onend === 'function') u.onend();
+        });
+      } catch (e) {
+        self.speaking = false;
+        if (u && typeof u.onerror === 'function') u.onerror({ error: 'synthesis-failed' });
+      }
+      /* pas de fin fiable remontee du natif : on estime ~1 mot / 350 ms */
+      var ms = Math.max(1200, String(u.text || '').split(/\s+/).length * 350 / (u.rate || 1));
+      setTimeout(function () {
+        self.speaking = false;
+        if (u && typeof u.onend === 'function') u.onend();
+      }, ms);
+    };
+    Synth.prototype.cancel = function () {
+      this.speaking = false;
+      try { SB.stop(); } catch (e) {}
+    };
+    Synth.prototype.getVoices = function () {
+      return [{ voiceURI: 'native', name: 'Android (natif)', lang: 'fr-FR', localService: true, default: true }];
+    };
+    Object.defineProperty(Synth.prototype, 'paused', { get: function () { return false; } });
+    Synth.prototype.addEventListener = function () {};
+    Synth.prototype.removeEventListener = function () {};
+    Synth.prototype.dispatchEvent = function () { return true; };
+    window.speechSynthesis = new Synth();
+    window.SpeechSynthesisUtterance = function (text) {
+      this.text = String(text == null ? '' : text);
+      this.lang = 'fr-FR'; this.voice = null; this.rate = 1; this.pitch = 1; this.volume = 1;
+      this.onstart = null; this.onend = null; this.onerror = null;
+    };
+    try { window.dispatchEvent(new Event('voiceschanged')); } catch (e) {}
+  }
+
+  /* ═══ v53 — Dictee : le WebView n'a pas SpeechRecognition. Polyfill qui
+     delegue au panneau vocal Google (SpeechBridge.dictate). L'app recoit
+     onresult(onerror=aborted) + onend, comme avec la vraie API. ═══ */
+  if (SB && !window.SpeechRecognition && !window.webkitSpeechRecognition) {
+    var Rec = function () {
+      this.lang = 'fr-FR'; this.continuous = false; this.interimResults = false;
+      this.onresult = null; this.onend = null; this.onerror = null;
+      this._started = false;
+    };
+    Rec.prototype.start = function () {
+      var self = this;
+      self._started = true;
+      SB.dictate().then(function (r) {
+        self._started = false;
+        var txt = (r && r.text) || '';
+        if (txt && typeof self.onresult === 'function') {
+          self.onresult({ resultIndex: 0,
+            results: { length: 1, 0: { isFinal: true, 0: { transcript: txt }, length: 1 } } });
+        }
+        if (typeof self.onend === 'function') self.onend();
+      }).catch(function (e) {
+        self._started = false;
+        var msg = String(e && e.message || '');
+        if (typeof self.onerror === 'function') {
+          self.onerror({ error: /refuse|denied/i.test(msg) ? 'not-allowed' : 'aborted' });
+        }
+        if (typeof self.onend === 'function') self.onend();
+      });
+    };
+    Rec.prototype.stop = function () { /* one-shot : le panneau se ferme seul */ };
+    Rec.prototype.abort = function () { try { SB.stop(); } catch (e) {} };
+    window.SpeechRecognition = Rec;
+    window.webkitSpeechRecognition = Rec;
+  }
   if (!FS) return;
   var _origFetch = window.fetch;
   function jsonRes(obj, status) {
