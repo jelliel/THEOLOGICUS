@@ -18739,10 +18739,17 @@ initTafsirVerseTooltip();
       if (tr) tr.style.display = 'none';
     }
     const w = b.offsetWidth || 160;
+    const h = b.offsetHeight || 44;   /* v57 : vraie hauteur (bulle multi-lignes) */
     let x = s.rect.left + s.rect.width/2 - w/2;
     x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
-    let y = s.rect.top - 44;
-    if (y < 8) y = s.rect.bottom + 12;
+    /* v57 — placement SANS jamais couvrir la selection : au-dessus par
+       defaut, en-dessous si pas de place ; marge de 14 px entre la bulle
+       et la selection dans les deux cas. */
+    let y = s.rect.top - h - 14;
+    if (y < 8) y = s.rect.bottom + 14;
+    /* filet : si le bas de la selection deborde de l'ecran, remonter au
+       dessus quoi qu'il arrive */
+    if (y + h > window.innerHeight - 8 && s.rect.top - h - 14 >= 8) y = s.rect.top - h - 14;
     b.style.left = x + 'px'; b.style.top = y + 'px';
   }
 
@@ -18788,8 +18795,30 @@ initTafsirVerseTooltip();
          double-clic et sélection clavier (Shift+flèches), même quand la
          livraison de mouseup est avalee par l'environnement (WebView2). ── */
   let _scTimer = null;
+  /* v57 — au TACTILE, la bulle ne s'affiche qu'APRES la fin du glisser :
+     `selectionchange` pendant l'etirement des poignees ne doit plus la
+     faire clignoter au milieu de la selection. On observe pointerdown ->
+     pointerup : pendant le drag (entre les deux), detectSelection est
+     reportee a la relevee + 350 ms. Souris/clavier : comportement unchanged. */
+  let _dragging = false;
+  let _dragWasTouch = false;
+  document.addEventListener('pointerdown', function(e){
+    _dragging = true;
+    _dragWasTouch = (e.pointerType === 'touch');
+  }, { capture: true });
+  document.addEventListener('pointerup', function(){
+    if (_dragging && _dragWasTouch) {
+      /* la selection peut se finaliser juste apres pointerup */
+      clearTimeout(_scTimer);
+      _scTimer = setTimeout(detectSelectionAndShow, 350);
+    }
+    _dragging = false;
+  }, { capture: true });
+  document.addEventListener('pointercancel', function(){ _dragging = false; }, { capture: true });
   document.addEventListener('selectionchange', function(){
     clearTimeout(_scTimer);
+    /* tactile + doigt encore pose (poignees) : on attend la relevee */
+    if (_dragging && _dragWasTouch) return;
     _scTimer = setTimeout(detectSelectionAndShow, 220);
   });
 
