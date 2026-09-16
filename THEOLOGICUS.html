@@ -7222,6 +7222,22 @@ window.__ensureTafsirSurah = function(p){
         <div class="field-hint">Si vous entendez un accent anglais sur du français, choisissez « Français (forcé) ». La voix française est réattribuée à chaque lecture.</div>
       </div>
 
+      <div class="section-title">🌐 TRADUCTION LOCALE (LIBRETRANSLATE)</div>
+      <div class="field-group" id="lt-ctrl">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span id="lt-dot" style="width:10px;height:10px;border-radius:50%;background:#666;flex:none;box-shadow:0 0 8px rgba(0,0,0,.4);"></span>
+          <span id="lt-state" style="font-size:12px;font-weight:700;">Vérification…</span>
+          <span style="flex:1;"></span>
+          <button class="btn-primary" id="lt-toggle" style="min-width:130px;min-height:34px;font-size:12px;">…</button>
+        </div>
+        <div id="lt-sub" class="field-hint" style="margin-top:6px;">Le serveur de traduction tourne sur ce PC et reste joignable par l'APK sur le Wi-Fi (bouton 🌐 de la bulle).</div>
+        <div id="lt-err" style="display:none;margin-top:6px;font-size:11px;color:#ff8a8a;"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn-ghost" id="lt-install-btn" style="display:none;min-height:30px;font-size:11px;">⬇️ Installer LibreTranslate</button>
+          <button class="btn-ghost" id="lt-log-btn" style="display:none;min-height:30px;font-size:11px;">📄 Voir le journal</button>
+        </div>
+      </div>
+
       <div class="section-title">MODÈLES ENREGISTRÉS</div>
       <div id="custom-models-list"></div>
 
@@ -8778,7 +8794,7 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
 function initSettingsModal() {
   const modal = $("#settings-modal");
   if (!modal) return;
-  const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); modal.classList.add("active"); };
+  const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active"); };
   const close = () => modal.classList.remove("active");
   const openBtn = $("#open-settings-modal");
   if (openBtn) openBtn.onclick = open;
@@ -25195,5 +25211,132 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 })();
 </script>
 
+<script id="v59-lt-settings">
+/* ═══ v59 — bouton PARAMÈTRES : démarrer/arrêter le serveur LibreTranslate
+   local (Windows uniquement — l'endpoint vit dans proxy_server.py, lancé
+   par app.py / l'exe). Sur Android ce bloc reste inerte : le téléphone
+   consomme le serveur du PC via la découverte v58. ═══ */
+(function(){
+  'use strict';
+  function $(id){ return document.getElementById(id); }
+  function isWindowsLike(){
+    try {
+      var ua = navigator.userAgent || '';
+      var isAndroid = /Android/i.test(ua);
+      var win = /Windows/i.test(ua) || (!isAndroid && !/iPhone|iPad|Mac/i.test(ua));
+      return win;
+    } catch(e){ return true; }
+  }
+  if (!isWindowsLike()) return;   // APK : aucun effet, zéro coût
+
+  var timer = null;
+  var busy = false;
+
+  function setUI(st){
+    var dot = $('lt-dot'), state = $('lt-state'), toggle = $('lt-toggle');
+    var sub = $('lt-sub'), err = $('lt-err'), inst = $('lt-install-btn'), log = $('lt-log-btn');
+    if (!dot || !state || !toggle) return;
+    var installing = st && st.installing;
+    var running = st && st.running;
+    var ready = st && st.ready;
+    dot.style.background = ready ? '#3fae7a' : running ? '#f5c542' : '#666';
+    dot.style.boxShadow = ready ? '0 0 10px rgba(63,174,122,.8)' : running ? '0 0 10px rgba(245,197,66,.8)' : 'none';
+    var label, subTxt;
+    if (installing) {
+      label = 'Installation…';
+      subTxt = 'Installation en cours (plusieurs minutes la 1re fois : téléchargement des modèles).';
+    } else if (ready) {
+      label = '⏹ ARRÊTER';
+      subTxt = (st.external ? 'Serveur détecté (démarré hors de l’app). ' : '') +
+               'En ligne sur http://127.0.0.1:' + st.port + ' — l’APK sur le même Wi-Fi traduit via ce PC.';
+    } else if (running) {
+      label = '…';
+      subTxt = 'Démarrage en cours — premiers modèles en chargement.';
+    } else {
+      label = '▶ DÉMARRER';
+      subTxt = 'Arrêté. Le démarrage charge les modèles (quelques secondes à une minute).';
+    }
+    toggle.textContent = label;
+    if (state) state.textContent = installing ? 'Installation…' : ready ? 'En ligne' : running ? 'Démarrage…' : 'Arrêté';
+    toggle.disabled = !!installing || busy;
+    sub.textContent = subTxt;
+    err.style.display = (st && st.last_error) ? '' : 'none';
+    err.textContent = st && st.last_error ? '⚠ ' + st.last_error : '';
+    if (inst) inst.style.display = (!ready && !installing && st && st.installed === false) ? '' : 'none';
+    if (log) log.style.display = (running || (st && st.last_error)) ? '' : 'none';
+  }
+
+  function refresh(){
+    fetch('/libretranslate/status').then(function(r){ return r.json(); }).then(function(st){
+      setUI(st);
+    }).catch(function(){ setUI(null); });
+  }
+
+  function act(path, waitMsg){
+    if (busy) return;
+    busy = true;
+    var state = $('lt-state'), toggle = $('lt-toggle');
+    if (state) state.textContent = waitMsg;
+    if (toggle) toggle.disabled = true;
+    fetch(path, { method:'POST' }).then(function(r){ return r.json(); }).then(function(res){
+      busy = false;
+      if (res && res.reason === 'no-python') {
+        if (window.toast) toast('Python introuvable : installez Python pour héberger le serveur', 'error');
+      } else if (res && res.reason === 'not-installed') {
+        if (window.toast) toast('LibreTranslate n’est pas installé — bouton « Installer » ci-dessous', 'error');
+      }
+      refresh();
+    }).catch(function(){ busy = false; refresh(); });
+  }
+
+  function wire(){
+    var toggle = $('lt-toggle'), inst = $('lt-install-btn'), log = $('lt-log-btn');
+    if (toggle && !toggle.dataset.ltWired) {
+      toggle.dataset.ltWired = '1';
+      toggle.addEventListener('click', function(){
+        fetch('/libretranslate/status').then(function(r){ return r.json(); }).then(function(st){
+          if (st && (st.running || st.ready)) act('/libretranslate/stop', 'Arrêt…');
+          else act('/libretranslate/start', 'Démarrage…');
+        }).catch(function(){ act('/libretranslate/start', 'Démarrage…'); });
+      });
+    }
+    if (inst && !inst.dataset.ltWired) {
+      inst.dataset.ltWired = '1';
+      inst.addEventListener('click', function(){ act('/libretranslate/install', 'Installation…'); });
+    }
+    if (log && !log.dataset.ltWired) {
+      log.dataset.ltWired = '1';
+      log.addEventListener('click', function(){
+        fetch('/libretranslate/log', { method:'POST' }).then(function(r){ return r.json(); }).then(function(res){
+          var lines = String(res && res.tail || '').split('\n').slice(-40).join('\n');
+          var ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.7);display:grid;place-items:center;';
+          var box = document.createElement('pre');
+          box.style.cssText = 'max-width:90vw;max-height:80vh;overflow:auto;background:#0d1626;color:#d6e4ff;border:1px solid #3d6fd8;border-radius:12px;padding:14px;font:11px Consolas,monospace;white-space:pre-wrap;';
+          box.textContent = lines || '(journal vide)';
+          ov.appendChild(box);
+          ov.addEventListener('click', function(){ ov.remove(); });
+          document.body.appendChild(ov);
+        }).catch(function(){});
+      });
+    }
+  }
+
+  function boot(){
+    wire();
+    if (!$('lt-dot')) return;
+    refresh();
+    if (timer) clearInterval(timer);
+    timer = setInterval(function(){
+      var m = document.getElementById('settings-modal');
+      if (m && m.classList.contains('active')) refresh();
+    }, 4000);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  window.__ltRefresh = refresh;
+})();
+</script>
 </body>
 </html>
