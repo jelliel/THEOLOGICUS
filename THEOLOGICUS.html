@@ -7482,6 +7482,17 @@ window.__ensureTafsirSurah = function(p){
         </div>
       </div>
 
+      <div class="section-title">🔎 VÉRIFICATION DES RÉFÉRENCES (2.0)</div>
+      <div class="field-group">
+        <label class="field-label">Mode de vérification des citations</label>
+        <select class="field-input field-select" id="verify-mode-select">
+          <option value="strict">Strict — marquer chaque référence (✅ existe / ⚠️ absente)</option>
+          <option value="souple">Souple — signaler uniquement les références absentes (⚠️)</option>
+          <option value="off">Désactivé — aucun marquage (comportement 1.0)</option>
+        </select>
+        <div class="field-hint">Chaque référence biblique ou coranique reçue de l'IA est confrontée au corpus embarqué (hors ligne). En mode strict, une coche ✅ confirme que le verset existe ; un ⚠️ signale une citation inventée. Les marques dépendent de la table de versification, donc instantanées et sans chargement de tranche.</div>
+      </div>
+
       <div class="section-title">MODÈLES ENREGISTRÉS</div>
       <div id="custom-models-list"></div>
 
@@ -9036,6 +9047,20 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
   return full;
 }
 function initSettingsModal() {
+  function syncVerifyModeSelect() {
+    const sel = $("#verify-mode-select");
+    if (sel) { try { sel.value = localStorage.getItem('theologicus_verify') || 'strict'; } catch (e) { sel.value = 'strict'; } }
+  }
+  const verifySel = $("#verify-mode-select");
+  if (verifySel) {
+    verifySel.onchange = () => {
+      const v = verifySel.value || 'strict';
+      try { localStorage.setItem('theologicus_verify', v); } catch (e) {}
+      window.dispatchEvent(new Event('theologicus-verify-mode-changed'));
+      const label = v === 'strict' ? 'Strict — chaque référence marquée' : v === 'souple' ? 'Souple — seulement les absences' : 'Désactivé — aucun marquage';
+      toast('Vérification des références : ' + label, 'success');
+    };
+  }
   const modal = $("#settings-modal");
   if (!modal) return;
   const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); syncVerifyModeSelect(); if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active"); };

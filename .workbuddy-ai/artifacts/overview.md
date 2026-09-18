@@ -645,6 +645,14 @@ vérification exposés sur `window` (`__parseBibleRef`, `__bibleVerifyState`,
 `__parseQuranRef`, `__quranVerifyState`, `__applyVerifyMarks`). Les marques sont
 des **frères** du lien (pas des enfants) pour que `textContent` reste parseable.
 
+> **Correctif post-`apk-v2.0.47`** : le contrôle réglage (select
+> `#verify-mode-select` + `syncVerifyModeSelect()` + handler `onchange`) avait été
+> **omis** de la build `apk-v2.0.47` (le moteur de marquage y était présent, mais
+> l'UI permettant de passer en `souple`/`off` manquait — `syncVerifyModeSelect()`
+> était appelé sans être défini). Restauré le 2026-09-18, shippe à la prochaine
+> release. Le moteur et la logique de mode (testés via `localStorage` +
+> `dispatchEvent`) étaient déjà vérifiés à 24/24.
+
 ## Preuves
 
 Banc CDP `_diag_v20.js` : **24/24** (18 de la base + 6 du T4). Tap `Jean 3:16` →
