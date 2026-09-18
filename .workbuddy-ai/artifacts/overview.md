@@ -679,7 +679,9 @@ Preuves (`_diag_v20.js`, H1–H7) : agent factice en IndexedDB → `loadAgents()
 → `pointerdown` sur la carte → attente > 480 ms → `#agent-info-modal.active`
 (`display: flex`) avec nom + rôle + température ; témoin négatif : tap court
 (`pointerdown` + `pointerup` avant le seuil) n'ouvre pas la fiche. Feature
-codée et vérifiée le 2026-09-18, **shippe à la prochaine release** (apk-v2.0.50+).
+codée et vérifiée le 2026-09-18 (CDP 31/31), **shippe en apk-v2.0.50** (CI
+`35375065795`, vérifié : versionCode 50 / `2.0.50`, signature `93d832…`,
+marqueurs agent présents).
 
 ## Preuves
 
