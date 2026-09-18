@@ -5476,6 +5476,13 @@ body.custom-bg #voice-overlay {
 }
 
 /* ═══ REFERENCES BUTTON ═══ */
+/* v68 — ce bouton flottant occupait EXACTEMENT le meme emplacement que
+   #memory-toggle (right:16px / bottom:80px / 40x40). Masquer #memory-toggle
+   en v67 n'a donc rien change a l'ecran : il a simplement revele celui-ci,
+   qui etait dessous. C'est pour ca que le rond en bas a droite semblait
+   "ne pas avoir ete supprime".
+   Le panneau REFERENCES reste accessible : barre superieure (v62) et
+   window.v13RefsOpen(). Seul le raccourci flottant disparait. */
 #references-btn {
   position: fixed;
   right: 16px;
@@ -5489,7 +5496,7 @@ body.custom-bg #voice-overlay {
   color: var(--cyan);
   font-size: 16px;
   cursor: pointer;
-  display: flex;
+  display: none !important;
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 15px var(--cyan-dim);
@@ -18832,6 +18839,56 @@ function initBibleVerseTooltip() {
   tip.style.cssText = 'position:fixed;z-index:99999;max-width:360px;padding:12px 14px;background:rgba(8,12,18,0.97);border:1px solid #4f8ef7;box-shadow:0 0 24px rgba(79,142,247,0.35);border-radius:10px;color:#e6f6ff;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;pointer-events:none;opacity:0;transition:opacity .12s ease;display:none;';
   document.body.appendChild(tip);
 
+  /* v2.0 — au doigt, mouseout suit immediatement le tap et refermerait la
+     citation qu'on vient d'ouvrir. `pinned` garde le panneau ouvert jusqu'a
+     un tap a l'exterieur. */
+  let pinned = false;
+  function hideTip() { if (pinned) return; tip.style.opacity = '0'; tip.style.display = 'none'; }
+  function closeTip() { pinned = false; tip.style.pointerEvents = 'none'; tip.style.opacity = '0'; tip.style.display = 'none'; }
+
+  /* v2.0 — table de versification (generee par tools/build_versification.js).
+     Elle repond a "ce verset existe-t-il ?" sans charger la tranche du livre :
+     9,7 Ko au lieu de 4,3 Mo. Chargee une seule fois, a la demande. */
+  function loadVerseCounts() {
+    if (window.__bibleVerseCounts) return Promise.resolve(true);
+    if (window.__verseCountsPending) return window.__verseCountsPending;
+    window.__verseCountsPending = new Promise(function (res) {
+      var sc = document.createElement('script');
+      sc.src = 'bible/versification.js';
+      sc.onload = function () { res(true); };
+      sc.onerror = function () { sc.remove(); console.error('[bible] table de versification indisponible'); res(false); };
+      document.head.appendChild(sc);
+    });
+    return window.__verseCountsPending;
+  }
+  window.__loadVerseCounts = loadVerseCounts;
+
+  /* Diagnostic precis quand le corpus ne peut pas repondre : on dit POURQUOI,
+     et on n'envoie pas l'utilisateur vers une page qui n'existera pas non
+     plus. Le lien web reste offert, en second. */
+  function showMissing(el, p) {
+    var counts = window.__bibleVerseCounts && window.__bibleVerseCounts[p.book];
+    var motif = 'Reference absente du corpus local.';
+    if (counts) {
+      var nb = counts[p.ch];
+      if (nb === undefined) motif = 'Ce livre n\'a pas de chapitre ' + p.ch + '.';
+      else if (p.v1 > nb) motif = 'Le chapitre ' + p.ch + ' compte ' + nb + ' versets : le verset ' + p.v1 + ' n\'existe pas.';
+      else if (p.v2 && p.v2 > nb) motif = 'Le chapitre ' + p.ch + ' s\'arrete au verset ' + nb + ' (fin demandee : ' + p.v2 + ').';
+    }
+    var web = '';
+    try { var u = buildBibleUrl(p.ref); if (u) web = '<a href="' + u + '" target="_blank" rel="noopener" style="color:#7fdfff;font-size:11px;">Chercher sur BibleGateway &rarr;</a>'; } catch (e) {}
+    tip.innerHTML = '<div style="color:#f0a020;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">&#9888; ' + p.ref + '</div>'
+      + '<div style="padding:2px 0 8px;">' + motif + '</div>' + web;
+    tip.style.display = 'block';
+    tip.style.pointerEvents = 'auto';
+    var r = el.getBoundingClientRect();
+    var x = r.left, y = r.bottom + 8;
+    var tr = tip.getBoundingClientRect();
+    if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
+    if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
+    tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+  }
+
   function showTip(el, p) {
     if (!DATA[p.book]) {   /* v33 : livre pas encore charge — le charger a la volee. */
       tip.dataset.book = String(p.book);
@@ -18846,11 +18903,13 @@ function initBibleVerseTooltip() {
       return;
     }
     const verses = getVerses(p);
-    if (!verses) { tip.style.display = 'none'; tip.style.opacity = '0'; return; }
+    /* v2.0 — verset absent : on explique POURQUOI au lieu de ne rien afficher. */
+    if (!verses) { showMissing(el, p); return; }
     let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
     tip.innerHTML = html;
     tip.style.display = 'block';
+    tip.style.pointerEvents = 'none';
     const r = el.getBoundingClientRect();
     let x = r.left, y = r.bottom + 8;
     const tr = tip.getBoundingClientRect();
@@ -18863,6 +18922,7 @@ function initBibleVerseTooltip() {
   document.addEventListener('mouseover', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
     if (!el) return;
+    if (pinned) return;   /* v2.0 : ne pas ecraser un panneau epingle */
     const p = parseRef(el.textContent);
     if (!p) return;
     showTip(el, p);
@@ -18871,6 +18931,26 @@ function initBibleVerseTooltip() {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
     if (el) hideTip();
   });
+
+  /* v2.0 — resolution LOCALE au tap. Jusqu'ici, taper une reference partait
+     ouvrir BibleGateway : en mode avion, TOUTES les references de l'app
+     etaient des liens morts. Desormais le corpus embarque repond d'abord, et
+     le lien web n'est plus que le secours propose dans le panneau.
+     On ne fait que preventDefault : le reste de la page continue de recevoir
+     l'evenement normalement. */
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
+    if (!el) { closeTip(); return; }
+    const p = parseRef(el.textContent);
+    if (!p) return;
+    e.preventDefault();
+    pinned = true;
+    showTip(el, p);
+  }, true);
+
+  /* v2.0 — table de versification chargee des le premier affichage, pour que
+     le diagnostic "ce verset existe-t-il ?" soit disponible hors ligne. */
+  loadVerseCounts();
 }
 __corpusHook("bible", initBibleVerseTooltip);
 
@@ -19303,7 +19383,9 @@ initTafsirVerseTooltip();
       google:    function(t){ return 'https://www.google.com/search?q=' + encodeURIComponent(t); },
       wikipedia: function(t){ return 'https://fr.wikipedia.org/w/index.php?search=' + encodeURIComponent(t); },
       bible:     function(t){ return 'https://www.biblegateway.com/passage/?search=' + encodeURIComponent(t) + '&version=LSG'; },
-      biblehub:  function(t){ return 'https://biblehub.net/search.cgi?q=' + encodeURIComponent(t); }
+      /* v2.0 — biblehub.net/search.cgi renvoie 404 (verifie le 2026-09-18).
+         Le point d'entree valide est biblehub.com/search.php. */
+      biblehub:  function(t){ return 'https://biblehub.com/search.php?q=' + encodeURIComponent(t); }
     };
     b.querySelectorAll('.atc-act').forEach(function(act){
       act.addEventListener('click', function(){
