@@ -9038,7 +9038,7 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
 function initSettingsModal() {
   const modal = $("#settings-modal");
   if (!modal) return;
-  const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active"); };
+  const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); syncVerifyModeSelect(); if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active"); };
   const close = () => modal.classList.remove("active");
   const openBtn = $("#open-settings-modal");
   if (openBtn) openBtn.onclick = open;
@@ -18816,6 +18816,19 @@ function initBibleVerseTooltip() {
   };
   const DATA = window.__bibleBooks;   /* v33 : livres charges a la volee */
 
+  /* v2.0 — expose le parseur et l'etat de verification pour le marquage
+     inline des references (initVerifyMarks, T4). */
+  window.__parseBibleRef = parseRef;
+  window.__bibleVerifyState = function (p) {
+    var counts = window.__bibleVerseCounts && window.__bibleVerseCounts[p.book];
+    if (!counts) return 'unknown';
+    var nb = counts[p.ch];
+    if (nb === undefined) return 'missing';
+    if (p.v1 > nb) return 'missing';
+    if (p.v2 && p.v2 > nb) return 'missing';
+    return 'ok';
+  };
+
   function parseRef(text) {
     const m = text.trim().match(/^(?:(\d+)\s+)?([A-Za-zÀ-ÿ.]+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
     if (!m) return null;
@@ -18905,7 +18918,7 @@ function initBibleVerseTooltip() {
     const verses = getVerses(p);
     /* v2.0 — verset absent : on explique POURQUOI au lieu de ne rien afficher. */
     if (!verses) { showMissing(el, p); return; }
-    let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
+    let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ ' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
     tip.innerHTML = html;
     tip.style.display = 'block';
@@ -18973,6 +18986,17 @@ function initQuranVerseTooltip() {
     return out.length ? out : null;
   }
 
+  /* v2.0 — expose le parseur et l'etat de verification pour le marquage
+     inline des references coraniques (initVerifyMarks, T4). */
+  window.__parseQuranRef = parseRef;
+  window.__quranVerifyState = function (p) {
+    var nb = window.__quranVerseCounts && window.__quranVerseCounts[p.sourate];
+    if (!nb) return 'unknown';
+    if (p.v1 > nb) return 'missing';
+    if (p.v2 && p.v2 > nb) return 'missing';
+    return 'ok';
+  };
+
   const tip = document.createElement('div');
   tip.id = 'quran-verse-tip';
   tip.style.cssText = 'position:fixed;z-index:99999;max-width:380px;padding:12px 14px;background:rgba(8,12,18,0.97);border:1px solid #f5c542;box-shadow:0 0 24px rgba(245,197,66,0.35);border-radius:10px;color:#fdf3d0;font-family:Consolas,Monaco,monospace;font-size:13px;line-height:1.5;pointer-events:none;opacity:0;transition:opacity .12s ease;display:none;';
@@ -19022,8 +19046,17 @@ function initQuranVerseTooltip() {
     }
     const verses = getVerses(p);
     const s = DATA[p.sourate];
-    if (!verses) { tip.style.display = 'none'; tip.style.opacity = '0'; return; }
-    let html = '<div style="color:#f5c542;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">CORAN — Sourate ' + p.sourate + ' : ' + p.v1 + (p.v2 ? '-' + p.v2 : '') + (s ? ' (' + s.nomPhon + ')' : '') + '</div>';
+    if (!verses) {
+      var qst = window.__quranVerifyState ? window.__quranVerifyState(p) : 'unknown';
+      if (qst === 'missing') {
+        tip.innerHTML = '<div style="color:#f0a020;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">⚠️ CORAN — Sourate ' + p.sourate + ' : ' + p.v1 + (p.v2 ? '-' + p.v2 : '') + '</div><div style="padding:2px 0 8px;">Cette sourate ou ce verset n\'existe pas dans le Coran.</div>';
+        tip.style.display = 'block'; tip.style.pointerEvents = 'none'; tip.style.opacity = '1';
+        var r2 = el.getBoundingClientRect(); tip.style.left = Math.max(10, r2.left) + 'px'; tip.style.top = Math.max(10, r2.bottom + 8) + 'px';
+        return;
+      }
+      tip.style.display = 'none'; tip.style.opacity = '0'; return;
+    }
+    let html = '<div style="color:#f5c542;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ CORAN — Sourate ' + p.sourate + ' : ' + p.v1 + (p.v2 ? '-' + p.v2 : '') + (s ? ' (' + s.nomPhon + ')' : '') + '</div>';
     verses.forEach(function (v) {
       html += '<div style="margin-bottom:6px;"><span style="color:#f0d68a;">' + v.n + '</span> ' + v.t + '</div>';
       if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + v.a + '</div>';
@@ -19074,6 +19107,120 @@ function initQuranVerseTooltip() {
   });
 }
 __corpusHook("quran", initQuranVerseTooltip);
+
+/* ═══ VÉRIFICATION INLINE DES RÉFÉRENCES (2.0 — T4) ═══
+   Marque chaque référence biblique/coranique d'après la table de
+   versification (instantané, hors ligne) :
+     ✅ existe · ⚠️ absente · ✏️ existe mais texte local manquant.
+   Respecte le réglage "mode vérification" (localStorage theologicus_verify). */
+function initVerifyMarks() {
+  'use strict';
+  /* Parseur/etat coraniques LOCAUX : le parseur de initQuranVerseTooltip
+     (window.__parseQuranRef) n'est expose qu'au chargement du corpus coran,
+     or les marques inline doivent apparaitre des le premier rendu du chat.
+     On le definit ici, leger et independant du corpus. */
+  function quranParseRef(text) {
+    var m = text.trim().match(/^(?:Coran|Qur['’]?an|Surate|Sourate)\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?$/i);
+    if (!m) return null;
+    return { sourate: parseInt(m[1], 10), v1: parseInt(m[2], 10), v2: m[3] ? parseInt(m[3], 10) : null, ref: text.trim() };
+  }
+  function quranVerifyState(p) {
+    var nb = window.__quranVerseCounts && window.__quranVerseCounts[p.sourate];
+    if (!nb) return 'unknown';
+    if (p.v1 > nb) return 'missing';
+    if (p.v2 && p.v2 > nb) return 'missing';
+    return 'ok';
+  }
+  function verifyMode() {
+    try { return localStorage.getItem('theologicus_verify') || 'strict'; } catch (e) { return 'strict'; }
+  }
+  function clearVerifyMarks(root) {
+    var r = root || document;
+    r.querySelectorAll('.verify-mark').forEach(function (s) { s.remove(); });
+    r.querySelectorAll('[data-verify-marked]').forEach(function (el) { el.removeAttribute('data-verify-marked'); });
+  }
+  var MARK = {
+    ok:      { g: '✅', t: 'Référence vérifiée dans le corpus local (BJ 1998).', c: '#56d364' },
+    missing: { g: '⚠️', t: 'Référence absente du corpus local : ce verset n\'existe pas.', c: '#f0a020' },
+    gap:     { g: '✏️', t: 'Verset connu mais texte indisponible dans le corpus local.', c: '#7fb3ff' }
+  };
+  function applyOne(el, stateFn, parser) {
+    if (el.dataset.verifyMarked === '1') return;
+    var p = parser(el.textContent);
+    if (!p) return;
+    var st = stateFn(p);
+    if (st === 'unknown') return;
+    var mode = verifyMode();
+    /* strict : tout marquer ; souple : seulement les problemes ; off : rien. */
+    var show = (mode === 'strict') || (mode === 'souple' && st !== 'ok');
+    if (!show) return;
+    var m = MARK[st];
+    var span = document.createElement('span');
+    span.className = 'verify-mark';
+    span.textContent = m.g;
+    span.title = m.t;
+    span.style.cssText = 'font-size:0.72em;margin-left:3px;cursor:help;';
+    /* Sibling (pas enfant) pour ne pas polluer el.textContent que le
+       clic utilise pour parser la reference. */
+    if (el.parentNode) el.parentNode.insertBefore(span, el.nextSibling);
+    el.dataset.verifyMarked = '1';
+  }
+  function applyVerifyMarks(root) {
+    var r = root || document;
+    if (window.__parseBibleRef && window.__bibleVerifyState)
+      r.querySelectorAll('a.bible-ref, span.bible-ref').forEach(function (el) { applyOne(el, window.__bibleVerifyState, window.__parseBibleRef); });
+    if (window.__quranVerseCounts)
+      r.querySelectorAll('a.quran-ref, span.quran-ref').forEach(function (el) { applyOne(el, quranVerifyState, quranParseRef); });
+  }
+  window.__applyVerifyMarks = applyVerifyMarks;
+  window.__clearVerifyMarks = clearVerifyMarks;
+
+  function loadQuranCounts() {
+    if (window.__quranVerseCounts) return Promise.resolve(true);
+    if (window.__quranCountsPending) return window.__quranCountsPending;
+    window.__quranCountsPending = new Promise(function (res) {
+      var sc = document.createElement('script');
+      sc.src = 'quran/versification.js';
+      sc.onload = function () { res(true); };
+      sc.onerror = function () { res(false); };
+      document.head.appendChild(sc);
+    });
+    return window.__quranCountsPending;
+  }
+  var pending = false;
+  function ensureCountsThenMark() {
+    var tasks = [];
+    if (window.__loadVerseCounts && !window.__bibleVerseCounts) tasks.push(window.__loadVerseCounts());
+    if (!window.__quranVerseCounts) tasks.push(loadQuranCounts());
+    if (tasks.length) {
+      if (pending) return;
+      pending = true;
+      Promise.all(tasks).then(function () { pending = false; applyVerifyMarks(document); });
+    } else {
+      applyVerifyMarks(document);
+    }
+  }
+
+  var chat = document.getElementById('chat-container');
+  if (chat) {
+    var to = null;
+    var obs = new MutationObserver(function () {
+      if (to) clearTimeout(to);
+      to = setTimeout(ensureCountsThenMark, 200);
+    });
+    obs.observe(chat, { childList: true, subtree: true });
+  }
+  ensureCountsThenMark();
+  if (typeof window.__corpusHook === 'function') {
+    window.__corpusHook('bible', function () { ensureCountsThenMark(); });
+    window.__corpusHook('quran', function () { ensureCountsThenMark(); });
+  }
+  window.addEventListener('theologicus-verify-mode-changed', function () {
+    clearVerifyMarks(document);
+    applyVerifyMarks(document);
+  });
+}
+initVerifyMarks();
 
 
 function initTafsirVerseTooltip() {
