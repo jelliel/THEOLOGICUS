@@ -7461,6 +7461,20 @@ window.__ensureTafsirSurah = function(p){
         </div>
       </div>
 
+      <div class="section-title">🔐 ACCÈS AU LANCEMENT</div>
+      <div class="field-group">
+        <div id="remember-state" class="field-hint">…</div>
+        <button class="btn-ghost" id="forget-remember-btn"
+                style="min-height:30px;font-size:11px;margin-top:8px;">
+          🔓 Oublier l'accès mémorisé
+        </button>
+        <div class="field-hint" style="margin-top:6px;">
+          « Se souvenir de moi » coché à la connexion admin ouvre l'app
+          directement pendant 7 jours. Ce bouton rétablit immédiatement le
+          verrouillage (quiz + mot de passe) au prochain lancement.
+        </div>
+      </div>
+
       <div class="section-title">MODÈLES ENREGISTRÉS</div>
       <div id="custom-models-list"></div>
 
@@ -17985,6 +17999,9 @@ if (document.readyState === 'loading') {
     padding: 40px !important;
     width: 380px !important;
     max-width: 90vw !important;
+    /* v66 : sur petit écran la boîte défile au lieu de déborder */
+    max-height: 92vh !important;
+    overflow-y: auto !important;
     text-align: center !important;
     box-shadow: 0 0 60px rgba(79,142,247,0.15) !important;
   }
@@ -18051,6 +18068,25 @@ if (document.readyState === 'loading') {
     color: rgba(255,255,255,0.3) !important;
     letter-spacing: 1px !important;
   }
+  .auth-remember {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    margin: 0 0 16px !important;
+    font-family: 'Share Tech Mono', monospace !important;
+    font-size: 11px !important;
+    color: rgba(255,255,255,0.65) !important;
+    cursor: pointer !important;
+    user-select: none !important;
+  }
+  .auth-remember input {
+    width: 16px !important;
+    height: 16px !important;
+    margin: 0 !important;
+    accent-color: #4f8ef7 !important;
+    cursor: pointer !important;
+  }
   /* Watermark */
   #watermark-overlay {
     position: fixed !important;
@@ -18098,6 +18134,23 @@ if (document.readyState === 'loading') {
   </div>
 </div>
 
+<script>
+/* v66 — masque l'ecran de verrouillage AVANT le premier rendu quand
+   l'acces admin est memorise. Sans ca, le verrou clignote une fraction
+   de seconde a chaque lancement, meme quand on n'a rien a saisir.
+   Le module principal re-valide ensuite l'enregistrement. */
+(function () {
+  try {
+    var raw = localStorage.getItem('theologicus_remember');
+    if (!raw) return;
+    var o = JSON.parse(raw);
+    if (!o || o.v !== 1 || typeof o.exp !== 'number' || Date.now() > o.exp) return;
+    var ov = document.getElementById('auth-overlay');
+    if (ov) ov.style.display = 'none';
+  } catch (e) {}
+})();
+</script>
+
 <div id="watermark-overlay"></div>
 
 <div id="devtools-warning">
@@ -18106,12 +18159,157 @@ if (document.readyState === 'loading') {
 </div>
 
 <script>
+/* ═══ v66 — verrouillage au lancement : plus robuste, plus rapide, et
+   « Se souvenir de moi » pour le mot de passe admin (7 jours). ═══
+
+   Ce qui change :
+   1. le mot de passe n'est PLUS en clair dans le HTML (empreinte SHA-256
+      salee). Ce n'est pas de la securite reelle — tout est cote client —
+      mais le mot de passe ne se lit plus d'un coup d'oeil dans la source.
+   2. « Se souvenir de moi » sur l'ecran admin -> l'app s'ouvre directement
+      pendant 7 jours. Revocable : ⚙ PARAMÈTRES > 🔐 ACCÈS AU LANCEMENT.
+   3. plus aucune penalite au changement de fenetre / d'onglet : sur Android
+      une simple notification suffisait a remettre le compteur a zero.
+      Le chronometre est maintenant mis en pause, pas en echec.
+   4. une question ratee revient : la liste noire definitive vidait le pool
+      et provoquait des reinitialisations en boucle.
+   5. le chronometre passe de 15 s a 20 s et n'enleve plus de point.
+   6. la difficulte monte avec les BONNES reponses (1 -> 2 -> 3), jamais
+      avec les mauvaises, et ne depasse plus le palier 3.
+   7. melange de Fisher-Yates : sort(() => Math.random() - 0.5) est biaise
+      et remettait la bonne reponse trop souvent au meme endroit. */
 (function() {
   'use strict';
-  
-  const AUTH_PASSWORD = 'joerabill39';
+
+  /* SHA-256 de « <sel>:<mot de passe> » — le mot de passe n'est plus lisible
+     ici. Pour le changer : remplacer AUTH_HASH par l'empreinte du nouveau
+     mot de passe (sha256hex(AUTH_SALT + ':' + nouveau)). */
+  const AUTH_SALT = 'theologicus-v66';
+  const AUTH_HASH = 'ca9cc135dea09c84e670f62659826f1d9d76a633e421cdc54c67ffa20b3a1a96';
+
   const OWNER_NAME = 'ambassa2ur';
   const OWNER_EMAIL = 'toshryzen@gmail.com';
+
+  /* ═══ MÉMORISATION ═══ */
+  const REMEMBER_KEY = 'theologicus_remember';
+  const REMEMBER_DAYS = 7;
+  const LEGACY_SESSION_OK = 'theologicus_auth';
+  const LEGACY_SESSION_MODE = 'theologicus_auth_mode';
+
+  function rememberToken() {
+    return sha256hex('remember:' + AUTH_HASH);
+  }
+
+  function readRemember() {
+    try {
+      const raw = localStorage.getItem(REMEMBER_KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (!o || o.v !== 1 || !o.exp || typeof o.exp !== 'number') return null;
+      if (Date.now() > o.exp) { localStorage.removeItem(REMEMBER_KEY); return null; }
+      if (o.tok !== rememberToken()) { localStorage.removeItem(REMEMBER_KEY); return null; }
+      return o;
+    } catch (e) { return null; }
+  }
+
+  function writeRemember() {
+    try {
+      localStorage.setItem(REMEMBER_KEY, JSON.stringify({
+        v: 1,
+        mode: 'admin',
+        exp: Date.now() + REMEMBER_DAYS * 86400000,
+        tok: rememberToken()
+      }));
+    } catch (e) {}
+  }
+
+  function clearRemember() {
+    try {
+      localStorage.removeItem(REMEMBER_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_OK);
+      sessionStorage.removeItem(LEGACY_SESSION_MODE);
+    } catch (e) {}
+  }
+
+  /* accessible depuis la console et depuis les parametres */
+  window.theologicusForgetRemember = clearRemember;
+
+  function daysLeft(rec) {
+    return Math.max(1, Math.ceil((rec.exp - Date.now()) / 86400000));
+  }
+
+  function checkPassword(pwd) {
+    if (!pwd) return false;
+    return sha256hex(AUTH_SALT + ':' + pwd) === AUTH_HASH;
+  }
+
+  /* ═══ SHA-256 pur JS ═══
+     `crypto.subtle` exigerait un contexte securise (https ou localhost) :
+     selon la version de la coque, le WebView Android peut servir en file://,
+     ou crypto.subtle serait undefined — donc pas de dependance. Entree
+     UTF-8 quelconque (un mot de passe accentue doit fonctionner). */
+  const SHA_K = [0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+
+  function sha256latin1(s) {
+    const H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    const l = s.length;
+    const blocks = Math.ceil((l + 9) / 64);
+    const total = blocks * 64;
+    const M = new Array(total);
+    const W = new Array(64);
+    let i, b, o;
+    for (i = 0; i < total; i++) M[i] = 0;
+    for (i = 0; i < l; i++) M[i] = s.charCodeAt(i) & 0xff;
+    M[l] = 0x80;
+    const bits = l * 8;
+    M[total - 1] = bits & 0xff;
+    M[total - 2] = (bits >>> 8) & 0xff;
+    M[total - 3] = (bits >>> 16) & 0xff;
+    M[total - 4] = (bits >>> 24) & 0xff;
+
+    for (b = 0; b < blocks; b++) {
+      for (i = 0; i < 16; i++) {
+        o = b * 64 + i * 4;
+        W[i] = ((M[o] << 24) | (M[o + 1] << 16) | (M[o + 2] << 8) | M[o + 3]) >>> 0;
+      }
+      for (i = 16; i < 64; i++) {
+        const x = W[i - 15], y = W[i - 2];
+        const r0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+        const r1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+        W[i] = (W[i - 16] + r0 + W[i - 7] + r1) >>> 0;
+      }
+      let a = H[0], bb = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (i = 0; i < 64; i++) {
+        const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+        const ch = (e & f) ^ (~e & g);
+        const t1 = (h + S1 + ch + SHA_K[i] + W[i]) >>> 0;
+        const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+        const maj = (a & bb) ^ (a & c) ^ (bb & c);
+        const t2 = (S0 + maj) >>> 0;
+        h = g; g = f; f = e; e = (d + t1) >>> 0;
+        d = c; c = bb; bb = a; a = (t1 + t2) >>> 0;
+      }
+      H[0] = (H[0] + a) >>> 0; H[1] = (H[1] + bb) >>> 0;
+      H[2] = (H[2] + c) >>> 0; H[3] = (H[3] + d) >>> 0;
+      H[4] = (H[4] + e) >>> 0; H[5] = (H[5] + f) >>> 0;
+      H[6] = (H[6] + g) >>> 0; H[7] = (H[7] + h) >>> 0;
+    }
+    let out = '';
+    for (i = 0; i < 8; i++) out += ('0000000' + H[i].toString(16)).slice(-8);
+    return out;
+  }
+
+  function sha256hex(str) {
+    return sha256latin1(unescape(encodeURIComponent(str)));
+  }
+
   
   // ═══ BASE DE DONNÉES — 100 QUESTIONS ═══
   const VERSE_QUIZZES = [
@@ -18157,12 +18355,12 @@ if (document.readyState === 'loading') {
     {question:"Qui a traduit la Bible en latin (la Vulgate) ?",correct:"Saint Jérôme",options:["Saint Jérôme","Saint Augustin","Saint Benoît","Saint Grégoire"],difficulty:2},
     {question:"Complétez : « Je puis tout par celui... »",correct:"qui me fortifie",options:["qui me fortifie","qui me protège","qui me guide","qui me pardonne"],difficulty:2},
     {question:"Complétez : « C'est par la grâce... »",correct:"par le moyen de la foi",options:["par le moyen de la foi","par vos bonnes œuvres","par la prière","par le baptême"],difficulty:2},
-    {question:"Combien de cas dans la Genèse ?",correct:"50",options:["50","40","60","70"],difficulty:2},
+    {question:"Combien de chapitres compte la Genèse ?",correct:"50",options:["50","40","60","70"],difficulty:2},
     {question:"Qui a écrit la majorité des Épîtres ?",correct:"Saint Paul",options:["Saint Paul","Saint Pierre","Saint Jean","Saint Jacques"],difficulty:2},
-    {question:"Quel est le nom du buisson ardent où Dieu a parlé à Moïse ?",correct:"Le buisson de Soreb",options:["Le buisson de Soreb","Le chêne de Mamré","Le roc d'Horeb","La source de Cariath"],difficulty:2},
-    {question:"Combien de livres comptent les Évangiles ?",correct:"Quatre",options:["Quatre","Trois","Cinq","Six"],difficulty:2},
+    {question:"Sur quelle montagne Dieu a-t-il parlé à Moïse dans le buisson ardent ?",correct:"Le mont Horeb",options:["Le mont Horeb","Le mont Carmel","Le mont Nebo","Le mont Thabor"],difficulty:2},
+    {question:"Dans quelle langue l'Ancien Testament a-t-il été écrit principalement ?",correct:"L'hébreu",options:["L'hébreu","Le grec","Le latin","L'araméen"],difficulty:2},
     {question:"Quel est le verset le plus court de la Bible ?",correct:"Jean 11:35 « Jésus pleura »",options:["Jean 11:35 « Jésus pleura »","1 Thessaloniciens 5:16","Psaume 117","Philémon 1:4"],difficulty:2},
-    {question:"Qui est le « Docteur de l'Église » le plus ancien ?",correct:"Saint Ignace d'Antioche",options:["Saint Ignace d'Antioche","Saint Irénée","Saint Justin","Clément de Rome"],difficulty:2},
+    {question:"Quel Père de l'Église a écrit « Contre les hérésies » ?",correct:"Saint Irénée de Lyon",options:["Saint Irénée de Lyon","Saint Justin","Saint Ignace d'Antioche","Clément de Rome"],difficulty:2},
     {question:"Que signifie « Christ » en grec ?",correct:"Christos (l'Oint)",options:["Christos (l'Oint)","Kyrios (Seigneur)","Soter (Sauveur)","Emmanuel"],difficulty:2},
     {question:"Combien de miracles sont cités dans les Évangiles ?",correct:"Environ 35",options:["Environ 35","100","10","50"],difficulty:2},
     {question:"Quel est le nom du premier martyr chrétien ?",correct:"Saint Étienne",options:["Saint Étienne","Saint Paul","Saint Pierre","Saint Jacques"],difficulty:2},
@@ -18191,8 +18389,8 @@ if (document.readyState === 'loading') {
     {question:"Quel concile a condamné l'arianisme ?",correct:"Le concile de Nicée (325)",options:["Le concile de Nicée (325)","Le concile de Rimini (359)","Le concile de Sardique (343)","Le concile de Milan (355)"],difficulty:3},
     {question:"Qui a écrit la Somme théologique ?",correct:"Saint Thomas d'Aquin",options:["Saint Thomas d'Aquin","Saint Augustin","Saint Bonaventure","Albert le Grand"],difficulty:3},
     {question:"Que signifie « Kanon » en grec ?",correct:"Règle / norme",options:["Règle / norme","Livre","Loi","Tradition"],difficulty:3},
-    {question:"Combien de livres déдесяtrocanoniques compte la Bible catholique ?",correct:"Sept",options:["Sept","Cinq","Trois","Neuf"],difficulty:3},
-    {question:"Quel concile a défini l'Immaculée Conception ?",correct:"Vatican I (1869-1870)",options:["Vatican I (1869-1870)","Vatican II (1962-1965)","Trente (1545-1563)","Lyon (1274)"],difficulty:3},
+    {question:"Combien de livres deutérocanoniques compte l'Ancien Testament catholique ?",correct:"Sept",options:["Sept","Cinq","Trois","Neuf"],difficulty:3},
+    {question:"En quelle année le dogme de l'Immaculée Conception a-t-il été proclamé ?",correct:"1854",options:["1854","1870","1869","1858"],difficulty:3},
     {question:"Que signifie « Paraclet » pour le Saint-Esprit ?",correct:"Le Consolateur / Défenseur",options:["Le Consolateur / Défenseur","Le Créateur","Le Juge","Le Sauveur"],difficulty:3},
     {question:"Quel apôtre a été martyr à Rome en même temps que Pierre ?",correct:"Saint Paul",options:["Saint Paul","Saint Jean","Saint Jacques","Saint André"],difficulty:3},
     {question:"Combien de Pères de l'Église latins y a-t-il traditionnellement ?",correct:"Quatre",options:["Quatre","Cinq","Six","Trois"],difficulty:3},
@@ -18216,376 +18414,329 @@ if (document.readyState === 'loading') {
     {question:"Qui a écrit les « Confessions » ?",correct:"Saint Augustin",options:["Saint Augustin","Saint Thomas","Saint François","Saint Ignace"],difficulty:4},
     {question:"Quel concile a défini l'infaillibilité du Pape ?",correct:"Vatican I (1869-1870)",options:["Vatican I (1869-1870)","Vatican II (1962-1965)","Trente (1545-1563)","Chalcédoine (451)"],difficulty:4},
     {question:"Quel est le premier mot de la Genèse en hébreu ?",correct:"Bereshit",options:["Bereshit","YHWH","Elohim","Adonai"],difficulty:4},
-    {question:"Combien de livres comptent les Évangiles ?",correct:"Quatre",options:["Quatre","Trois","Cinq","Six"],difficulty:4},
+    {question:"Quel pape a convoqué le concile Vatican II ?",correct:"Saint Jean XXIII",options:["Saint Jean XXIII","Pie XII","Paul VI","Benoît XV"],difficulty:4},
     {question:"Qui a écrit la « Cité de Dieu » ?",correct:"Saint Augustin",options:["Saint Augustin","Saint Thomas","Saint Jérôme","Saint Grégoire"],difficulty:4},
     {question:"Quel concile a condamné les nestoriens ?",correct:"Éphèse (431)",options:["Éphèse (431)","Chalcédoine (451)","Nicée (325)","Constantinople (381)"],difficulty:4},
     {question:"Qui est le patron des théologiens ?",correct:"Saint Thomas d'Aquin",options:["Saint Thomas d'Aquin","Saint Augustin","Saint Bonaventure","Saint Albert"],difficulty:4},
-    {question:"Quel concile a défini le Filioque ?",correct:"Constantinople III (681)",options:["Constantinople III (681)","Nicée (325)","Trente (1545)","Vatican I (1869)"],difficulty:4},
+    {question:"Combien de conciles œcuméniques l'Église catholique reconnaît-elle ?",correct:"Vingt et un",options:["Vingt et un","Vingt","Dix-neuf","Vingt-cinq"],difficulty:4},
     {question:"Combien de conciles œcuméniques a-t-il eu avant Vatican II ?",correct:"Vingt",options:["Vingt","Dix","Quinze","Vingt-cinq"],difficulty:4},
     {question:"Qui a été le premier Pape ?",correct:"Saint Pierre",options:["Saint Pierre","Saint Paul","Saint Lin","Saint Clément"],difficulty:4},
     {question:"Quel est le nom latin du concile de Trente ?",correct:"Concilium Tridentinum",options:["Concilium Tridentinum","Concilium Vaticanum","Concilium Nicaenum","Concilium Constantiniense"],difficulty:4},
     {question:"Qui a écrit le « Cur Deus Homo » ?",correct:"Saint Anselme",options:["Saint Anselme","Saint Thomas","Saint Augustin","Saint Bernard"],difficulty:4},
     {question:"Quel théologien a développé la « voie négative » ?",correct:"Pseudo-Denys l'Aréopagite",options:["Pseudo-Denys l'Aréopagite","Saint Thomas","Saint Augustin","Origène"],difficulty:4},
-    {question:"Combien de livres déodécanoniques compte la Bible grecque ?",correct:"Sept",options:["Sept","Cinq","Trois","Neuf"],difficulty:4},
+    {question:"Quel est le plus court des quatre Évangiles ?",correct:"Marc",options:["Marc","Matthieu","Luc","Jean"],difficulty:4},
     {question:"Quel concile a condamné le monophysisme ?",correct:"Chalcédoine (451)",options:["Chalcédoine (451)","Éphèse (431)","Nicée (325)","Constantinople (381)"],difficulty:4},
-    {question:"Qui a été le premier Docteur de l'Église ?",correct:"Saint Irénée",options:["Saint Irénée","Saint Augustin","Saint Jérôme","Saint Ambroise"],difficulty:4},
+    {question:"En quelle année saint Irénée de Lyon a-t-il été proclamé Docteur de l'Église ?",correct:"2022",options:["2022","1920","1997","1830"],difficulty:4},
     {question:"Quel concile a défini la transsubstantiation ?",correct:"Trente (1551)",options:["Trente (1551)","Vatican II (1965)","Nicée (325)","Paris (1210)"],difficulty:4}
   ];
   
+  /* ═══ ÉTAT DU VERROU ═══ */
   let currentQuiz = null;
-  let quizAttempts = 0;
-  const MAX_QUIZ_ATTEMPTS = 3;
-  let quizTimer = null;
-  const QUIZ_TIME_LIMIT = 15; // secondes
-  let difficultyLevel = 1; // 1=facile, 2=moyen, 3=difficile
+  let difficultyLevel = 1;
   let correctAnswers = 0;
-  const REQUIRED_CORRECT = 3; // Nombre de bonnes réponses requises
-  let usedQuizIds = []; // Questions déjà posées (jamais répéter)
-  let failedQuizIds = []; // Questions ratées (jamais revoir)
-  
+  let usedQuizIds = [];
+  let quizTimer = null;
+  let quizTimeLeft = 0;
+  let quizVisible = false;
+  let busy = false;         /* évite le double-clic pendant l'affichage du retour */
+  let unlocked = false;
+
+  const REQUIRED_CORRECT = 3;
+  const QUIZ_TIME_LIMIT = 20;   /* v66 : 15 s était trop court sur mobile */
+  const MAX_DIFFICULTY = 3;     /* v66 : on ne monte plus au palier « expert » */
+
   const authOverlay = document.getElementById('auth-overlay');
-  const authPassword = document.getElementById('auth-password');
-  const authSubmit = document.getElementById('auth-submit');
-  const authError = document.getElementById('auth-error');
   const authBox = authOverlay ? authOverlay.querySelector('.auth-box') : null;
-  
+
+  /* ═══ RÉVOCATION DEPUIS LES PARAMÈTRES ═══ */
+  function paintRememberState() {
+    const st = document.getElementById('remember-state');
+    if (!st) return;
+    const rec = readRemember();
+    st.textContent = rec
+      ? 'Accès admin mémorisé sur cet appareil — encore ' + daysLeft(rec) + ' jour(s). Le verrouillage est contourné au lancement.'
+      : 'Aucun accès mémorisé. Le verrouillage s’affiche à chaque lancement.';
+  }
+  const forgetBtn = document.getElementById('forget-remember-btn');
+  if (forgetBtn) {
+    forgetBtn.addEventListener('click', function () {
+      clearRemember();
+      paintRememberState();
+      if (typeof toast === 'function') toast('🔒 Accès mémorisé oublié — verrouillage rétabli', 'info');
+    });
+  }
+  paintRememberState();
+
   if (!authOverlay) return;
-  
-  // ═══ AFFICHER LE QUIZ VERSET ═══
-  function showVerseQuiz() {
-    if (!authBox) return;
-    
-    // Filtrer : difficulté OK + jamais utilisée + jamais ratée
-    let filteredQuizzes = VERSE_QUIZZES.filter((q, idx) => 
-      q.difficulty <= difficultyLevel && 
-      !usedQuizIds.includes(idx) && 
-      !failedQuizIds.includes(idx)
-    );
-    
-    // Si plus de questions disponibles, réinitialiser (sauf les ratées)
-    if (filteredQuizzes.length === 0) {
-      usedQuizIds = [];
-      filteredQuizzes = VERSE_QUIZZES.filter((q, idx) => 
-        q.difficulty <= difficultyLevel && 
-        !failedQuizIds.includes(idx)
-      );
-    }
-    
-    // Si vraiment plus de questions, réinitialiser tout
-    if (filteredQuizzes.length === 0) {
-      failedQuizIds = [];
-      usedQuizIds = [];
-      filteredQuizzes = VERSE_QUIZZES.filter(q => q.difficulty <= difficultyLevel);
-    }
-    
-    const quizIndex = Math.floor(Math.random() * filteredQuizzes.length);
-    currentQuiz = filteredQuizzes[quizIndex];
-    usedQuizIds.push(VERSE_QUIZZES.indexOf(currentQuiz));
-    
-    // Mélanger les options
-    const shuffled = [...currentQuiz.options].sort(() => Math.random() - 0.5);
-    
-    authBox.innerHTML = `
-      <div class="auth-logo">THEOLOGICUS</div>
-      <div class="auth-sub">VERSET BIBLIQUE</div>
-      
-      <!-- COMPTEUR DE BONNES RÉPONSES -->
-      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:15px;">
-        <span style="color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;font-size:10px;">ACCÈS :</span>
-        ${[1,2,3].map(n => `<div style="width:12px;height:12px;border-radius:50%;background:${n <= correctAnswers ? '#4f8ef7' : 'rgba(255,255,255,0.2)'};border:1px solid ${n <= correctAnswers ? '#4f8ef7' : 'rgba(255,255,255,0.3)'};"></div>`).join('')}
-        <span style="color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;font-size:10px;">${correctAnswers}/${REQUIRED_CORRECT}</span>
-      </div>
-      
-      <!-- CHRONOMÈTRE -->
-      <div id="quiz-timer" style="
-        position:absolute;top:15px;right:15px;
-        width:50px;height:50px;
-        border-radius:50%;
-        background:rgba(79,142,247,0.1);
-        border:2px solid rgba(79,142,247,0.5);
-        display:flex;align-items:center;justify-content:center;
-        font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:#4f8ef7;
-      ">${QUIZ_TIME_LIMIT}</div>
-      
-      <!-- INDICATEUR DE DIFFICULTÉ -->
-      <div style="display:flex;gap:5px;justify-content:center;margin-bottom:10px;">
-        ${[1,2,3,4].map(d => `<div style="width:8px;height:8px;border-radius:50%;background:${d <= difficultyLevel ? '#4f8ef7' : 'rgba(255,255,255,0.2)'};"></div>`).join('')}
-      </div>
-      
-      <div style="color:#4f8ef7;font-family:'Share Tech Mono',monospace;font-size:13px;margin:20px 0;line-height:1.6;padding:15px;background:rgba(79,142,247,0.05);border:1px solid rgba(79,142,247,0.2);border-radius:8px;">
-        "${currentQuiz.question}"
-      </div>
-      
-      <div style="color:var(--text-dim);font-size:11px;margin-bottom:15px;">Choisissez la bonne réponse :</div>
-      
-      <div id="quiz-options" style="display:flex;flex-direction:column;gap:10px;">
-        ${shuffled.map((opt, i) => `
-          <button class="quiz-option" onclick="window.selectVerse('${opt.replace(/'/g, "\\'")}')" style="
-            background:rgba(5,13,24,0.8);
-            border:1px solid rgba(79,142,247,0.3);
-            color:#eaf4ff;
-            font-family:'Share Tech Mono',monospace;
-            font-size:13px;
-            padding:12px 16px;
-            border-radius:8px;
-            cursor:pointer;
-            transition:all 0.2s ease;
-            text-align:left;
-          ">${opt}</button>
-        `).join('')}
-      </div>
-      
-      <div class="auth-error" id="quiz-error"></div>
-      
-      <div style="margin-top:20px;">
-        <button onclick="window.showAdminLogin()" style="background:transparent;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;font-size:10px;padding:8px 16px;border-radius:6px;cursor:pointer;">
-          🔑 Connexion Admin
-        </button>
-      </div>
-      <div class="auth-footer">PROPRIÉTÉ EXCLUSIVE — ambassa2ur</div>
-    `;
-    
-    // Hover effects
-    document.querySelectorAll('.quiz-option').forEach(btn => {
-      btn.addEventListener('mouseenter', function() {
-        this.style.borderColor = 'rgba(79,142,247,0.6)';
-        this.style.background = 'rgba(79,142,247,0.1)';
-      });
-      btn.addEventListener('mouseleave', function() {
-        this.style.borderColor = 'rgba(79,142,247,0.3)';
-        this.style.background = 'rgba(5,13,24,0.8)';
-      });
-    });
-    
-    // Démarrer le chronomètre
-    startQuizTimer();
+
+  /* ═══ OUTILS ═══ */
+  function esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-  
-  // ═══ CHRONOMÈTRE ═══
+
+  /* Melange de Fisher-Yates. sort(() => Math.random() - 0.5) est BIAISÉ :
+     la bonne reponse revenait bien plus souvent au meme endroit. */
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function pickQuestion() {
+    /* v66 : plus de liste noire definitive. Une question ratée ne revenait
+       jamais, le pool s'épuisait, et les réinitialisations tournaient en
+       boucle — on pouvait se retrouver bloqué. */
+    let pool = [];
+    let i;
+    for (i = 0; i < VERSE_QUIZZES.length; i++) {
+      if (VERSE_QUIZZES[i].difficulty <= difficultyLevel && usedQuizIds.indexOf(i) < 0) pool.push(i);
+    }
+    if (!pool.length) {
+      usedQuizIds = [];
+      for (i = 0; i < VERSE_QUIZZES.length; i++) {
+        if (VERSE_QUIZZES[i].difficulty <= difficultyLevel) pool.push(i);
+      }
+    }
+    if (!pool.length) {            /* garde-fou : ne jamais renvoyer undefined */
+      difficultyLevel = MAX_DIFFICULTY;
+      for (i = 0; i < VERSE_QUIZZES.length; i++) pool.push(i);
+    }
+    const idx = pool[Math.floor(Math.random() * pool.length)];
+    usedQuizIds.push(idx);
+    return VERSE_QUIZZES[idx];
+  }
+
+  function setQuizError(text, color) {
+    const el = document.getElementById('quiz-error');
+    if (!el) return;
+    el.textContent = text;
+    if (color) el.style.color = color;
+  }
+
+  /* ═══ CHRONOMÈTRE ═══ */
+  function stopQuizTimer() {
+    if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+  }
+  function tickQuiz() {
+    quizTimeLeft--;
+    paintTimer();
+    if (quizTimeLeft <= 0) {
+      stopQuizTimer();
+      /* v66 : le temps écoulé donne une nouvelle question, il n'enlève
+         plus de point et n'augmente plus la difficulté. */
+      showVerseQuiz({ text: '⏱ Temps écoulé — nouvelle question', color: '#ff9f0a' });
+    }
+  }
   function startQuizTimer() {
-    clearInterval(quizTimer);
-    let timeLeft = QUIZ_TIME_LIMIT;
-    const timerEl = document.getElementById('quiz-timer');
-    
-    quizTimer = setInterval(function() {
-      timeLeft--;
-      if (timerEl) {
-        timerEl.textContent = timeLeft;
-        if (timeLeft <= 5) {
-          timerEl.style.color = '#ff3b30';
-          timerEl.style.borderColor = 'rgba(255,59,48,0.5)';
-          timerEl.style.background = 'rgba(255,59,48,0.1)';
-        }
-      }
-      
-      if (timeLeft <= 0) {
-        clearInterval(quizTimer);
-        
-        // Question ratée = jamais revue
-        if (currentQuiz) {
-          failedQuizIds.push(VERSE_QUIZZES.indexOf(currentQuiz));
-        }
-        
-        quizAttempts++;
-        correctAnswers = Math.max(0, correctAnswers - 1);
-        
-        if (quizAttempts >= MAX_QUIZ_ATTEMPTS) {
-          difficultyLevel = Math.min(4, difficultyLevel + 1);
-          quizAttempts = 0;
-          correctAnswers = 0;
-        }
-        
-        const quizError = document.getElementById('quiz-error');
-        if (quizError) {
-          quizError.textContent = '⏱ Temps écoulé — cette question ne sera plus posée';
-          quizError.style.color = '#ff3b30';
-        }
-        setTimeout(showVerseQuiz, 1500);
-      }
-    }, 1000);
+    stopQuizTimer();
+    quizTimeLeft = QUIZ_TIME_LIMIT;
+    paintTimer();
+    quizTimer = setInterval(tickQuiz, 1000);
   }
-  
-  // ═══ SÉLECTION D'UNE RÉPONSE ═══
-  window.selectVerse = function(answer) {
-    const quizError = document.getElementById('quiz-error');
-    if (!currentQuiz || !quizError) return;
-    
-    clearInterval(quizTimer);
-    const currentQuizIdx = VERSE_QUIZZES.indexOf(currentQuiz);
-    
+  function resumeQuizTimer() {
+    if (unlocked || !quizVisible || quizTimer) return;
+    quizTimer = setInterval(tickQuiz, 1000);
+  }
+  function paintTimer() {
+    const el = document.getElementById('quiz-timer');
+    if (!el) return;
+    el.textContent = String(Math.max(0, quizTimeLeft));
+    if (quizTimeLeft <= 5) {
+      el.style.color = '#ff3b30';
+      el.style.borderColor = 'rgba(255,59,48,0.5)';
+      el.style.background = 'rgba(255,59,48,0.1)';
+    }
+  }
+
+  /* ═══ ÉCRAN QUIZ ═══ */
+  function showVerseQuiz(feedback) {
+    if (!authBox) return;
+    if (unlocked) return;
+    stopQuizTimer();
+    busy = false;
+    quizVisible = true;
+
+    currentQuiz = pickQuestion();
+    const order = shuffle(currentQuiz.options.map(function (_, i) { return i; }));
+
+    let dots = '';
+    for (let n = 1; n <= REQUIRED_CORRECT; n++) {
+      const on = n <= correctAnswers;
+      dots += '<div style="width:12px;height:12px;border-radius:50%;background:'
+        + (on ? '#4f8ef7' : 'rgba(255,255,255,0.2)') + ';border:1px solid '
+        + (on ? '#4f8ef7' : 'rgba(255,255,255,0.3)') + ';"></div>';
+    }
+
+    let lvl = '';
+    for (let d = 1; d <= 4; d++) {
+      lvl += '<div style="width:8px;height:8px;border-radius:50%;background:'
+        + (d <= difficultyLevel ? '#4f8ef7' : 'rgba(255,255,255,0.2)') + ';"></div>';
+    }
+
+    authBox.innerHTML =
+      '<div class="auth-logo">THEOLOGICUS</div>' +
+      '<div class="auth-sub">VERSET BIBLIQUE</div>' +
+      '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:15px;">' +
+        '<span style="color:rgba(255,255,255,0.4);font-family:\'Share Tech Mono\',monospace;font-size:10px;">ACCÈS :</span>' +
+        dots +
+        '<span style="color:rgba(255,255,255,0.4);font-family:\'Share Tech Mono\',monospace;font-size:10px;">' +
+          correctAnswers + '/' + REQUIRED_CORRECT + '</span>' +
+      '</div>' +
+      '<div id="quiz-timer" style="position:absolute;top:15px;right:15px;width:50px;height:50px;' +
+        'border-radius:50%;background:rgba(79,142,247,0.1);border:2px solid rgba(79,142,247,0.5);' +
+        'display:flex;align-items:center;justify-content:center;font-family:\'Orbitron\',monospace;' +
+        'font-size:18px;font-weight:700;color:#4f8ef7;">' + QUIZ_TIME_LIMIT + '</div>' +
+      '<div style="display:flex;gap:5px;justify-content:center;margin-bottom:10px;">' + lvl + '</div>' +
+      '<div style="color:#4f8ef7;font-family:\'Share Tech Mono\',monospace;font-size:13px;margin:20px 0;' +
+        'line-height:1.6;padding:15px;background:rgba(79,142,247,0.05);' +
+        'border:1px solid rgba(79,142,247,0.2);border-radius:8px;">« ' + esc(currentQuiz.question) + ' »</div>' +
+      '<div style="color:var(--text-dim);font-size:11px;margin-bottom:15px;">Choisissez la bonne réponse :</div>' +
+      '<div id="quiz-options" style="display:flex;flex-direction:column;gap:10px;">' +
+        order.map(function (oi) {
+          /* v66 : data-opt + délégation. Avant, le texte de l'option était
+             injecté dans un attribut onclick entre apostrophes — une option
+             contenant une apostrophe cassait le bouton. */
+          return '<button class="quiz-option" data-opt="' + oi + '" style="' +
+            'background:rgba(5,13,24,0.8);border:1px solid rgba(79,142,247,0.3);color:#eaf4ff;' +
+            'font-family:\'Share Tech Mono\',monospace;font-size:13px;padding:12px 16px;' +
+            'border-radius:8px;cursor:pointer;transition:all 0.2s ease;text-align:left;' +
+            '">' + esc(currentQuiz.options[oi]) + '</button>';
+        }).join('') +
+      '</div>' +
+      '<div class="auth-error" id="quiz-error"></div>' +
+      '<div style="margin-top:20px;">' +
+        '<button data-act="admin" style="background:transparent;border:1px solid rgba(255,255,255,0.2);' +
+          'color:rgba(255,255,255,0.4);font-family:\'Share Tech Mono\',monospace;font-size:10px;' +
+          'padding:8px 16px;border-radius:6px;cursor:pointer;">🔑 Connexion Admin</button>' +
+      '</div>' +
+      '<div class="auth-footer">PROPRIÉTÉ EXCLUSIVE — ' + esc(OWNER_NAME) + '</div>';
+
+    startQuizTimer();
+    if (feedback && feedback.text) setQuizError(feedback.text, feedback.color);
+  }
+
+  /* ═══ RÉPONSE ═══ */
+  window.selectVerse = function (answer) {
+    if (!currentQuiz || unlocked || busy) return;
+    busy = true;
+    stopQuizTimer();
+
     if (answer === currentQuiz.correct) {
-      // Bonne réponse
       correctAnswers++;
-      quizAttempts = 0;
-      
-      if (correctAnswers >= REQUIRED_CORRECT) {
-        // 3 bonnes réponses → accès accordé
-        authOverlay.classList.add('hidden');
-        sessionStorage.setItem('theologicus_auth', 'true');
-        sessionStorage.setItem('theologicus_auth_mode', 'verse');
-        initWatermark();
-        initDevtoolsProtection();
-      } else {
-        // Encore des questions à répondre
-        quizError.textContent = '✓ Bonne réponse ! (' + correctAnswers + '/' + REQUIRED_CORRECT + ')';
-        quizError.style.color = '#4f8ef7';
-        setTimeout(showVerseQuiz, 1500);
-      }
+      if (correctAnswers >= REQUIRED_CORRECT) { unlock('verse'); return; }
+      /* v66 : la difficulté monte avec la RÉUSSITE, jamais avec l'échec. */
+      difficultyLevel = Math.min(MAX_DIFFICULTY, difficultyLevel + 1);
+      setQuizError('✓ Bonne réponse (' + correctAnswers + '/' + REQUIRED_CORRECT + ')', '#4f8ef7');
+      setTimeout(function () { showVerseQuiz(); }, 1200);
     } else {
-      // Mauvaise réponse → question ratée = jamais revue
-      failedQuizIds.push(currentQuizIdx);
-      quizAttempts++;
-      correctAnswers = Math.max(0, correctAnswers - 1);
-      
-      if (quizAttempts >= MAX_QUIZ_ATTEMPTS) {
-        quizError.textContent = 'Trop de tentatives — difficulté augmentée';
-        quizError.style.color = '#ff3b30';
-        difficultyLevel = Math.min(4, difficultyLevel + 1);
-        quizAttempts = 0;
-        correctAnswers = 0;
-        setTimeout(showVerseQuiz, 2000);
-      } else {
-        quizError.textContent = '✗ Incorrect — cette question ne sera plus posée';
-        quizError.style.color = '#ff3b30';
-        setTimeout(showVerseQuiz, 1500);
-      }
+      setQuizError('✗ Incorrect — nouvelle question', '#ff3b30');
+      setTimeout(function () { showVerseQuiz(); }, 1200);
     }
   };
-  
-  // ═══ AFFICHER LE LOGIN ADMIN ═══
-  window.showAdminLogin = function() {
+
+  /* ═══ ÉCRAN ADMIN ═══ */
+  function showAdminLogin() {
     if (!authBox) return;
-    clearInterval(quizTimer);
-    
-    authBox.innerHTML = `
-      <div class="auth-logo">THEOLOGICUS</div>
-      <div class="auth-sub">CONNEXION ADMINISTRATEUR</div>
-      <input type="password" class="auth-input" id="auth-password" placeholder="Mot de passe admin..." autofocus>
-      <button class="auth-btn" id="auth-submit">DÉVERROUILLER</button>
-      <div class="auth-error" id="auth-error"></div>
-      <div style="margin-top:20px;">
-        <button onclick="window.backToQuiz()" style="background:transparent;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.4);font-family:'Share Tech Mono',monospace;font-size:10px;padding:8px 16px;border-radius:6px;cursor:pointer;">
-          📖 Retour au Verset
-        </button>
-      </div>
-      <div class="auth-footer">PROPRIÉTÉ EXCLUSIVE — ambassa2ur</div>
-    `;
-    
-    // Réattacher les événements
-    const newAuthPassword = document.getElementById('auth-password');
-    const newAuthSubmit = document.getElementById('auth-submit');
-    const newAuthError = document.getElementById('auth-error');
-    
-    newAuthSubmit.addEventListener('click', function() {
-      const input = newAuthPassword.value;
-      if (input === AUTH_PASSWORD) {
-        authOverlay.classList.add('hidden');
-        sessionStorage.setItem('theologicus_auth', 'true');
-        sessionStorage.setItem('theologicus_auth_mode', 'admin');
-        initWatermark();
-        initDevtoolsProtection();
-      } else {
-        newAuthError.textContent = 'Mot de passe incorrect';
-        newAuthPassword.value = '';
-        newAuthPassword.focus();
+    if (unlocked) return;
+    stopQuizTimer();
+    quizVisible = false;
+    busy = false;
+
+    authBox.innerHTML =
+      '<div class="auth-logo">THEOLOGICUS</div>' +
+      '<div class="auth-sub">CONNEXION ADMINISTRATEUR</div>' +
+      '<input type="password" class="auth-input" id="auth-password" ' +
+        'placeholder="Mot de passe admin..." autocomplete="current-password">' +
+      '<label class="auth-remember" for="auth-remember">' +
+        '<input type="checkbox" id="auth-remember">' +
+        '<span>Se souvenir de moi pendant ' + REMEMBER_DAYS + ' jours</span>' +
+      '</label>' +
+      '<button class="auth-btn" data-act="admin-go">DÉVERROUILLER</button>' +
+      '<div class="auth-error" id="auth-error"></div>' +
+      '<div style="margin-top:20px;">' +
+        '<button data-act="quiz" style="background:transparent;border:1px solid rgba(255,255,255,0.2);' +
+          'color:rgba(255,255,255,0.4);font-family:\'Share Tech Mono\',monospace;font-size:10px;' +
+          'padding:8px 16px;border-radius:6px;cursor:pointer;">📖 Retour au Verset</button>' +
+      '</div>' +
+      '<div class="auth-footer">PROPRIÉTÉ EXCLUSIVE — ' + esc(OWNER_NAME) + '</div>';
+
+    const pwd = document.getElementById('auth-password');
+    const err = document.getElementById('auth-error');
+    const remember = document.getElementById('auth-remember');
+
+    function submit() {
+      if (!pwd) return;
+      if (checkPassword(pwd.value)) {
+        if (remember && remember.checked) writeRemember(); else clearRemember();
+        unlock('admin');
+        return;
       }
+      if (err) { err.textContent = 'Mot de passe incorrect'; err.style.color = '#ff3b30'; }
+      pwd.value = '';
+      pwd.focus();
+    }
+
+    const go = authBox.querySelector('[data-act="admin-go"]');
+    if (go) go.addEventListener('click', submit);
+    if (pwd) {
+      pwd.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+      pwd.focus();
+    }
+  }
+  window.showAdminLogin = showAdminLogin;
+
+  /* ═══ DÉLÉGATION : un seul jeu d'écouteurs pour tous les écrans ═══ */
+  if (authBox) {
+    authBox.addEventListener('click', function (e) {
+      const opt = e.target && e.target.closest ? e.target.closest('.quiz-option') : null;
+      if (opt && currentQuiz && !busy && !unlocked) {
+        window.selectVerse(currentQuiz.options[Number(opt.getAttribute('data-opt'))]);
+        return;
+      }
+      const el = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!el) return;
+      const act = el.getAttribute('data-act');
+      if (act === 'admin') showAdminLogin();
+      else if (act === 'quiz') showVerseQuiz();
     });
-    
-    newAuthPassword.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') newAuthSubmit.click();
-    });
-    
-    newAuthPassword.focus();
-  };
-  
-  // ═══ RETOUR AU QUIZ ═══
-  window.backToQuiz = function() {
-    showVerseQuiz();
-  };
-  
-  // ═══ INITIALISATION ═══
-  if (sessionStorage.getItem('theologicus_auth') === 'true') {
-    authOverlay.classList.add('hidden');
+  }
+
+  /* ═══ OUVERTURE ═══ */
+  function unlock(mode) {
+    unlocked = true;
+    quizVisible = false;
+    busy = false;
+    stopQuizTimer();
+    if (authOverlay) {
+      authOverlay.classList.add('hidden');
+      authOverlay.style.display = 'none';
+    }
+    try {
+      sessionStorage.setItem(LEGACY_SESSION_OK, 'true');
+      sessionStorage.setItem(LEGACY_SESSION_MODE, mode);
+    } catch (e) {}
     initWatermark();
     initDevtoolsProtection();
-  } else {
-    correctAnswers = 0;
-    difficultyLevel = 1;
-    showVerseQuiz();
   }
-  
-  // ═══ DÉTECTION DE CHANGEMENT DE FENÊTRE ═══
-  let lastFocusTime = Date.now();
-  let focusChanges = 0;
-  
-  window.addEventListener('blur', function() {
-    lastFocusTime = Date.now();
-    clearInterval(quizTimer);
-  });
-  
-  window.addEventListener('focus', function() {
-    const timeAway = Date.now() - lastFocusTime;
-    
-    // Si l'utilisateur est parti plus de 2 secondes
-    if (timeAway > 2000 && !sessionStorage.getItem('theologicus_auth')) {
-      focusChanges++;
-      
-      // Question ratée = jamais revue
-      if (currentQuiz) {
-        failedQuizIds.push(VERSE_QUIZZES.indexOf(currentQuiz));
-      }
-      
-      correctAnswers = Math.max(0, correctAnswers - 1);
-      
-      // Augmenter la difficulté à chaque changement
-      if (focusChanges >= 2) {
-        difficultyLevel = Math.min(4, difficultyLevel + 1);
-        focusChanges = 0;
-      }
-      
-      // Changer la question immédiatement
-      showVerseQuiz();
-      
-      // Afficher un message d'avertissement
-      const quizError = document.getElementById('quiz-error');
-      if (quizError) {
-        quizError.textContent = '⚠️ Changement de fenêtre — question remplacée';
-        quizError.style.color = '#ff9f0a';
-      }
-    }
-  });
-  
-  // Détecter le changement d'onglet
-  document.addEventListener('visibilitychange', function() {
-    if (document.hidden && !sessionStorage.getItem('theologicus_auth')) {
-      clearInterval(quizTimer);
-    } else if (!document.hidden && !sessionStorage.getItem('theologicus_auth')) {
-      // Question ratée = jamais revue
-      if (currentQuiz) {
-        failedQuizIds.push(VERSE_QUIZZES.indexOf(currentQuiz));
-      }
-      
-      correctAnswers = Math.max(0, correctAnswers - 1);
-      difficultyLevel = Math.min(4, difficultyLevel + 1);
-      
-      const quizError = document.getElementById('quiz-error');
-      if (quizError) {
-        quizError.textContent = '⚠️ Changement d\'onglet — question remplacée';
-        quizError.style.color = '#ff9f0a';
-      }
-      showVerseQuiz();
-    }
-  });
-  
+
+  /* ═══ FILIGRANE ═══ */
+  let wmInit = false;
   function initWatermark() {
+    if (wmInit) return;
     const overlay = document.getElementById('watermark-overlay');
     if (!overlay) return;
+    wmInit = true;
     const text = OWNER_NAME + ' — ' + OWNER_EMAIL + ' — PROPRIÉTÉ EXCLUSIVE';
     const positions = [
-      {x: 5, y: 10}, {x: 35, y: 25}, {x: 65, y: 40},
-      {x: 15, y: 55}, {x: 45, y: 70}, {x: 75, y: 85}
+      { x: 5, y: 10 }, { x: 35, y: 25 }, { x: 65, y: 40 },
+      { x: 15, y: 55 }, { x: 45, y: 70 }, { x: 75, y: 85 }
     ];
-    positions.forEach(function(pos) {
+    positions.forEach(function (pos) {
       const el = document.createElement('div');
       el.className = 'watermark-text';
       el.textContent = text;
@@ -18594,18 +18745,49 @@ if (document.readyState === 'loading') {
       overlay.appendChild(el);
     });
   }
-  
+
+  /* ═══ PROTECTION « DEVTOOLS » — idempotente ═══ */
+  let devtoolsInit = false;
   function initDevtoolsProtection() {
-    document.addEventListener('contextmenu', function(e) {
+    if (devtoolsInit) return;
+    devtoolsInit = true;
+    document.addEventListener('contextmenu', function (e) {
       if (e.target && e.target.closest && e.target.closest('.atc-mark')) return; // surlignage : clic droit autorisé
-      e.preventDefault(); });
-    document.addEventListener('keydown', function(e) {
+      e.preventDefault();
+    });
+    document.addEventListener('keydown', function (e) {
       if (e.key === 'F12') { e.preventDefault(); return false; }
       if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) { e.preventDefault(); return false; }
       if (e.ctrlKey && e.key === 'u') { e.preventDefault(); return false; }
       if (e.ctrlKey && e.key === 's') { e.preventDefault(); return false; }
     });
   }
+
+  /* ═══ DÉMARRAGE ═══ */
+  const remembered = readRemember();
+  if (remembered) {
+    unlock('admin');
+  } else if (sessionStorage.getItem(LEGACY_SESSION_OK) === 'true') {
+    unlock(sessionStorage.getItem(LEGACY_SESSION_MODE) || 'verse');
+  } else {
+    /* annule le masquage précoce si l'enregistrement n'est pas valide */
+    authOverlay.style.display = '';
+    correctAnswers = 0;
+    difficultyLevel = 1;
+    showVerseQuiz();
+  }
+
+  /* ═══ CHANGEMENT DE FENÊTRE / D'ONGLET ═══
+     v66 : on MET EN PAUSE, on ne pénalise plus. Avant, une simple
+     notification Android remettait le compteur à zéro et changeait la
+     question — l'utilisateur n'avait aucun moyen de l'éviter. */
+  window.addEventListener('blur', function () { if (!unlocked) stopQuizTimer(); });
+  window.addEventListener('focus', function () { if (!unlocked) resumeQuizTimer(); });
+  document.addEventListener('visibilitychange', function () {
+    if (unlocked) return;
+    if (document.hidden) stopQuizTimer(); else resumeQuizTimer();
+  });
+})();
 
 function initBibleVerseTooltip() {
   'use strict';
@@ -18923,9 +19105,6 @@ function initTafsirVerseTooltip() {
   });
 }
 initTafsirVerseTooltip();
-
-
-})();
 
 
 </script>
