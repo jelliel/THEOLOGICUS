@@ -670,9 +670,10 @@ CI run `35363869961` → succès.
 1. **Vérifier sur téléphone** : taper une référence, couper les données, vérifier
    que le verset s'affiche ; confirmer que le bouton du bas à droite a
    disparu ; tester le nouveau réglage *mode vérification*.
-2. **Fallback `1.0.` dans `android/app/build.gradle`** l. 48 — à passer à `2.0.`
-   quand on retouchera le build (non fait ici pour ne pas créer une release en
-   double). La skill passe désormais `APK_VERSION_NAME` explicitement.
+2. **Fait** — fallback `1.0.` → `2.0.` dans `android/app/build.gradle` l. 48
+   (corrigé après `apk-v2.0.48`). Un build local sans `APK_VERSION_NAME`
+   annonce désormais `2.0.<code>`, cohérent avec le HTML embarqué. La skill
+   passe toujours `APK_VERSION_NAME` explicitement en local.
 3. **Droits sur la traduction** : le corpus est identifié « BJ 1998 » (Bible de
    Jérusalem, 1998) — donc sous droits. Cela conditionne le comparateur de
    traductions et l'export des paliers suivants.
