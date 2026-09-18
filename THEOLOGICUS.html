@@ -232,16 +232,109 @@
     try { return new Response(JSON.stringify(obj), { status: status || 200, headers: { 'Content-Type': 'application/json' } }); }
     catch (e) { return { ok: (status || 200) < 400, status: status || 200, json: function () { return Promise.resolve(obj); } }; }
   }
+  /* v65 — conversion texte -> octets sans gonflement memoire.
+     `TextEncoder` donne 1 octet par caractere ; a defaut on passe par
+     encodeURIComponent MAIS par tranches de 8 Ko, alors que l'ancien code
+     l'appliquait a tout le JSON d'un coup (x3 a x9 sur du contenu arabe ou
+     hebreu : ~135 Mo de chaine intermediaire pour 35 Mo de donnees). */
+  function toUtf8(str){
+    try {
+      if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
+    } catch (e) {}
+    var buf = new Uint8Array(str.length * 3), p = 0, i;
+    for (i = 0; i < str.length; i += 8192) {
+      var enc = unescape(encodeURIComponent(str.slice(i, Math.min(i + 8192, str.length))));
+      for (var j = 0; j < enc.length; j++) buf[p++] = enc.charCodeAt(j) & 0xff;
+    }
+    return buf.subarray(0, p);
+  }
+
+  function b64ToBytes(b64){
+    var bin = atob(b64), n = bin.length, out = new Uint8Array(n);
+    for (var i = 0; i < n; i++) out[i] = bin.charCodeAt(i) & 0xff;
+    return out;
+  }
+
+  var CHUNK = 3 * 65536;   /* 192 Ko -> 256 Ko de base64, multiple de 3 */
+
+  function writeAll(Picker, token, bytes, i){
+    if (i >= bytes.length) return Promise.resolve();
+    var end = Math.min(i + CHUNK, bytes.length);
+    var s = '';
+    for (var j = i; j < end; j += 8192) {
+      s += String.fromCharCode.apply(null, bytes.subarray(j, Math.min(j + 8192, end)));
+    }
+    return Picker.writeChunk({ token: token, data64: btoa(s) })
+      .then(function(){ return writeAll(Picker, token, bytes, end); });
+  }
+
+  /* v65 — sauvegarde par morceaux. Le dossier est choisi D'ABORD (le plugin
+     n'ouvre le selecteur qu'avec le nom de fichier, aucune donnee en vol),
+     puis le contenu est pousse par tranches de 256 Ko. Un backup de 35 Mo ne
+     coutait plus rien en memoire : avant, un seul String Java de ~96 Mo plus
+     un byte[] de 36 Mo faisaient tomber l'app des le retour du selecteur. */
+  function streamToPicker(Picker, fname, b, resolve){
+    var data64 = String(b.data64 || '');
+    var bytes;
+    try {
+      if (b.text != null && b.text !== '') bytes = toUtf8(String(b.text));
+      else if (data64) bytes = b64ToBytes(data64);
+      else throw new Error('contenu vide');
+    } catch (e) { legacySave(fname, data64, resolve); return; }
+
+    Picker.saveAs({ name: fname }).then(function (r) {
+      var token = r && r.token;
+      if (!token) throw new Error('aucun jeton de session');
+      return writeAll(Picker, token, bytes, 0).then(function () {
+        return Picker.finish({ token: token });
+      }).catch(function (err) {
+        try { Picker.abort({ token: token }); } catch (e) {}
+        throw err;
+      });
+    }).then(function (r) {
+      resolve(jsonRes({ ok: true, path: String(r && r.display || 'dossier choisi') }));
+    }).catch(function (err) {
+      console.warn('[shim] SavePicker par morceaux en echec, repli :', err);
+      /* v65 — le repli Filesystem ne sait transporter QUE du base64. Si le
+         contenu est arrive en texte (chemin natif normal), le re-encoder d'un
+         bloc ferait renaitre le pic memoire qu'on vient juste de supprimer.
+         On le fait pour les petits backups, sinon on SIGNALE l'echec : un
+         fichier de 0 octet annonce "ok" serait bien pire qu'une erreur. */
+      var b64 = data64;
+      if (!b64 && bytes && bytes.length) {
+        if (bytes.length <= 4 * 1024 * 1024) {
+          try {
+            var s = '';
+            for (var i = 0; i < bytes.length; i += 8192) {
+              s += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, bytes.length)));
+            }
+            b64 = btoa(s);
+          } catch (e) { b64 = ''; }
+        }
+        if (!b64) {
+          resolve(jsonRes({ ok: false, error: 'ecriture impossible : ' + String(err && err.message || err) }, 500));
+          return;
+        }
+      }
+      legacySave(fname, b64, resolve);
+    });
+  }
+
   function saveData(init, resolve) {
     var b = {};
     try { b = JSON.parse((init && init.body) || '{}'); } catch (e) {}
     var fname = String(b.filename || 'theologicus-backup.json');
     var data64 = String(b.data64 || '');
     /* v51 — le choix du repertoire d'abord : plugin natif SavePicker (SAF).
+       v65 — envoi par morceaux quand le plugin les supporte.
        Replis : Documents (Filesystem) puis Download public. */
     var Picker = cap.Plugins && cap.Plugins.SavePicker;
     if (Picker && typeof Picker.saveAs === 'function') {
       try {
+        if (typeof Picker.writeChunk === 'function' && typeof Picker.finish === 'function') {
+          streamToPicker(Picker, fname, b, resolve);
+          return;
+        }
         Picker.saveAs({ name: fname, data64: data64 })
           .then(function (r) { resolve(jsonRes({ ok: true, path: String(r && r.display || 'dossier choisi') })); })
           .catch(function (err) { console.warn('[shim] picker refuse/echec, repli Documents :', err); legacySave(fname, data64, resolve); });
@@ -14632,14 +14725,24 @@ async function exportData() {
     };
     const json = JSON.stringify(payload, null, 2);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
+    /* v65 — sur natif on transmet le TEXTE, pas un base64. Construire le
+       base64 d'un backup de 35 Mo (btoa(unescape(encodeURIComponent(...))))
+       empilait ~250 Mo de pics memoire ct WebView + ct natif : l'app se
+       fermait net au retour du selecteur de dossier. Le shim mobile v34
+       decoupe maintenant le texte en morceaux de 256 Ko.
+       Desktop inchange : app.py continue de recevoir `data64`. */
+    let isNative = false;
+    try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch(e){}
     /* 1) Sauvegarde directe dans le dossier de l'application via le serveur
           local (dossier de l'exe, sous-dossier backups/). */
     try {
-      const data64 = btoa(unescape(encodeURIComponent(json)));
+      const body = isNative
+        ? { filename: filename, text: json }
+        : { filename: filename, data64: btoa(unescape(encodeURIComponent(json))) };
       const res = await fetch('/save-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename, data64: data64 })
+        body: JSON.stringify(body)
       });
       if (res.ok) {
         const j = await res.json().catch(() => ({}));
