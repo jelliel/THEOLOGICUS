@@ -7327,6 +7327,25 @@ window.__ensureTafsirSurah = function(p){
   </div>
 </div>
 
+<!-- ═══════════════════ MODAL : INFO AGENT (fiche caractéristiques) ═══════════════════ -->
+<div class="modal-overlay" id="agent-info-modal">
+  <div class="modal-box">
+    <div class="corner-deco corner-tl"></div>
+    <div class="corner-deco corner-tr"></div>
+    <div class="corner-deco corner-bl"></div>
+    <div class="corner-deco corner-br"></div>
+    <div class="modal-header">
+      <div class="modal-title">◈ CARACTÉRISTIQUES DE L'AGENT</div>
+      <button class="modal-close" id="close-agent-info-modal">✕</button>
+    </div>
+    <div class="modal-body" id="agent-info-body"></div>
+    <div class="btn-row">
+      <button class="btn-ghost" id="agent-info-close">Fermer</button>
+      <button class="btn-primary" id="agent-info-activate">⚙ Activer / Démarrer une discussion</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════ MODAL : DATA ═══════════════════ -->
 <div class="modal-overlay" id="data-modal">
   <div class="modal-box">
@@ -14697,9 +14716,9 @@ async function loadAgents() {
         return;
       }
       list.innerHTML = `
-        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:10px">AGENTS EXISTANTS (${agents.length})</div>
+        <div style="font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:10px">AGENTS EXISTANTS (${agents.length}) <span style="opacity:.6">· appui long = caractéristiques</span></div>
         ${agents.map(a => `
-          <div class="agent-preview" onclick="activateAgent('${a.id}')">
+          <div class="agent-preview" data-agent-id="${a.id}" onclick="activateAgent('${a.id}')">
             <div style="flex:1;min-width:0">
               <div class="agent-preview-name">◈ ${escapeHtml(a.name)}</div>
               <div class="agent-preview-desc">${escapeHtml((a.desc||'').slice(0,80))}${(a.desc||'').length>80?'…':''}</div>
@@ -14738,6 +14757,82 @@ window.deleteAgent = async id => {
   await loadAgents();
   toast("Agent supprimé", "success");
 };
+
+// ════════════════════════════════════════
+// AGENT INFO — fiche caractéristiques (long-appui sur une carte)
+// ════════════════════════════════════════
+window.showAgentInfo = async id => {
+  try {
+    const ag = await db.get('agents', id);
+    if (!ag) return;
+    const styleLabels = { concis:'Concis & Direct', detaille:'Détaillé & Exhaustif', formel:'Formel & Professionnel', creatif:'Créatif & Innovant', pedagogique:'Pédagogique & Clair', '':'Auto' };
+    const rows = [
+      ['Nom', ag.name],
+      ['Rôle & Domaine d\'expertise', ag.desc],
+      ['Tags mémoire', (ag.tags||[]).join(', ')],
+      ['Modèle préféré', ag.modelPref ? ag.modelPref : 'Auto (défaut)'],
+      ['Température', ag.temperature != null ? String(ag.temperature) : '0.7'],
+      ['Style de réponse', styleLabels[ag.style||''] || 'Auto'],
+      ['Instructions comportementales', ag.instructions],
+      ['Phrase d\'amorce', ag.primer],
+      ['Instructions interdites', ag.forbidden],
+      ['Créé le', ag.created ? new Date(ag.created).toLocaleString() : '—']
+    ];
+    const body = document.getElementById('agent-info-body');
+    body.innerHTML = rows.filter(r => r[1] != null && r[1] !== '').map(([k,v]) =>
+      '<div class="field-group">' +
+        '<label class="field-label">' + escapeHtml(k) + '</label>' +
+        '<div class="field-hint" style="white-space:pre-wrap;word-break:break-word;line-height:1.5">' + escapeHtml(String(v)) + '</div>' +
+      '</div>').join('');
+    document.getElementById('agent-info-activate').dataset.agentId = id;
+    document.getElementById('agent-info-modal').classList.add('active');
+  } catch(e) { console.error('showAgentInfo', e); }
+};
+
+(function initAgentLongPress() {
+  const list = document.getElementById('agent-existing-list');
+  if (!list || list.__lpInit) return;
+  list.__lpInit = true;
+  let timer = null, sx = 0, sy = 0, longFired = false;
+  const TH = 480;
+  const clearT = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  list.addEventListener('pointerdown', e => {
+    const card = e.target.closest('.agent-preview');
+    if (!card) return;
+    if (e.target.closest('.agent-card-actions')) return; // laisser les boutons d'action à leur tap
+    longFired = false;
+    sx = e.clientX; sy = e.clientY;
+    const id = card.getAttribute('data-agent-id');
+    clearT();
+    timer = setTimeout(() => { longFired = true; clearT(); if (id) window.showAgentInfo(id); }, TH);
+  });
+  list.addEventListener('pointermove', e => {
+    if (timer && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) clearT();
+  });
+  list.addEventListener('pointerup', clearT);
+  list.addEventListener('pointercancel', clearT);
+  list.addEventListener('click', e => {
+    if (longFired) { e.stopPropagation(); e.preventDefault(); longFired = false; }
+  }, true);
+  list.addEventListener('contextmenu', e => { if (e.target.closest('.agent-preview')) e.preventDefault(); });
+})();
+
+(function initAgentInfoModal() {
+  const m = document.getElementById('agent-info-modal');
+  if (!m || m.__init) return; m.__init = true;
+  const close = () => m.classList.remove('active');
+  const c1 = document.getElementById('close-agent-info-modal');
+  const c2 = document.getElementById('agent-info-close');
+  if (c1) c1.onclick = close;
+  if (c2) c2.onclick = close;
+  m.onclick = e => { if (e.target === m) close(); };
+  const act = document.getElementById('agent-info-activate');
+  if (act) act.onclick = () => {
+    const id = act.dataset.agentId;
+    close();
+    if (id) window.activateAgent(id);
+  };
+})();
 
 // ════════════════════════════════════════
 // DATA EXPORT / IMPORT

@@ -653,9 +653,37 @@ des **frères** du lien (pas des enfants) pour que `textContent` reste parseable
 > release. Le moteur et la logique de mode (testés via `localStorage` +
 > `dispatchEvent`) étaient déjà vérifiés à 24/24.
 
+### T6 — appui long sur une carte agent (fiche caractéristiques)
+
+Demandé pour la « nouvelle version » : dans l'onglet AGENTS, un **appui long**
+sur une carte d'agent affiche ses caractéristiques. (La demande initiale
+mentionnait « lance le paliers important » ; clarifiée avec l'utilisateur : le
+cœur est l'affichage des caractéristiques, sans workflow multi-étapes.)
+
+Mécanique (`THEOLOGICUS.html`, ~l. 14764–14835) :
+
+- `initAgentLongPress()` écoute `pointerdown` sur `#agent-existing-list`,
+  timer de **480 ms** (`TH`) annulé si déplacement > 10 px ou relâchement ; au
+  seuil, `window.showAgentInfo(id)` ouvre la fiche `#agent-info-modal`.
+- L'appui long **ignore** `.agent-card-actions` (Modifier / Dupliquer /
+  Exporter / Supprimer gardent leur tap).
+- Suppresseur de `click` en capture : après un appui long, le tap
+  `activateAgent()` ne se déclenche pas (`longFired`).
+- `initAgentInfoModal()` relie fermeture + bouton « ⚙ Activer / Démarrer une
+  discussion » (ferme puis `activateAgent(id)`).
+- `showAgentInfo()` rend 10 lignes (Nom, Rôle, Tags, Modèle, Température,
+  Style, Instructions, Amorce, Interdites, Créé le) via `escapeHtml`.
+- Bandeau de liste : « · appui long = caractéristiques ».
+
+Preuves (`_diag_v20.js`, H1–H7) : agent factice en IndexedDB → `loadAgents()`
+→ `pointerdown` sur la carte → attente > 480 ms → `#agent-info-modal.active`
+(`display: flex`) avec nom + rôle + température ; témoin négatif : tap court
+(`pointerdown` + `pointerup` avant le seuil) n'ouvre pas la fiche. Feature
+codée et vérifiée le 2026-09-18, **shippe à la prochaine release** (apk-v2.0.50+).
+
 ## Preuves
 
-Banc CDP `_diag_v20.js` : **24/24** (18 de la base + 6 du T4). Tap `Jean 3:16` →
+Banc CDP `_diag_v20.js` : **31/31** (18 de la base + 6 du T4 + 7 du T6). Tap `Jean 3:16` →
 verset local, navigation bloquée. `Jean 3:37` → signalé. `Psaume 23:1` **réseau
 coupé** → résolu. **0 requête externe** sur toute la session. T4 : réf. valide →
 ✅, réf. absente → ⚠️, Coran valide → ✅, mode `souple` retire ✅ et garde ⚠️,
@@ -677,3 +705,7 @@ CI run `35363869961` → succès.
 3. **Droits sur la traduction** : le corpus est identifié « BJ 1998 » (Bible de
    Jérusalem, 1998) — donc sous droits. Cela conditionne le comparateur de
    traductions et l'export des paliers suivants.
+4. **Vérifier sur téléphone** le nouvel appui long sur une carte agent
+   (onglet AGENTS) : la fiche caractéristiques s'ouvre bien au doigt, et les
+   boutons Modifier / Dupliquer / Exporter / Supprimer continuent de répondre
+   au tap (sans déclencher la fiche).
