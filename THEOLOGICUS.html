@@ -7986,6 +7986,11 @@ function buildBibleUrl(ref) {
 
 // Lien vers l'app desktop Biblia Universalis 3 (bouton secondaire, si installée).
 function buildBibliaUrl(ref) {
+  /* Schema d'application desktop (Biblia Universalis 3, Windows). Sur Android
+     aucun handler n'est enregistre : le tap ouvre « page introuvable »
+     (ERR_UNKNOWN_URL_SCHEME). Masque au doigt/natif — la reference reste
+     resolue en local par la v2.0. Les deux appelants testent deja `if (biblia)`. */
+  if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) return null;
   const m = ref.match(/^(.+?)\s+(\d+):(\d+(?:-\d+)?)$/);
   if (!m) return null;
   let book = m[1].trim();
