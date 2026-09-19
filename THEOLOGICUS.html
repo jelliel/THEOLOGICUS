@@ -6580,6 +6580,7 @@ window.__ensureTafsirSurah = function(p){
             </button>
           </div>
           <button class="tpai-sublink" data-act="refs-open" style="margin-top:6px"><span class="tpai-acc-ico">📖</span>Ouvrir le panel</button>
+          <button class="tpai-sublink" data-act="fathers-open"><span class="tpai-acc-ico">🧔</span>Pères de l’Église</button>
         </div>
       </div>
 
@@ -7358,6 +7359,22 @@ window.__ensureTafsirSurah = function(p){
               <div class="btn-row">
                 <button class="btn-ghost" id="summa-close">Fermer</button>
                 <a class="btn-primary" id="summa-web" href="#" target="_blank" rel="noopener">Consulter en ligne →</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-overlay" id="fathers-modal">
+            <div class="modal-box">
+              <div class="corner-deco corner-tl"></div><div class="corner-deco corner-tr"></div>
+              <div class="corner-deco corner-bl"></div><div class="corner-deco corner-br"></div>
+              <div class="modal-header">
+                <div class="modal-title">◈ PÈRES DE L'ÉGLISE</div>
+                <button class="modal-close" id="close-fathers-modal">✕</button>
+              </div>
+              <div class="modal-body" id="fathers-body" style="max-height:60vh;overflow-y:auto"></div>
+              <div class="btn-row">
+                <button class="btn-ghost" id="fathers-close">Fermer</button>
+                <a class="btn-primary" id="fathers-web" href="#" target="_blank" rel="noopener">Consulter en ligne →</a>
               </div>
             </div>
           </div>
@@ -8147,6 +8164,11 @@ function buildTheoRefUrl(ref) {
   if (/tome\s+[àa]\s+flavien|epistula\s*28/i.test(ref)) return 'https://www.newadvent.org/fathers/3604028.htm';
   if (/de\s+l['’]unit[ée]\s+de\s+l['’]\u00c9glise|de\s+unitate\s+ecclesiae/i.test(ref)) return 'https://www.newadvent.org/fathers/050701.htm';
 
+  /* Pere de l'Eglise reconnu : URL exacte newadvent au lieu d'une recherche
+     Google (les conciles sont dans le corpus, d'ou ce test avant la branche
+     « Conciles »). Le tap est de toute facon resolu en local. */
+  var _fp0 = (typeof parseFathersRef === 'function') ? parseFathersRef(ref) : null;
+  if (_fp0) return 'https://www.newadvent.org/fathers/' + _fp0.id + '.htm';
   // Conciles → recherche web
   if (/concile/i.test(ref)) {
     return 'https://www.google.com/search?q=' + encodeURIComponent(ref);
@@ -8212,7 +8234,10 @@ function theoRefHtml(ref) {
   var _sp = parseSummaRef(ref);
   var _attr = '';
   if (_sp) _attr = ' data-summa="' + (_sp.part * 1000 + _sp.q) + '" data-summa-a="' + (_sp.a || '') + '"';
-  return '<a class="theo-ref' + (_sp ? ' summa-ref' : '') + '"' + _attr + ' href="' + url + '" target="_blank" rel="noopener" title="' + tooltip.replace(/"/g, '&quot;') + '">' + ref + '</a>';
+  /* Peres de l'Eglise : meme traitement — resolution locale au tap. */
+  var _fp = _sp ? null : parseFathersRef(ref);
+  if (_fp) _attr = ' data-fathers="' + _fp.id + '" data-fathers-ch="' + (_fp.ch || '') + '"';
+  return '<a class="theo-ref' + (_sp ? ' summa-ref' : '') + (_fp ? ' fathers-ref' : '') + '"' + _attr + ' href="' + url + '" target="_blank" rel="noopener" title="' + tooltip.replace(/"/g, '&quot;') + '">' + ref + '</a>';
 }
 
 /* ── Somme theologique : resolution locale ──────────────────────────────
@@ -8312,6 +8337,257 @@ window.__parseSummaRef = parseSummaRef;
   }, true);
 })();
 
+
+/* ── Pères de l'Église : resolution locale ──────────────────────────────
+   Meme principe que la Somme : le corpus est sur disque (fathers/fNNNN.js)
+   et n'est charge qu'a la demande. Seuls index.js et names.js — quelques
+   kilo-octets — sont charges au demarrage, pour que l'analyse des
+   references fonctionne des le premier message.
+
+   Une citation s'ecrit selon les habitudes de l'IA :
+     « Augustin, Confessions, X, 27 »
+     « Contre les heresies, livre III, 12 »
+     « Basile, Traite du Saint-Esprit, ch. 9 »
+   On renvoie { id: ouvrage, ch: numero de page-livre, sec: section }.
+-------------------------------------------------------------------------- */
+
+/* Normalise une citation ou un titre : casse, accents et ponctuation
+   disparaissent, seuls restent les mots — c'est la cle de names.js. */
+function fathersNorm(s) {
+  return String(s == null ? '' : s)
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseFathersRef(ref) {
+  var N = window.__fathersNames;
+  if (!N) return null;
+  if (/somme\s+th[eé]ologique|summa\s+theologica/i.test(ref)) return null;
+  var n = fathersNorm(ref);
+  if (!n) return null;
+
+  /* Le titre le plus long present dans la citation gagne : « Homelies sur
+     Matthieu » doit l'emporter sur « Homelies ». */
+  var best = null, bestLen = 0;
+  for (var k in N) {
+    if (k.length < 5) continue;
+    if (n.indexOf(k) !== -1 && k.length > bestLen) { bestLen = k.length; best = k; }
+  }
+  if (!best) return null;
+  var id = N[best];
+
+  /* Ce qui reste apres le titre : « X, 27 », « livre III, 12 », « ch. 9 »… */
+  var rest = n.slice(n.indexOf(best) + best.length).replace(/^[\s,:;.-]+/, '');
+  var book = null, sec = null;
+  var mb = rest.match(/\b(?:livre|book|l)\s*([0-9]+|[ivxlc]+)\b/);
+  if (mb) book = fathersNum(mb[1]);
+  var ms = rest.match(/\b(?:chapitre|chapter|ch|c|hom[eé]lie|homily|lettre|letter|discours|oration|canon|section)\s*([0-9]+|[ivxlc]+)\b/);
+  if (ms) sec = fathersNum(ms[1]);
+  if (sec === null) {
+    /* Nombres nus, le « livre » ayant deja ete consomme s'il est explicite :
+       « X, 27 » = livre 27 section…, « livre III, 12 » = livre 3 section 12. */
+    var tail = mb ? rest.replace(mb[0], ' ') : rest;
+    var nums = tail.match(/\b([0-9]+|[ivxlc]+)\b/g) || [];
+    var nch = (window.__fathersIndex && window.__fathersIndex[id] && window.__fathersIndex[id].n) || 1;
+    if (nums.length >= 2) { if (book === null) book = fathersNum(nums[0]); sec = fathersNum(nums[1]); }
+    else if (nums.length === 1) {
+      /* Un seul nombre : numero de livre pour une œuvre en plusieurs
+         parties, numero de section pour un texte d'un seul tenant. */
+      if (book === null && nch > 1) book = fathersNum(nums[0]);
+      else sec = fathersNum(nums[0]);
+    }
+  }
+  return { id: id, ch: book, sec: sec };
+}
+
+/* Chiffres romains ou arabes -> entier. */
+function fathersNum(s) {
+  if (!s) return null;
+  if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
+  var r = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  var t = s.toLowerCase(), tot = 0, prev = 0;
+  for (var i = t.length - 1; i >= 0; i--) {
+    var v = r[t[i]] || 0;
+    if (v < prev) tot -= v; else { tot += v; prev = v; }
+  }
+  return tot || null;
+}
+
+/* Charge index.js + names.js (legers) puis une œuvre complete a la volee.
+   Rien n'est precharge : AndroidManifest n'a pas largeHeap. */
+window.__ensureFathersMeta = function () {
+  if (window.__fathersNames && window.__fathersIndex) return Promise.resolve(true);
+  var done = { i: !!window.__fathersIndex, n: !!window.__fathersNames };
+  return Promise.all(['index.js', 'names.js'].map(function (f) {
+    var key = f === 'index.js' ? '__fathersIndex' : '__fathersNames';
+    if (window[key]) return Promise.resolve(true);
+    return new Promise(function (res) {
+      var sc = document.querySelector('script[data-fathers-meta="' + f + '"]');
+      if (!sc) {
+        sc = document.createElement('script');
+        sc.src = 'fathers/' + f;
+        sc.setAttribute('data-fathers-meta', f);
+        sc.onerror = function () { sc.remove(); res(false); };
+        document.head.appendChild(sc);
+      }
+      var n = 0;
+      (function check() {
+        if (window[key]) return res(true);
+        if (++n > 60) return res(false);
+        setTimeout(check, 100);
+      })();
+    });
+  })).then(function (r) { return r[0] && r[1]; });
+};
+
+window.__ensureFathersWork = function (wid) {
+  wid = String(wid);
+  if (window.__fathersWorks && window.__fathersWorks[wid]) return Promise.resolve(true);
+  return new Promise(function (res) {
+    var sc = document.querySelector('script[data-fathers-w="' + wid + '"]');
+    if (!sc) {
+      sc = document.createElement('script');
+      sc.src = 'fathers/f' + wid + '.js';
+      sc.setAttribute('data-fathers-w', wid);
+      sc.onerror = function () { sc.remove(); console.error('[fathers] echec de chargement : ' + wid); res(false); };
+      document.head.appendChild(sc);
+    }
+    var n = 0;
+    (function check() {
+      if (window.__fathersWorks && window.__fathersWorks[wid]) return res(true);
+      if (++n > 120) return res(false);
+      setTimeout(check, 100);
+    })();
+  });
+};
+
+window.__parseFathersRef = parseFathersRef;
+
+/* Rendu d'une œuvre : si elle compte plusieurs livres, un selecteur permet
+   de circuler ; sinon le texte est affiche d'un bloc. */
+function fathersRenderWork(w, opts) {
+  opts = opts || {};
+  var body = document.getElementById('fathers-body');
+  if (!body || !w) return;
+  var idx = Math.min(Math.max(parseInt(opts.ch, 10) || 1, 1), w.c.length);
+  var chap = w.c[idx - 1] || w.c[0];
+  var h = '<div class="field-group"><label class="field-label">' +
+          escapeHtml(w.a) + '</label><div class="field-hint">' + escapeHtml(w.t) + '</div></div>';
+
+  if (w.c.length > 1) {
+    h += '<div class="field-group"><label class="field-label">Livre / partie</label>' +
+         '<select id="fathers-chapter" style="width:100%;padding:8px;border-radius:8px">';
+    w.c.forEach(function (c, i) {
+      h += '<option value="' + (i + 1) + '"' + (i + 1 === idx ? ' selected' : '') + '>' +
+           escapeHtml((c.t || ('Partie ' + (i + 1)))) + '</option>';
+    });
+    h += '</select></div>';
+  }
+
+  (chap.s || []).forEach(function (s, si) {
+    var hot = (opts.sec && fathersNum(String(opts.sec)) === si + 1) ||
+              (opts.sec && /^(\d+)/.test(s.t) && parseInt(RegExp.$1, 10) === parseInt(opts.sec, 10));
+    h += '<div class="field-group"' + (hot ? ' style="border-left:3px solid var(--accent);padding-left:8px"' : '') + '>' +
+         (s.t ? '<label class="field-label">' + escapeHtml(s.t) + '</label>' : '');
+    (s.p || []).forEach(function (p) {
+      h += '<div style="margin-bottom:9px;line-height:1.6">' + escapeHtml(p) + '</div>';
+    });
+    h += '</div>';
+  });
+  body.innerHTML = h;
+
+  var sel = document.getElementById('fathers-chapter');
+  if (sel) sel.onchange = function () { fathersRenderWork(w, { ch: sel.value }); };
+  var web = document.getElementById('fathers-web');
+  if (web) web.href = 'https://www.newadvent.org/fathers/' + (chap.i || w.id) + '.htm';
+}
+
+/* Tap sur une reference aux Peres : resolution EN LOCAL, le lien web ne
+   devient qu'une sortie de secours. Meme philosophie que la Somme :
+   capture + preventDefault, sans stopPropagation. */
+(function initFathersRefs() {
+  var m = document.getElementById('fathers-modal');
+  var body = document.getElementById('fathers-body');
+  if (!m || !body || m.__init) return;
+  m.__init = true;
+  var close = function () { m.classList.remove('active'); };
+  var c1 = document.getElementById('close-fathers-modal');
+  var c2 = document.getElementById('fathers-close');
+  if (c1) c1.onclick = close;
+  if (c2) c2.onclick = close;
+  m.onclick = function (e) { if (e.target === m) close(); };
+
+  /* Le navigateur d'œuvres : liste filtrable des textes disponibles. */
+  window.__openFathersLibrary = function () {
+    if (!m) return;
+    body.innerHTML = '<div class="field-hint">Chargement du catalogue…</div>';
+    m.classList.add('active');
+    var web = document.getElementById('fathers-web');
+    if (web) web.href = 'https://www.newadvent.org/fathers/';
+    window.__ensureFathersMeta().then(function (ok) {
+      var idx = window.__fathersIndex || {};
+      var ids = Object.keys(idx);
+      if (!ok || !ids.length) {
+        body.innerHTML = '<div class="field-hint">⚠️ Catalogue indisponible.</div>';
+        return;
+      }
+      var byAuthor = {};
+      ids.forEach(function (i) {
+        var a = idx[i].a || 'Divers';
+        (byAuthor[a] = byAuthor[a] || []).push(i);
+      });
+      var h = '<div class="field-group"><input id="fathers-search" type="text" placeholder="Filtrer — auteur ou titre…" style="width:100%;padding:8px;border-radius:8px"></div><div id="fathers-lib"></div>';
+      body.innerHTML = h;
+      var list = document.getElementById('fathers-lib');
+      var draw = function (q) {
+        var nq = fathersNorm(q);
+        var out = '';
+        Object.keys(byAuthor).sort().forEach(function (a) {
+          var ws = byAuthor[a].filter(function (i) {
+            return !nq || fathersNorm(a + ' ' + idx[i].t).indexOf(nq) !== -1;
+          });
+          if (!ws.length) return;
+          out += '<div class="field-group"><label class="field-label">' + escapeHtml(a) + '</label>';
+          ws.sort(function (x, y) { return idx[x].t.localeCompare(idx[y].t); }).forEach(function (i) {
+            out += '<div style="margin-bottom:6px"><a href="#" class="fathers-work" data-fathers="' + i +
+                   '" style="color:var(--accent);text-decoration:none">↳ ' + escapeHtml(idx[i].t) + '</a></div>';
+          });
+          out += '</div>';
+        });
+        list.innerHTML = out || '<div class="field-hint">Aucun résultat.</div>';
+      };
+      draw('');
+      var s = document.getElementById('fathers-search');
+      if (s) s.oninput = function () { draw(s.value); };
+    });
+  };
+
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('[data-fathers]') : null;
+    if (!a) return;
+    var wid = String(a.getAttribute('data-fathers') || '');
+    if (!wid) return;
+    if (a.tagName === 'A' || a.closest('a')) e.preventDefault();
+    var ch = a.getAttribute('data-fathers-ch');
+    var web = document.getElementById('fathers-web');
+    if (web && a.href && a.href !== '#') web.href = a.href;
+    body.innerHTML = '<div class="field-hint">Chargement…</div>';
+    m.classList.add('active');
+    window.__ensureFathersWork(wid).then(function (ok) {
+      var w = (window.__fathersWorks || {})[wid];
+      if (!ok || !w) {
+        body.innerHTML = '<div class="field-hint">⚠️ Œuvre non disponible localement.</div>';
+        return;
+      }
+      fathersRenderWork(w, { ch: ch || 1 });
+    });
+  }, true);
+
+  window.__ensureFathersMeta();
+})();
 
 const inlineMd = s => {
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -17218,18 +17494,18 @@ const THEO_REFS_DATA = [
   {name: "Catéchisme de l’Église catholique", cat: "autres", url: "https://www.vatican.va/archive/FRA0013/_INDEX.HTM", desc: "CEC (1992)"},
   {name: "Somme théologique", cat: "autres", url: "https://www.google.com/search?q=Somme+th%C3%A9ologique+site%3Anewadvent.org", desc: "Thomas d’Aquin (1265-1274)"},
   // Patristique
-  {name: "Les Confessions", cat: "patristique", url: "https://www.newadvent.org/fathers/1101.htm", desc: "Saint Augustin d’Hippone (397-400)"},
-  {name: "La Cité de Dieu", cat: "patristique", url: "https://www.newadvent.org/fathers/1201.htm", desc: "Saint Augustin d’Hippone (413-426)"},
-  {name: "De la Trinité", cat: "patristique", url: "https://www.newadvent.org/fathers/130101.htm", desc: "Saint Augustin d’Hippone (400-416)"},
-  {name: "Lettres de Saint Jérôme", cat: "patristique", url: "https://www.newadvent.org/fathers/3001.htm", desc: "Saint Jérôme (347-420)"},
-  {name: "Des Sacrements", cat: "patristique", url: "https://www.newadvent.org/fathers/3405.htm", desc: "Saint Ambroise de Milan (390)"},
-  {name: "Homélies sur Matthieu", cat: "patristique", url: "https://www.newadvent.org/fathers/2001.htm", desc: "Saint Jean Chrysostome (390)"},
-  {name: "Discours théologiques", cat: "patristique", url: "https://www.newadvent.org/fathers/3102.htm", desc: "Saint Grégoire de Nazianze (380)"},
-  {name: "Le Saint-Esprit", cat: "patristique", url: "https://www.newadvent.org/fathers/3203.htm", desc: "Saint Basile de Césarée (375)"},
-  {name: "Contre les hérésies", cat: "patristique", url: "https://www.newadvent.org/fathers/0103.htm", desc: "Saint Irénée de Lyon (180)"},
-  {name: "Apologétique", cat: "patristique", url: "https://www.newadvent.org/fathers/0301.htm", desc: "Saint Tertullien (197)"},
-  {name: "Tome à Flavien", cat: "patristique", url: "https://www.newadvent.org/fathers/3604028.htm", desc: "Saint Léon le Grand (449)"},
-  {name: "De l’unité de l’Église", cat: "patristique", url: "https://www.newadvent.org/fathers/050701.htm", desc: "Saint Cyprien de Carthage (251)"},
+  {name: "Les Confessions", cat: "patristique", fathers: "1101", url: "https://www.newadvent.org/fathers/1101.htm", desc: "Saint Augustin d’Hippone (397-400)"},
+  {name: "La Cité de Dieu", cat: "patristique", fathers: "1201", url: "https://www.newadvent.org/fathers/1201.htm", desc: "Saint Augustin d’Hippone (413-426)"},
+  {name: "De la Trinité", cat: "patristique", fathers: "1301", url: "https://www.newadvent.org/fathers/130101.htm", desc: "Saint Augustin d’Hippone (400-416)"},
+  {name: "Lettres de Saint Jérôme", cat: "patristique", fathers: "3001", url: "https://www.newadvent.org/fathers/3001.htm", desc: "Saint Jérôme (347-420)"},
+  {name: "Des Sacrements", cat: "patristique", fathers: "3405", url: "https://www.newadvent.org/fathers/3405.htm", desc: "Saint Ambroise de Milan (390)"},
+  {name: "Homélies sur Matthieu", cat: "patristique", fathers: "2001", url: "https://www.newadvent.org/fathers/2001.htm", desc: "Saint Jean Chrysostome (390)"},
+  {name: "Discours théologiques", cat: "patristique", fathers: "3102", url: "https://www.newadvent.org/fathers/3102.htm", desc: "Saint Grégoire de Nazianze (380)"},
+  {name: "Le Saint-Esprit", cat: "patristique", fathers: "3203", url: "https://www.newadvent.org/fathers/3203.htm", desc: "Saint Basile de Césarée (375)"},
+  {name: "Contre les hérésies", cat: "patristique", fathers: "0103", url: "https://www.newadvent.org/fathers/0103.htm", desc: "Saint Irénée de Lyon (180)"},
+  {name: "Apologétique", cat: "patristique", fathers: "0301", url: "https://www.newadvent.org/fathers/0301.htm", desc: "Saint Tertullien (197)"},
+  {name: "Tome à Flavien", cat: "patristique", fathers: "3604", url: "https://www.newadvent.org/fathers/3604028.htm", desc: "Saint Léon le Grand (449)"},
+  {name: "De l’unité de l’Église", cat: "patristique", fathers: "0507", url: "https://www.newadvent.org/fathers/050701.htm", desc: "Saint Cyprien de Carthage (251)"},
 ];
 
 function initReferencesPanel() {
@@ -17289,7 +17565,7 @@ function initReferencesPanel() {
         'autres': '♫'
       };
       list.innerHTML = filtered.map((r, i) =>
-        '<a class="ref-item" href="' + r.url + '" target="_blank" rel="noopener" ' + (animate ? 'style="animation-delay:' + Math.min(i, 15) * 0.04 + 's"' : '') + '>' +
+        '<a class="ref-item' + (r.fathers ? ' fathers-ref' : '') + '" href="' + r.url + '" target="_blank" rel="noopener"' + (r.fathers ? ' data-fathers="' + r.fathers + '"' : '') + ' ' + (animate ? 'style="animation-delay:' + Math.min(i, 15) * 0.04 + 's"' : '') + '>' +
         '<span class="ref-item-icon">' + (catIcons[r.cat] || '•') + '</span>' +
         '<div class="ref-item-content">' +
         '<div class="ref-item-title">' + r.name + '</div>' +
@@ -17372,6 +17648,13 @@ function initReferencesPanel() {
   // Sidebar "Ouvrir le panel" link
   const refsOpenBtn = document.querySelector('[data-act="refs-open"]');
   if (refsOpenBtn) refsOpenBtn.addEventListener('click', (e) => { if(e) e.stopPropagation(); btn.click(); });
+
+  /* Bibliotheque des Peres : ouvre le navigateur d'œuvres locales. */
+  const fathersOpenBtn = document.querySelector('[data-act="fathers-open"]');
+  if (fathersOpenBtn) fathersOpenBtn.addEventListener('click', (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (typeof window.__openFathersLibrary === 'function') window.__openFathersLibrary();
+  });
 
   // Keyboard shortcuts: Ctrl+Shift+D to toggle, Escape to close
   document.addEventListener('keydown', (e) => {

@@ -63,14 +63,40 @@ Chaque tranche est utilisable seule.
 | # | Tranche | Source | État |
 |---|---|---|---|
 | **T1** | **Somme théologique** (611 questions) | newadvent/summa | **FAIT** — 611/611, 3 115 articles, 17 Mo |
-| **T2** | Pères de l'Église (œuvres principales) | newadvent/fathers | prouvé, **à faire** |
+| **T2** | Pères de l'Église (œuvres principales) | newadvent/fathers | **FAIT** — 118 œuvres, 36 Mo, 416 alias |
 | **T3** | Protestant (Calvin, Luther, confessions) | CCEL via API | ⚠️ API à identifier |
 | **T4** | Orthodoxe | Pères (déjà en T2) + textes propres | à sourcer |
 | **T5** | Islamique | Coran + tafsir **déjà présents** ; hadith à évaluer | partiellement fait |
 | **T6** | Denzinger | OCR latin | le plus coûteux, **en dernier** |
 
-**Ordre recommandé : T1 → T2 → T3 → T5 → T4 → T6.** T1 et T2 sont prouvées et
+**Ordre recommandé : T1 → T2 → T3 → T5 → T4 → T6.** T1 et T2 sont livrées et
 donnent un résultat visible rapidement.
+
+### Structure réelle de newadvent/fathers (mesurée, pas supposée)
+
+- L'index liste **419 œuvres** de **69 auteurs** ; l'identifiant est `NNWW`
+  (groupe + œuvre). `3402` = Ambroise, *Le Saint-Esprit*.
+- **315 œuvres sont « feuilles »** : tout le texte est sur la page.
+- **104 ne sont que des sommaires** ; le texte vit sur des pages filles dont
+  l'identifiant *commence par* celui de l'œuvre et est plus long.
+  Deux schémas coexistent : `1101 → 110101…110113` (6 chiffres) et
+  `3402 → 34021, 34022, 34023` (5 chiffres). Les filles sont toujours des
+  feuilles : **jamais un troisième niveau**.
+- Règle retenue, valable pour les deux schémas :
+  `fille.startswith(œuvre) and len(fille) > len(œuvre)`.
+- Dans une page : `<h1>` titre, `<h2>`/`<h3>` sections, `<p>` paragraphes.
+  Le bloc `<div class="pub">` = « About this page » (source, traducteur) :
+  **à supprimer**, sinon on embarque du bruit.
+
+###Poids : pourquoi 118 œuvres et non 419
+
+Le corpus complet avoisine **200 Mo** de texte. On ne garde qu'un **noyau
+choisi de 118 œuvres** (Pères apostoliques, apologistes, grands traités
+dogmatiques, conciles œcuméniques) = **36 Mo**.
+
+Point clé mesuré sur un APK existant : les `.js` dans `assets/` sont **déflatés
+au ratio 0,19** (51,86 Mo → 9,74 Mo). Les 36 Mo du corpus ne coûtent donc
+que **~7 Mo** dans l'APK. Le poids disque n'était pas le vrai problème.
 
 ---
 

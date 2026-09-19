@@ -22,3 +22,7 @@ tafsir_data_monolith.js
 theologicus_keys.json
 
 output/
+
+# Caches HTTP des generateurs de corpus (jamais versionner)
+tools/.summa_cache/
+tools/.fathers_cache/
