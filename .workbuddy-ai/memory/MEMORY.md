@@ -10,15 +10,16 @@ Ici uniquement ce qui doit survivre.
   `quran/` (114), `tafsir/` (114), `libs/`, **`summa/`** (611 questions,
   17 Mo), **`fathers/`** (118 œuvres, 36 Mo), **`reformed/`** (91 entrées,
   27,8 Mo), **`orthodox/`** (43 entrées, 1,9 Mo), **`islamic/`** (93 livres,
-  5,4 Mo : Houdas & Marçais, le Sahih d'Al-Bukhari en français). Chargés **à la
+  5,4 Mo : Houdas & Marçais, le Sahih d'Al-Bukhari en français), **`denzinger/`**
+  (128 sections, 1,3 Mo : le magistère, éd. latine 1911). Chargés **à la
   volée** par `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah`
   / `__ensureSummaQuestion` / `theoCorpusWork`.
 - **`THEO_CORPORA` pilote tout** : un corpus = `{dir, pfx, idx, wrk, nms,
   label, tab, root, web}`. Ajouter une entrée suffit — onglets de la
   bibliothèque, `theoParseRef`, rendu du modal et `parseLibraryRef` s'en
   déduisent. Ordre de résolution des citations : **fathers → reformed →
-  orthodox → islamic** (le plus long alias gagne, le premier corpus essayé
-  gagne). Conséquence : un titre chrétien et un titre musulman identiques
+  orthodox → islamic → denzinger** (le plus long alias gagne, le premier
+  corpus essayé gagne). Conséquence : un titre chrétien et un titre musulman identiques
   (« de la foi », « grand catéchisme ») donnent toujours le **premier** corpus
   — c'est une précédence, pas un bug. Interroger `parseIslamicRef` (etc.)
   pour forcer un corpus.
@@ -26,10 +27,18 @@ Ici uniquement ce qui doit survivre.
   51,86 Mo → 9,74 Mo). Un corpus de texte ne coûte donc qu'un cinquième de
   son poids disque. **Ne jamais tailler un corpus avant d'avoir mesuré.**
 - Les générateurs de corpus (`tools/build_summa.py`, `build_fathers.py`,
-  `build_reformed.py`, `build_orthodox.py`, `build_islamic.py`) gardent leur
-  cache HTTP dans `tools/.summa_cache/`, `.fathers_cache/`, `.ccel_cache/`,
-  `.orthodox_cache/`, `.islamic_cache/` (tous gitignored). Relancer régénère
-  tout sans réseau.
+  `build_reformed.py`, `build_orthodox.py`, `build_islamic.py`,
+  `build_denzinger.py`) gardent leur cache HTTP dans `tools/.summa_cache/`,
+  `.fathers_cache/`, `.ccel_cache/`, `.orthodox_cache/`, `.islamic_cache/`,
+  `.denzinger_cache/` (tous gitignored). Relancer régénère tout sans réseau.
+- **Vider le dossier de sortie avant chaque génération** (`rm -f denzinger/*.js`).
+  Les fichiers d'une génération précédente y restent, sont `git add`-és et
+  partent dans l'APK avec du contenu **faux** : piégé en T6 (165 fichiers
+  versés pour 131 réellement produits).
+- **Ne jamais « corriger » un titre OCR par rapprochement approximatif**
+  (difflib, seuil bas) : en T6 un seuil de 0,55 a remplacé « S. HYGINUS » par
+  « S. ZOSIMUS » et attribué chaque document au mauvais pontife. Un corpus
+  dont l'attribution n'est pas sûre est pire que pas de corpus.
 - **OCR : deux pièges récurrents dans les livres numérotés.** (1) Un tome
   porte souvent **deux séries** de lignes-titre : le corps, puis la **table des
   matières** en fin de volume (en majuscules, nom après un tiret). Couper à
