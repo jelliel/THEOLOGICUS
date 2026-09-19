@@ -7376,6 +7376,7 @@ window.__ensureTafsirSurah = function(p){
               <div class="corner-deco corner-bl"></div><div class="corner-deco corner-br"></div>
               <div class="modal-header">
                 <div class="modal-title">◈ SOMME THÉOLOGIQUE</div>
+                <button class="btn-ghost" id="summa-lang" style="padding:4px 10px;font-size:11px">FR</button>
                 <button class="modal-close" id="close-summa-modal">✕</button>
               </div>
               <div class="modal-body" id="summa-body" style="max-height:60vh;overflow-y:auto"></div>
@@ -8313,6 +8314,96 @@ window.__ensureSummaQuestion = function (qid) {
 };
 window.__parseSummaRef = parseSummaRef;
 
+/* ── La Somme en FRANÇAIS ────────────────────────────────────────────────
+   Traduction Drioux (8 vol., ~1851-1865, domaine public), extraite par
+   tools/build_summa_fr.py.  Même forme et MÊME NUMÉROTATION que le corpus
+   anglais (qid = partie*1000 + question) : une référence « Somme
+   théologique, Ia q.2 a.3 » s'ouvre donc dans les deux.  613 questions
+   (les 611 canoniques + les 2 de l'appendice du Supplément).
+   Deux questions sont restées en latin chez Drioux (IIa-IIae q.154,
+   Supplément q.64) : elles portent lang:'la' et sont signalées telles
+   quelles, jamais présentées pour du français. */
+window.__SUMMA_LANG_DEFAULT = 'fr';
+window.__ensureSummaFrQuestion = function (qid) {
+  qid = String(qid);
+  if (window.__summaFrQuestions && window.__summaFrQuestions[qid]) return Promise.resolve(true);
+  return new Promise(function (res) {
+    var sc = document.querySelector('script[data-summafr-q="' + qid + '"]');
+    if (!sc) {
+      sc = document.createElement('script');
+      sc.src = 'summafr/s' + qid + '.js';
+      sc.setAttribute('data-summafr-q', qid);
+      sc.onerror = function () { sc.remove(); res(false); };
+      document.head.appendChild(sc);
+    }
+    var essais = 0;
+    (function check() {
+      if (window.__summaFrQuestions && window.__summaFrQuestions[qid]) return res(true);
+      if (++essais > 60) return res(false);
+      setTimeout(check, 100);
+    })();
+  });
+};
+window.__ensureSummaFrIndex = function () {
+  if (window.__summaFrIndex) return Promise.resolve(true);
+  return new Promise(function (res) {
+    var sc = document.querySelector('script[data-summafr-index="1"]');
+    if (!sc) {
+      sc = document.createElement('script');
+      sc.src = 'summafr/index.js';
+      sc.setAttribute('data-summafr-index', '1');
+      sc.onerror = function () { sc.remove(); res(false); };
+      document.head.appendChild(sc);
+    }
+    var essais = 0;
+    (function check() {
+      if (window.__summaFrIndex) return res(true);
+      if (++essais > 60) return res(false);
+      setTimeout(check, 100);
+    })();
+  });
+};
+function theoSummaLang() { return window.__summaLang || window.__SUMMA_LANG_DEFAULT; }
+function theoSummaDict(lang) {
+  return lang === 'fr' ? '__summaFrQuestions' : '__summaQuestions';
+}
+function theoSummaLoad(lang, qid) {
+  return lang === 'fr' ? window.__ensureSummaFrQuestion(qid) : window.__ensureSummaQuestion(qid);
+}
+/* Rend une question dans la langue demandée. Renvoie false si elle n'y est
+   pas (le corpus français ne couvre pas tout : 613 questions). */
+function theoSummaRender(body, qid, artN, lang) {
+  return theoSummaLoad(lang, qid).then(function (ok) {
+    var q = (window[theoSummaDict(lang)] || {})[qid];
+    if (!ok || !q) return false;
+    var arts = artN ? (q.articles || []).filter(function (x) { return x.n === artN; })
+                    : (q.articles || []);
+    if (!arts.length) arts = q.articles || [];
+    var nom = ({ 1: 'Ia', 2: 'Ia-IIae', 3: 'IIa-IIae', 4: 'IIIa', 5: 'Suppl.' })[q.part] || '';
+    var h = '<div class="field-group"><label class="field-label">Question ' + q.question +
+            ' — ' + nom + (lang === 'fr' ? ' · trad. Drioux' : ' · texte anglais') +
+            (q.appendix ? ' · appendice' : '') + '</label>' +
+            '<div class="field-hint">' + escapeHtml(q.title) + '</div></div>';
+    if (q.lang === 'la') {
+      h += '<div class="field-hint" style="margin-bottom:8px">⚠️ Drioux a laissé cette ' +
+           'question en latin : le texte ci-dessous n\'est pas une traduction ' +
+           'française.</div>';
+    }
+    arts.forEach(function (art) {
+      h += '<div class="field-group"><label class="field-label">Article ' + art.n + '</label>' +
+           '<div class="field-hint" style="margin-bottom:8px">' + escapeHtml(art.title) + '</div>';
+      (art.paragraphs || []).forEach(function (p) {
+        h += '<div style="margin-bottom:9px;line-height:1.6">' +
+             (p.label ? '<strong>' + escapeHtml(p.label) + '</strong> ' : '') +
+             escapeHtml(p.text) + '</div>';
+      });
+      h += '</div>';
+    });
+    body.innerHTML = h;
+    return true;
+  });
+}
+
 /* Tap sur une reference a la Somme : resolution EN LOCAL, le lien web ne
    devient qu'une sortie de secours. Meme philosophie que la v2.0 pour la
    Bible : on intercepte en capture et on fait preventDefault, sans
@@ -8330,6 +8421,46 @@ window.__parseSummaRef = parseSummaRef;
   if (c2) c2.onclick = close;
   m.onclick = function (e) { if (e.target === m) close(); };
 
+  /* Bascule français / anglais. Le choix est mémorisé pour la session. */
+  var btn = document.getElementById('summa-lang');
+  var paint = function () {
+    if (btn) btn.textContent = theoSummaLang() === 'fr' ? 'FR' : 'EN';
+  };
+  var courante = null;   // { qid, artN } de la dernière question ouverte
+  var ouvrir = function (qid, artN, lang) {
+    body.innerHTML = '<div class="field-hint">Chargement…</div>';
+    courante = { qid: qid, artN: artN };
+    paint();
+    theoSummaRender(body, qid, artN, lang).then(function (ok) {
+      if (!ok) return false;
+      return true;
+    }).then(function (ok) {
+      if (ok) return;
+      /* Repli : la question manque dans la langue demandée. */
+      var autre = lang === 'fr' ? 'en' : 'fr';
+      theoSummaRender(body, qid, artN, autre).then(function (ok2) {
+        if (!ok2) {
+          body.innerHTML = '<div class="field-hint">⚠️ Question non disponible localement.</div>';
+          return;
+        }
+        window.__summaLang = autre;
+        paint();
+        body.insertAdjacentHTML('afterbegin',
+          '<div class="field-hint" style="margin-bottom:8px">' +
+          (autre === 'en' ? 'ℹ️ Traduction française indisponible pour cette ' +
+                            'question — texte anglais affiché.'
+                          : 'ℹ️ Texte anglais indisponible — traduction ' +
+                            'française affichée.') + '</div>');
+      });
+    });
+  };
+  if (btn) btn.onclick = function () {
+    window.__summaLang = theoSummaLang() === 'fr' ? 'en' : 'fr';
+    if (courante) ouvrir(courante.qid, courante.artN, theoSummaLang());
+    else paint();
+  };
+  paint();
+
   document.addEventListener('click', function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a.summa-ref[data-summa]') : null;
     if (!a) return;
@@ -8337,31 +8468,8 @@ window.__parseSummaRef = parseSummaRef;
     var artN = parseInt(a.getAttribute('data-summa-a') || '', 10) || null;
     e.preventDefault();
     if (web) web.href = a.href;
-    body.innerHTML = '<div class="field-hint">Chargement…</div>';
     m.classList.add('active');
-    window.__ensureSummaQuestion(qid).then(function (ok) {
-      var q = (window.__summaQuestions || {})[qid];
-      if (!ok || !q) {
-        body.innerHTML = '<div class="field-hint">⚠️ Question non disponible localement.</div>';
-        return;
-      }
-      var arts = artN ? (q.articles || []).filter(function (x) { return x.n === artN; }) : (q.articles || []);
-      if (!arts.length) arts = q.articles || [];
-      var h = '<div class="field-group"><label class="field-label">Question ' + q.question +
-              ' — ' + ({1:'Ia',2:'Ia-IIae',3:'IIa-IIae',4:'IIIa',5:'Suppl.'}[q.part] || '') +
-              '</label><div class="field-hint">' + escapeHtml(q.title) + '</div></div>';
-      arts.forEach(function (art) {
-        h += '<div class="field-group"><label class="field-label">Article ' + art.n + '</label>' +
-             '<div class="field-hint" style="margin-bottom:8px">' + escapeHtml(art.title) + '</div>';
-        (art.paragraphs || []).forEach(function (p) {
-          h += '<div style="margin-bottom:9px;line-height:1.6">' +
-               (p.label ? '<strong>' + escapeHtml(p.label) + '</strong> ' : '') +
-               escapeHtml(p.text) + '</div>';
-        });
-        h += '</div>';
-      });
-      body.innerHTML = h;
-    });
+    ouvrir(qid, artN, theoSummaLang());
   }, true);
 })();
 
