@@ -233,8 +233,59 @@ La Somme de New Advent est la traduction **anglaise** dominicaine (domaine
 public). L'application est française. Le code contient déjà ce précédent :
 « Version anglaise préférée — français non disponible sur vatican.va ».
 
-→ Une traduction **française** ancienne (domaine public) serait nettement
-mieux. À rechercher avant d'aspirer 619 pages.
+→ **Tranché (2026-09-19) : la Somme est aussi disponible en français.**
+Voir la section 4 bis ci-dessous.
+
+### 4 bis. La Somme en français — Drioux (T7), livré
+
+Deux traductions intégrales sont en domaine public : **Lachat** (16 volumes)
+et **Drioux** (8 volumes, `lasommethologi0Nthom`). Mesuré : Lachat est
+**bilingue**, latin et français entrelacés ligne à ligne (10 945 lignes
+françaises pour 484 lignes latines longues) — l'extraction du seul français y
+est incertaine. Drioux est **français seul** (13 lignes latines sur 28 890).
+C'est donc Drioux.
+
+`tools/build_summa_fr.py` → `summafr/` : **613 questions, 2 978 articles,
+20,2 Mo**, 614 fichiers. Mêmes identifiants que `summa/` (`1001` = Ia q.1),
+donc aucune référence existante à changer.
+
+Comptes par volume, tous exacts : 74 / 84 / 75 / 91 / 98 / 71 / 19 / 101.
+Par partie : Ia 119, Ia-IIae 114, IIa-IIae 189, IIIa 90, Supplément 101
+(99 + les 2 de l'appendice).
+
+**Cinq pièges, tous mesurés**
+
+1. **La table de fin de volume répète les questions.** Volume 4 l'intitule
+   « CONTENUES DANS LE QUATRIÈME VOLUME » et non « TABLE DES MATIÈRES » —
+   couper sur la seule deuxième forme laissait 119 questions au volume 4.
+   Le volume 7 contient en plus 55 000 lignes d'index latin après sa table.
+2. **Le mot-clé QUESTION est lui-même mangé** : `QIESTION`, `OIJESTION`,
+   `giiKsrioN`, `OIKSTION`, `QUESTIOxN`, `QUESTlOiN`, `QU^ESTIO`, `QLESTION`.
+   Une chaîne littérale perdait 14 questions sur le volume 1. On reconnaît
+   donc une *forme* : 6 à 11 lettres, initiale Q/O/G/C/I, finale N ou O,
+   contenant `ST` ou `SR`.
+3. **Les chiffres romains sont illisibles en décodage direct** : `XIL` se lit
+   39 (le `L` final est un `I`), `XLV` se lit 85, `LUI` se lit 56. On génère
+   *toutes* les valeurs romaines **syntaxiquement valides** que le token peut
+   représenter (chaque caractère ayant ses confusions documentées : G→C,
+   U→V ou II, Y→V, H→II, J→I, E→C, L→L ou I…), puis la suite tranche.
+   Ne jamais « corriger » un titre par similarité : c'est exactement
+   l'erreur qui, sur le Denzinger, attribuait chaque document au mauvais pape.
+4. **Le numéro retenu n'est jamais le chiffre lu** : c'est le rang, contrôlé
+   par le compte de questions du volume. Le chiffre lu ne sert qu'à
+   *confirmer* — il concorde dans 98 à 100 % des cas, et c'est cette
+   concordance qui valide la numérotation.
+5. **« ARTICLE » est mangé aussi** : `AKTICLE`, `ARTICULUS`, `ARTICULIJS`,
+   et « ARTICLE UAfIQUE » pour UNIQUE. À l'inverse, un « article. » en plein
+   texte n'est pas un en-tête. D'où une règle mot-clé + chiffre, avec un
+   repli approché (distance d'édition ≤ 3) réservé aux lignes courtes.
+
+**Deux questions sont restées en latin chez Drioux** (IIa-IIae q.154,
+Supplément q.64). Elles portent `lang: 'la'`, l'index les signale, et
+l'application affiche un avertissement : jamais présentées pour du français.
+
+**Dans l'application** : le panneau de la Somme s'ouvre en français, avec un
+bouton FR/EN et un repli sur le corpus anglais si la question manque.
 
 ---
 

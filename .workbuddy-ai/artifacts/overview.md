@@ -1,7 +1,56 @@
 # THEOLOGICUS — correctifs mobile
 
-Dernier commit : `91edeb4` · APK : **v1.0.44** (versionCode 44) · release CI
-attendue : `apk-v1.0.45`
+Dernier commit : `2764182` · APK : **v2.0.62** (versionCode 62) · release CI
+attendue : `apk-v2.0.62`
+
+---
+
+# La Somme théologique en français (Drioux) — corpus T7, plan bouclé
+
+Le corpus local ne contenait la Somme qu'en **anglais**. Trouvé et extrait :
+**Drioux**, *La Somme théologique de saint Thomas d'Aquin*, 8 volumes
+(1851-1865, domaine public). L'autre traduction intégrale libre, **Lachat**
+(16 volumes), est **bilingue** — latin et français entrelacés ligne à ligne —
+donc inexploitable pour un corpus français. Drioux est français seul
+(13 lignes latines sur 28 890).
+
+**Résultat : 613 questions, 2 978 articles, 20,2 Mo, 614 fichiers**
+(`summafr/`), **avec les mêmes identifiants que `summa/`** (`1001` = Ia q.1) :
+aucune référence existante à changer.
+
+| Partie | Questions | Articles |
+|---|---|---|
+| Prima Pars | 119 | 540 |
+| Prima Secundae | 114 | 595 |
+| Secunda Secundae | 189 | 890 |
+| Tertia Pars | 90 | 521 |
+| Supplementum | 101 (99 + appendice) | 432 |
+
+**Le point critique — la numérotation.** Un texte mal numéroté est une
+mauvaise attribution, et c'est la règle d'or du projet. Le numéro retenu
+n'est donc **jamais** le chiffre lu par l'OCR : c'est le rang dans la suite,
+contrôlé par le compte de questions de chaque volume
+(74 / 84 / 75 / 91 / 98 / 71 / 19 / 101). Le chiffre lu ne sert qu'à
+*confirmer* — il concorde dans **98 à 100 %** des cas, et c'est cette
+concordance qui valide la numérotation, pas le décodage.
+
+Cinq pièges mesurés, tous consignés dans `PLAN_CORPUS_THEOLOGIQUE.md` :
+table des matières de fin de volume (volume 4 l'intitule « CONTENUES DANS LE
+QUATRIÈME VOLUME ») ; mot-clé `QUESTION` méconnaissable (`giiKsrioN`,
+`QIESTION`, `OIKSTION`…) ; chiffres romains illisibles en direct (`XIL`→39,
+`XLV`→85) ; `ARTICLE` mangé (`AKTICLE`, `ARTICULIJS`, « ARTICLE UAfIQUE ») ;
+55 000 lignes d'index latin en queue du volume 7.
+
+**Deux questions sont restées en latin chez Drioux** (IIa-IIae q.154,
+Supplément q.64). Elles portent `lang: 'la'`, sont signalées dans l'index et
+l'application affiche un avertissement : jamais présentées pour du français.
+
+**Dans l'application** : le panneau de la Somme s'ouvre désormais **en
+français**, avec un bouton **FR/EN** et un repli automatique sur le corpus
+anglais si une question manque.
+
+Vérifications : banc CDP **96/96** (dont 7 nouveaux contrôles S1-S7),
+`check_syntax.js` 49 blocs / 0 erreur, corpus relu tranche par tranche.
 
 ---
 
