@@ -24,7 +24,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "mobile", "www")
 
-COPY_DIRS = ["bible", "quran", "tafsir", "libs", "summa", "fathers", "reformed"]
+COPY_DIRS = ["bible", "quran", "tafsir", "libs", "summa", "fathers", "reformed",
+             "orthodox"]
 EXPECTED = {
     "bible": ("b", ".js", 66),
     "quran": ("q", ".js", 114),

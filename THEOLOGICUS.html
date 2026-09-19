@@ -8171,7 +8171,7 @@ function buildTheoRefUrl(ref) {
   var _fp0 = (typeof parseLibraryRef === 'function') ? parseLibraryRef(ref) : null;
   if (_fp0) {
     if (_fp0.kind === 'fathers') return 'https://www.newadvent.org/fathers/' + _fp0.id + '.htm';
-    return (typeof libraryWebUrl === 'function') ? libraryWebUrl('reformed', _fp0.id)
+    return (typeof libraryWebUrl === 'function') ? libraryWebUrl(_fp0.kind, _fp0.id)
       : 'https://www.google.com/search?q=' + encodeURIComponent(ref);
   }
   // Conciles → recherche web
@@ -8381,20 +8381,30 @@ function theoNum(s) {
   return tot || null;
 }
 
+/* Un corpus = un répertoire, trois globales, un préfixe de fichier.
+   Ajouter un corpus ici suffit : onglets, résolution des citations et
+   navigateur s'en déduisent. */
 var THEO_CORPORA = {
   fathers: {
-    dir: 'fathers', idx: '__fathersIndex', wrk: '__fathersWorks', nms: '__fathersNames',
-    label: 'PÈRES DE L’ÉGLISE', root: 'https://www.newadvent.org/fathers/',
+    dir: 'fathers', pfx: 'f', idx: '__fathersIndex', wrk: '__fathersWorks', nms: '__fathersNames',
+    label: 'PÈRES DE L’ÉGLISE', tab: '☻ Pères', root: 'https://www.newadvent.org/fathers/',
     web: function (id, work, chap) {
       return 'https://www.newadvent.org/fathers/' + ((chap && chap.i) || id) + '.htm';
     }
   },
   reformed: {
-    dir: 'reformed', idx: '__reformedIndex', wrk: '__reformedWorks', nms: '__reformedNames',
-    label: 'RÉFORME & PROTESTANTISME', root: 'https://ccel.org/',
+    dir: 'reformed', pfx: 'r', idx: '__reformedIndex', wrk: '__reformedWorks', nms: '__reformedNames',
+    label: 'RÉFORME & PROTESTANTISME', tab: '✦ Réforme', root: 'https://ccel.org/',
     web: function (id, work) {
       var e = (window.__reformedIndex || {})[id];
       return (work && work.u) || (e && e.u) || 'https://ccel.org/';
+    }
+  },
+  orthodox: {
+    dir: 'orthodox', pfx: 'o', idx: '__orthodoxIndex', wrk: '__orthodoxWorks', nms: '__orthodoxNames',
+    label: 'ORTHODOXIE', tab: '⛪ Orthodoxie', root: 'https://ccel.org/',
+    web: function (id, work) {
+      return 'https://archive.org/details/cu31924029363128';
     }
   }
 };
@@ -8437,7 +8447,7 @@ function theoCorpusWork(kind, id) {
     var sc = document.querySelector('script[data-corpus-w="' + kind + id + '"]');
     if (!sc) {
       sc = document.createElement('script');
-      sc.src = C.dir + '/' + (kind === 'reformed' ? 'r' : 'f') + id + '.js';
+      sc.src = C.dir + '/' + C.pfx + id + '.js';
       sc.setAttribute('data-corpus-w', kind + id);
       sc.onerror = function () { sc.remove(); console.error('[corpus] échec : ' + kind + '/' + id); res(false); };
       document.head.appendChild(sc);
@@ -8527,10 +8537,11 @@ function theoParseRef(ref, kind) {
 
 function parseFathersRef(ref) { return theoParseRef(ref, 'fathers'); }
 function parseReformedRef(ref) { return theoParseRef(ref, 'reformed'); }
-/* Une citation peut appartenir à l'un ou l'autre corpus : on essaie les
-   deux, les Pères d'abord (leurs titres sont les plus cités). */
+/* Une citation peut appartenir à n'importe quel corpus : on essaie dans
+   l'ordre, les Pères d'abord (leurs titres sont les plus cités). */
 function parseLibraryRef(ref) {
-  return theoParseRef(ref, 'fathers') || theoParseRef(ref, 'reformed');
+  return theoParseRef(ref, 'fathers') || theoParseRef(ref, 'reformed') ||
+         theoParseRef(ref, 'orthodox');
 }
 
 /* URL web de secours, sans avoir chargé l'œuvre. */
@@ -8576,7 +8587,7 @@ function libraryWebUrl(kind, id) {
       Object.keys(THEO_CORPORA).forEach(function (k) {
         tabs += '<button class="btn-ghost corpus-tab' + (k === kind ? ' active' : '') +
                 '" data-corp-tab="' + k + '" style="margin-right:6px">' +
-                (k === 'fathers' ? '☻ Pères' : '✦ Réforme') + '</button>';
+                (THEO_CORPORA[k].tab || k) + '</button>';
       });
       body.innerHTML = '<div class="field-group">' + tabs + '</div>' +
         '<div class="field-group"><input id="fathers-search" type="text" ' +
@@ -8640,8 +8651,11 @@ function libraryWebUrl(kind, id) {
     });
   }, true);
 
+  /* Les trois catalogues sont petits (quelques ko) : les charger d'emblée
+     permet de résoudre une citation sans attendre un aller-retour. */
   theoCorpusMeta('fathers');
   theoCorpusMeta('reformed');
+  theoCorpusMeta('orthodox');
 
   /* Sorties stables pour le banc de test et d'éventuels scripts. */
   window.__parseFathersRef = parseFathersRef;
@@ -8649,6 +8663,7 @@ function libraryWebUrl(kind, id) {
   window.__parseLibraryRef = parseLibraryRef;
   window.__ensureFathersMeta = function () { return theoCorpusMeta('fathers'); };
   window.__ensureReformedMeta = function () { return theoCorpusMeta('reformed'); };
+  window.__ensureOrthodoxMeta = function () { return theoCorpusMeta('orthodox'); };
 })();
 
 const inlineMd = s => {
