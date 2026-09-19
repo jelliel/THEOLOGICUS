@@ -6580,7 +6580,7 @@ window.__ensureTafsirSurah = function(p){
             </button>
           </div>
           <button class="tpai-sublink" data-act="refs-open" style="margin-top:6px"><span class="tpai-acc-ico">📖</span>Ouvrir le panel</button>
-          <button class="tpai-sublink" data-act="fathers-open"><span class="tpai-acc-ico">🧔</span>Pères de l’Église</button>
+          <button class="tpai-sublink" data-act="fathers-open"><span class="tpai-acc-ico">🧔</span>Bibliothèque</button>
         </div>
       </div>
 
@@ -7368,7 +7368,7 @@ window.__ensureTafsirSurah = function(p){
               <div class="corner-deco corner-tl"></div><div class="corner-deco corner-tr"></div>
               <div class="corner-deco corner-bl"></div><div class="corner-deco corner-br"></div>
               <div class="modal-header">
-                <div class="modal-title">◈ PÈRES DE L'ÉGLISE</div>
+                <div class="modal-title" id="fathers-title">◈ PÈRES DE L’ÉGLISE</div>
                 <button class="modal-close" id="close-fathers-modal">✕</button>
               </div>
               <div class="modal-body" id="fathers-body" style="max-height:60vh;overflow-y:auto"></div>
@@ -8164,11 +8164,16 @@ function buildTheoRefUrl(ref) {
   if (/tome\s+[àa]\s+flavien|epistula\s*28/i.test(ref)) return 'https://www.newadvent.org/fathers/3604028.htm';
   if (/de\s+l['’]unit[ée]\s+de\s+l['’]\u00c9glise|de\s+unitate\s+ecclesiae/i.test(ref)) return 'https://www.newadvent.org/fathers/050701.htm';
 
-  /* Pere de l'Eglise reconnu : URL exacte newadvent au lieu d'une recherche
-     Google (les conciles sont dans le corpus, d'ou ce test avant la branche
-     « Conciles »). Le tap est de toute facon resolu en local. */
-  var _fp0 = (typeof parseFathersRef === 'function') ? parseFathersRef(ref) : null;
-  if (_fp0) return 'https://www.newadvent.org/fathers/' + _fp0.id + '.htm';
+  /* Père de l’Église ou texte de la Réforme reconnu : URL exacte au lieu
+     d’une recherche Google (les conciles sont dans le corpus, d’où ce test
+     avant la branche « Conciles »). Le tap est résolu en local de toute
+     façon ; ceci ne sert que de sortie de secours. */
+  var _fp0 = (typeof parseLibraryRef === 'function') ? parseLibraryRef(ref) : null;
+  if (_fp0) {
+    if (_fp0.kind === 'fathers') return 'https://www.newadvent.org/fathers/' + _fp0.id + '.htm';
+    return (typeof libraryWebUrl === 'function') ? libraryWebUrl('reformed', _fp0.id)
+      : 'https://www.google.com/search?q=' + encodeURIComponent(ref);
+  }
   // Conciles → recherche web
   if (/concile/i.test(ref)) {
     return 'https://www.google.com/search?q=' + encodeURIComponent(ref);
@@ -8234,9 +8239,9 @@ function theoRefHtml(ref) {
   var _sp = parseSummaRef(ref);
   var _attr = '';
   if (_sp) _attr = ' data-summa="' + (_sp.part * 1000 + _sp.q) + '" data-summa-a="' + (_sp.a || '') + '"';
-  /* Peres de l'Eglise : meme traitement — resolution locale au tap. */
-  var _fp = _sp ? null : parseFathersRef(ref);
-  if (_fp) _attr = ' data-fathers="' + _fp.id + '" data-fathers-ch="' + (_fp.ch || '') + '"';
+  /* Pères de l’Église et Réforme : même traitement — résolution locale au tap. */
+  var _fp = _sp ? null : parseLibraryRef(ref);
+  if (_fp) _attr = ' data-corp="' + _fp.kind + '" data-corp-id="' + _fp.id + '" data-corp-ch="' + (_fp.ch || '') + '"';
   return '<a class="theo-ref' + (_sp ? ' summa-ref' : '') + (_fp ? ' fathers-ref' : '') + '"' + _attr + ' href="' + url + '" target="_blank" rel="noopener" title="' + tooltip.replace(/"/g, '&quot;') + '">' + ref + '</a>';
 }
 
@@ -8338,22 +8343,23 @@ window.__parseSummaRef = parseSummaRef;
 })();
 
 
-/* ── Pères de l'Église : resolution locale ──────────────────────────────
-   Meme principe que la Somme : le corpus est sur disque (fathers/fNNNN.js)
-   et n'est charge qu'a la demande. Seuls index.js et names.js — quelques
-   kilo-octets — sont charges au demarrage, pour que l'analyse des
-   references fonctionne des le premier message.
+/* ── Bibliothèque locale : Pères de l'Église · Réforme ────────────────
+   Deux corpus sur disque (fathers/, reformed/), un seul moteur. Le
+   principe est le même que pour la Somme : rien n'est préchargé, la
+   tranche n'arrive qu'au tap (AndroidManifest n'a pas largeHeap).
 
-   Une citation s'ecrit selon les habitudes de l'IA :
+   Une citation s'écrit selon les habitudes de l'IA :
      « Augustin, Confessions, X, 27 »
-     « Contre les heresies, livre III, 12 »
-     « Basile, Traite du Saint-Esprit, ch. 9 »
-   On renvoie { id: ouvrage, ch: numero de page-livre, sec: section }.
+     « Confession de Westminster, ch. III »
+     « Calvin, Institution, III, 21 »
+   On renvoie { kind, id, ch, sec } : kind = corpus, id = œuvre,
+   ch = livre/partie, sec = section.
 -------------------------------------------------------------------------- */
 
-/* Normalise une citation ou un titre : casse, accents et ponctuation
-   disparaissent, seuls restent les mots — c'est la cle de names.js. */
-function fathersNorm(s) {
+/* Normalise une citation ou un titre : casse, accents, traits d'union et
+   ponctuation disparaissent, seuls restent les mots — c'est la clé de
+   names.js. */
+function theoNorm(s) {
   return String(s == null ? '' : s)
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -8362,53 +8368,12 @@ function fathersNorm(s) {
     .trim();
 }
 
-function parseFathersRef(ref) {
-  var N = window.__fathersNames;
-  if (!N) return null;
-  if (/somme\s+th[eé]ologique|summa\s+theologica/i.test(ref)) return null;
-  var n = fathersNorm(ref);
-  if (!n) return null;
-
-  /* Le titre le plus long present dans la citation gagne : « Homelies sur
-     Matthieu » doit l'emporter sur « Homelies ». */
-  var best = null, bestLen = 0;
-  for (var k in N) {
-    if (k.length < 5) continue;
-    if (n.indexOf(k) !== -1 && k.length > bestLen) { bestLen = k.length; best = k; }
-  }
-  if (!best) return null;
-  var id = N[best];
-
-  /* Ce qui reste apres le titre : « X, 27 », « livre III, 12 », « ch. 9 »… */
-  var rest = n.slice(n.indexOf(best) + best.length).replace(/^[\s,:;.-]+/, '');
-  var book = null, sec = null;
-  var mb = rest.match(/\b(?:livre|book|l)\s*([0-9]+|[ivxlc]+)\b/);
-  if (mb) book = fathersNum(mb[1]);
-  var ms = rest.match(/\b(?:chapitre|chapter|ch|c|hom[eé]lie|homily|lettre|letter|discours|oration|canon|section)\s*([0-9]+|[ivxlc]+)\b/);
-  if (ms) sec = fathersNum(ms[1]);
-  if (sec === null) {
-    /* Nombres nus, le « livre » ayant deja ete consomme s'il est explicite :
-       « X, 27 » = livre 27 section…, « livre III, 12 » = livre 3 section 12. */
-    var tail = mb ? rest.replace(mb[0], ' ') : rest;
-    var nums = tail.match(/\b([0-9]+|[ivxlc]+)\b/g) || [];
-    var nch = (window.__fathersIndex && window.__fathersIndex[id] && window.__fathersIndex[id].n) || 1;
-    if (nums.length >= 2) { if (book === null) book = fathersNum(nums[0]); sec = fathersNum(nums[1]); }
-    else if (nums.length === 1) {
-      /* Un seul nombre : numero de livre pour une œuvre en plusieurs
-         parties, numero de section pour un texte d'un seul tenant. */
-      if (book === null && nch > 1) book = fathersNum(nums[0]);
-      else sec = fathersNum(nums[0]);
-    }
-  }
-  return { id: id, ch: book, sec: sec };
-}
-
 /* Chiffres romains ou arabes -> entier. */
-function fathersNum(s) {
+function theoNum(s) {
   if (!s) return null;
   if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
   var r = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
-  var t = s.toLowerCase(), tot = 0, prev = 0;
+  var t = String(s).toLowerCase(), tot = 0, prev = 0;
   for (var i = t.length - 1; i >= 0; i--) {
     var v = r[t[i]] || 0;
     if (v < prev) tot -= v; else { tot += v; prev = v; }
@@ -8416,20 +8381,39 @@ function fathersNum(s) {
   return tot || null;
 }
 
-/* Charge index.js + names.js (legers) puis une œuvre complete a la volee.
-   Rien n'est precharge : AndroidManifest n'a pas largeHeap. */
-window.__ensureFathersMeta = function () {
-  if (window.__fathersNames && window.__fathersIndex) return Promise.resolve(true);
-  var done = { i: !!window.__fathersIndex, n: !!window.__fathersNames };
+var THEO_CORPORA = {
+  fathers: {
+    dir: 'fathers', idx: '__fathersIndex', wrk: '__fathersWorks', nms: '__fathersNames',
+    label: 'PÈRES DE L’ÉGLISE', root: 'https://www.newadvent.org/fathers/',
+    web: function (id, work, chap) {
+      return 'https://www.newadvent.org/fathers/' + ((chap && chap.i) || id) + '.htm';
+    }
+  },
+  reformed: {
+    dir: 'reformed', idx: '__reformedIndex', wrk: '__reformedWorks', nms: '__reformedNames',
+    label: 'RÉFORME & PROTESTANTISME', root: 'https://ccel.org/',
+    web: function (id, work) {
+      var e = (window.__reformedIndex || {})[id];
+      return (work && work.u) || (e && e.u) || 'https://ccel.org/';
+    }
+  }
+};
+
+/* Charge index.js + names.js (quelques ko) d'un corpus. */
+function theoCorpusMeta(kind) {
+  var C = THEO_CORPORA[kind];
+  if (!C) return Promise.resolve(false);
+  if (window[C.idx] && (!C.nms || window[C.nms])) return Promise.resolve(true);
   return Promise.all(['index.js', 'names.js'].map(function (f) {
-    var key = f === 'index.js' ? '__fathersIndex' : '__fathersNames';
-    if (window[key]) return Promise.resolve(true);
+    var key = f === 'index.js' ? C.idx : C.nms;
+    if (!key || window[key]) return Promise.resolve(true);
     return new Promise(function (res) {
-      var sc = document.querySelector('script[data-fathers-meta="' + f + '"]');
+      var tag = kind + '-' + f;
+      var sc = document.querySelector('script[data-corpus-meta="' + tag + '"]');
       if (!sc) {
         sc = document.createElement('script');
-        sc.src = 'fathers/' + f;
-        sc.setAttribute('data-fathers-meta', f);
+        sc.src = C.dir + '/' + f;
+        sc.setAttribute('data-corpus-meta', tag);
         sc.onerror = function () { sc.remove(); res(false); };
         document.head.appendChild(sc);
       }
@@ -8441,76 +8425,128 @@ window.__ensureFathersMeta = function () {
       })();
     });
   })).then(function (r) { return r[0] && r[1]; });
-};
+}
 
-window.__ensureFathersWork = function (wid) {
-  wid = String(wid);
-  if (window.__fathersWorks && window.__fathersWorks[wid]) return Promise.resolve(true);
+/* Charge une œuvre entière à la volée. */
+function theoCorpusWork(kind, id) {
+  var C = THEO_CORPORA[kind];
+  id = String(id);
+  if (!C) return Promise.resolve(false);
+  if (window[C.wrk] && window[C.wrk][id]) return Promise.resolve(true);
   return new Promise(function (res) {
-    var sc = document.querySelector('script[data-fathers-w="' + wid + '"]');
+    var sc = document.querySelector('script[data-corpus-w="' + kind + id + '"]');
     if (!sc) {
       sc = document.createElement('script');
-      sc.src = 'fathers/f' + wid + '.js';
-      sc.setAttribute('data-fathers-w', wid);
-      sc.onerror = function () { sc.remove(); console.error('[fathers] echec de chargement : ' + wid); res(false); };
+      sc.src = C.dir + '/' + (kind === 'reformed' ? 'r' : 'f') + id + '.js';
+      sc.setAttribute('data-corpus-w', kind + id);
+      sc.onerror = function () { sc.remove(); console.error('[corpus] échec : ' + kind + '/' + id); res(false); };
       document.head.appendChild(sc);
     }
     var n = 0;
     (function check() {
-      if (window.__fathersWorks && window.__fathersWorks[wid]) return res(true);
+      if (window[C.wrk] && window[C.wrk][id]) return res(true);
       if (++n > 120) return res(false);
       setTimeout(check, 100);
     })();
   });
-};
+}
 
-window.__parseFathersRef = parseFathersRef;
-
-/* Rendu d'une œuvre : si elle compte plusieurs livres, un selecteur permet
-   de circuler ; sinon le texte est affiche d'un bloc. */
-function fathersRenderWork(w, opts) {
+/* Rendu d'une œuvre : un sélecteur si elle compte plusieurs livres. */
+function theoRenderWork(kind, w, opts) {
   opts = opts || {};
   var body = document.getElementById('fathers-body');
   if (!body || !w) return;
   var idx = Math.min(Math.max(parseInt(opts.ch, 10) || 1, 1), w.c.length);
   var chap = w.c[idx - 1] || w.c[0];
   var h = '<div class="field-group"><label class="field-label">' +
-          escapeHtml(w.a) + '</label><div class="field-hint">' + escapeHtml(w.t) + '</div></div>';
-
+          escapeHtml(w.a || '') + '</label><div class="field-hint">' + escapeHtml(w.t || '') + '</div></div>';
   if (w.c.length > 1) {
     h += '<div class="field-group"><label class="field-label">Livre / partie</label>' +
          '<select id="fathers-chapter" style="width:100%;padding:8px;border-radius:8px">';
     w.c.forEach(function (c, i) {
+      var t = (c.t || ('Partie ' + (i + 1)));
       h += '<option value="' + (i + 1) + '"' + (i + 1 === idx ? ' selected' : '') + '>' +
-           escapeHtml((c.t || ('Partie ' + (i + 1)))) + '</option>';
+           escapeHtml(t.length > 90 ? t.slice(0, 90) + '…' : t) + '</option>';
     });
     h += '</select></div>';
   }
-
   (chap.s || []).forEach(function (s, si) {
-    var hot = (opts.sec && fathersNum(String(opts.sec)) === si + 1) ||
-              (opts.sec && /^(\d+)/.test(s.t) && parseInt(RegExp.$1, 10) === parseInt(opts.sec, 10));
+    var hot = opts.sec && (theoNum(String(opts.sec)) === si + 1 ||
+              (/^(\d+)/.test(s.t) && parseInt(RegExp.$1, 10) === parseInt(opts.sec, 10)));
     h += '<div class="field-group"' + (hot ? ' style="border-left:3px solid var(--accent);padding-left:8px"' : '') + '>' +
-         (s.t ? '<label class="field-label">' + escapeHtml(s.t) + '</label>' : '');
+         (s.t ? '<label class="field-label">' + escapeHtml(s.t.length > 120 ? s.t.slice(0, 120) + '…' : s.t) + '</label>' : '');
     (s.p || []).forEach(function (p) {
       h += '<div style="margin-bottom:9px;line-height:1.6">' + escapeHtml(p) + '</div>';
     });
     h += '</div>';
   });
   body.innerHTML = h;
-
   var sel = document.getElementById('fathers-chapter');
-  if (sel) sel.onchange = function () { fathersRenderWork(w, { ch: sel.value }); };
+  if (sel) sel.onchange = function () { theoRenderWork(kind, w, { ch: sel.value }); };
   var web = document.getElementById('fathers-web');
-  if (web) web.href = 'https://www.newadvent.org/fathers/' + (chap.i || w.id) + '.htm';
+  if (web) web.href = THEO_CORPORA[kind].web(w.id, w, chap);
 }
 
-/* Tap sur une reference aux Peres : resolution EN LOCAL, le lien web ne
-   devient qu'une sortie de secours. Meme philosophie que la Somme :
-   capture + preventDefault, sans stopPropagation. */
-(function initFathersRefs() {
+/* Analyse une citation pour un corpus donné. */
+function theoParseRef(ref, kind) {
+  var C = THEO_CORPORA[kind];
+  var N = C && C.nms ? window[C.nms] : null;
+  if (!N) return null;
+  if (/somme\s+th[eé]ologique|summa\s+theologica/i.test(ref)) return null;
+  var n = theoNorm(ref);
+  if (!n) return null;
+  /* Le titre le plus long présent dans la citation gagne : « Homélies sur
+     Matthieu » doit l'emporter sur « Homélies ». */
+  var best = null, bestLen = 0;
+  for (var k in N) {
+    if (k.length < 5) continue;
+    if (n.indexOf(k) !== -1 && k.length > bestLen) { bestLen = k.length; best = k; }
+  }
+  if (!best) return null;
+  var id = N[best];
+  var rest = n.slice(n.indexOf(best) + best.length).replace(/^[\s,:;.-]+/, '');
+  var book = null, sec = null;
+  var mb = rest.match(/\b(?:livre|book|l)\s*([0-9]+|[ivxlc]+)\b/);
+  if (mb) book = theoNum(mb[1]);
+  var ms = rest.match(/\b(?:chapitre|chapter|ch|c|hom[eé]lie|homily|lettre|letter|discours|oration|canon|section|jour|day)\s*([0-9]+|[ivxlc]+)\b/);
+  if (ms) sec = theoNum(ms[1]);
+  if (sec === null) {
+    var tail = mb ? rest.replace(mb[0], ' ') : rest;
+    var nums = tail.match(/\b([0-9]+|[ivxlc]+)\b/g) || [];
+    var nch = 1;
+    var ent = (window[C.idx] || {})[id];
+    if (ent && ent.n) nch = ent.n;
+    if (nums.length >= 2) { if (book === null) book = theoNum(nums[0]); sec = theoNum(nums[1]); }
+    else if (nums.length === 1) {
+      if (book === null && nch > 1) book = theoNum(nums[0]);
+      else sec = theoNum(nums[0]);
+    }
+  }
+  return { kind: kind, id: id, ch: book, sec: sec };
+}
+
+function parseFathersRef(ref) { return theoParseRef(ref, 'fathers'); }
+function parseReformedRef(ref) { return theoParseRef(ref, 'reformed'); }
+/* Une citation peut appartenir à l'un ou l'autre corpus : on essaie les
+   deux, les Pères d'abord (leurs titres sont les plus cités). */
+function parseLibraryRef(ref) {
+  return theoParseRef(ref, 'fathers') || theoParseRef(ref, 'reformed');
+}
+
+/* URL web de secours, sans avoir chargé l'œuvre. */
+function libraryWebUrl(kind, id) {
+  var C = THEO_CORPORA[kind];
+  if (!C) return 'https://www.google.com/search?q=' + encodeURIComponent(id);
+  return C.web(id, null, null);
+}
+
+/* Tap sur une référence : résolution EN LOCAL, le lien web ne devient
+   qu'une sortie de secours. Capture + preventDefault, sans
+   stopPropagation. */
+(function initLibraryRefs() {
   var m = document.getElementById('fathers-modal');
   var body = document.getElementById('fathers-body');
+  var title = document.getElementById('fathers-title');
   if (!m || !body || m.__init) return;
   m.__init = true;
   var close = function () { m.classList.remove('active'); };
@@ -8520,41 +8556,55 @@ function fathersRenderWork(w, opts) {
   if (c2) c2.onclick = close;
   m.onclick = function (e) { if (e.target === m) close(); };
 
-  /* Le navigateur d'œuvres : liste filtrable des textes disponibles. */
-  window.__openFathersLibrary = function () {
-    if (!m) return;
+  function setTitle(txt) { if (title) title.textContent = '◈ ' + txt; }
+
+  /* Le navigateur d'œuvres : liste filtrable, avec onglets de corpus. */
+  window.__openCorpusLibrary = function (kind) {
+    kind = THEO_CORPORA[kind] ? kind : 'fathers';
+    setTitle(THEO_CORPORA[kind].label);
     body.innerHTML = '<div class="field-hint">Chargement du catalogue…</div>';
     m.classList.add('active');
     var web = document.getElementById('fathers-web');
-    if (web) web.href = 'https://www.newadvent.org/fathers/';
-    window.__ensureFathersMeta().then(function (ok) {
-      var idx = window.__fathersIndex || {};
-      var ids = Object.keys(idx);
-      if (!ok || !ids.length) {
+    if (web) web.href = THEO_CORPORA[kind].root;
+    theoCorpusMeta(kind).then(function (ok) {
+      var idx = window[THEO_CORPORA[kind].idx] || {};
+      if (!ok || !Object.keys(idx).length) {
         body.innerHTML = '<div class="field-hint">⚠️ Catalogue indisponible.</div>';
         return;
       }
+      var tabs = '';
+      Object.keys(THEO_CORPORA).forEach(function (k) {
+        tabs += '<button class="btn-ghost corpus-tab' + (k === kind ? ' active' : '') +
+                '" data-corp-tab="' + k + '" style="margin-right:6px">' +
+                (k === 'fathers' ? '☻ Pères' : '✦ Réforme') + '</button>';
+      });
+      body.innerHTML = '<div class="field-group">' + tabs + '</div>' +
+        '<div class="field-group"><input id="fathers-search" type="text" ' +
+        'placeholder="Filtrer — auteur ou titre…" style="width:100%;padding:8px;border-radius:8px"></div>' +
+        '<div id="fathers-lib"></div>';
+      Array.prototype.forEach.call(body.querySelectorAll('[data-corp-tab]'), function (b) {
+        b.onclick = function () { window.__openCorpusLibrary(b.getAttribute('data-corp-tab')); };
+      });
+      var list = document.getElementById('fathers-lib');
       var byAuthor = {};
-      ids.forEach(function (i) {
+      Object.keys(idx).forEach(function (i) {
         var a = idx[i].a || 'Divers';
         (byAuthor[a] = byAuthor[a] || []).push(i);
       });
-      var h = '<div class="field-group"><input id="fathers-search" type="text" placeholder="Filtrer — auteur ou titre…" style="width:100%;padding:8px;border-radius:8px"></div><div id="fathers-lib"></div>';
-      body.innerHTML = h;
-      var list = document.getElementById('fathers-lib');
       var draw = function (q) {
-        var nq = fathersNorm(q);
-        var out = '';
+        var nq = theoNorm(q), out = '';
         Object.keys(byAuthor).sort().forEach(function (a) {
           var ws = byAuthor[a].filter(function (i) {
-            return !nq || fathersNorm(a + ' ' + idx[i].t).indexOf(nq) !== -1;
+            return !nq || theoNorm(a + ' ' + idx[i].t).indexOf(nq) !== -1;
           });
           if (!ws.length) return;
           out += '<div class="field-group"><label class="field-label">' + escapeHtml(a) + '</label>';
-          ws.sort(function (x, y) { return idx[x].t.localeCompare(idx[y].t); }).forEach(function (i) {
-            out += '<div style="margin-bottom:6px"><a href="#" class="fathers-work" data-fathers="' + i +
-                   '" style="color:var(--accent);text-decoration:none">↳ ' + escapeHtml(idx[i].t) + '</a></div>';
-          });
+          ws.sort(function (x, y) { return String(idx[x].t).localeCompare(String(idx[y].t)); })
+            .forEach(function (i) {
+              out += '<div style="margin-bottom:6px"><a href="#" class="corpus-work" data-corp="' + kind +
+                     '" data-corp-id="' + i + '" style="color:var(--accent);text-decoration:none">↳ ' +
+                     escapeHtml(String(idx[i].t).slice(0, 90)) + '</a></div>';
+            });
           out += '</div>';
         });
         list.innerHTML = out || '<div class="field-hint">Aucun résultat.</div>';
@@ -8564,29 +8614,41 @@ function fathersRenderWork(w, opts) {
       if (s) s.oninput = function () { draw(s.value); };
     });
   };
+  window.__openFathersLibrary = function () { window.__openCorpusLibrary('fathers'); };
 
   document.addEventListener('click', function (e) {
-    var a = e.target && e.target.closest ? e.target.closest('[data-fathers]') : null;
+    var a = e.target && e.target.closest ? e.target.closest('[data-corp],[data-fathers]') : null;
     if (!a) return;
-    var wid = String(a.getAttribute('data-fathers') || '');
-    if (!wid) return;
+    var kind = a.getAttribute('data-corp');
+    var wid = a.getAttribute('data-corp-id') || a.getAttribute('data-fathers');
+    if (!kind) kind = 'fathers';                 /* ancien attribut du panneau */
+    if (!wid || !THEO_CORPORA[kind]) return;
     if (a.tagName === 'A' || a.closest('a')) e.preventDefault();
-    var ch = a.getAttribute('data-fathers-ch');
+    var ch = a.getAttribute('data-corp-ch') || a.getAttribute('data-fathers-ch');
     var web = document.getElementById('fathers-web');
-    if (web && a.href && a.href !== '#') web.href = a.href;
+    if (web) web.href = (a.href && a.href !== '#') ? a.href : libraryWebUrl(kind, wid);
+    setTitle(THEO_CORPORA[kind].label);
     body.innerHTML = '<div class="field-hint">Chargement…</div>';
     m.classList.add('active');
-    window.__ensureFathersWork(wid).then(function (ok) {
-      var w = (window.__fathersWorks || {})[wid];
+    theoCorpusWork(kind, wid).then(function (ok) {
+      var w = (window[THEO_CORPORA[kind].wrk] || {})[wid];
       if (!ok || !w) {
         body.innerHTML = '<div class="field-hint">⚠️ Œuvre non disponible localement.</div>';
         return;
       }
-      fathersRenderWork(w, { ch: ch || 1 });
+      theoRenderWork(kind, w, { ch: ch || 1 });
     });
   }, true);
 
-  window.__ensureFathersMeta();
+  theoCorpusMeta('fathers');
+  theoCorpusMeta('reformed');
+
+  /* Sorties stables pour le banc de test et d'éventuels scripts. */
+  window.__parseFathersRef = parseFathersRef;
+  window.__parseReformedRef = parseReformedRef;
+  window.__parseLibraryRef = parseLibraryRef;
+  window.__ensureFathersMeta = function () { return theoCorpusMeta('fathers'); };
+  window.__ensureReformedMeta = function () { return theoCorpusMeta('reformed'); };
 })();
 
 const inlineMd = s => {
@@ -17565,7 +17627,7 @@ function initReferencesPanel() {
         'autres': '♫'
       };
       list.innerHTML = filtered.map((r, i) =>
-        '<a class="ref-item' + (r.fathers ? ' fathers-ref' : '') + '" href="' + r.url + '" target="_blank" rel="noopener"' + (r.fathers ? ' data-fathers="' + r.fathers + '"' : '') + ' ' + (animate ? 'style="animation-delay:' + Math.min(i, 15) * 0.04 + 's"' : '') + '>' +
+        '<a class="ref-item' + (r.fathers ? ' fathers-ref' : '') + '" href="' + r.url + '" target="_blank" rel="noopener"' + (r.fathers ? ' data-corp="fathers" data-corp-id="' + r.fathers + '"' : '') + ' ' + (animate ? 'style="animation-delay:' + Math.min(i, 15) * 0.04 + 's"' : '') + '>' +
         '<span class="ref-item-icon">' + (catIcons[r.cat] || '•') + '</span>' +
         '<div class="ref-item-content">' +
         '<div class="ref-item-title">' + r.name + '</div>' +

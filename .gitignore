@@ -26,3 +26,5 @@ output/
 # Caches HTTP des generateurs de corpus (jamais versionner)
 tools/.summa_cache/
 tools/.fathers_cache/
+
+tools/.ccel_cache/

@@ -711,3 +711,48 @@ CI run `35363869961` → succès.
    (onglet AGENTS) : la fiche caractéristiques s'ouvre bien au doigt, et les
    boutons Modifier / Dupliquer / Exporter / Supprimer continuent de répondre
    au tap (sans déclencher la fiche).
+
+---
+
+# Corpus théologique local (palier B) — livraison en cours
+
+Objectif unique à deux plaintes qui n'en font qu'une : *« les liens disent
+erreur 404 »* et *« je veux que le logiciel soit très théologique »*. Un lien
+local ne renvoie jamais 404.
+
+## T1 — Somme théologique (livré, `apk-v2.0.53`)
+
+611 questions / 3 115 articles / 17 Mo, aspirés de `newadvent.org/summa`.
+`parseSummaRef` reconnait « Somme Ia q. 2 a. 3 » ; le tap ouvre le panneau
+local, le lien web devient un simple secours.
+
+## T2 — Pères de l'Église (livré, commit `c7a24a1`)
+
+**118 œuvres**, 36 Mo, depuis `newadvent.org/fathers`. Structure mesurée
+(419 œuvres, 69 auteurs) : 315 pages feuilles, 104 sommaires dont le texte vit
+sur des pages filles, avec **deux schémas d'identifiants** (`1101 → 110101` en
+6 chiffres, `3402 → 34021` en 5). Règle retenue : une fille a un id qui
+commence par celui de l'œuvre et est plus long.
+
+- `parseFathersRef` : « Augustin, Confessions, X, 27 » → œuvre 1101, livre X,
+  section 27. **416 alias** couvrent les citations en français.
+- Tap → résolution locale ; tout Père reconnu reçoit désormais une **URL
+  exacte** newadvent au lieu d'une recherche Google.
+- Bibliothèque filtrable des 118 œuvres par auteur (`data-act="fathers-open"`).
+- Les 12 entrées *patristique* du panneau Références s'ouvrent en local.
+
+**Découverte qui change l'économie du projet** : les `.js` de `assets/` sont
+déflatés au **ratio 0,19** dans l'APK. Les 36 Mo du corpus ne coûtent que
+~7 Mo. La taille n'est pas la contrainte qu'on croyait.
+
+## Preuves
+
+Banc CDP : **48/48** (K1-K9 ajoutés). « Confessions X, 27 » → livre X ouvert
+en local. Contrôle négatif : un texte du Magistère n'est pas pris pour un Père.
+`tools/check_syntax.js` : 49 blocs, 0 erreur.
+
+## Reste (T3 → T6)
+
+T3 protestant (CCEL, API à identifier) · T4 orthodoxe · T5 islamique (hadith ?)
+· T6 Denzinger (OCR latin, le plus coûteux). Ouvert : trouver une Somme en
+**français** (domaine public) — aujourd'hui le corpus est en anglais.
