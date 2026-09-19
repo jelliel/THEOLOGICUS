@@ -271,6 +271,12 @@ def parse_page(raw):
         frag = re.sub(r'<%s[^>]*>' % tag, '\n@@%s@@\n' % tag.upper(), frag, flags=re.I)
     frag = re.sub(r'<[^>]+>', '', frag)
     frag = html.unescape(frag).replace('\xa0', ' ')
+    """ Residus de gabarit coté serveur : les notes de bas de page cassées
+        laissent « ]}}--> » en plein texte (50 cas, dont le Symbole de Nicée)
+        et un « 9JKLJKLsec. » sur les Confessions. On les retire. """
+    frag = re.sub(r'\s*\}\}\s*-->', ' ', frag)
+    frag = re.sub(r'(?:JKL)+', '', frag)
+    frag = frag.replace('-->', ' ')
 
     title, sections = '', []
     cur = None
