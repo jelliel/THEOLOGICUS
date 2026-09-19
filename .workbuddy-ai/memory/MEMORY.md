@@ -9,21 +9,34 @@ Ici uniquement ce qui doit survivre.
 - Monolithe `THEOLOGICUS.html` (~1,2 Mo) + tranches JS : `bible/` (66),
   `quran/` (114), `tafsir/` (114), `libs/`, **`summa/`** (611 questions,
   17 Mo), **`fathers/`** (118 œuvres, 36 Mo), **`reformed/`** (91 entrées,
-  27,8 Mo), **`orthodox/`** (43 entrées, 1,9 Mo). Chargés **à la volée** par
-  `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah` /
-  `__ensureSummaQuestion` / `theoCorpusWork`.
+  27,8 Mo), **`orthodox/`** (43 entrées, 1,9 Mo), **`islamic/`** (93 livres,
+  5,4 Mo : Houdas & Marçais, le Sahih d'Al-Bukhari en français). Chargés **à la
+  volée** par `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah`
+  / `__ensureSummaQuestion` / `theoCorpusWork`.
 - **`THEO_CORPORA` pilote tout** : un corpus = `{dir, pfx, idx, wrk, nms,
   label, tab, root, web}`. Ajouter une entrée suffit — onglets de la
   bibliothèque, `theoParseRef`, rendu du modal et `parseLibraryRef` s'en
   déduisent. Ordre de résolution des citations : **fathers → reformed →
-  orthodox** (le plus long alias gagne, le premier corpus essayé gagne).
+  orthodox → islamic** (le plus long alias gagne, le premier corpus essayé
+  gagne). Conséquence : un titre chrétien et un titre musulman identiques
+  (« de la foi », « grand catéchisme ») donnent toujours le **premier** corpus
+  — c'est une précédence, pas un bug. Interroger `parseIslamicRef` (etc.)
+  pour forcer un corpus.
 - **Les `.js` de `assets/` sont déflatés au ratio 0,19 dans l'APK** (mesuré :
   51,86 Mo → 9,74 Mo). Un corpus de texte ne coûte donc qu'un cinquième de
   son poids disque. **Ne jamais tailler un corpus avant d'avoir mesuré.**
 - Les générateurs de corpus (`tools/build_summa.py`, `build_fathers.py`,
-  `build_reformed.py`, `build_orthodox.py`) gardent leur cache HTTP dans
-  `tools/.summa_cache/`, `.fathers_cache/`, `.ccel_cache/`, `.orthodox_cache/`
-  (tous gitignored). Relancer régénère tout sans réseau.
+  `build_reformed.py`, `build_orthodox.py`, `build_islamic.py`) gardent leur
+  cache HTTP dans `tools/.summa_cache/`, `.fathers_cache/`, `.ccel_cache/`,
+  `.orthodox_cache/`, `.islamic_cache/` (tous gitignored). Relancer régénère
+  tout sans réseau.
+- **OCR : deux pièges récurrents dans les livres numérotés.** (1) Un tome
+  porte souvent **deux séries** de lignes-titre : le corps, puis la **table des
+  matières** en fin de volume (en majuscules, nom après un tiret). Couper à
+  `TABLE DES MATIÈRES`, sinon le corpus double et les numéros sont faux.
+  (2) Les **chiffres romains OCR-isés ne sont pas fiables** (`Ilï`→III,
+  `XL`→XI) : préférer un identifiant **séquentiel** à un identifiant calculé.
+  Règle générale : l'ordre du texte est fiable, le chiffre ne l'est pas.
 - **`build_reformed.tokenize` ne lit `title=` que collé au nom de balise** :
   `<div2 id="…" title="…">` donne un titre vide. `build_orthodox.fix_titles()`
   remonte l'attribut en tête avant de parser.
