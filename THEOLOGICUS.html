@@ -7341,10 +7341,26 @@ window.__ensureTafsirSurah = function(p){
     <div class="modal-body" id="agent-info-body"></div>
     <div class="btn-row">
       <button class="btn-ghost" id="agent-info-close">Fermer</button>
-      <button class="btn-primary" id="agent-info-activate">⚙ Activer / Démarrer une discussion</button>
-    </div>
-  </div>
-</div>
+                <button class="btn-primary" id="agent-info-activate">⚙ Activer / Démarrer une discussion</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-overlay" id="summa-modal">
+            <div class="modal-box">
+              <div class="corner-deco corner-tl"></div><div class="corner-deco corner-tr"></div>
+              <div class="corner-deco corner-bl"></div><div class="corner-deco corner-br"></div>
+              <div class="modal-header">
+                <div class="modal-title">◈ SOMME THÉOLOGIQUE</div>
+                <button class="modal-close" id="close-summa-modal">✕</button>
+              </div>
+              <div class="modal-body" id="summa-body" style="max-height:60vh;overflow-y:auto"></div>
+              <div class="btn-row">
+                <button class="btn-ghost" id="summa-close">Fermer</button>
+                <a class="btn-primary" id="summa-web" href="#" target="_blank" rel="noopener">Consulter en ligne →</a>
+              </div>
+            </div>
+          </div>
 
 <!-- ═══════════════════ MODAL : DATA ═══════════════════ -->
 <div class="modal-overlay" id="data-modal">
@@ -8080,8 +8096,13 @@ const THEO_REF_RE = /(?:Somme théologique|Summa Theologica|Catéchisme de l'Ég
 // Construit une URL de consultation pour une référence théologique
 function buildTheoRefUrl(ref) {
   const lower = ref.toLowerCase();
-  // Somme théologique → New Advent / Latin
+  /* Somme théologique → URL EXACTE de la question sur New Advent.
+     Avant c'etait une recherche Google « site:newadvent.org » : l'utilisateur
+     cliquait en croyant ouvrir le texte et obtenait une page de resultats.
+     La numerotation est connue : qid = partie*1000 + question (1001 = Ia q.1). */
   if (/somme\s+th[ée]ologique|summa\s+theologica/i.test(ref)) {
+    var _p = parseSummaRef(ref);
+    if (_p) return 'https://www.newadvent.org/summa/' + (_p.part * 1000 + _p.q) + '.htm';
     return 'https://www.google.com/search?q=' + encodeURIComponent(ref) + '+site:newadvent.org';
   }
   // CEC → Vatican.va (working URL)
@@ -8186,8 +8207,110 @@ function theoRefHtml(ref) {
   const normalized = ref.replace(/[\u2019']/g, "'").replace(/\s+/g, ' ').trim();
   const title = THEO_DOC_TITLES[normalized] || THEO_DOC_TITLES[Object.keys(THEO_DOC_TITLES).find(k => k.toLowerCase() === normalized.toLowerCase())] || '';
   const tooltip = title ? '📖 ' + title : 'Consulter : ' + ref;
-  return '<a class="theo-ref" href="' + url + '" target="_blank" rel="noopener" title="' + tooltip.replace(/"/g, '&quot;') + '">' + ref + '</a>';
+  /* Les references a la Somme portent l'identifiant de question : le
+     gestionnaire de clic peut alors resoudre EN LOCAL sans suivre le lien. */
+  var _sp = parseSummaRef(ref);
+  var _attr = '';
+  if (_sp) _attr = ' data-summa="' + (_sp.part * 1000 + _sp.q) + '" data-summa-a="' + (_sp.a || '') + '"';
+  return '<a class="theo-ref' + (_sp ? ' summa-ref' : '') + '"' + _attr + ' href="' + url + '" target="_blank" rel="noopener" title="' + tooltip.replace(/"/g, '&quot;') + '">' + ref + '</a>';
 }
+
+/* ── Somme theologique : resolution locale ──────────────────────────────
+   Reference attendue, telle que l'ecrit l'IA :
+     « Somme theologique, Ia, q. 2, a. 3 »
+     « Somme theologique Ia-IIae q. 5 a. 1 »
+     « Somme theologique, Supplement, q. 58, a. 5 »
+   qid = partie*1000 + question  (1001 = Prima Pars q.1, 3001 = IIa-IIae q.1)
+-------------------------------------------------------------------------- */
+function parseSummaRef(ref) {
+  if (!/somme\s+th[ée]ologique|summa\s+theologica|somme\s+(?:ia|iia|iiia)/i.test(ref)) return null;
+  var part = 1;
+  if (/ia\s*[-–]?\s*iiae|prima\s+secundae|1a\s*2ae/i.test(ref)) part = 2;
+  else if (/iia\s*[-–]?\s*iiae|secunda\s+secundae|2a\s*2ae/i.test(ref)) part = 3;
+  else if (/iiia|tertia\s+pars|3a(?!\s*2)/i.test(ref)) part = 4;
+  else if (/suppl/i.test(ref)) part = 5;
+  var qm = ref.match(/q(?:uestion)?\.?\s*(\d+)/i);
+  if (!qm) return null;
+  var am = ref.match(/\ba(?:rticle|rt)?\.?\s*(\d+)/i);
+  return { part: part, q: parseInt(qm[1], 10), a: am ? parseInt(am[1], 10) : null };
+}
+
+/* Charge une tranche de question a la volee, comme __ensureBibleBook.
+   Rien n'est precharge : le corpus doit rester hors du chemin critique
+   (AndroidManifest n'a pas largeHeap). */
+window.__ensureSummaQuestion = function (qid) {
+  qid = String(qid);
+  if (window.__summaQuestions && window.__summaQuestions[qid]) return Promise.resolve(true);
+  return new Promise(function (res) {
+    var sc = document.querySelector('script[data-summa-q="' + qid + '"]');
+    if (!sc) {
+      sc = document.createElement('script');
+      sc.src = 'summa/s' + qid + '.js';
+      sc.setAttribute('data-summa-q', qid);
+      sc.onerror = function () { sc.remove(); console.error('[summa] echec de chargement : ' + qid); res(false); };
+      document.head.appendChild(sc);
+    }
+    var essais = 0;
+    (function check() {
+      if (window.__summaQuestions && window.__summaQuestions[qid]) return res(true);
+      if (++essais > 60) return res(false);
+      setTimeout(check, 100);
+    })();
+  });
+};
+window.__parseSummaRef = parseSummaRef;
+
+/* Tap sur une reference a la Somme : resolution EN LOCAL, le lien web ne
+   devient qu'une sortie de secours. Meme philosophie que la v2.0 pour la
+   Bible : on intercepte en capture et on fait preventDefault, sans
+   stopPropagation (le reste de la page doit continuer a recevoir le clic). */
+(function initSummaRefs() {
+  var m = document.getElementById('summa-modal');
+  var body = document.getElementById('summa-body');
+  var web = document.getElementById('summa-web');
+  if (!m || !body || m.__init) return;
+  m.__init = true;
+  var close = function () { m.classList.remove('active'); };
+  var c1 = document.getElementById('close-summa-modal');
+  var c2 = document.getElementById('summa-close');
+  if (c1) c1.onclick = close;
+  if (c2) c2.onclick = close;
+  m.onclick = function (e) { if (e.target === m) close(); };
+
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a.summa-ref[data-summa]') : null;
+    if (!a) return;
+    var qid = String(a.getAttribute('data-summa'));
+    var artN = parseInt(a.getAttribute('data-summa-a') || '', 10) || null;
+    e.preventDefault();
+    if (web) web.href = a.href;
+    body.innerHTML = '<div class="field-hint">Chargement…</div>';
+    m.classList.add('active');
+    window.__ensureSummaQuestion(qid).then(function (ok) {
+      var q = (window.__summaQuestions || {})[qid];
+      if (!ok || !q) {
+        body.innerHTML = '<div class="field-hint">⚠️ Question non disponible localement.</div>';
+        return;
+      }
+      var arts = artN ? (q.articles || []).filter(function (x) { return x.n === artN; }) : (q.articles || []);
+      if (!arts.length) arts = q.articles || [];
+      var h = '<div class="field-group"><label class="field-label">Question ' + q.question +
+              ' — ' + ({1:'Ia',2:'Ia-IIae',3:'IIa-IIae',4:'IIIa',5:'Suppl.'}[q.part] || '') +
+              '</label><div class="field-hint">' + escapeHtml(q.title) + '</div></div>';
+      arts.forEach(function (art) {
+        h += '<div class="field-group"><label class="field-label">Article ' + art.n + '</label>' +
+             '<div class="field-hint" style="margin-bottom:8px">' + escapeHtml(art.title) + '</div>';
+        (art.paragraphs || []).forEach(function (p) {
+          h += '<div style="margin-bottom:9px;line-height:1.6">' +
+               (p.label ? '<strong>' + escapeHtml(p.label) + '</strong> ' : '') +
+               escapeHtml(p.text) + '</div>';
+        });
+        h += '</div>';
+      });
+      body.innerHTML = h;
+    });
+  }, true);
+})();
 
 
 const inlineMd = s => {
