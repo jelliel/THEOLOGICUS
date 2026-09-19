@@ -796,16 +796,35 @@ celles qui débordent réellement** : `fitSuggestionChips()` mesure
 une course `--shift` et une durée `--dur` proportionnelle, et se remesure au
 redimensionnement (250 ms de débounce). Le texte complet reste en infobulle.
 
+## T6 — Denzinger, le magistère (dernier de la liste)
+
+`tools/build_denzinger.py` → **128 sections**, 1,3 Mo, 292 alias, cinquième
+onglet ✝ Magistère. Édition latine de 1911 (11e, Bannwart S.J.), domaine
+public.
+
+Le Denzinger est célèbre pour ses numéros marginaux — mais on **ne découpe pas
+par numéro** : mesuré, ~1100 sur ~2200 sont retrouvables et la suite n'est pas
+monotone. Les pages imprimées ne sont pas récupérables non plus. Seuls les
+**titres de section** (pontife, concile) sont fiables : c'est le découpage
+retenu.
+
+**Le piège qui compte** : il ne faut pas corriger les titres du corps avec la
+table des matières. Un rapprochement par similarité de nom a d'abord produit un
+corpus où chaque document était attribué au **mauvais pontife** (« S. HYGINUS »
+→ « S. ZOSIMUS »). C'est exactement ce que la règle d'or interdit ; le
+rapprochement a été retiré. Le corpus ne vaut que si l'attribution est sûre.
+
 ## Preuves
 
-Banc CDP : **81/81** (K → L → M → N → P). Quatre onglets ☻ Pères / ✦ Réforme /
-⛪ Orthodoxie / ☾ Islam. « hadith » → avant-propos de Houdas ; « lustration
-pulvérale » → `bukh_07` ; « de la foi » → `bukh_02` **dans le corpus
-islamique** (la résolution globale donne les Pères, c'est la précédence, pas
-un bug). Puce longue : `-340px en 12.8s`, puce courte : aucun défilement.
-`tools/check_syntax.js` : 49 blocs, 0 erreur.
+Banc CDP : **89/89** (K → L → M → N → P → Q). Cinq onglets ☻ Pères / ✦ Réforme
+/ ⛪ Orthodoxie / ☾ Islam / ✝ Magistère. « denzinger » → préfaces ;
+« concile de Trente » → `Conc. TRIDENTINUM 1545—1563` ouvert en local
+(« Oecumenicum XIX », sessions III/IV/VI) ; « Vatican I » → Pie IX ;
+« hadith » → avant-propos de Houdas. Puce longue : `-340px en 12.8s`, puce
+courte : aucun défilement. `tools/check_syntax.js` : 49 blocs, 0 erreur.
 
-## Reste (T6)
+## Reste
 
-T6 Denzinger (OCR latin, le plus coûteux). Ouvert : trouver une Somme en
-**français** (domaine public) — aujourd'hui le corpus est en anglais.
+Le plan T1 → T6 est **terminé**. Restent les questions ouvertes : une Somme en
+**français** (domaine public) — le corpus est aujourd'hui en anglais ; la
+décision sur les droits de la BJ 1998 ; le test sur téléphone des cinq onglets.

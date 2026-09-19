@@ -67,7 +67,7 @@ Chaque tranche est utilisable seule.
 | **T3** | Protestant (Calvin, Luther, confessions) | CCEL, ThML | **FAIT** — 91 entrées, 27,8 Mo, 190 alias |
 | **T4** | Orthodoxe | Hapgood 1906 + Schaff | **FAIT** — 43 entrées, 1,9 Mo, 168 alias |
 | **T5** | Islamique — le hadith | Houdas & Marçais 1903-1914 | **FAIT** — 93 livres, 5,4 Mo, 102 alias |
-| **T6** | Denzinger | OCR latin | le plus coûteux, **en dernier** |
+| **T6** | Denzinger | Denzinger 1911, 11e éd. | **FAIT** — 128 sections, 1,3 Mo, 292 alias |
 
 **Ordre recommandé : T1 → T2 → T3 → T5 → T4 → T6.** T1 et T2 sont livrées et
 donnent un résultat visible rapidement.
@@ -174,6 +174,43 @@ Autres pièges rencontrés :
 **Le livre I n'a qu'un chapitre et ce n'est pas un bug** : vérifié sur
 l'OCR, les 480 lignes du « TITRE PREMIER » tiennent en un seul `CHAPITRE`
 suivi de traditions longuement commentées.
+
+### T6 en détail — le Denzinger, et pourquoi on ne découpe pas par numéro
+
+Le Denzinger est célèbre pour ses **numéros marginaux** (« Denzinger 3020 »).
+Trois mesures faites avant d'écrire une ligne, toutes négatives :
+
+| Ce qu'on voudrait | Ce qu'on mesure | Conséquence |
+|---|---|---|
+| découper par **numéro marginal** | ~1100 retrouvés sur ~2200, suite **non monotone** | impossible |
+| découper par **page imprimée** | 67 numéros isolés sur ~950 pages, non monotones | impossible |
+| découper par **titre de section** | titres corrects et dans l'ordre | **c'est celui-là** |
+
+Le découpage retenu est donc par **section** : un pontife ou un concile
+(« S. LEO I M. 440—461. », « Conc. TRIDENTINUM 1545—1563. »), les sessions et
+les canons devenant des chapitres à l'intérieur. **128 sections.**
+
+**Piège majeur — il a failli livrer un corpus faux.** Deux scans de la même
+édition existent. `...00denz` a le meilleur OCR pour la **table**,
+`...01denz` pour le **corps**. Comme les titres viennent du corps, on prend
+`...01denz`. Surtout, il ne faut **pas** « corriger » les titres du corps avec
+la table : un rapprochement par similarité de nom (seuil 0,55) a remplacé
+« S. HYGINUS » par « S. ZOSIMUS » et produit un corpus où **chaque document
+était attribué au mauvais pontife** — la règle d'or du projet interdit
+précisément ça. Le corpus ne vaut que si l'attribution est sûre.
+
+Autres pièges mesurés :
+- les **en-têtes de page** répètent le pontife courant, parfois avec un OCR
+  différent (« PELAGIUS I 251—253 » puis « S. CORNELIUS I 251—253 ») → on
+  dédoublonne par **années**, pas par titre ;
+- l'OCR prend des lettres pour des chiffres (« I676 » pour 1676) →
+  normalisation avant comparaison ;
+- la particule « **Conc.** » est en minuscules : la compter fait tomber
+  « Conc. NICAENUM I 325. » à 0,77 de majuscules et **Nicée disparaît** du
+  corpus. On la retire avant de mesurer ;
+- **Vatican I** n'a pas de titre propre : il n'apparaît que dans les en-têtes
+  doubles. Ses documents sont dans la section Pie IX, et l'alias « Vatican I »
+  y pointe explicitement.
 
 ---
 

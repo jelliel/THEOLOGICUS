@@ -8436,6 +8436,14 @@ var THEO_CORPORA = {
     web: function (id, work) {
       return (work && work.u) || 'https://archive.org/details/lestraditionsisl01muamuoft';
     }
+  },
+  denzinger: {
+    dir: 'denzinger', pfx: 'd', idx: '__denzingerIndex', wrk: '__denzingerWorks', nms: '__denzingerNames',
+    label: 'MAGISTÈRE (DENZINGER)', tab: '✝ Magistère',
+    root: 'https://archive.org/details/enchiridionsymbo01denz',
+    web: function (id, work) {
+      return (work && work.u) || 'https://archive.org/details/enchiridionsymbo01denz';
+    }
   }
 };
 
@@ -8568,11 +8576,13 @@ function theoParseRef(ref, kind) {
 function parseFathersRef(ref) { return theoParseRef(ref, 'fathers'); }
 function parseReformedRef(ref) { return theoParseRef(ref, 'reformed'); }
 function parseIslamicRef(ref) { return theoParseRef(ref, 'islamic'); }
+function parseDenzingerRef(ref) { return theoParseRef(ref, 'denzinger'); }
 /* Une citation peut appartenir à n'importe quel corpus : on essaie dans
    l'ordre, les Pères d'abord (leurs titres sont les plus cités). */
 function parseLibraryRef(ref) {
   return theoParseRef(ref, 'fathers') || theoParseRef(ref, 'reformed') ||
-         theoParseRef(ref, 'orthodox') || theoParseRef(ref, 'islamic');
+         theoParseRef(ref, 'orthodox') || theoParseRef(ref, 'islamic') ||
+         theoParseRef(ref, 'denzinger');
 }
 
 /* URL web de secours, sans avoir chargé l'œuvre. */
@@ -8688,6 +8698,7 @@ function libraryWebUrl(kind, id) {
   theoCorpusMeta('reformed');
   theoCorpusMeta('orthodox');
   theoCorpusMeta('islamic');
+  theoCorpusMeta('denzinger');
 
   /* Sorties stables pour le banc de test et d'éventuels scripts. */
   window.__parseFathersRef = parseFathersRef;
@@ -8697,6 +8708,7 @@ function libraryWebUrl(kind, id) {
   window.__ensureReformedMeta = function () { return theoCorpusMeta('reformed'); };
   window.__ensureOrthodoxMeta = function () { return theoCorpusMeta('orthodox'); };
   window.__ensureIslamicMeta = function () { return theoCorpusMeta('islamic'); };
+  window.__ensureDenzingerMeta = function () { return theoCorpusMeta('denzinger'); };
 })();
 
 const inlineMd = s => {
