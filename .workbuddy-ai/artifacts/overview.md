@@ -745,14 +745,67 @@ commence par celui de l'œuvre et est plus long.
 déflatés au **ratio 0,19** dans l'APK. Les 36 Mo du corpus ne coûtent que
 ~7 Mo. La taille n'est pas la contrainte qu'on croyait.
 
+## T3 — Réforme & protestantisme (livré, `apk-v2.0.56`)
+
+**91 entrées**, 27,8 Mo, depuis `ccel.org` (leur ThML : `div1 > div2 > div3`,
+métadonnées Dublin Core). Calvin, Luther, Owen, Baxter, Bunyan, Edwards,
+Hodge, Berkhof ; les confessions extraites **une par une** du recueil de
+Schaff (Westminster, Heidelberg, Belgique, Dordrecht, Augsbourg, les 39
+articles, helvétique, écossaise…). **190 alias.**
+
+Filtre de droits automatique : toute œuvre dont le `<DC.Rights>` n'est pas
+« Public Domain » est refusée. Le front matter est écarté, CCEL prévenant que
+les introductions peuvent être protégées. Détail : `artifacts/CCEL_DROITS.md`.
+
+## T4 — Orthodoxie (livré, commit `6cbaee0`)
+
+**43 entrées**, 1,9 Mo. Deux sources, deux formats d'entrée, une seule sortie.
+
+- **Hapgood, *Service Book*, 1906** (archive.org, domaine public) : 39 entrées
+  — liturgie de saint Jean Chrysostome, des Présanctifiés, Vigile, Heures,
+  Grandes Complies, les Mystères, funérailles, Douze Grandes Fêtes, huit tons.
+- **Schaff, *Creeds of Christendom*** : 4 entrées — les confessions de l'Église
+  grecque en anglais, les symboles œcuméniques, les règles de foi, le Grand
+  Catéchisme de Philaret. **168 alias.**
+
+Le moteur est devenu **piloté par table** : un corpus = une entrée dans
+`THEO_CORPORA` (répertoire, préfixe de fichier, trois globales). Onglets,
+parseur de citations et rendu n'ont plus de code par corpus.
+
+## T5 — Islam, le hadith en français (commit en cours)
+
+L'app avait le Coran (français + arabe) et le tafsir d'Ibn Kathir (anglais) ;
+manquait le troisième pilier. Source : **Houdas & Marçais, *Les traditions
+islamiques*** (Sahih d'Al-Bukhari en français, 1903-1914, 4 tomes, domaine
+public). `tools/build_islamic.py` → **93 livres**, 5,4 Mo, **102 alias**,
+quatrième onglet ☾ Islam.
+
+Deux pièges valent d'être retenus : chaque tome porte **deux séries** de
+lignes `TITRE` (le corps, puis la table des matières en fin de volume) — on
+coupe à la table ; et les **chiffres romains de l'OCR sont trop peu fiables**
+pour servir d'identifiant (`Ilï` pour III, `XL` pour XI), donc les
+identifiants sont **séquentiels**. L'ordre du corps, lui, est sûr : Révélation,
+Foi, Science, Ablutions, Lotion, Menstrues…
+
+## Questions de suivi trop longues (commit en cours)
+
+Les puces de suggestion étaient coupées (`nowrap` + `text-overflow: ellipsis`)
+et la fin du texte était perdue. Elles **défilent** maintenant, mais **seules
+celles qui débordent réellement** : `fitSuggestionChips()` mesure
+`scrollWidth - clientWidth` par puce, arme un `@keyframes chipMarquee` avec
+une course `--shift` et une durée `--dur` proportionnelle, et se remesure au
+redimensionnement (250 ms de débounce). Le texte complet reste en infobulle.
+
 ## Preuves
 
-Banc CDP : **48/48** (K1-K9 ajoutés). « Confessions X, 27 » → livre X ouvert
-en local. Contrôle négatif : un texte du Magistère n'est pas pris pour un Père.
+Banc CDP : **81/81** (K → L → M → N → P). Quatre onglets ☻ Pères / ✦ Réforme /
+⛪ Orthodoxie / ☾ Islam. « hadith » → avant-propos de Houdas ; « lustration
+pulvérale » → `bukh_07` ; « de la foi » → `bukh_02` **dans le corpus
+islamique** (la résolution globale donne les Pères, c'est la précédence, pas
+un bug). Puce longue : `-340px en 12.8s`, puce courte : aucun défilement.
 `tools/check_syntax.js` : 49 blocs, 0 erreur.
 
-## Reste (T3 → T6)
+## Reste (T6)
 
-T3 protestant (CCEL, API à identifier) · T4 orthodoxe · T5 islamique (hadith ?)
-· T6 Denzinger (OCR latin, le plus coûteux). Ouvert : trouver une Somme en
+T6 Denzinger (OCR latin, le plus coûteux). Ouvert : trouver une Somme en
 **français** (domaine public) — aujourd'hui le corpus est en anglais.

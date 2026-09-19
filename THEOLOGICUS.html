@@ -4278,6 +4278,29 @@ body {
   text-overflow: ellipsis;
   position: relative;
 }
+/* Une question de suivi peut etre longue : plutot que de la couper net,
+   on fait DEFILER le texte (marquee), avec une pause a chaque extremite
+   pour laisser le temps de lire.  Seules les puces qui debordent
+   defilent — une question courte reste immobile. */
+.suggestion-chip .chip-text {
+  display: inline-block;
+  white-space: nowrap;
+}
+.suggestion-chip.chip-scroll {
+  text-overflow: clip;
+}
+.suggestion-chip.chip-scroll .chip-text {
+  animation: chipMarquee var(--dur, 8s) linear infinite alternate;
+  will-change: transform;
+}
+/* Le survol fige le defilement : pratique pour lire une partie precisement. */
+.suggestion-chip.chip-scroll:hover .chip-text {
+  animation-play-state: paused;
+}
+@keyframes chipMarquee {
+  0%, 10%   { transform: translateX(0); }
+  90%, 100% { transform: translateX(var(--shift, -40px)); }
+}
 .suggestion-chip::before {
   content: '→';
   margin-right: 5px;
@@ -8406,6 +8429,13 @@ var THEO_CORPORA = {
     web: function (id, work) {
       return 'https://archive.org/details/cu31924029363128';
     }
+  },
+  islamic: {
+    dir: 'islamic', pfx: 'i', idx: '__islamicIndex', wrk: '__islamicWorks', nms: '__islamicNames',
+    label: 'ISLAM — LE HADITH', tab: '☾ Islam', root: 'https://archive.org/details/lestraditionsisl01muamuoft',
+    web: function (id, work) {
+      return (work && work.u) || 'https://archive.org/details/lestraditionsisl01muamuoft';
+    }
   }
 };
 
@@ -8537,11 +8567,12 @@ function theoParseRef(ref, kind) {
 
 function parseFathersRef(ref) { return theoParseRef(ref, 'fathers'); }
 function parseReformedRef(ref) { return theoParseRef(ref, 'reformed'); }
+function parseIslamicRef(ref) { return theoParseRef(ref, 'islamic'); }
 /* Une citation peut appartenir à n'importe quel corpus : on essaie dans
    l'ordre, les Pères d'abord (leurs titres sont les plus cités). */
 function parseLibraryRef(ref) {
   return theoParseRef(ref, 'fathers') || theoParseRef(ref, 'reformed') ||
-         theoParseRef(ref, 'orthodox');
+         theoParseRef(ref, 'orthodox') || theoParseRef(ref, 'islamic');
 }
 
 /* URL web de secours, sans avoir chargé l'œuvre. */
@@ -8656,6 +8687,7 @@ function libraryWebUrl(kind, id) {
   theoCorpusMeta('fathers');
   theoCorpusMeta('reformed');
   theoCorpusMeta('orthodox');
+  theoCorpusMeta('islamic');
 
   /* Sorties stables pour le banc de test et d'éventuels scripts. */
   window.__parseFathersRef = parseFathersRef;
@@ -8664,6 +8696,7 @@ function libraryWebUrl(kind, id) {
   window.__ensureFathersMeta = function () { return theoCorpusMeta('fathers'); };
   window.__ensureReformedMeta = function () { return theoCorpusMeta('reformed'); };
   window.__ensureOrthodoxMeta = function () { return theoCorpusMeta('orthodox'); };
+  window.__ensureIslamicMeta = function () { return theoCorpusMeta('islamic'); };
 })();
 
 const inlineMd = s => {
@@ -9224,6 +9257,39 @@ function _readSSEStream(reader, onChunk) {
   })();
 }
 
+// ── Puce de question de suivi ──
+// Les questions générées sont parfois longues : avec `nowrap` + ellipse on
+// n'en voyait que le début.  Le texte est enveloppé dans un span que
+// `fitSuggestionChips` fait défiler s'il déborde.
+function suggestionChipHtml(t) {
+  const esc = t.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  return '<button class="suggestion-chip" onclick="useSuggestion(this)" title="' + esc +
+         '" data-text="' + esc + '"><span class="chip-text">' + t + '</span></button>';
+}
+
+/* Mesure le débordement de chaque puce et arme le défilement.
+   À rappeler après toute insertion de puces et après redimensionnement :
+   la largeur disponible change avec l'écran. */
+function fitSuggestionChips(root) {
+  var chips = (root || document).querySelectorAll('.suggestion-chip');
+  for (var i = 0; i < chips.length; i++) {
+    var chip = chips[i];
+    var span = chip.querySelector('.chip-text');
+    chip.classList.remove('chip-scroll');
+    chip.style.removeProperty('--dur');
+    if (!span) continue;
+    span.style.removeProperty('--shift');
+    var over = chip.scrollWidth - chip.clientWidth;
+    if (over > 6) {
+      /* 26 px par seconde, borné : ni interminable ni illisible. */
+      var dur = Math.min(20, Math.max(4, over / 26));
+      span.style.setProperty('--shift', '-' + (over + 6) + 'px');
+      chip.style.setProperty('--dur', dur.toFixed(1) + 's');
+      chip.classList.add('chip-scroll');
+    }
+  }
+}
+
 // ── Extrait la section "Questions de suivi" et rend les puces instantanément ──
 function extractSuggestionsHtml(raw) {
   let content = raw || '';
@@ -9266,7 +9332,7 @@ function extractSuggestionsHtml(raw) {
   const chips = sugLines.map(l => {
     const t = l.replace(/^\d+[.\}\\)]\s*/, '').replace(/^\s*[-•*]\s*/, '').replace(/^\*\*?\d+[.)]\*\*?\s*/, '').trim();
     if (!t || t.length < 5 || _isSuggestionUsed(t)) return '';
-    return `<button class="suggestion-chip" onclick="useSuggestion(this)" data-text="${t.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${t}</button>`;
+    return suggestionChipHtml(t);
   }).filter(Boolean).join('');
   return { body: content, html: chips ? `<div class="suggestions-section"><div class="suggestions-label">Questions de suivi</div><div class="suggestions-chips">${chips}</div></div>` : '' };
 }
@@ -9323,7 +9389,7 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
         finalRendered = true;
         const r = extractSuggestionsHtml(full);
         contentEl.innerHTML = mdToHtml(r.body);
-        if (slotEl) slotEl.innerHTML = r.html;
+        if (slotEl) { slotEl.innerHTML = r.html; fitSuggestionChips(slotEl); }
         _streamScrollToBottom(scrollEl);
       }
     }
@@ -12370,7 +12436,7 @@ function renderMessages(scrollToTop) {
     if (m.role === 'assistant') {
       if (Array.isArray(m.suggestions) && m.suggestions.length) {
         // Suggestions deja generees et stockees -> rendu SYNCHRONE (survit a tout re-render)
-        const chips = _filterUsedSuggestions(m.suggestions).map(t => `<button class="suggestion-chip" onclick="useSuggestion(this)" data-text="${t.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${t}</button>`).join('');
+        const chips = _filterUsedSuggestions(m.suggestions).map(suggestionChipHtml).join('');
         suggestionsHtml = chips ? `<div class="suggestions-section"><div class="suggestions-label">Questions de suivi</div><div class="suggestions-chips">${chips}</div></div>` : '';
       } else {
         const r = extractSuggestionsHtml(content);
@@ -12400,6 +12466,7 @@ function renderMessages(scrollToTop) {
     c.appendChild(div);
   });
   c.scrollTop = scrollToTop ? 0 : c.scrollHeight;
+  fitSuggestionChips(c);
   if (typeof window._rebuildMinimap === 'function') window._rebuildMinimap();
 
   if (lastAssistantIdx !== -1) {
@@ -12672,7 +12739,18 @@ function renderMessages(scrollToTop) {
     showScrollbar();
     updateMinimapHighlight();
   });
-  window.addEventListener('resize', () => { updateThumb(); updateMinimapHighlight(); });
+  /* La largeur disponible change : il faut re-mesurer le défilement des
+     puces de suivi, sinon la course calculée ne correspond plus. */
+  let _fitSugTimer = null;
+  window.addEventListener('resize', () => {
+    updateThumb();
+    updateMinimapHighlight();
+    clearTimeout(_fitSugTimer);
+    _fitSugTimer = setTimeout(function () {
+      const c = document.getElementById('chat-container');
+      if (c) fitSuggestionChips(c);
+    }, 250);
+  });
 
   // ── Drag thumb ──
   thumb.addEventListener('mousedown', (e) => {

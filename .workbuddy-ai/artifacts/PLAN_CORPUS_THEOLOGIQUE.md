@@ -64,9 +64,9 @@ Chaque tranche est utilisable seule.
 |---|---|---|---|
 | **T1** | **Somme théologique** (611 questions) | newadvent/summa | **FAIT** — 611/611, 3 115 articles, 17 Mo |
 | **T2** | Pères de l'Église (œuvres principales) | newadvent/fathers | **FAIT** — 118 œuvres, 36 Mo, 416 alias |
-| **T3** | Protestant (Calvin, Luther, confessions) | CCEL via API | ⚠️ API à identifier |
-| **T4** | Orthodoxe | Pères (déjà en T2) + textes propres | à sourcer |
-| **T5** | Islamique | Coran + tafsir **déjà présents** ; hadith à évaluer | partiellement fait |
+| **T3** | Protestant (Calvin, Luther, confessions) | CCEL, ThML | **FAIT** — 91 entrées, 27,8 Mo, 190 alias |
+| **T4** | Orthodoxe | Hapgood 1906 + Schaff | **FAIT** — 43 entrées, 1,9 Mo, 168 alias |
+| **T5** | Islamique — le hadith | Houdas & Marçais 1903-1914 | **FAIT** — 93 livres, 5,4 Mo, 102 alias |
 | **T6** | Denzinger | OCR latin | le plus coûteux, **en dernier** |
 
 **Ordre recommandé : T1 → T2 → T3 → T5 → T4 → T6.** T1 et T2 sont livrées et
@@ -97,6 +97,83 @@ dogmatiques, conciles œcuméniques) = **36 Mo**.
 Point clé mesuré sur un APK existant : les `.js` dans `assets/` sont **déflatés
 au ratio 0,19** (51,86 Mo → 9,74 Mo). Les 36 Mo du corpus ne coûtent donc
 que **~7 Mo** dans l'APK. Le poids disque n'était pas le vrai problème.
+
+### T4 en détail — ce qui manquait vraiment
+
+Les Pères *grecs* étaient déjà couverts par T2 (Athanase, les trois
+Cappadociens, Cyrille de Jérusalem, Jean Chrysostome, Jean Damascène, et les
+**sept conciles œcuméniques** en 18 entrées). Ce qui manquait, c'était tout
+ce qui est **spécifiquement orthodoxe et post-patristique** :
+
+1. **La liturgie byzantine.** *Service Book of the Holy Orthodox-Catholic
+   Apostolic Church*, Isabel F. Hapgood, 1906 — domaine public, OCR de 1,88 Mo
+   sur archive.org (`cu31924029363128_djvu.txt`). Découpage : liturgie de
+   saint Jean Chrysostome, des Présanctifiés, Vigile, Heures, Grandes
+   Complies, les Mystères, les Douze Grandes Fêtes, les huit tons.
+2. **Les symboles orientaux.** Schaff, *Creeds of Christendom*.
+
+**Piège mesuré sur Schaff, à retenir** : le volume II est une édition
+critique qui n'imprime les confessions grecques qu'en **grec et latin**, en
+colonnes parallèles — donc dans des `<table>`, que le parseur écarte. Le
+texte **anglais** de ces confessions est dans le **volume I** (« The History
+of Creeds »), chapitre 3. D'où `s_greekchurch` et `s_oecumenical` depuis
+`creeds1`, et `s_philaret` / `s_rules` depuis `creeds2`.
+
+Autre piège : le tokenizer ThML ne lit `title=` que placé juste après le nom
+de balise. `creeds2` écrit `<div2 id="…" title="…">` → **tous les titres
+disparaissaient**. `fix_titles()` remonte l'attribut en tête.
+
+**Le philologue, pas l'heuristique.** Le découpage du *Service Book* est fait
+sur des **indices de lignes mesurés**, pas devinés : le nettoyage ne supprime
+jamais de ligne (il les vide), donc les indices restent valides. Trois pièges
+OCR réels, tous rencontrés :
+- les **en-têtes de page** (« THE DIVINE LITURGY 65 ») se répètent ~60 fois →
+  écartés par fréquence, sauf ceux marqués `*` ou précédés d'un chiffre romain ;
+- un titre peut être **coupé par une césure** sur deux lignes
+  (« THE ORDI- » / « NATION OF A DEACON ») → on recolle comme un paragraphe ;
+- une page d'illustration a été **retournée** par l'OCR
+  (« HDHAHD 3H1 JO WSnOaiMAS SHX ») → une seule occurrence, liste explicite.
+
+### T5 en détail — le troisième pilier, en français
+
+L'application avait déjà le **Coran** (français + arabe) et le **tafsir**
+d'Ibn Kathir (anglais). Manquait le **hadith**, et surtout en français.
+
+Source : **Houdas & Marçais, *Les traditions islamiques*** — la traduction
+française du *Sahih* d'Al-Bukhari, 1903-1914, 4 tomes, domaine public,
+archive.org (`lestraditionsisl0Nmuamuoft`), 6,5 Mo d'OCR.
+
+Structure mesurée : `TITRE PREMIER.` (le livre) → nom en majuscules sur la
+ligne suivante → `CHAPITRE …` → traditions numérotées.
+
+**Le piège central, et il est trompeur :** chaque tome porte **deux séries**
+de lignes `TITRE`. Celle du corps (numéros croissants), puis celle de la
+**table des matières** en fin de volume, en majuscules avec le nom après un
+tiret (`TITRE IV. — DES ABLUTIONS.`). Garder les deux doublait le corpus et
+faisait gagner la table sur le corps : les numéros devenaient absurdes
+(« DE LA SCIENCE » = 49) et la moitié des livres partaient en identifiant de
+rebut. On coupe net à la première ligne `TABLE DES MATIÈRES`.
+
+**Deuxième décision, contre-intuitive :** les **chiffres romains ne sont pas
+fiables** — l'OCR lit `Ilï` pour III, `VL` pour VI, `XL` pour XI, `L\\V` pour
+LXV. Un identifiant tiré du chiffre était faux une fois sur trois. L'**ordre
+du corps** est fiable, le chiffre ne l'est pas : les identifiants sont donc
+**séquentiels** (`bukh_01`… `bukh_92`). Ils tombent juste, l'ordre canonique
+du Sahih étant celui du corps : Révélation, Foi, Science, Ablutions, Lotion,
+Menstrues, Lustration pulvérale, Prière…
+
+Autres pièges rencontrés :
+- le mot « **titre** » apparaît en plein texte (« titre d'échange, mille
+  dirhems ») → la regex `TITRE` est désormais **sensible à la casse** ;
+- le nom du livre manque parfois ; la ligne suivante est alors déjà le premier
+  `CHAPITRE`, en majuscules lui aussi → ne pas le prendre comme titre ;
+- l'OCR colle aux noms des **appels de note** (« DE L'UNITÉ DE DIEU ffl »,
+  « DES MALADES d) ») → dernier mot de moins de 4 lettres **sans voyelle**
+  = bruit, on le retire.
+
+**Le livre I n'a qu'un chapitre et ce n'est pas un bug** : vérifié sur
+l'OCR, les 480 lignes du « TITRE PREMIER » tiennent en un seul `CHAPITRE`
+suivi de traditions longuement commentées.
 
 ---
 
