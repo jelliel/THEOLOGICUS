@@ -1438,6 +1438,20 @@ body {
   font-family: Georgia, 'Times New Roman', 'Garamond', serif;
   color: var(--sch-text, #4a3520);
   overflow-x: auto;
+  /* v81 fluidite : le navigateur isole la carte, le defilement horizontal
+     ne propage pas le geste a la conversation, et l'apparition est douce. */
+  box-sizing: border-box;
+  contain: layout paint;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  animation: schemaIn 0.35s cubic-bezier(0.2,0.8,0.2,1) both;
+}
+@keyframes schemaIn { from { opacity: 0; } to { opacity: 1; } }
+/* Respect du reglage systeme : pas d'animation pour qui l'a demande. */
+@media (prefers-reduced-motion: reduce) {
+  .schema-card { animation: none; }
+  .schema-box { transition: none; }
 }
 .schema-layer { display: block; text-align: center; }
 .schema-row { display: flex; justify-content: center; align-items: stretch; gap: 18px; flex-wrap: wrap; margin: 4px 0; }
@@ -1453,6 +1467,12 @@ body {
   text-align: center;
   box-shadow: none;
   line-height: 1.35;
+  box-sizing: border-box;
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.schema-box:hover {
+  box-shadow: 0 4px 14px rgba(90,62,30,0.22);
+  transform: translateY(-1px);
 }
 .schema-box.dashed { border-style: dashed; border-color: #9b7a45; }
 .schema-box em, .schema-box i { font-style: italic; color: #6b4f2a; font-size: 0.9em; display: block; margin-top: 2px; }
@@ -1479,6 +1499,41 @@ body {
 .schema-tree .schema-group.onlyChild .schema-rail { display: none; }
 .schema-tree .schema-stem { position: absolute; top: 12px; left: 50%; margin-left: -1px; height: 12px; border-left: 2px solid var(--sch-edge, #8a6d3b); }
 .schema-layer svg { display: block; margin: 0 auto; }
+
+/* ═══ v81 : références colorées dans les schémas ═══
+   Sur parchemin clair, l'or #ffd700 du reste de l'application est
+   illisible : on prend des teintes soutenues, chacune avec un fond
+   très léger de la même famille. La spécificité (.schema-card .sch-ref.X)
+   doit dépasser celle de `.message-content .bible-ref`. */
+.schema-card .sch-ref {
+  font-style: normal;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+  transition: filter 0.2s ease;
+}
+.schema-card .sch-ref:hover { filter: saturate(1.35) brightness(0.94); }
+.schema-card .sch-ref.bible-ref  { color: #9a6206 !important; background: rgba(255,196,0,0.18);  text-shadow: none !important; }
+.schema-card .sch-ref.quran-ref  { color: #0f6b4a !important; background: rgba(16,160,110,0.15); text-shadow: none !important; }
+.schema-card .sch-ref.tafsir-ref { color: #6a3fa0 !important; background: rgba(130,90,215,0.14); text-shadow: none !important; }
+/* Légende : elle n'apparaît qu'à partir de deux familles de sources. */
+.schema-legend {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--sch-card-border, #c9b48a);
+  font-family: inherit;
+  font-size: 11px;
+}
+.schema-legend-label { color: var(--sch-note, #6b4f2a); font-style: italic; margin-right: 2px; }
+.schema-legend-item { font-family: inherit; }
 
 .message-content table.md-table {
   contain: layout;
@@ -9062,7 +9117,11 @@ function sanitizeSchemaHtml(html) {
     const doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
     const root = doc.body.firstChild;
     if (!root) return '';
-    const ALLOW = new Set(['DIV','SPAN','SVG','G','RECT','LINE','PATH','POLYLINE','POLYGON','CIRCLE','TEXT','TSPAN','BR','B','I','STRONG','EM','TABLE','TR','TD','TH','SMALL','P','UL','OL','LI']);
+    /* v81 : TBODY/THEAD/A/SUP/SUB/CODE manquaient. Un tableau fourni par le
+       modele perdait alors TOUTES ses lignes (le conteneur etait retire avec
+       ses enfants) et un lien perdait son texte. On les autorise ; les
+       attributs dangereux restent nettoyes plus bas. */
+    const ALLOW = new Set(['DIV','SPAN','SVG','G','RECT','LINE','PATH','POLYLINE','POLYGON','CIRCLE','TEXT','TSPAN','DEFS','MARKER','TITLE','BR','B','I','STRONG','EM','TABLE','THEAD','TBODY','TFOOT','CAPTION','TR','TD','TH','SMALL','P','UL','OL','LI','A','SUP','SUB','CODE','MARK','HR','H3','H4','FIGURE','FIGCAPTION']);
     const walk = node => {
       const kids = Array.from(node.childNodes);
       for (const k of kids) {
@@ -9086,6 +9145,113 @@ function sanitizeSchemaHtml(html) {
     walk(root);
     return root.innerHTML;
   } catch (e) { return ''; }
+}
+
+/* Fabrique une variante tolerante d'une regex de reference, en remplacant
+   un fragment de sa source. Si la derivation echoue, on rend la regex
+   d'origine : mieux vaut reconnaitre la forme canonique que rien du tout. */
+function schemaReFr(base, cherche, remplacePar) {
+  try {
+    if (!base || !base.source) return base;
+    var src = String(base.source);
+    var i = src.indexOf(cherche);
+    if (i < 0) return base;
+    src = src.slice(0, i) + remplacePar + src.slice(i + cherche.length);
+    return new RegExp(src, 'gi');
+  } catch (e) { return base; }
+}
+
+/* ═══ v81 : références colorées à l'intérieur des schémas ═══
+   Dans une généalogie, « Gn 5,3 », « 1 Ch 1,1 » et « Lc 3,36 » s'affichaient
+   dans le même sépia que le reste de la boîte : aucune way de distinguer une
+   source biblique d'une source coranique ou d'un tafsir. On reprend les
+   classes que l'application utilise déjà (.bible-ref / .quran-ref /
+   .tafsir-ref) : la référence reste cliquable et se résout EN LOCAL, mais
+   elle porte une couleur propre, lisible sur le parchemin. */
+function colorizeSchemaRefs(html) {
+  try {
+    if (!html || String(html).indexOf(':') === -1) return html;
+    /* Les regex canoniques exigent le deux-points (« Gn 5:1 »). En francais
+       on ecrit surtout « Gn 5,1 » : sans variante, ces references
+       n'etaient jamais colorees. On la derive de la regex canonique pour
+       rester synchronise avec la liste des livres. Le texte affiche n'est
+       pas reecrit. */
+    var familles = [
+      { cls: 'bible-ref',  re: schemaReFr(bRefRe,  '\\d+:\\d+(?:-\\d+)?', '\\d+\\s*[:.,]\\s*\\d+(?:\\s*[-\\u2013]\\s*\\d+)?'), label: 'Bible',  titre: 'Référence biblique — touchez pour lire le verset' },
+      { cls: 'quran-ref',  re: schemaReFr(qRefRe,  '\\s*:\\s*', '\\s*[:,]\\s*'), label: 'Coran',  titre: 'Référence coranique — touchez pour lire le verset' },
+      { cls: 'tafsir-ref', re: schemaReFr(tRefRe,  '\\s*:\\s*', '\\s*[:,]\\s*'), label: 'Tafsir', titre: 'Référence du Tafsir — touchez pour lire le commentaire' }
+    ];
+    /* Renvoie la référence la plus à gauche, quelle que soit la famille. */
+    function prochaine(txt) {
+      var best = null;
+      for (var i = 0; i < familles.length; i++) {
+        var f = familles[i];
+        if (!f.re) continue;
+        f.re.lastIndex = 0;
+        var m = f.re.exec(txt);
+        f.re.lastIndex = 0;
+        if (m && m[0] && (!best || m.index < best.index)) best = { f: f, texte: m[0], index: m.index };
+      }
+      return best;
+    }
+    var doc = new DOMParser().parseFromString('<div>' + html + '</div>', 'text/html');
+    var root = doc.body.firstChild;
+    if (!root) return html;
+    var textes = [];
+    (function walk(n) {
+      if (n.nodeType === 3) { if (n.nodeValue) textes.push(n); return; }
+      if (n.nodeType !== 1) return;
+      var cl = n.className ? String(n.className) : '';
+      /* Déjà une référence (balisée par le modèle) : on n'imbrique pas. */
+      if (cl.indexOf('bible-ref') >= 0 || cl.indexOf('quran-ref') >= 0 || cl.indexOf('tafsir-ref') >= 0) return;
+      for (var i = 0; i < n.childNodes.length; i++) walk(n.childNodes[i]);
+    })(root);
+    var vues = {};
+    for (var t = 0; t < textes.length; t++) {
+      var tn = textes[t];
+      var reste = String(tn.nodeValue || '');
+      var acc = [];
+      var garde = 0;
+      var tr = prochaine(reste);
+      if (!tr) continue;
+      while (tr && garde++ < 200) {
+        if (tr.index > 0) acc.push(doc.createTextNode(reste.slice(0, tr.index)));
+        var sp = doc.createElement('span');
+        sp.className = tr.f.cls + ' sch-ref';
+        sp.setAttribute('title', tr.f.titre);
+        sp.textContent = tr.texte;
+        acc.push(sp);
+        vues[tr.f.cls] = tr.f;
+        reste = reste.slice(tr.index + tr.texte.length);
+        tr = prochaine(reste);
+      }
+      if (reste) acc.push(doc.createTextNode(reste));
+      var frag = doc.createDocumentFragment();
+      for (var a = 0; a < acc.length; a++) frag.appendChild(acc[a]);
+      if (tn.parentNode) tn.parentNode.replaceChild(frag, tn);
+    }
+    var cles = [];
+    for (var k in vues) if (Object.prototype.hasOwnProperty.call(vues, k)) cles.push(k);
+    cles.sort();
+    if (cles.length >= 2) {
+      /* Une légende n'a de sens qu'à partir de deux familles : avec une
+         seule, il n'y a rien à distinguer. */
+      var leg = doc.createElement('div');
+      leg.className = 'schema-legend';
+      var intro = doc.createElement('span');
+      intro.className = 'schema-legend-label';
+      intro.textContent = 'Sources :';
+      leg.appendChild(intro);
+      for (var c = 0; c < cles.length; c++) {
+        var it = doc.createElement('span');
+        it.className = 'schema-legend-item sch-ref ' + vues[cles[c]].cls;
+        it.textContent = vues[cles[c]].label;
+        leg.appendChild(it);
+      }
+      root.appendChild(leg);
+    }
+    return root.innerHTML;
+  } catch (e) { return html; }
 }
 
 const bRefRe = /\b(?:(\d+)\s+)?(Gn|Ex|Lv|Nb|Dt|Jos|Jg|Rt|1S|2S|1R|2R|1Ch|2Ch|Es|Ne|Et|Jb|Ps|Pr|Ec|Ct|Is|Jr|Lm|Ez|Dn|Os|Jl|Am|Ab|Jo|Mi|Na|Ha|So|Ag|Za|Ml|Mt|Mc|Lc|Jn|Ac|Rm|1Co|2Co|Ga|Ep|Ph|Col|1Th|2Th|1Tm|2Tm|Tt|Phm|He|Jc|1P|2P|1Jn|2Jn|3Jn|Jd|Ap|Genèse|Exode|Lévitique|Nombres|Deutéronome|Josué|Juges|Ruth|Samuel|Rois|Chroniques|Esdras|Néhémie|Esther|Job|Psaume|Proverbes|Ecclésiaste|Ésaïe|Jérémie|Lamentations|Ézéchiel|Daniel|Osée|Joël|Amos|Abdias|Jonas|Michée|Nahum|Habacuc|Sophonie|Aggée|Zacharie|Malachie|Matthieu|Marc|Luc|Jean|Actes|Romains|Corinthiens|Galates|Éphésiens|Colossiens|Thessaloniciens|Timothée|Tite|Philémon|Hébreux|Jacques|Pierre|Jude|Apocalypse)\.?\s+(\d+:\d+(?:-\d+)?)/gi;
@@ -9138,7 +9304,9 @@ const mdToHtml = t => {
     const id = schemaBlocks.length;
     const body = c.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
     let clean = sanitizeSchemaHtml(body);
+    if (clean) clean = colorizeSchemaRefs(clean);
     if (!clean && body.trim()) clean = asciiSchemaHtml(body);
+    if (clean && String(clean).indexOf('schema-box') !== -1) clean = colorizeSchemaRefs(clean);
     if (!clean && body.trim()) {
       clean = '<pre class="schema-fallback">' + body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
     }
@@ -9154,6 +9322,7 @@ const mdToHtml = t => {
     if (/^mermaid\s*\n/i.test(body)) body = body.replace(/^mermaid\s*\n/i, '');
     let html = '';
     try { html = mermaidToSchemaHtml(body); } catch (e) { html = ''; }
+    if (html) html = colorizeSchemaRefs(html);
     if (!html && body.trim()) {
       const fb = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       html = '<pre class="schema-fallback">' + fb + '</pre>';
@@ -9174,6 +9343,7 @@ const mdToHtml = t => {
     const escCode = rawCode.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     if (_hits >= 3) {
       var _tree = asciiSchemaHtml(rawCode);
+      if (_tree) _tree = colorizeSchemaRefs(_tree);
       blocks.push(_tree
         ? ('<div class="schema-card">' + _tree + '</div>')
         : ('<div class="schema-card"><pre class="schema-fallback">' + escCode + '</pre></div>'));
@@ -9636,49 +9806,75 @@ function verifierChipBouge(chip) {
 
 // ── Extrait la section "Questions de suivi" et rend les puces instantanément ──
 function extractSuggestionsHtml(raw) {
-  let content = raw || '';
-  // Un bloc est une "section questions de suivi" SEULEMENT s'il contient de vraies questions
-  // (lignes finissant par '?' ou numérotées). Sinon c'est une simple section de la réponse -> on la laisse.
+  /* PRINCIPE (v81) : cette fonction ne doit JAMAIS faire disparaitre du texte.
+     Elle ne decoupe un bloc que si les quatre conditions sont reunies :
+       1. la ligne declencheur est un TITRE court, le mot-clef EN TETE de
+          ligne — pas une phrase qui contient « suite » par hasard ;
+       2. le bloc court jusqu'a la fin du message ;
+       3. TOUTES les lignes du bloc sont des questions ou des puces ;
+       4. des puces sont effectivement produites.
+     Sans la 4., un bloc retire dont les puces ont deja ete utilisees
+     (_isSuggestionUsed) disparaissait definitivement : la conversation
+     rechargee depuis les archives s'affichait vide. */
+  const original = raw || '';
+  let content = original;
+  const _lignes = blk => String(blk || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const _question = l => /[?\u00bf]\s*$/.test(l);
+  const _puce = l => /^(\d+[.\})\]]\s*|[-•*]\s*|\*\*?\d+[.)]\*\*?\s*)/.test(l);
   const _looksLikeSuggestions = blk => {
-    if (!blk || !blk.trim()) return false;
-    const lines = blk.split('\n').filter(l => l.trim());
-    if (!lines.length) return false;
-    // au moins 2 lignes qui ressemblent a des questions (contiennent '?')
-    const q = lines.filter(l => /[?¿]$/.test(l.trim()) || /\?\s*$/.test(l.trim()) || /^\d+[.\})\]\s]+\s*\S.*\?$/.test(l.trim())).length;
-    if (q >= 2) return true;
-    // ou au moins 3 lignes numérotées/pucées
-    const numbered = lines.filter(l => /^(\d+[.\})\]]\s*|[-•*]\s*)/.test(l.trim())).length;
-    return numbered >= 3;
+    const lines = _lignes(blk);
+    if (!lines.length || lines.length > 8) return false;
+    /* Une seule ligne de prose suffit a prouver que ce n'est pas une liste
+       de questions de suivi : on ne prend aucun risque. */
+    if (lines.filter(l => _question(l) || _puce(l)).length !== lines.length) return false;
+    const q = lines.filter(_question).length;
+    const p = lines.filter(_puce).length;
+    return q >= 2 || p >= 3;
+  };
+  /* « suite » seul est trop frequent en francais (« par la suite »,
+     « dans la suite du texte ») : on ne l'accepte que si la ligne n'est
+     QUE ce libelle. Les autres libelles tolerent un court prefixe. */
+  const _titreSuivi = l => {
+    const t = String(l || '').trim().replace(/^#{1,6}\s*/, '');
+    if (!t || t.length > 60) return false;
+    let m = t.match(/^(questions?\s+de\s+suivi|questions?\s+compl[eé]mentaires?|pour\s+aller\s+plus\s+loin|pour\s+creuser|approfondir)\b/i);
+    if (!m) m = t.match(/^(suite|à\s+suivre)\b/i);
+    if (!m) return false;
+    return t.slice(m[0].length).trim().replace(/^[:\-\u2013\u2014]\s*/, '').length <= 25;
   };
   let sugMatch = null;
   // 1) Tag explicite [SUGGESTIONS]...[/SUGGESTIONS]
   const tag = content.match(/\[SUGGESTIONS\]([\s\S]*?)\[\/SUGGESTIONS\]/);
   if (tag && _looksLikeSuggestions(tag[1])) sugMatch = { 0: tag[0], 1: tag[1] };
-  // 2) Titre '### Questions de suivi' / '## Suite' -> seulment si le bloc suivant est bien des questions
+  // 2) Un titre de suivi : on balaie les lignes, une a une
   if (!sugMatch) {
-    const h = content.match(/(?:^|\n)#{1,6}\s*(?:questions?\s+de\s+suivi|suite|approfondir|complémentaires?)\b[^\n]*\n([\s\S]*?)$/i);
-    if (h && _looksLikeSuggestions(h[1])) sugMatch = { 0: h[0], 1: h[1] };
+    const lignes = String(content).split('\n');
+    for (let i = 0; i < lignes.length; i++) {
+      if (!_titreSuivi(lignes[i])) continue;
+      const apres = lignes.slice(i + 1).join('\n');
+      if (!_looksLikeSuggestions(apres)) continue;
+      sugMatch = { 0: lignes[i] + '\n' + apres, 1: apres.trim() };
+      break;
+    }
   }
-  // 3) Ligne contenant 'questions de suivi' puis un bloc de questions
+  // 3) Repli : fin de texte en questions numérotées/pucées
   if (!sugMatch) {
-    const h2 = content.match(/(?:^|\n)[^\n]*(?:questions?\s+de\s+suivi|suite|approfondir)\b[^\n]*\n([\s\S]*?)$/i);
-    if (h2 && _looksLikeSuggestions(h2[1])) sugMatch = { 0: h2[0], 1: h2[1] };
-  }
-  // 4) Repli : une suite de questions numérotées/pucées en fin de texte
-  if (!sugMatch) {
-    const list = content.match(/(?:\n|^)((?:(?:\d+[.\]\\)]\s*)|(?:[-•*]\s*)|(?:\*\*?\d+[.)]\*\*?\s*))[^\n]*\?)(?:\n(?:(?:\d+[.\]\\)]\s*)|(?:[-•*]\s*)|(?:\*\*?\d+[.)]\*\*?\s*))[^\n]*\?)*\s*$/i);
-    if (list) sugMatch = { 0: list[0], 1: list[0] };
+    const list = content.match(/(?:\n|^)((?:(?:\d+[.\]\)\]]\s*)|(?:[-•*]\s*)|(?:\*\*?\d+[.)]\*\*?\s*))[^\n]*\?)(?:\n(?:(?:\d+[.\]\)\]]\s*)|(?:[-•*]\s*)|(?:\*\*?\d+[.)]\*\*?\s*))[^\n]*\?)*\s*$/i);
+    if (list && _looksLikeSuggestions(list[0])) sugMatch = { 0: list[0], 1: list[0] };
   }
   if (!sugMatch) return { body: content, html: '' };
   const rawBlock = sugMatch[1] || sugMatch[0];
-  content = content.replace(sugMatch[0], '').trim();
-  const sugLines = rawBlock.split('\n').filter(l => l.trim()).slice(0, 6);
+  const bodySansBloc = content.replace(sugMatch[0], '').trim();
+  const sugLines = _lignes(rawBlock).slice(0, 6);
   const chips = sugLines.map(l => {
     const t = l.replace(/^\d+[.\}\\)]\s*/, '').replace(/^\s*[-•*]\s*/, '').replace(/^\*\*?\d+[.)]\*\*?\s*/, '').trim();
     if (!t || t.length < 5 || _isSuggestionUsed(t)) return '';
     return suggestionChipHtml(t);
   }).filter(Boolean).join('');
-  return { body: content, html: chips ? `<div class="suggestions-section"><div class="suggestions-label">Questions de suivi</div><div class="suggestions-chips">${chips}</div></div>` : '' };
+  /* Filet : aucune puce a afficher -> on ne retire rien. Le texte reste
+     dans le corps du message plutot que de disparaitre. */
+  if (!chips) return { body: original, html: '' };
+  return { body: bodySansBloc, html: `<div class="suggestions-section"><div class="suggestions-label">Questions de suivi</div><div class="suggestions-chips">${chips}</div></div>` };
 }
 
 // ── Helper: create a streaming message div ──
@@ -14749,6 +14945,7 @@ function buildSystemPrompt() {
 - Pour TOUT schéma (arbre généalogique, frise chronologique, organigramme, hypothèse de sources, tableau de filiation), utilise un bloc de code dont la balise de langage vaut « schema » (ouvre le bloc avec trois accents graves puis le mot schema, ferme avec trois accents graves). JAMAIS d'art ASCII (+, -, |, /) ni flèches textuelles, JAMAIS Mermaid.
 - Style imposé : parchemin académique. Boîtes à fond crème (#fffdf5), bordure brune #8a6d3b, coins arrondis, police serif (Georgia/Times). Connexions via <svg><line class="schema-edge"> (trait brun orthogonal). Détails en <em> italique</em> sépia.
 - Boîtes de sources/références : ajoute class="schema-box dashed".
+- Les références (Gn 5,3 · Coran 4:171 · Tafsir 4:171) s'écrivent en texte simple dans la boîte : elles sont colorées et rendues cliquables automatiquement selon leur corpus. Ne les balise pas toi-même, ne les mets pas en gras.
 - FORMAT LE PLUS SIMPLE ET FIABLE : dans un bloc « schema », écris chaque personne sur SA PROPRE LIGNE, indentée de 2 espaces par génération, avec les notes entre parenthèses :
   Térah
     Haran (mort à Ur, Gn 11:28)
@@ -14872,7 +15069,10 @@ async function renderArchives() {
       let matchMsgIdx = -1;
       if (archivesSearchQuery) {
         const terms = archivesSearchQuery.toLowerCase().split(/\s+/).filter(Boolean);
-        const msgs = c.messages||[];
+        /* renderMessages() n'affiche pas les messages 'system' : l'index
+           doit etre calcule sur la meme liste, sinon le defilement vise
+           un autre message (decalage d'autant de messages systeme). */
+        const msgs = (c.messages||[]).filter(m => m.role !== 'system');
         for (let mi = 0; mi < msgs.length; mi++) {
           const low = (msgs[mi].content||"").toLowerCase();
           if (terms.some(t => low.includes(t))) { matchMsgIdx = mi; break; }
@@ -14917,14 +15117,37 @@ async function renderArchives() {
 }
 
 window.loadArchiveChat = async (id, msgIdx) => {
-  await loadChat(id);
-  try { closeArchivesPanel(); } catch(e) {}
+  /* closeArchivesPanel() est une const LOCALE a bindEvents() : depuis
+     ici elle declenchait un ReferenceError avale par le try/catch, et
+     le panneau restait ouvert par-dessus la conversation chargee.
+     On retire la classe directement, sans dependre de la portee. */
+  try { const p = document.getElementById('archives-panel'); if (p) p.classList.remove('active'); } catch(e) {}
+  try { const b = document.getElementById('tpai-arch'); if (b) b.hidden = true; } catch(e) {}
+  const chargee = await loadChat(id);
   await renderArchives();
+  if (!chargee) {
+    /* Avant, on annoncait « Conversation chargée » meme quand rien
+       n'avait ete trouve : l'utilisateur voyait le toast et un chat vide. */
+    toast("Conversation introuvable — elle a peut-être été supprimée", "error");
+    return;
+  }
   toast("Conversation chargée — cliquez ▶️ pour l'écouter", "success");
   if (typeof tpaiSetView === 'function') tpaiSetView('chat');
   updateTtsAllBtn();
   // Scroll to top after DOM settles
   setTimeout(() => { const c = $("#chat-container"); if (c) c.scrollTop = 0; }, 50);
+  /* Filet : un rendu concurrent (puces, surlignages, migration) peut
+     vider le conteneur juste apres loadChat. Si rien ne s'affiche alors
+     que la conversation a des messages visibles, on re-rend une fois. */
+  setTimeout(function () {
+    try {
+      if (document.querySelectorAll('#chat-container .message').length) return;
+      if (((typeof state !== 'undefined' ? state.messages : []) || []).filter(m => m.role !== 'system').length > 0) {
+        console.log('[DIAG] loadArchiveChat: conteneur vide -> second rendu');
+        renderMessages(true);
+      }
+    } catch(e) {}
+  }, 400);
   const sq = archivesSearchQuery || window.archivesSearchQuery;
   if (sq) {
     setTimeout(() => {
@@ -15495,7 +15718,7 @@ function sanitizeChatMessages(messages) {
     if (chat) { const annC = (chat.messages||[]).reduce((s,m) => s + (m.annotations||[]).length, 0); const mkC = (chat.messages||[]).reduce((s,m) => s + (m.marks||[]).length, 0); console.log('[DIAG] loadChat: IDB found id=' + id + ' updated=' + chat.updated + ' msgs=' + (chat.messages||[]).length + ' annotations=' + annC + ' marks=' + mkC); }
     /* En cas de panne IDB partielle, on conserve la source la plus récente */
     if (lsChat && (!chat || (lsChat.updated || 0) > (chat.updated || 0))) { chat = lsChat; chatSource = 'LS(wins)'; }
-    if (!chat) { console.log('[DIAG] loadChat: NO CHAT FOUND for id=' + id); return; }
+    if (!chat) { console.log('[DIAG] loadChat: NO CHAT FOUND for id=' + id); return false; }
     console.log('[DIAG] loadChat: using source=' + chatSource, { id });
      state.chatId = id;
      try { await db.put('settings', { id:'currentChatId', value: state.chatId }); } catch(e) {}
@@ -15528,6 +15751,7 @@ function sanitizeChatMessages(messages) {
     if (wasCleaned) {
       try { await saveChat(); } catch(e) {}
     }
+    return true;
   }
 
 // ════════════════════════════════════════
@@ -17183,6 +17407,9 @@ function bindEvents() {
   const closeArchivesPanel = () => {
     archivesPanel.classList.remove("active");
   };
+  /* v81 : loadArchiveChat() vit dans une autre portee et ne pouvait pas
+     atteindre la const ci-dessus -> ReferenceError invisible. */
+  window.closeArchivesPanel = closeArchivesPanel;
 
   if (archivesBtn) {
     archivesBtn.onclick = e => {
@@ -19860,7 +20087,10 @@ function initBibleVerseTooltip() {
   };
 
   function parseRef(text) {
-    const m = text.trim().match(/^(?:(\d+)\s+)?([A-Za-zÀ-ÿ.]+?)\s+(\d+):(\d+)(?:-(\d+))?$/);
+    /* v81 : la forme francaise « Gn 5,1 » est aussi frequente que
+       « Gn 5:1 ». Sans elle, une reference colorée dans un schema ne
+       resolvait rien au tap. */
+    const m = text.trim().match(/^(?:(\d+)\s+)?([A-Za-zÀ-ÿ.]+?)\s+(\d+)\s*[:,]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/);
     if (!m) return null;
     const prefix = m[1] ? m[1] + ' ' : '';
     const bookKey = (prefix + m[2]).toLowerCase().replace(/\./g, '').trim();

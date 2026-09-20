@@ -151,6 +151,28 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   (Android WebView) : mesurer l'élément **intérieur** sans ellipsis.
 - **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure
   0. Ne jamais en conclure qu'il n'y a rien à faire — re-mesurer plus tard.
+- **`extractSuggestionsHtml()` (v81)** : capturait tout le reste d'un message
+  quand le mot « suite » (banal en français) ou « approfondir » apparaissait en
+  fin de bloc. Si les puces produites étaient déjà utilisées (`_isSuggestionUsed`),
+  le texte retiré disparaissait. **Règle** : une fonction d'extraction doit
+  toujours avoir un filet — si rien ne sort, ne rien retirer. Et le déclencheur
+  doit être un titre court (le mot-clé EN TÊTE de ligne), pas une phrase qui
+  contient le mot-clé par hasard.
+- **French refs** : les références bibliques en français s'écrivent « Gn 5,1 »
+  (virgule), pas « Gn 5:1 ». Toute regex qui les cherche doit accepter les
+  deux formes **et** la résolution au tap aussi (parseRef() élargie 2026-09-20).
+- **`closeArchivesPanel()` était une const LOCALE à `bindEvents()`** : depuis
+  `loadArchiveChat()` (autre portée), c'était un `ReferenceError` silencieux
+  dans un `try{}catch(e){}` → le panneau restait ouvert, le toast annonçait
+  « chargée ». Règle : soit exposer sur `window`, soit fermer en touchant la
+  classe directement (sans dépendre de la portée).
+- **`loadChat()` échouait en silence** et `loadArchiveChat()` annonçait quand même
+  « Conversation chargée » → un toast ne doit jamais mentir. Toujours retourner
+  une valeur de vérité et la tester avant d'afficher la confirmation.
+- **`sanitizeSchemaHtml()` et ALLOW** : `TBODY`, `THEAD`, `A`, `SUP`, `SUB`
+  étaient refusés → un `<table>` du modèle perdait TOUTES ses lignes (le
+  conteneur retiré, ses enfants aussi), un lien perdait son texte. Toujours
+  inclure dans ALLOW les balises structurelles dont l'absence tue le contenu.
 - PowerShell depuis Bash est bloqué → outil PowerShell dédié.
 - `AndroidManifest.xml` n'a **pas** `android:largeHeap` : tout gros objet natif
   tue l'app (v65, d'où la sauvegarde par morceaux).
