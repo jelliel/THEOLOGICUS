@@ -4273,7 +4273,14 @@ body {
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
   white-space: nowrap;
-  max-width: 100%;
+  /* Plafond de largeur.  Sans lui, sur un ecran large la puce s etire
+     sur toute la colonne (mesure : colonne de 1030 px, texte de 909 px
+     en 1280x800) et la question TIENT — donc aucun defilement, alors
+     que c'est justement ce qui est demande.  A 420 px (~63 signes) une
+     longue question defile ; sur telephone la colonne fait moins de
+     420 px, `min()` retombe sur 100% et rien ne change la-bas. */
+  max-width: 100%;              /* repli si min() n est pas compris */
+  max-width: min(100%, 420px);
   overflow: hidden;
   text-overflow: ellipsis;
   position: relative;
@@ -4316,7 +4323,7 @@ body {
 .suggestion-chip.chip-nomotion {
   white-space: normal;
   text-overflow: clip;
-  max-width: 100%;
+  max-width: min(100%, 420px);   /* meme plafond : pas de saut de mise en page */
   line-height: 1.45;
 }
 /* le span force nowrap pour le defilement : sans animation il faut le

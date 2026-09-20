@@ -903,6 +903,22 @@ infobulle.
 dans `getComputedStyle` sans jamais s'exécuter. Tant qu'un contrôle ne mesure
 que la déclaration, il passe — et l'utilisateur voit une question coupée.
 
+### Le cas de l'écran large (PC)
+
+Sur l'exe Windows, aucune animation non plus — mais pour une raison toute
+autre, mesurée : à 1280×800 la colonne fait **1030 px** et une question de 168
+caractères n'en demande que **909**. La puce s'étirait sur toute la colonne, la
+question **tenait**, donc rien n'était coupé et aucun défilement ne s'armait.
+Ce n'était pas un bug : c'était la règle « seules les puces qui débordent
+défilent » appliquée à un écran large.
+
+Comme l'utilisateur veut voir le défilement, les puces sont maintenant
+**plafonnées** : `max-width: min(100%, 420px)` (~63 signes). Sur téléphone la
+colonne fait moins de 420 px, `min()` retombe sur 100 % et rien ne change —
+mesuré à 412 px : puce 410 px ; à 360 px : puce 358 px. Sur PC, une longue
+question déborde de 515 px et défile ; une question courte reste immobile et
+complète (contrôles N13/N14 du banc, 107/107).
+
 ## Version Windows (.exe) — parité avec l'APK (commit `7a892f9`)
 
 Le job `windows` de la CI construit un exe PyInstaller (pywebview + WebView2)
