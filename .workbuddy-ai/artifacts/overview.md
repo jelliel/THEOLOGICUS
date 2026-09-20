@@ -919,6 +919,33 @@ mesuré à 412 px : puce 410 px ; à 360 px : puce 358 px. Sur PC, une longue
 question déborde de 515 px et défile ; une question courte reste immobile et
 complète (contrôles N13/N14 du banc, 107/107).
 
+## Mise à jour depuis l'application (v74)
+
+L'app vérifie elle-même si une version plus récente existe et propose de
+l'installer.
+
+- **Détection** : au démarrage (8 s, pour ne rien ralentir) puis au plus une
+  fois toutes les 6 h, appel anonyme à
+  `https://api.github.com/repos/jelliel/THEOLOGICUS/releases/latest`.
+  Comparaison **numérique** des versions (`2.0.9` doit précéder `2.0.73`) —
+  une comparaison de chaînes aurait classé `2.0.9` après `2.0.73`.
+- **Android** : le WebView ne sait rien installer (pas de gestionnaire de
+  téléchargement, pas de navigateur externe garanti). Le plugin `UpdateBridge`
+  télécharge l'APK dans le cache puis ouvre l'installateur du système via un
+  intent `ACTION_VIEW` sur une URI FileProvider — le fournisseur existait déjà
+  dans le manifeste. Permission `REQUEST_INSTALL_PACKAGES` ajoutée : Android 8+
+  demande une fois l'autorisation pour la source, ensuite la mise à jour est
+  en un tap. L'APK est celle de la release, signée avec la même clé.
+- **Windows** : `DesktopApi.install_update` dans `app.py` (API pywebview)
+  télécharge `THEOLOGICUS-Setup-x64.exe`, le lance, puis ferme l'application
+  pour que l'installateur puisse écraser les fichiers en cours d'usage.
+- **Replis** : pas de canal natif → ouverture de la page de téléchargement ;
+  pas de réseau → aucun bandeau ; « Plus tard » mémorise la version refusée.
+
+Contrôles U1 → U6 du banc (113/113). G1 (aucune requête externe pendant les
+taps) exclut désormais **nommément** l'appel à l'API GitHub : c'est un appel
+volontaire, pas une fuite de la résolution locale des références.
+
 ## Version Windows (.exe) — parité avec l'APK (commit `7a892f9`)
 
 Le job `windows` de la CI construit un exe PyInstaller (pywebview + WebView2)

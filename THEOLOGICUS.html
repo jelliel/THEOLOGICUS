@@ -26568,6 +26568,251 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }, 250);
 })();
 </script>
+<script id="v74-update">
+/* THEOLOGICUS v74 — mise a jour depuis l'application.
+ *
+ * Principe : l'app connait sa version (tamponnee au build, voir le bloc
+ * v40-version) et demande au depot GitHub s'il existe plus recent. Si oui,
+ * un bandeau propose la mise a jour ; un tap lance le telechargement puis
+ * l'installateur de la plateforme.
+ *
+ * Deux canaux, parce que le WebView ne sait rien installer :
+ *   - Android : plugin Capacitor `UpdateBridge` (telecharge l'APK dans le
+ *     cache puis ouvre l'installateur du systeme) ;
+ *   - Windows : `window.pywebview.api.install_update` ajoute a app.py
+ *     (telecharge l'installeur puis le lance).
+ *   - repli des deux : ouverture de la page de telechargement.
+ *
+ * Rien n'est bloquant : pas de reseau, pas de version connue ou depot
+ * injoignable => on ne dit rien (sauf verification manuelle).
+ */
+(function () {
+  'use strict';
+
+  var REPO = 'jelliel/THEOLOGICUS';
+  var API = 'https://api.github.com/repos/' + REPO + '/releases/latest';
+  var CLE_CHECK = 'theo_maj_dernier_check';
+  var CLE_IGNORE = 'theo_maj_ignoree';
+  var ATTENTE_AUTO = 6 * 3600 * 1000;   /* au plus une verification auto / 6 h */
+  var DELAI_DEMARRAGE = 8000;           /* on ne ralentit pas le demarrage */
+  var TIMEOUT = 10000;
+
+  function natif() {
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform &&
+              window.Capacitor.isNativePlatform());
+  }
+  function plateforme() { return natif() ? 'android' : 'windows'; }
+  function assetVoulu() {
+    return plateforme() === 'android' ? 'app-release.apk' : 'THEOLOGICUS-Setup-x64.exe';
+  }
+
+  /* « apk-v2.0.74 » -> « 2.0.74 » */
+  function extraire(tag) {
+    return String(tag || '').replace(/^apk-v/i, '').trim();
+  }
+  /* Comparaison numerique : « 2.0.9 » doit etre AVANT « 2.0.73 ». */
+  function cmp(a, b) {
+    var pa = String(a || '').replace(/[^0-9.]/g, '').split('.');
+    var pb = String(b || '').replace(/[^0-9.]/g, '').split('.');
+    for (var i = 0; i < 3; i++) {
+      var x = parseInt(pa[i], 10) || 0, y = parseInt(pb[i], 10) || 0;
+      if (x !== y) return x < y ? -1 : 1;
+    }
+    return 0;
+  }
+  function lire(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function ecrire(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+
+  /* ── le bandeau ─────────────────────────────────────────────────────── */
+  var bandeau = null;
+  function fermerBandeau() {
+    if (bandeau && bandeau.parentNode) bandeau.parentNode.removeChild(bandeau);
+    bandeau = null;
+  }
+  function afficher(version, url, nom) {
+    fermerBandeau();
+    var actuelle = window.THEO_VERSION || '';
+    bandeau = document.createElement('div');
+    bandeau.id = 'theo-maj-bandeau';
+    bandeau.setAttribute('data-maj-version', version);
+    bandeau.style.cssText = 'position:fixed;left:12px;right:12px;bottom:14px;z-index:99997;' +
+      'display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;' +
+      'padding:10px 12px;border-radius:12px;background:#14171f;border:1px solid #2f3646;' +
+      'box-shadow:0 10px 28px rgba(0,0,0,.5);font-family:var(--font-mono,monospace);' +
+      'font-size:11px;color:#e8eaf0';
+
+    var txt = document.createElement('span');
+    txt.id = 'theo-maj-texte';
+    txt.textContent = 'Mise a jour ' + version + ' disponible' +
+      (actuelle ? ' (vous avez ' + actuelle + ')' : '');
+
+    var go = document.createElement('button');
+    go.id = 'theo-maj-go';
+    go.textContent = 'Mettre a jour';
+    go.style.cssText = 'padding:6px 12px;border-radius:20px;border:1px solid #4f8ef7;' +
+      'background:#4f8ef7;color:#08101c;font-weight:700;cursor:pointer;font-size:11px';
+    go.onclick = function () { partir(url, nom); };
+
+    var plus = document.createElement('button');
+    plus.id = 'theo-maj-plus-tard';
+    plus.textContent = 'Plus tard';
+    plus.style.cssText = 'padding:6px 12px;border-radius:20px;border:1px solid #3a4252;' +
+      'background:transparent;color:#a8b0c0;cursor:pointer;font-size:11px';
+    plus.onclick = function () { ecrire(CLE_IGNORE, version); fermerBandeau(); };
+
+    bandeau.appendChild(txt);
+    bandeau.appendChild(go);
+    bandeau.appendChild(plus);
+    document.body.appendChild(bandeau);
+  }
+  function etat(msg) {
+    var t = document.getElementById('theo-maj-texte');
+    if (t) t.textContent = msg;
+  }
+
+  /* ── l'installation ─────────────────────────────────────────────────── */
+  function canal(url, nom) {
+    if (natif() && window.Capacitor && window.Capacitor.Plugins &&
+        window.Capacitor.Plugins.UpdateBridge) {
+      return window.Capacitor.Plugins.UpdateBridge.install({ url: url, name: nom });
+    }
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.install_update) {
+      return window.pywebview.api.install_update(url);
+    }
+    return null;
+  }
+  function partir(url, nom) {
+    var p = canal(url, nom);
+    if (!p) {
+      /* ni Android ni exe : on ouvre la page de telechargement. */
+      try { window.open(url, '_blank'); } catch (e) {}
+      fermerBandeau();
+      return;
+    }
+    etat('Telechargement de la mise a jour...');
+    var go = document.getElementById('theo-maj-go');
+    if (go) go.disabled = true;
+    Promise.resolve(p).then(function () {
+      etat('Installation lancee — laissez l ecran se terminer.');
+      setTimeout(fermerBandeau, 6000);
+    }).catch(function (err) {
+      etat('Telechargement impossible — ouverture de la page.');
+      setTimeout(function () {
+        try { window.open(url, '_blank'); } catch (e) {}
+        fermerBandeau();
+      }, 1200);
+    });
+  }
+
+  /* ── la verification ────────────────────────────────────────────────── */
+  function verifier(opts) {
+    opts = opts || {};
+    if (typeof fetch !== 'function') return Promise.resolve({ ok: false, why: 'nofetch' });
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var t = setTimeout(function () { if (ctrl) ctrl.abort(); }, TIMEOUT);
+    return fetch(API, {
+      signal: ctrl ? ctrl.signal : undefined,
+      cache: 'no-store',
+      headers: { 'Accept': 'application/vnd.github+json' }
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      var v = extraire(j && j.tag_name);
+      var actuelle = window.THEO_VERSION || '';
+      if (!v) throw new Error('tag illisible');
+      if (!/^[0-9]/.test(actuelle)) {
+        /* version inconnue (build de developpement) : comparaison impossible. */
+        if (opts.manuel && j && j.html_url) {
+          return { ok: true, inconnu: true, version: v, url: j.html_url, nom: '' };
+        }
+        return { ok: false, why: 'version-inconnue' };
+      }
+      if (cmp(v, actuelle) <= 0) return { ok: false, aJour: true, version: v };
+      if (!opts.manuel && v === lire(CLE_IGNORE)) return { ok: false, ignoree: true };
+      var assets = (j && j.assets) || [];
+      var voulu = assetVoulu(), a = null, i;
+      for (i = 0; i < assets.length; i++) {
+        if (assets[i] && assets[i].name === voulu) { a = assets[i]; break; }
+      }
+      var url = (a && a.browser_download_url) ||
+                'https://github.com/' + REPO + '/releases/download/' + j.tag_name + '/' + voulu;
+      return { ok: true, version: v, url: url, nom: voulu };
+    }).catch(function (e) {
+      return { ok: false, why: String((e && e.message) || e) };
+    }).then(function (res) {
+      clearTimeout(t);
+      return res;
+    });
+  }
+
+  var enCours = false;
+  function verifierEtAfficher(opts) {
+    if (enCours) return Promise.resolve(null);
+    enCours = true;
+    return verifier(opts).then(function (r) {
+      enCours = false;
+      if (!r) return r;
+      if (r.ok && !r.inconnu) afficher(r.version, r.url, r.nom);
+      if (r.ok && r.inconnu) {
+        try { window.open(r.url, '_blank'); } catch (e) {}
+      }
+      return r;
+    });
+  }
+
+  /* ── branchements ───────────────────────────────────────────────────── */
+  /* Automatique au demarrage, mais jamais plus d'une fois par fenetre de
+     6 h : GitHub limite les appels sans authentification. */
+  function auto() {
+    var dernier = parseInt(lire(CLE_CHECK) || '0', 10);
+    var maintenant = Date.now();
+    if (dernier && (maintenant - dernier) < ATTENTE_AUTO) return;
+    ecrire(CLE_CHECK, String(maintenant));
+    verifierEtAfficher({});
+  }
+  setTimeout(auto, DELAI_DEMARRAGE);
+
+  /* La ligne de version de PARAMETRES sert aussi de declencheur manuel. */
+  var essais = 0;
+  var ti = setInterval(function () {
+    essais++;
+    var row = document.getElementById('tpai-version-row');
+    if (!row) { if (essais > 160) clearInterval(ti); return; }
+    clearInterval(ti);
+    row.title = 'Verifier les mises a jour';
+    row.style.cursor = 'pointer';
+    if (row.dataset.majBranche) return;
+    row.dataset.majBranche = '1';
+    row.addEventListener('click', function () {
+      row.textContent = 'Verification...';
+      verifierEtAfficher({ manuel: true }).then(function (r) {
+        if (!r) return;
+        if (r.aJour || (!r.ok && !r.why)) {
+          row.textContent = 'THEOLOGICUS v' + (window.THEO_VERSION || '') + ' — a jour';
+        } else if (!r.ok) {
+          row.textContent = 'Verification impossible (' + (r.why || 'reseau') + ')';
+        }
+        setTimeout(function () {
+          row.textContent = 'THEOLOGICUS v' + (window.THEO_VERSION || 'dev');
+        }, 4000);
+      });
+    });
+  }, 250);
+
+  /* Sortie pour le banc d essai (et pour un depannage a la main). */
+  window.__theoMaj = {
+    verifier: verifier,
+    verifierEtAfficher: verifierEtAfficher,
+    cmp: cmp,
+    extraire: extraire,
+    assetVoulu: assetVoulu,
+    afficher: afficher,
+    fermer: fermerBandeau,
+    bandeau: function () { return document.getElementById('theo-maj-bandeau'); }
+  };
+})();
+</script>
 <style id="theo-force-text-select">
   html, body { user-select: text !important; -webkit-user-select: text !important; }
   .message, .message-content, .atc-hl, .atc-mark { user-select: text !important; -webkit-user-select: text !important; }

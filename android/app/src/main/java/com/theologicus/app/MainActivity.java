@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
     registerPlugin(SavePickerPlugin.class);
     registerPlugin(SpeechBridgePlugin.class);
     registerPlugin(NetBridgePlugin.class);   /* v58 : decouverte LibreTranslate LAN */
+    registerPlugin(UpdateBridgePlugin.class); /* v74 : mise a jour depuis l app */
     super.onCreate(savedInstanceState);
   }
 }

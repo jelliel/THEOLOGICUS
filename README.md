@@ -45,6 +45,44 @@ Windows affiche un avertissement au premier lancement.
 - **Mémorisation** : fiches, quiz à difficulté montante, verrou de révision.
 - **Entrée/sortie de fichiers** : import PDF / DOCX / images, export des
   réponses, lecture audio.
+- **Mises à jour** : l'application vérifie elle-même si une version plus
+  récente existe et propose de l'installer (voir plus bas).
+
+---
+
+## Mises à jour
+
+Au démarrage (et au plus une fois toutes les 6 h), l'application interroge
+l'API publique de GitHub :
+
+```
+https://api.github.com/repos/jelliel/THEOLOGICUS/releases/latest
+```
+
+Si le tag est plus récent que la version installée, un bandeau propose
+**Mettre à jour** / **Plus tard**. Un appui lance le téléchargement puis
+l'installation :
+
+| Plateforme | Mécanisme |
+|---|---|
+| Android | plugin `UpdateBridge` : télécharge l'APK dans le cache, puis ouvre l'installateur du système |
+| Windows | `DesktopApi.install_update` dans `app.py` : télécharge l'installeur, le lance, puis ferme l'application |
+
+À défaut de canal disponible, l'app ouvre simplement la page de téléchargement
+dans le navigateur. « Plus tard » mémorise la version refusée : elle n'est
+reproposée que si une version plus récente paraît. La ligne de version dans
+PARAMÈTRES sert aussi de vérification manuelle.
+
+Détails qui comptent :
+
+- Appel **anonyme** (aucun jeton), sans données personnelles. Pas de réseau =
+  pas de bandeau, silencieusement.
+- Android 8+ demande une fois l'autorisation « installer des applications
+  inconnues » pour cette source ; c'est le système qui affiche l'écran.
+  L'APK téléchargée est la même que celle de la release, signée avec la même
+  clé : la mise à jour remplace l'application sans perdre les données.
+- Sur Windows, l'installeur n'est pas signé : SmartScreen avertit au premier
+  lancement.
 
 ---
 

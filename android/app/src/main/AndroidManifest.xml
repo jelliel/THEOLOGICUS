@@ -42,6 +42,10 @@
     <!-- v53 : micro (dictée vocale + enregistrement audio du chat vocal) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- v74 : mise a jour depuis l application (UpdateBridge telecharge l APK
+         puis ouvre l installateur du systeme). Android 8+ demande que la source
+         soit autorisee : le systeme affiche lui-meme l ecran de demande. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- v58 : LibreTranslate auto-hébergé sur le PC parle en HTTP clair sur le
          réseau local. Android bloque le cleartext par défaut (API 28+) ; on
