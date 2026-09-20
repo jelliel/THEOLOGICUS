@@ -154,6 +154,9 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
 - PowerShell depuis Bash est bloqué → outil PowerShell dédié.
 - `AndroidManifest.xml` n'a **pas** `android:largeHeap` : tout gros objet natif
   tue l'app (v65, d'où la sauvegarde par morceaux).
+- **Messages de commit : jamais `printf`** (un `%` dans le texte — « 100% » —
+  est un format invalide et tronque le message en pleine phrase). Écrire le
+  message dans un fichier puis `git commit -F fichier`.
 
 ## Décisions produit arrêtées avec l'utilisateur
 
