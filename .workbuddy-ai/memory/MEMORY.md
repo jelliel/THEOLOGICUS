@@ -83,6 +83,15 @@ Ici uniquement ce qui doit survivre.
   (`CORRECTIONS`/`EPITHETES` dans `tools/traduit_gloses.py`) parce
   qu'Argos Translate massacrait les épithètes divines. Toujours étiqueté
   « trad. auto. » dans l'UI, anglais source gardé dessous.
+- **`biblegr/`** (27 livres + `strongs.js`, 6,4 Mo) : mot à mot grec du
+  Nouveau Testament, `biblegr/bN.js` chargé par `__ensureBibleGr(n)`,
+  dictionnaire par `__ensureStrongsGr()`. Source **MorphGNT / SBLGNT**
+  (J. K. Tauber). ATTENTION aux licences : texte SBLGNT **CC BY 4.0**
+  (la page `sblgnt.com/license` s'intitule « EULA » mais contient bien la
+  CC BY 4.0), morphologie **CC BY-SA 3.0** → `biblegr/` publié sous CC
+  BY-SA 3.0. Format `mot|translit|Strong|morph|lemme`, le code MorphGNT
+  étant stocké **sans espace** (`N-----NSF-`) car il en contient un dans
+  la source et que les mots sont séparés par des espaces.
 - Capacitor 8, `com.theologicus.app`, webDir `mobile/www`, minSdk 24 →
   targetSdk 36, AGP 8.13.0, Gradle 8.14.3.
 - Clés API **jamais embarquées** : saisies au lancement,
@@ -177,6 +186,15 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   JS (`element.animate`) et **mesurer le déplacement réel** (N9/N10 du banc).
 - **`scrollWidth` gelé** sur `overflow:hidden` + `text-overflow:ellipsis`
   (Android WebView) : mesurer l'élément **intérieur** sans ellipsis.
+- **Nom de fichier ≠ numéro de livre** chez MorphGNT : les fichiers sont
+  `61-Mt.txt` … `87-Re.txt` (numérotation CCAT) alors que la référence va
+  de `01` à `27`. Toujours lire le livre depuis `ref[:2]`.
+- **Un code morphologique peut contenir une espace** (`N- ----NSF-`) : si
+  les mots d'un verset sont séparés par des espaces, le stocker tel quel
+  casse le découpage. Le déspacer et reconstituer à l'affichage.
+- **Majuscules grecques hors table de translittération** : Ἐν → « n »,
+  Βίβλος → « iblos ». Passer la base en minuscule après NFD.
+- **`_m/` → racine = trois `dirname`**, pas deux ni quatre. 4e occurrence.
 - **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure
   0. Ne jamais en conclure qu'il n'y a rien à faire — re-mesurer plus tard.
 - **`extractSuggestionsHtml()` (v81)** : capturait tout le reste d'un message
