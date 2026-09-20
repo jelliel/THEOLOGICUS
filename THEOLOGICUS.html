@@ -20579,7 +20579,10 @@ function initQuranVerseTooltip() {
     let html = '<div style="color:#f5c542;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ CORAN — Sourate ' + p.sourate + ' : ' + p.v1 + (p.v2 ? '-' + p.v2 : '') + (s ? ' (' + s.nomPhon + ')' : '') + '</div>';
     verses.forEach(function (v) {
       html += '<div style="margin-bottom:6px;"><span style="color:#f0d68a;">' + v.n + '</span> ' + v.t + '</div>';
-      if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + v.a + '</div>';
+      /* v88 : le verset arabe devient une suite de mots reperes.
+         Sans __qwMots (module pas encore charge) on garde le texte tel
+         quel : l'infobulle reste lisible en toutes circonstances. */
+      if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
     });
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
     tip.innerHTML = html;
@@ -28371,6 +28374,164 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     }, { passive: true });
 
     window.__motV86 = { contexteDuMot: contexteDuMot, compterOcc: compterOcc, ouvrir: ouvrir };
+  })();
+
+</script>
+<script id="v88-arabe">
+  /* ==================================================================
+     v88 — MOT À MOT ARABE DANS L'INFOBULLE DU CORAN
+
+     Le verset arabe est decoupe en mots cliquables. Chaque mot affiche :
+     translitteration, glose (anglaise), racine trilitere, lemme et
+     nature grammaticale.
+
+     Deux corpus, charges a la volee comme bible/ et quran/ :
+       quranwbw/qN.js   -> __quranWbw[s][v][i] = [glose, translit]
+       quranroots/qN.js -> __quranRoots[s][v][i] = [racine, lemme, pos]
+
+     REGLE D'OR : sans donnee, on affiche « aucune donnee ». Jamais
+     devine, jamais reconstruit. Un verset absent des corpus (les 3 qui
+     n'etaient pas alignes) n'a tout simplement pas de glose.
+
+     Attribution obligatoire : la racine vient du Quranic Arabic Corpus
+     (GNU GPL), dont la notice exige de citer la source et de renvoyer
+     vers corpus.quran.com.
+     ================================================================== */
+  (function () {
+    var SIG = /[\u06d6-\u06ed\u08e2]/;
+    var promesses = {};
+
+    function charger(dossier, global, p) {
+      var g = window[global];
+      if (g && g[p]) return Promise.resolve(true);
+      var cle = dossier + ':' + p;
+      if (promesses[cle]) return promesses[cle];
+      promesses[cle] = new Promise(function (res) {
+        var sc = document.createElement('script');
+        sc.src = dossier + '/q' + p + '.js';
+        sc.onerror = function () { sc.remove(); res(false); };
+        sc.onload = function () { res(!!(window[global] && window[global][p])); };
+        document.head.appendChild(sc);
+      });
+      return promesses[cle];
+    }
+    window.__ensureQuranWbw = function (p) { return charger('quranwbw', '__quranWbw', p); };
+    window.__ensureQuranRoots = function (p) { return charger('quranroots', '__quranRoots', p); };
+
+    /* Decoupe le verset arabe en mots reperes. Les signes d'annotation
+       coraniques ne sont PAS des mots : ils gardent leur place mais ne
+       recoivent aucun index (sinon les gloses seraient decalees). */
+    window.__qwMots = function (s, v, html) {
+      var parts = String(html || '').split(' ');
+      var out = [];
+      var i = 0;
+      for (var k = 0; k < parts.length; k++) {
+        var t = parts[k];
+        if (!t) continue;
+        if (SIG.test(t)) { out.push(t); continue; }
+        out.push('<span class="qw" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' + t + '</span>');
+      }
+      return out.join(' ');
+    };
+
+    var style = document.createElement('style');
+    style.id = 'v88-arabe-css';
+    style.textContent =
+      '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);}' +
+      '.qw:hover,.qw.qw-actif{background:rgba(245,197,66,0.22);border-bottom-color:#f5c542;}' +
+      '#qw-tip{position:fixed;z-index:4000;max-width:290px;background:#1b2430;color:#e8e0cc;' +
+      'border:1px solid rgba(245,197,66,0.45);border-radius:8px;padding:9px 11px;font-size:12px;' +
+      'line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:none;pointer-events:auto;}' +
+      '#qw-tip .qw-mot{direction:rtl;text-align:right;font-size:19px;color:#f5c542;display:block;margin-bottom:3px;}' +
+      '#qw-tip .qw-ligne{margin:2px 0;}' +
+      '#qw-tip .qw-cle{color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:0.6px;}' +
+      '#qw-tip .qw-racine{direction:rtl;font-size:17px;color:#7fd1a0;}' +
+      '#qw-tip .qw-src{margin-top:6px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.12);' +
+      'font-size:10px;color:#8fa3b8;}';
+    document.head.appendChild(style);
+
+    var tip = document.createElement('div');
+    tip.id = 'qw-tip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    function ech(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function afficher(mot, d) {
+      var h = '<span class="qw-mot">' + ech(d.mot) + '</span>';
+      var vide = true;
+      if (d.translit) { h += '<div class="qw-ligne"><span class="qw-cle">Translittération</span><br>' + ech(d.translit) + '</div>'; vide = false; }
+      if (d.glose) { h += '<div class="qw-ligne"><span class="qw-cle">Mot à mot (en)</span><br>' + ech(d.glose) + '</div>'; vide = false; }
+      if (d.racine) { h += '<div class="qw-ligne"><span class="qw-cle">Racine</span><br><span class="qw-racine">' + ech(d.racine) + '</span></div>'; vide = false; }
+      if (d.lemme) { h += '<div class="qw-ligne"><span class="qw-cle">Lemme</span><br><span class="qw-racine">' + ech(d.lemme) + '</span></div>'; }
+      if (d.pos) { h += '<div class="qw-ligne"><span class="qw-cle">Nature</span> ' + ech(d.pos) + '</div>'; }
+      if (vide) h += '<div class="qw-ligne">Aucune donnée pour ce mot.</div>';
+      h += '<div class="qw-src">Racine : <a href="https://corpus.quran.com" target="_blank" rel="noopener" ' +
+        'style="color:#7fd1a0">Quranic Arabic Corpus</a> (GPL) — D. Kais Dukes, université de Leeds.</div>';
+      tip.innerHTML = h;
+      tip.style.display = 'block';
+      var r = mot.getBoundingClientRect();
+      var x = Math.min(Math.max(8, r.left), (window.innerWidth || 400) - 300);
+      var y = r.bottom + 6;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+      var tr = tip.getBoundingClientRect();
+      if (tr.bottom > (window.innerHeight || 800) - 8) tip.style.top = Math.max(8, r.top - tr.height - 6) + 'px';
+    }
+
+    function cacher() { tip.style.display = 'none'; }
+
+    function detail(mot) {
+      var s = mot.getAttribute('data-s');
+      var v = mot.getAttribute('data-v');
+      var i = parseInt(mot.getAttribute('data-i'), 10);
+      document.querySelectorAll('.qw.qw-actif').forEach(function (m) { m.classList.remove('qw-actif'); });
+      mot.classList.add('qw-actif');
+      Promise.all([
+        window.__ensureQuranWbw(s),
+        window.__ensureQuranRoots(s)
+      ]).then(function () {
+        var wbw = (window.__quranWbw && window.__quranWbw[s] && window.__quranWbw[s][v]) || null;
+        var rt = (window.__quranRoots && window.__quranRoots[s] && window.__quranRoots[s][v]) || null;
+        var g = (wbw && wbw[i]) || [];
+        var r = (rt && rt[i]) || [];
+        afficher(mot, {
+          mot: mot.textContent || '',
+          translit: g[1] || '',
+          glose: g[0] || '',
+          racine: r[0] || '',
+          lemme: r[1] || '',
+          pos: r[2] || ''
+        });
+      });
+    }
+
+    /* Tap / clic sur un mot. La souris suffit au survol sur ordinateur. */
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var m = t.closest('.qw');
+      if (!m) { cacher(); return; }
+      e.stopPropagation();
+      detail(m);
+    }, false);
+
+    document.addEventListener('mouseover', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var m = t.closest('.qw');
+      if (!m) return;
+      if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+      detail(m);
+    }, false);
+
+    document.addEventListener('scroll', cacher, true);
+    window.addEventListener('resize', cacher);
+
+    window.__qwV88 = { detail: detail, cacher: cacher };
   })();
 
 </script>
