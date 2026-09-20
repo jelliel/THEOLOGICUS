@@ -21143,6 +21143,10 @@ initTafsirVerseTooltip();
 
   /* ── Détection de la sélection : dans un message (mode annotation) OU
         n'importe où ailleurs (mode universel : envoi dans le chat) ── */
+  /* v86 : le module « mot » ouvre la bulle sur un seul mot. On expose
+     les deux fonctions plutot que de reecrire une bulle concurrente. */
+  window.__atcBubble = { show: showBubble, hide: hideBubble, ensure: ensureBubble };
+
   function detectSelectionAndShow(){
     hideBubble();
     const sel = window.getSelection();
@@ -21882,7 +21886,14 @@ initTafsirVerseTooltip();
     } catch(e) { console.warn('[DIAG] onAddToChat highlight failed', e); }
 
     // Annotation stockée SUR le message existant — aucun nouveau message dans le chat
-    const ann = dup ? dup : { id: useId, text: s.text, a: null, loading: true, start: _annOff ? _annOff.start : undefined, end: _annOff ? _annOff.end : undefined };
+    /* v86 : un mot peut apparaitre plusieurs fois dans le message —
+       on garde son rang d'occurrence, sinon le commentaire se
+       rattacherait a la premiere occurrence, donc au mauvais mot. */
+    const ann = dup ? dup : { id: useId, text: s.text, a: null, loading: true,
+      occ: (typeof s.occ === 'number' ? s.occ : undefined),
+      w: (s.w ? 1 : undefined),
+      parent: (s.hlId || undefined),
+      start: _annOff ? _annOff.start : undefined, end: _annOff ? _annOff.end : undefined };
     if (!dup) msg.annotations.push(ann);
     else if (dup.loading && !dup.a) { /* déjà en cours, on laisse tourner */ }
     else if (dup.a) {
@@ -22112,6 +22123,29 @@ initTafsirVerseTooltip();
      const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
      return extractWrap(container, a, b, hlId, cls);
    }
+  /* v86 : entoure la N-ieme occurrence de `text` (0 = premiere).
+     wrapOnce ne savait faire que la premiere : un mot repeté etait
+     toujours annote au meme endroit, le premier. */
+  function wrapNth(container, text, nth, hlId, cls){
+    if (!text || typeof nth !== 'number') return false;
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+    const nodes = []; let full = ''; let n;
+    while ((n = walker.nextNode())) { nodes.push(n); full += n.nodeValue; }
+    const fullM = normalizeMatch(full);
+    const txtM = normalizeMatch(String(text).trim());
+    if (!txtM.norm) return false;
+    let idx = -1;
+    for (let k = 0; k <= nth; k++){
+      idx = fullM.norm.indexOf(txtM.norm, idx + 1);
+      if (idx === -1) return false;
+    }
+    const startOrig = fullM.map[idx];
+    const e = idx + txtM.norm.length;
+    const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
+    const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
+    return extractWrap(container, a, b, hlId, cls);
+  }
+
   /* Surligne une plage en fractionnant par NŒUD TEXTE (et non un seul span
      englobant). Marche même si la sélection traverse plusieurs paragraphes /
      listes / gras — cas où surroundContents/extractContents échouent car on
@@ -22188,16 +22222,34 @@ initTafsirVerseTooltip();
         if (!a || !a.text) { totalNoText++; return; }
         if (a.text.indexOf('<') !== -1) return;
         totalFound++;
-        const existing = box.querySelector('[data-hl-id="' + a.id + '"]');
-        if (existing) {
+        /* v86 : plusieurs rendus concurrents laissaient parfois trois
+           spans de meme data-hl-id, le premier VIDE. On s'arretetait
+           dessus et le surlignage visible n'etait pas le bon.
+           Un span n'est reutilise que s'il est unique et non vide ;
+           sinon on le defait et on re-enroule. */
+        const _deja = box.querySelectorAll('[data-hl-id="' + a.id + '"]');
+        let _bon = null;
+        if (_deja.length === 1 && String(_deja[0].textContent || '').trim()) _bon = _deja[0];
+        if (_bon) {
           totalSkipped++;
-          if (a.loading) existing.classList.add('atc-loading');
-          else existing.classList.remove('atc-loading');
+          if (a.w) _bon.classList.add('atc-mot');
+          if (a.loading) _bon.classList.add('atc-loading');
+          else _bon.classList.remove('atc-loading');
           return;
         }
+        _deja.forEach(function (sp) {
+          try { if (sp.parentNode) sp.parentNode.replaceChild(document.createTextNode(sp.textContent || ''), sp); }
+          catch (e) {}
+        });
         let ok = false;
+        /* v86 : rang d'occurrence d'abord. Un mot repete (« Seigneur »,
+           « Dieu ») doit etre annote la ou l'utilisateur a tape, pas a
+           sa premiere apparition dans le message. */
+        if (typeof a.occ === 'number' && a.occ >= 0) {
+          ok = wrapNth(box, a.text, a.occ, a.id, 'atc-hl');
+        }
         // Priorité : offset positionnel (invariant gras/markdown/mots répétis)
-        if (typeof a.start === 'number' && typeof a.end === 'number') {
+        if (!ok && typeof a.start === 'number' && typeof a.end === 'number') {
           ok = wrapByOffset(box, a.start, a.end, a.id, 'atc-hl');
           // Filet de sécurité (sans faux positif) : si le span englobe un
           // élément interactif (bouton/lien), on dé-wrapp. Le fractionnement par
@@ -22217,6 +22269,10 @@ initTafsirVerseTooltip();
         if (!ok) ok = wrapOnce(box, a.text, a.id, 'atc-hl');
         if (ok) totalApplied++;
         else console.log('[DIAG] applyHighlights: wrap FAILED', { hlId: a.id, text: a.text.slice(0,60), hasOffset: typeof a.start === 'number', boxId: 'mc-' + m.ts });
+        if (ok && a.w) {
+          const spm = box.querySelector('[data-hl-id="' + a.id + '"]');
+          if (spm) spm.classList.add('atc-mot');
+        }
         if (ok && a.loading) {
           const sp = box.querySelector('[data-hl-id="' + a.id + '"]');
           if (sp) sp.classList.add('atc-loading');
@@ -28065,5 +28121,258 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 })();
 </script>
 
+<script id="v86-mot">
+  /* ==================================================================
+     v86 — ANNOTER / COMMENTER UN SEUL MOT
+
+     Demande : « lorsque j'encadre une phrase, je veux pouvoir annoter /
+     commenter un mot ». Le geste : tap sur le mot au mobile, survol puis
+     clic a la souris sur ordinateur.
+
+     Principe : on ne reecrit rien. La bulle d'annotation existante se
+     pilote par window._atcSel = { text, range, rect, msgTs, hlId }.
+     On y place UN SEUL MOT : les douze actions deja codees (Add to chat,
+     Note, Google, Wikipedia, Bible, Bible Hub, Surligner, Partager,
+     Encadrer, Lire, Question, Traduire) s'appliquent alors au mot.
+
+     Le piege des mots repetis : « Seigneur » apparait dix fois dans un
+     message. Sans rang d'occurrence, le commentaire se rattacherait a la
+     premiere occurrence — donc au MAUVAIS endroit. On memorise occ et
+     applyHighlights() l'utilise en priorite.
+     ================================================================== */
+  (function () {
+    var RE_L = /[\p{L}\p{N}]/u;
+    function isWC(ch) {
+      if (!ch) return false;
+      if (ch === "'" || ch === '\u2019' || ch === '\u02bc' || ch === '-' || ch === '\u00ad') return true;
+      try { return RE_L.test(ch); } catch (e) { return /[A-Za-z\u00c0-\u00ff0-9]/.test(ch); }
+    }
+
+    function normaliser(s) {
+      return String(s || '').toLowerCase()
+        .replace(/[\u00e0\u00e1\u00e2\u00e3\u00e4\u00e5]/g, 'a')
+        .replace(/[\u00e8\u00e9\u00ea\u00eb]/g, 'e')
+        .replace(/[\u00ec\u00ed\u00ee\u00ef]/g, 'i')
+        .replace(/[\u00f2\u00f3\u00f4\u00f5\u00f6]/g, 'o')
+        .replace(/[\u00f9\u00fa\u00fb\u00fc]/g, 'u')
+        .replace(/\u00e7/g, 'c');
+    }
+
+    /* Occurrences de MOT dans AVANT, en exigeant des bords non-lettre :
+       sinon « dieu » compterait « dieudonne » et le rang serait faux. */
+    function compterOcc(avant, mot) {
+      var a = normaliser(avant), m = normaliser(mot);
+      if (!m) return 0;
+      var c = 0, i = 0;
+      while (true) {
+        i = a.indexOf(m, i);
+        if (i === -1) break;
+        var g = i > 0 ? a.charAt(i - 1) : ' ';
+        var d = (i + m.length) < a.length ? a.charAt(i + m.length) : ' ';
+        if (!isWC(g) && !isWC(d)) c++;
+        i += m.length;
+      }
+      return c;
+    }
+
+    /* Le mot sous le point (x,y). Meme technique que le module v37, mais
+       avec un repli quand le navigateur renvoie un noeud ELEMENT. */
+    function motAuPoint(x, y) {
+      var node = null, off = 0, r = null, p = null;
+      try {
+        if (document.caretRangeFromPoint) {
+          r = document.caretRangeFromPoint(x, y);
+          if (r) { node = r.startContainer; off = r.startOffset; }
+        } else if (document.caretPositionFromPoint) {
+          p = document.caretPositionFromPoint(x, y);
+          if (p) { node = p.offsetNode; off = p.offset; }
+        }
+      } catch (e) { return null; }
+      if (node && node.nodeType !== 3) {
+        try {
+          var el = document.elementFromPoint(x, y);
+          if (el) {
+            var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+            var t = w.nextNode();
+            if (t) { node = t; off = Math.min(1, String(t.nodeValue || '').length - 1); }
+          }
+        } catch (e) {}
+      }
+      if (!node || node.nodeType !== 3) return null;
+      var txt = String(node.nodeValue || '');
+      if (!txt) return null;
+      if (off >= txt.length) off = txt.length - 1;
+      if (off < 0) return null;
+      if (!isWC(txt.charAt(off))) {
+        if (off > 0 && isWC(txt.charAt(off - 1))) off = off - 1; else return null;
+      }
+      var a = off, b = off;
+      while (a > 0 && isWC(txt.charAt(a - 1))) a--;
+      while (b < txt.length - 1 && isWC(txt.charAt(b + 1))) b++;
+      var mot = txt.slice(a, b + 1);
+      while (mot && !isWC(mot.charAt(0))) { mot = mot.slice(1); a++; }
+      while (mot.length && !isWC(mot.charAt(mot.length - 1))) { mot = mot.slice(0, -1); b--; }
+      if (!mot) return null;
+      var rr;
+      try { rr = document.createRange(); rr.setStart(node, a); rr.setEnd(node, b + 1); }
+      catch (e) { return null; }
+      var rect = null;
+      try { rect = rr.getBoundingClientRect(); } catch (e) {}
+      return { word: mot, range: rr, rect: rect, node: node, debut: a };
+    }
+
+    function boiteDe(node) {
+      try {
+        if (!node) return null;
+        /* Un noeud TEXTE n'a pas .closest() : il faut passer par son
+           parent. Sans ca, boiteDe() renvoyait null et le mot n'etait
+           jamais reconnu (piege deja vu dans le module v37). */
+        var el = (node.nodeType === 3) ? node.parentNode : node;
+        return el && el.closest ? el.closest('.message-content') : null;
+      } catch (e) { return null; }
+    }
+    function tsDe(box) {
+      if (!box || !box.id) return null;
+      var m = String(box.id).match(/^mc-(.+)$/);
+      if (!m) return null;
+      /* « mc-9000000001 » -> le NOMBRE 9000000001. onAddToChat cherche
+         le message par `m.ts === s.msgTs` (egalite stricte) : rendre la
+         chaine faisait echouer la recherche et l'annotation n'etait
+         jamais creee. */
+      return /^\d+$/.test(m[1]) ? Number(m[1]) : m[1];
+    }
+    /* Texte de la boite AVANT le mot : sert a compter les occurrences. */
+    function avantDuMot(box, node, debut) {
+      var avant = '';
+      try {
+        var w = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+        var n;
+        while ((n = w.nextNode())) { if (n === node) break; avant += String(n.nodeValue || ''); }
+      } catch (e) {}
+      return avant + String(node.nodeValue || '').slice(0, debut);
+    }
+
+    function contexteDuMot(x, y) {
+      var w = motAuPoint(x, y);
+      if (!w) return null;
+      var box = boiteDe(w.node);
+      if (!box) return null;
+      var ts = tsDe(box);
+      if (!ts) return null;
+      var occ = compterOcc(avantDuMot(box, w.node, w.debut), w.word);
+      var parentId = null;
+      try {
+        var p = (w.node.parentNode && w.node.parentNode.closest) ? w.node.parentNode.closest('.atc-hl') : null;
+        if (p) parentId = p.getAttribute('data-hl-id');
+      } catch (e) {}
+      return { word: w.word, range: w.range, rect: w.rect, msgTs: ts, occ: occ, parentId: parentId };
+    }
+
+    /* ---- survol (ordinateur) : on montre quel mot serait pris ---- */
+    var hlNom = 'v86-mot';
+    function surligner(range) {
+      try {
+        if (!(window.CSS && CSS.highlights && window.Highlight)) return;
+        var h = new window.Highlight(range);
+        CSS.highlights.set(hlNom, h);
+      } catch (e) {}
+    }
+    function effacerSurvol() {
+      try { if (window.CSS && CSS.highlights && CSS.highlights.delete) CSS.highlights.delete(hlNom); } catch (e) {}
+    }
+
+    var style = document.createElement('style');
+    style.id = 'v86-mot-css';
+    style.textContent =
+      '::highlight(v86-mot){background:rgba(255,214,0,0.38);}' +
+      '.atc-mot{background:linear-gradient(transparent 62%,rgba(255,214,0,0.55) 0) !important;' +
+      'border-bottom:1px dotted rgba(120,80,0,0.75) !important;color:inherit !important;}' +
+      '.atc-mot.atc-loading{opacity:0.75;}';
+    document.head.appendChild(style);
+
+    /* ---- ouverture de la bulle sur un mot ---- */
+    function ouvrir(ctx) {
+      if (!ctx || !ctx.word) return false;
+      var api = window.__atcBubble;
+      if (!api || typeof api.show !== 'function') return false;
+      window._atcSel = {
+        text: ctx.word,
+        range: ctx.range,
+        rect: ctx.rect || { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 },
+        msgTs: ctx.msgTs,
+        hlId: ctx.parentId || null,
+        occ: ctx.occ,
+        w: 1
+      };
+      try { api.show(); } catch (e) { return false; }
+      return true;
+    }
+
+    /* ---- clic (ordinateur) ---- */
+    document.addEventListener('click', function (e) {
+      if (e.button !== undefined && e.button !== 0) return;
+      if (e.detail && e.detail > 1) return;             /* double-clic = encadrer */
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('a,button,input,textarea,select,.schema-tool,.schema-toggle')) return;
+      try {
+        var sel = window.getSelection();
+        if (sel && String(sel.toString() || '').length > 1) return;  /* vraie selection */
+      } catch (err) {}
+      if (!t.closest('.message-content')) return;
+      var ctx = contexteDuMot(e.clientX, e.clientY);
+      if (!ctx) return;
+      if (ouvrir(ctx)) { e.preventDefault(); e.stopPropagation(); }
+    }, false);
+
+    /* ---- survol : souligner le mot vise ---- */
+    document.addEventListener('mousemove', function (e) {
+      if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('.message-content')) { effacerSurvol(); return; }
+      var w = motAuPoint(e.clientX, e.clientY);
+      if (w && w.range) surligner(w.range); else effacerSurvol();
+    }, false);
+    document.addEventListener('mouseleave', effacerSurvol, false);
+
+    /* ---- tap (mobile) : on attend 320 ms pour ne pas voler le double-tap ---- */
+    var tapX = 0, tapY = 0, tapT = 0, timer = null, enAttente = false;
+    document.addEventListener('touchstart', function (e) {
+      var t = e.touches && e.touches[0];
+      if (!t) return;
+      tapX = t.clientX; tapY = t.clientY; tapT = Date.now();
+      if (timer) { clearTimeout(timer); timer = null; enAttente = false; }
+    }, { passive: true });
+
+    document.addEventListener('touchend', function (e) {
+      var t = (e.changedTouches && e.changedTouches[0]) || null;
+      if (!t) return;
+      var dx = Math.abs(t.clientX - tapX), dy = Math.abs(t.clientY - tapY);
+      if (dx > 12 || dy > 12) return;                    /* c'etait un geste */
+      if (Date.now() - tapT > 700) return;               /* appui long : autre geste */
+      try {
+        var sel = window.getSelection();
+        if (sel && String(sel.toString() || '').length > 1) return;
+      } catch (err) {}
+      var x = t.clientX, y = t.clientY;
+      if (timer) { clearTimeout(timer); timer = null; }   /* 2e tap : on laisse le double-tap */
+      enAttente = true;
+      timer = setTimeout(function () {
+        timer = null; if (!enAttente) return;
+        enAttente = false;
+        var ctx = contexteDuMot(x, y);
+        if (ctx) ouvrir(ctx);
+      }, 320);
+    }, { passive: true });
+
+    /* Deuxieme tap arrive -> on annule (c'est un double-tap « encadrer »). */
+    document.addEventListener('touchstart', function () {
+      if (enAttente) { enAttente = false; if (timer) { clearTimeout(timer); timer = null; } }
+    }, { passive: true });
+
+    window.__motV86 = { contexteDuMot: contexteDuMot, compterOcc: compterOcc, ouvrir: ouvrir };
+  })();
+
+</script>
 </body>
 </html>
