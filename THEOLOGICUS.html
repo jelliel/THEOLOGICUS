@@ -20440,6 +20440,8 @@ function initBibleVerseTooltip() {
     if (!verses) { showMissing(el, p); return; }
     let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ ' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
+    /* v89 — emplacement du mot a mot hebreu, rempli a la volee. */
+    html += '<div id="hb-slot"></div>';
     tip.innerHTML = html;
     tip.style.display = 'block';
     tip.style.pointerEvents = 'none';
@@ -20449,6 +20451,7 @@ function initBibleVerseTooltip() {
     if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
     if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
     tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+    if (typeof window.__hbRemplir === 'function') window.__hbRemplir(p, tip);
   }
   function hideTip() { tip.style.opacity = '0'; tip.style.display = 'none'; }
 
@@ -28464,7 +28467,20 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       var h = '<span class="qw-mot">' + ech(d.mot) + '</span>';
       var vide = true;
       if (d.translit) { h += '<div class="qw-ligne"><span class="qw-cle">Translittération</span><br>' + ech(d.translit) + '</div>'; vide = false; }
-      if (d.glose) { h += '<div class="qw-ligne"><span class="qw-cle">Mot à mot (en)</span><br>' + ech(d.glose) + '</div>'; vide = false; }
+      /* v89 : le mot a mot francais d'abord, l'anglais de la source en
+         petit. La traduction est AUTOMATIQUE (LibreTranslate, local) :
+         on l'etiquette, on ne la fait pas passer pour une source. */
+      if (d.gloseFr) {
+        h += '<div class="qw-ligne"><span class="qw-cle">Mot à mot</span><br>'
+          + ech(d.gloseFr)
+          + ' <span style="color:#8fa3b8;font-size:10px;">(trad. auto.)</span></div>';
+        if (d.glose) h += '<div class="qw-ligne" style="color:#8fa3b8;font-size:11px;">source (en) : ' + ech(d.glose) + '</div>';
+        vide = false;
+      } else if (d.glose) {
+        h += '<div class="qw-ligne"><span class="qw-cle">Mot à mot (en)</span><br>'
+          + ech(d.glose) + '</div>';
+        vide = false;
+      }
       if (d.racine) { h += '<div class="qw-ligne"><span class="qw-cle">Racine</span><br><span class="qw-racine">' + ech(d.racine) + '</span></div>'; vide = false; }
       if (d.lemme) { h += '<div class="qw-ligne"><span class="qw-cle">Lemme</span><br><span class="qw-racine">' + ech(d.lemme) + '</span></div>'; }
       if (d.pos) { h += '<div class="qw-ligne"><span class="qw-cle">Nature</span> ' + ech(d.pos) + '</div>'; }
@@ -28502,6 +28518,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           mot: mot.textContent || '',
           translit: g[1] || '',
           glose: g[0] || '',
+          gloseFr: g[2] || '',
           racine: r[0] || '',
           lemme: r[1] || '',
           pos: r[2] || ''
@@ -28535,5 +28552,272 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   })();
 
 </script>
+<script id="v89-hb">
+  /* ==================================================================
+     v89 — MOT À MOT HÉBREU DANS L'INFOBULLE BIBLIQUE
+
+     Pour toute référence de l'Ancien Testament (livres 1 à 39), l'infobulle
+     ajoute sous le verset français la ligne hébraïque du texte massorétique,
+     découpée en mots cliquables. Chaque mot ouvre :
+
+        translittération · lemme Strong vocalisé · sens (KJV, en anglais)
+        · analyse grammaticale · code brut
+
+     Sources (chargées à la volée, comme bible/ et quran/) :
+       biblehb/bN.js     -> __bibleHb[livre][chap][verset] =
+                            "Hebreu|translit|Strong|morph ..." (mots séparés
+                            par des espaces)
+       biblehb/strongs.js -> __strongsHb["7225"] = [lemme, translit, déf]
+
+     POURQUOI LE WLC ET PAS morphhb/oshb.js : oshb.js est numéroté selon la
+     KJV, où le titre d'un psaume est fondu dans le verset 1. Notre corpus
+     français suit la numérotation massorétique (titre = verset à part).
+     Mesuré : 84,6 % de chapitres alignés avec oshb.js, 98,9 % avec le WLC.
+
+     RÈGLE D'OR : sans donnée, on n'affiche rien. Les 8 chapitres dont la
+     versification ne concordait pas exactement (Gn 15, Ex 30, 1S 28,
+     2R 11, 2Ch 10, Ps 51, Ps 103, Dn 3) sont ABSENTS du corpus émis :
+     un mot à mot désaligné est pire qu'un mot à mot absent.
+     Aucune « racine » trilitère n'est proposée : elle ne figure pas dans
+     les données sous licence utilisées — on affiche le LEMME.
+     ================================================================== */
+  (function () {
+    var promesses = {};
+
+    function charger(fichier, global, cle) {
+      var g = window[global];
+      if (g && (cle === null || g[cle])) return Promise.resolve(true);
+      if (promesses[fichier]) return promesses[fichier];
+      promesses[fichier] = new Promise(function (res) {
+        var sc = document.createElement('script');
+        sc.src = fichier;
+        sc.onerror = function () { sc.remove(); res(false); };
+        sc.onload = function () {
+          var g2 = window[global];
+          res(!!(g2 && (cle === null || g2[cle])));
+        };
+        document.head.appendChild(sc);
+      });
+      return promesses[fichier];
+    }
+    window.__ensureBibleHb = function (n) {
+      return charger('biblehb/b' + n + '.js', '__bibleHb', n);
+    };
+    window.__ensureStrongsHb = function () {
+      return charger('biblehb/strongs.js', '__strongsHb', null);
+    };
+
+    /* ── Analyse grammaticale ────────────────────────────────────────────
+       Decodage VOLONTAIREMENT PARTIEL du code Westminster. Le code brut est
+       toujours affiche a cote : si le decodage est incomplet, l'utilisateur
+       garde l'information exacte. Mieux vaut « nom, masculin, singulier
+       (HNcmsa) » qu'une analyse inventee. */
+    var POS = {
+      N: 'nom', V: 'verbe', A: 'adjectif', D: 'adverbe', P: 'pronom',
+      R: 'préposition', C: 'conjonction', T: 'particule', I: 'interjection',
+      S: 'suffixe pronominal'
+    };
+    var GENRE = { m: 'masculin', f: 'féminin', b: 'masculin et féminin', c: 'commun' };
+    var NOMBRE = { s: 'singulier', p: 'pluriel', d: 'duel' };
+    var ETAT = { a: 'absolu', c: 'construit' };
+    var TNOM = { c: 'commun', p: 'propre' };
+    var STEM = { q: 'qal', N: 'niphal', p: 'piel', pu: 'pual', h: 'hiphil', ho: 'hophal', H: 'hithpael' };
+    var CONJ = {
+      p: 'parfait', q: 'imparfait', w: 'wayyiqtol (récit)', v: 'volitif',
+      a: 'participe actif', u: 'participe passif', i: 'infinitif construit',
+      c: 'infinitif absolu'
+    };
+
+    function personne(reste) {
+      var m = reste.match(/^(\d)([mfb])([spd])/);
+      if (!m) return null;
+      return m[1] + 'e pers. ' + (GENRE[m[2]] || '') + ' ' + (NOMBRE[m[3]] || '');
+    }
+
+    function analyser(code) {
+      if (!code) return '';
+      var morceaux = String(code).split('/');
+      var seg = morceaux[morceaux.length - 1];
+      if (seg.charAt(0) === 'H' || seg.charAt(0) === 'A') seg = seg.slice(1);
+      var pos = POS[seg.charAt(0)];
+      if (!pos) return '';
+      var reste = seg.slice(1);
+      var bits = [pos];
+      if (seg.charAt(0) === 'N') {
+        if (TNOM[reste.charAt(0)]) { bits.push(TNOM[reste.charAt(0)]); reste = reste.slice(1); }
+        if (GENRE[reste.charAt(0)]) { bits.push(GENRE[reste.charAt(0)]); reste = reste.slice(1); }
+        if (NOMBRE[reste.charAt(0)]) { bits.push(NOMBRE[reste.charAt(0)]); reste = reste.slice(1); }
+        if (ETAT[reste.charAt(0)]) { bits.push(ETAT[reste.charAt(0)]); }
+      } else if (seg.charAt(0) === 'V') {
+        var deux = reste.slice(0, 2);
+        if (STEM[deux]) { bits.push(STEM[deux]); reste = reste.slice(2); }
+        else if (STEM[reste.charAt(0)]) { bits.push(STEM[reste.charAt(0)]); reste = reste.slice(1); }
+        if (CONJ[reste.charAt(0)]) { bits.push(CONJ[reste.charAt(0)]); reste = reste.slice(1); }
+        var pn = personne(reste);
+        if (pn) bits.push(pn);
+      } else if (seg.charAt(0) === 'S') {
+        if (reste.charAt(0) === 'p') reste = reste.slice(1);
+        var ps = personne(reste);
+        if (ps) bits.push(ps);
+      }
+      if (morceaux.length > 1) bits.push('avec préfixe');
+      return bits.join(', ');
+    }
+
+    var style = document.createElement('style');
+    style.id = 'v89-hb-css';
+    style.textContent =
+      '.hb-ligne{direction:rtl;text-align:right;line-height:2.1;margin:6px 0 2px;}' +
+      '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.hb:hover,.hb.hb-actif{background:rgba(79,142,247,0.25);' +
+      'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.hb-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
+      'text-transform:uppercase;margin:2px 0 0;direction:ltr;text-align:left;}' +
+      '#hb-tip{position:fixed;z-index:4000;max-width:300px;background:#111a24;' +
+      'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
+      'padding:9px 11px;font-size:12px;line-height:1.5;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55);display:none;pointer-events:auto;}' +
+      '#hb-tip .hb-mot{direction:rtl;text-align:right;font-size:22px;' +
+      'color:#9fd0ff;display:block;margin-bottom:2px;}' +
+      '#hb-tip .hb-lig{margin:3px 0;}' +
+      '#hb-tip .hb-cle{color:#8fa3b8;font-size:10px;text-transform:uppercase;' +
+      'letter-spacing:.6px;}' +
+      '#hb-tip .hb-lem{direction:rtl;font-size:18px;color:#7fd1a0;}' +
+      '#hb-tip .hb-src{margin-top:6px;padding-top:5px;' +
+      'border-top:1px solid rgba(255,255,255,0.12);font-size:10px;color:#8fa3b8;}';
+    document.head.appendChild(style);
+
+    var tip = document.createElement('div');
+    tip.id = 'hb-tip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    function ech(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function afficher(mot, d) {
+      var h = '<span class="hb-mot">' + ech(d.h) + '</span>';
+      var vide = true;
+      if (d.t) { h += '<div class="hb-lig"><span class="hb-cle">Translittération</span><br>' + ech(d.t) + '</div>'; vide = false; }
+      if (d.lem) {
+        h += '<div class="hb-lig"><span class="hb-cle">Lemme (entrée lexicale)</span><br>' +
+          '<span class="hb-lem">' + ech(d.lem) + '</span>' +
+          (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '') +
+          ' <span style="color:#8fa3b8">· Strong ' + ech(d.s) + '</span></div>';
+        vide = false;
+      } else if (d.s) {
+        h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' + ech(d.s) + '</div>';
+      }
+      if (d.def) { h += '<div class="hb-lig"><span class="hb-cle">Sens (en)</span><br>' + ech(d.def) + '</div>'; vide = false; }
+      var ana = analyser(d.m);
+      if (ana) { h += '<div class="hb-lig"><span class="hb-cle">Analyse</span> ' + ech(ana) + '</div>'; }
+      if (d.m) { h += '<div class="hb-lig" style="color:#6f8296;font-size:10px;">code ' + ech(d.m) + '</div>'; }
+      if (vide) h += '<div class="hb-lig">Aucune donnée pour ce mot.</div>';
+      h += '<div class="hb-src">Texte : Westminster Leningrad Codex (domaine public) — ' +
+        'lemmes : Strong\'s d\'Open Scriptures (<a href="https://www.gnu.org/licenses/gpl-3.0.html" ' +
+        'target="_blank" rel="noopener" style="color:#7fd1a0">GPL 3.0</a>).</div>';
+      tip.innerHTML = h;
+      tip.style.display = 'block';
+      var r = mot.getBoundingClientRect();
+      var x = Math.min(Math.max(8, r.left), (window.innerWidth || 400) - 310);
+      tip.style.left = x + 'px';
+      tip.style.top = r.bottom + 6 + 'px';
+      var tr = tip.getBoundingClientRect();
+      if (tr.bottom > (window.innerHeight || 800) - 8) tip.style.top = Math.max(8, r.top - tr.height - 6) + 'px';
+    }
+
+    function cacher() {
+      tip.style.display = 'none';
+      document.querySelectorAll('.hb.hb-actif').forEach(function (m) {
+        m.classList.remove('hb-actif');
+      });
+    }
+
+    function detail(mot) {
+      var d = {
+        h: mot.getAttribute('data-h') || '',
+        t: mot.getAttribute('data-t') || '',
+        s: mot.getAttribute('data-s') || '',
+        m: mot.getAttribute('data-m') || ''
+      };
+      document.querySelectorAll('.hb.hb-actif').forEach(function (m) {
+        m.classList.remove('hb-actif');
+      });
+      mot.classList.add('hb-actif');
+      window.__ensureStrongsHb().then(function () {
+        var st = (window.__strongsHb || {})[d.s];
+        if (st) { d.lem = st[0] || ''; d.lemTr = st[1] || ''; d.def = st[2] || ''; }
+        afficher(mot, d);
+      });
+    }
+
+    /* Le panneau biblique reste en pointer-events:none tant qu'il n'y a
+       pas d'hébreu : on ne change pas le comportement existant du NT. */
+    var attache = false;
+    function ecouter() {
+      if (attache) return;
+      attache = true;
+      document.addEventListener('mouseover', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.hb') : null;
+        if (m) { detail(m); return; }
+        if (tip.style.display === 'block' &&
+            !(e.target && e.target.closest && e.target.closest('#hb-tip'))) cacher();
+      });
+      document.addEventListener('click', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.hb') : null;
+        if (!m) return;
+        e.preventDefault();
+        e.stopPropagation();
+        detail(m);
+      }, true);
+    }
+    ecouter();
+
+    /* Injecte la ligne hébraïque dans l'infobulle biblique. */
+    window.__hbRemplir = function (p, panneau) {
+      var livre = parseInt(p.book, 10);
+      var slot = panneau && panneau.querySelector('#hb-slot');
+      if (!slot) return;
+      /* Le Nouveau Testament est grec : pas d'hébreu ici. */
+      if (!(livre >= 1 && livre <= 39)) return;
+      window.__ensureBibleHb(livre).then(function (ok) {
+        if (!ok) return;
+        var liv = (window.__bibleHb || {})[livre] || {};
+        var v1 = p.v1, v2 = p.v2 || p.v1;
+        var html = '';
+        var trouve = false;
+        for (var n = v1; n <= v2; n++) {
+          var txt = (liv[String(p.ch)] || {})[String(n)];
+          if (!txt) continue;
+          trouve = true;
+          var mots = [];
+          txt.split(' ').forEach(function (w, idx) {
+            if (!w) return;
+            var q = w.split('|');
+            mots.push('<span class="hb" data-h="' + ech(q[0] || '') + '"' +
+              ' data-t="' + ech(q[1] || '') + '"' +
+              ' data-s="' + ech(q[2] || '') + '"' +
+              ' data-m="' + ech(q[3] || '') + '">' + ech(q[0] || '') + '</span>');
+          });
+          if (mots.length) {
+            html += '<div class="hb-ligne">' + mots.join(' ') + '</div>';
+            html += '<div class="hb-sous">hébreu — verset ' + n +
+              ' — survolez un mot</div>';
+          }
+        }
+        if (!trouve) return;
+        slot.innerHTML = html;
+        /* Les mots sont cliquables : le panneau doit capter la souris. */
+        panneau.style.pointerEvents = 'auto';
+      });
+    };
+
+    window.__hbV89 = { analyser: analyser, cacher: cacher };
+  })();
+</script>
+
 </body>
 </html>

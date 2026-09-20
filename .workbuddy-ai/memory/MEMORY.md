@@ -173,6 +173,46 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   étaient refusés → un `<table>` du modèle perdait TOUTES ses lignes (le
   conteneur retiré, ses enfants aussi), un lien perdait son texte. Toujours
   inclure dans ALLOW les balises structurelles dont l'absence tue le contenu.
+- **`colorizeSchemaRefs()` et le filtre `indexOf(':')`** : un schéma sans
+  deux-points (« Gn 5,1 » virgule française, ou sans aucune référence)
+  **sortait immédiatement** et donc perdu les rôles, le pliage et la barre
+  d'outils. Le filtre demande désormais `indexOf('<')` (présence de balises),
+  pas un deux-points. Un filtre trop optimiste qui exclut des entrées
+  légitimes fait perdre la fonctionnalité aux yeux de l'utilisateur.
+- **`<br/>` du modèle visible à l'écran** : le modèle écrit souvent
+  `Seth<br/>Enosh` en texte courant ; le premier traitement de `mdToHtml`
+  échappe `<` en `&lt;`, la balise devient texte visible. Parade : stocker
+  `<br...>` en `@@BR@@` juste après la normalisation CRLF et restaurer en
+  `<br>` à la toute fin de `mdToHtml`, après `@@MDLINK`. Trois cas
+  couverts : bloc de code, prose hors bloc, schéma avec balise inconnue.
+- **Détection de rôle par `nodeType === 3`** : `box.textContent` colle
+  « Abraham » + « patriarche » en `abrahampatriarche`, aucun mot-clé
+  n'est trouvé aux bords. Toujours descendre dans les nœuds texte
+  individuels pour normaliser les bordures.
+- **Texte arabe du Coran : les signes d'annotation ne sont PAS des mots.**
+  ۖ ۛ ۚ … (U+06D6–U+06ED) sont des tokens séparés par des espaces dans
+  notre champ `arabe`. Les compter faisait croire à un désalignement avec
+  api.quran.com (31,8 %). Après exclusion : **100 % sur 311 versets**.
+  Toujours filtrer cette plage avant de découper en mots.
+- **Un nœud texte n'a pas `.closest()`** : pour remonter au conteneur,
+  passer par `node.parentNode.closest(...)`. Déjà piégé dans v37 et v86.
+- **`m.ts === s.msgTs` est une égalité stricte** : un id DOM
+  `mc-9000000001` donne la CHAÎNE alors que `m.ts` est un NOMBRE.
+  Toujours re-numériser ce qu'on lit d'un `id`.
+- **En headless, l'app démarre derrière l'écran d'authentification** qui
+  recouvre tout : `elementFromPoint` renvoie `auth-logo`. Masquer les
+  `body > *` en `fixed`/`absolute` de plus de 300×300 avant toute sonde
+  qui utilise des coordonnées.
+- **Licences des données bibliques (vérifié 2026-09-20)** : Strong's XML
+  d'Open Scriptures est **GPL 3.0** (pas domaine public) ; OSHB
+  lemme/morphologie est **CC BY 4.0** (texte WLC domaine public) ;
+  Quranic Arabic Corpus est **GPL** et interdit la modification → livrer
+  le fichier tel quel et le parser à l'exécution.
+- **Couleurs v83 par rôle** : `patriarche` ambre `#9a6206`, `roi` or
+  `#b8860b`, `prophète` bleu `#2f6f8f`, `prêtre` violet `#6a3fa0`,
+  `apôtre` vert `#0f6b4a`, `source` taupe `#8a7a55`. Le détecteur est
+  en français (accents supprimés) — l'anglais (`patriarch`) est aussi
+  reconnu.
 - PowerShell depuis Bash est bloqué → outil PowerShell dédié.
 - `AndroidManifest.xml` n'a **pas** `android:largeHeap` : tout gros objet natif
   tue l'app (v65, d'où la sauvegarde par morceaux).
