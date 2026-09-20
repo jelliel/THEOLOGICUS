@@ -5,7 +5,7 @@ Une seule base de code, deux livrables : une **APK Android** et un **exe
 Windows**. Le parti pris : les textes sont **embarqués** dans l'application,
 donc une référence s'ouvre même sans réseau, et un lien ne peut pas être mort.
 
-Version courante : **2.0.82** (`2.0.` + nombre de commits). L'application
+Version courante : **2.0.85** (`2.0.` + nombre de commits). L'application
 signale elle-même les versions plus récentes.
 
 ---

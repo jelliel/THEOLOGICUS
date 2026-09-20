@@ -1534,6 +1534,123 @@ body {
 }
 .schema-legend-label { color: var(--sch-note, #6b4f2a); font-style: italic; margin-right: 2px; }
 .schema-legend-item { font-family: inherit; }
+/* ═══ v83 : outils des schémas ═══ */
+.schema-tools {
+  display: flex; justify-content: flex-end; gap: 6px;
+  margin-top: 10px; padding-top: 8px;
+  border-top: 1px dashed var(--sch-card-border, #c9b48a);
+}
+.schema-tool {
+  font-family: inherit; font-size: 10px; letter-spacing: 0.08em; font-weight: 700;
+  padding: 3px 8px; border-radius: 5px; cursor: pointer;
+  background: rgba(90,62,30,0.08);
+  border: 1px solid var(--sch-box-border, #8a6d3b);
+  color: var(--sch-note, #6b4f2a);
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.schema-tool:hover { background: rgba(90,62,30,0.18); transform: translateY(-1px); }
+.schema-tool:active { transform: translateY(0); }
+
+/* Pliage : le bouton vit dans le groupe, en haut a droite */
+.schema-tree .schema-group { padding-top: 4px; }
+.schema-toggle {
+  position: absolute; top: -2px; right: -2px; z-index: 3;
+  width: 18px; height: 18px; line-height: 1; padding: 0;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  border-radius: 50%; cursor: pointer;
+  background: var(--sch-card-bg, #f4ecd8);
+  border: 1px solid var(--sch-box-border, #8a6d3b);
+  color: var(--sch-note, #6b4f2a);
+  opacity: 0.45; transition: opacity 0.2s ease, background 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.schema-group:hover > .schema-toggle { opacity: 1; }
+.schema-toggle:hover { background: rgba(90,62,30,0.18); }
+.schema-badge {
+  display: inline-block; margin-top: 4px; padding: 1px 7px;
+  font-size: 10px; font-weight: 700; border-radius: 999px;
+  background: rgba(90,62,30,0.14); color: var(--sch-note, #6b4f2a);
+  border: 1px solid var(--sch-box-border, #8a6d3b);
+}
+.schema-group.schema-plie > .schema-kids { display: none !important; }
+
+/* Couleur par rôle : une bande en haut de la boîte + bordure teintée */
+.schema-box[data-role] { position: relative; border-top-width: 4px; }
+.schema-box.schema-role-patriarche { border-color: #8a5a2b; }
+.schema-box.schema-role-prophete   { border-color: #2f6f8f; }
+.schema-box.schema-role-roi        { border-color: #b8860b; }
+.schema-box.schema-role-pretre     { border-color: #6b3fa0; }
+.schema-box.schema-role-apotre     { border-color: #0f6b4a; }
+.schema-box.schema-role-juge       { border-color: #7a5c1e; }
+.schema-box.schema-role-docteur    { border-color: #8c2f39; }
+.schema-box.schema-role-scribe     { border-color: #4a6b6b; }
+.schema-box.schema-role-femme      { border-color: #a13d6d; }
+.schema-box.schema-role-source     { border-color: #6b7280; }
+.schema-box[data-role] b, .schema-box[data-role] strong { text-decoration: none; }
+
+/* Mini-carte */
+.schema-minimap {
+  position: sticky; float: right; right: 0; bottom: 0;
+  margin: 8px 0 0 8px; padding: 3px;
+  background: rgba(255,253,245,0.9);
+  border: 1px solid var(--sch-card-border, #c9b48a);
+  border-radius: 6px; z-index: 4; line-height: 0;
+}
+.schema-minimap[hidden] { display: none; }
+.schema-minimap-canvas { display: block; width: 132px; height: 96px; touch-action: none; cursor: grab; }
+
+/* Mode nuit : on ne redessine pas le parchemin, on en change les teintes */
+.schema-card.schema-night {
+  --sch-card-bg: #101a26;
+  --sch-card-border: #2c4358;
+  --sch-text: #dfe6ef;
+  --sch-note: #9fb4c8;
+  --sch-box-border: #6f8fa8;
+  --sch-edge: #5a7d95;
+  background: #101a26;
+  color: #dfe6ef;
+}
+.schema-card.schema-night .schema-box { color: #dfe6ef; border-color: #6f8fa8; }
+.schema-card.schema-night .schema-box b,
+.schema-card.schema-night .schema-box strong { color: #ffd700; }
+.schema-card.schema-night .schema-box em,
+.schema-card.schema-night .schema-box i { color: #9fb4c8; }
+.schema-card.schema-night .sch-ref.bible-ref  { color: #ffc94d !important; background: rgba(255,201,77,0.18); }
+.schema-card.schema-night .sch-ref.quran-ref  { color: #4ade9b !important; background: rgba(74,222,155,0.16); }
+.schema-card.schema-night .sch-ref.tafsir-ref { color: #c4a3ff !important; background: rgba(196,163,255,0.16); }
+.schema-card.schema-night .schema-minimap { background: rgba(16,26,38,0.92); border-color: #2c4358; }
+.schema-card.schema-night .schema-tool { background: rgba(255,255,255,0.07); border-color: #6f8fa8; color: #9fb4c8; }
+
+/* Zoom plein écran */
+.schema-zoom-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: rgba(6,10,16,0.94);
+  display: flex; flex-direction: column;
+  overflow: auto;
+}
+.schema-zoom-bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; gap: 8px; justify-content: center;
+  padding: 10px; background: rgba(6,10,16,0.96);
+}
+.schema-zoom-btn {
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  min-width: 36px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.08); color: #e6ecf4;
+  border: 1px solid rgba(255,255,255,0.22);
+  -webkit-tap-highlight-color: transparent;
+}
+.schema-zoom-btn:hover { background: rgba(255,255,255,0.18); }
+.schema-zoom-stage {
+  flex: 1; display: flex; align-items: flex-start; justify-content: center;
+  padding: 24px; min-height: 0;
+}
+.schema-zoom-card {
+  transform-origin: top center; max-width: 100%;
+  margin: 0 auto; animation: none;
+}
+
 
 .message-content table.md-table {
   contain: layout;
@@ -9122,12 +9239,24 @@ function sanitizeSchemaHtml(html) {
        ses enfants) et un lien perdait son texte. On les autorise ; les
        attributs dangereux restent nettoyes plus bas. */
     const ALLOW = new Set(['DIV','SPAN','SVG','G','RECT','LINE','PATH','POLYLINE','POLYGON','CIRCLE','TEXT','TSPAN','DEFS','MARKER','TITLE','BR','B','I','STRONG','EM','TABLE','THEAD','TBODY','TFOOT','CAPTION','TR','TD','TH','SMALL','P','UL','OL','LI','A','SUP','SUB','CODE','MARK','HR','H3','H4','FIGURE','FIGCAPTION']);
+    /* v83 : une balise inconnue (<section>, <article>, <main>...) etait
+       supprimee AVEC ses enfants — tout le schema disparaissait, puis
+       retombait dans le repli ascii qui affichait le HTML brut echappe.
+       On DETACHE la balise et on garde son contenu ; seules les balises
+       reellement dangereuses partent avec leur sous-arbre. */
+    const DROP = new Set(['SCRIPT','STYLE','IFRAME','OBJECT','EMBED','FORM','INPUT','BUTTON','SELECT','TEXTAREA','LINK','META','BASE','NOSCRIPT','TEMPLATE','FRAME','FRAMESET','APPLET','AUDIO','VIDEO','SOURCE','TRACK','CANVAS']);
+    const detacher = el => {
+      const p = el.parentNode; if (!p) return;
+      while (el.firstChild) p.insertBefore(el.firstChild, el);
+      p.removeChild(el);
+    };
     const walk = node => {
       const kids = Array.from(node.childNodes);
       for (const k of kids) {
         if (k.nodeType !== 1) continue;
         const tag = k.tagName.toUpperCase();
-        if (!ALLOW.has(tag)) { k.remove(); continue; }
+        if (DROP.has(tag)) { k.remove(); continue; }
+        if (!ALLOW.has(tag)) { detacher(k); continue; }
         const attrs = Array.from(k.attributes);
         for (const a of attrs) {
           const n = a.name.toLowerCase();
@@ -9161,6 +9290,56 @@ function schemaReFr(base, cherche, remplacePar) {
   } catch (e) { return base; }
 }
 
+/* ═══ v83 : roles dans un schema ═══
+   Une genealogie melange patriarches, rois, prophetes, pretres : on colore
+   la boite selon le role annonce dans son texte. La detection reste
+   prudente — un role n'est pose que si un mot-cle est present, sinon la
+   boite garde le parchemin neutre. */
+const SCHEMA_ROLES = [
+  { id: 'patriarche', mots: ['patriarche', 'patriarch', 'pere de famille'] },
+  { id: 'prophete',   mots: ['prophete', 'prophete', 'prophet', 'voyant'] },
+  { id: 'roi',        mots: ['roi ', 'roi de', 'king', 'regne', 'regna', 'souverain'] },
+  { id: 'pretre',     mots: ['pretre', 'priest', 'sacrificateur', 'grand pretre', 'levite', 'pontife'] },
+  { id: 'apotre',     mots: ['apotre', 'apostle', 'disciple'] },
+  { id: 'juge',       mots: ['juge', 'judge', 'suffete'] },
+  { id: 'docteur',    mots: ['docteur', 'pere de l eglise', "pere de l'eglise", 'theologien', 'concile'] },
+  { id: 'scribe',     mots: ['scribe', 'rabbin', 'pharisien', 'saduceen'] },
+  { id: 'femme',      mots: ['femme', 'epouse', 'reine', 'mère', 'mere', 'fille', 'soeur'] },
+  { id: 'source',     mots: ['source', 'reference', 'renvoi', 'citation'] }
+];
+function schemaRoleDe(noeud) {
+  if (!noeud) return '';
+  var norm = x => ' ' + String(x || '').toLowerCase()
+    .replace(/[\u00e9\u00e8\u00ea\u00eb]/g, 'e').replace(/[\u00e0\u00e2\u00e4]/g, 'a')
+    .replace(/[\u00ee\u00ef]/g, 'i').replace(/[\u00f4\u00f6]/g, 'o')
+    .replace(/[\u00f9\u00fb\u00fc]/g, 'u').replace(/[\u00e7]/g, 'c')
+    .replace(/[^a-z0-9' ]/g, ' ') + ' ';
+  /* textContent donnerait « abrahampatriarche » : les mots se collent et
+     plus aucune frontiere ne tient. On regarde chaque noeud texte SEUL —
+     le role est presque toujours dans le <em> de la boite. */
+  var morceaux = [];
+  (function walk(n) {
+    if (!n || !n.childNodes) return;
+    for (var i = 0; i < n.childNodes.length; i++) {
+      var c = n.childNodes[i];
+      if (c.nodeType === 3) { if (c.nodeValue) morceaux.push(c.nodeValue); }
+      else if (c.nodeType === 1) walk(c);
+    }
+  })(noeud);
+  for (var mi = 0; mi < morceaux.length; mi++) {
+    var t = norm(morceaux[mi]);
+    if (t.length < 4) continue;
+    for (var i2 = 0; i2 < SCHEMA_ROLES.length; i2++) {
+      var r = SCHEMA_ROLES[i2];
+      for (var j = 0; j < r.mots.length; j++) {
+        var m = r.mots[j];
+        if (t.indexOf(' ' + m) !== -1 || t.indexOf(m + ' ') !== -1) return r.id;
+      }
+    }
+  }
+  return '';
+}
+
 /* ═══ v81 : références colorées à l'intérieur des schémas ═══
    Dans une généalogie, « Gn 5,3 », « 1 Ch 1,1 » et « Lc 3,36 » s'affichaient
    dans le même sépia que le reste de la boîte : aucune way de distinguer une
@@ -9170,7 +9349,12 @@ function schemaReFr(base, cherche, remplacePar) {
    elle porte une couleur propre, lisible sur le parchemin. */
 function colorizeSchemaRefs(html) {
   try {
-    if (!html || String(html).indexOf(':') === -1) return html;
+    /* v83e : ce filtre exigeait un deux-points. Un schema ecrit en
+       virgules francaises (« Gn 5,1 ») — ou sans aucune reference —
+       sortait donc avant les roles, le pliage et la barre d'outils.
+       Le test porte maintenant sur la presence de balises, pas sur
+       les references : tout schema enrichissable reste enrichi. */
+    if (!html || String(html).indexOf('<') === -1) return html;
     /* Les regex canoniques exigent le deux-points (« Gn 5:1 »). En francais
        on ecrit surtout « Gn 5,1 » : sans variante, ces references
        n'etaient jamais colorees. On la derive de la regex canonique pour
@@ -9250,6 +9434,68 @@ function colorizeSchemaRefs(html) {
       }
       root.appendChild(leg);
     }
+
+    /* ── v83 : couleur par role ── */
+    try {
+      var boites = root.querySelectorAll('.schema-box');
+      for (var bi = 0; bi < boites.length; bi++) {
+        var bx = boites[bi];
+        if (bx.getAttribute('data-role')) continue;
+        var role = schemaRoleDe(bx);
+        if (!role) continue;
+        bx.setAttribute('data-role', role);
+        bx.className = (bx.className ? bx.className + ' ' : '') + 'schema-role-' + role;
+      }
+    } catch (e) {}
+
+    /* ── v83 : pliage des branches ──
+       On pose un bouton sur chaque groupe qui a des enfants. Le
+       gestionnaire est en delegation (bloc v83-schema) : aucune fonction
+       inline, donc rien a nettoyer. */
+    try {
+      var groupes = root.querySelectorAll('.schema-group');
+      for (var gi = 0; gi < groupes.length; gi++) {
+        var g = groupes[gi];
+        var kids = null;
+        for (var ki = 0; ki < g.children.length; ki++) {
+          if (g.children[ki].className && String(g.children[ki].className).indexOf('schema-kids') !== -1) { kids = g.children[ki]; break; }
+        }
+        if (!kids) continue;
+        var n = kids.querySelectorAll('.schema-box').length;
+        if (!n) continue;
+        if (g.querySelector(':scope > .schema-toggle')) continue;
+        var btn = doc.createElement('button');
+        btn.className = 'schema-toggle';
+        btn.type = 'button';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.setAttribute('title', 'Plier / deplier cette branche (' + n + ' descendants)');
+        btn.textContent = '\u2212';
+        g.insertBefore(btn, g.firstChild);
+      }
+    } catch (e) {}
+
+    /* ── v83 : barre d'outils de la carte ── */
+    try {
+      if (!root.querySelector(':scope > .schema-tools')) {
+        var tools = doc.createElement('div');
+        tools.className = 'schema-tools';
+        var boutons = [
+          ['schema-svg',   'SVG',  'Exporter ce schema en SVG'],
+          ['schema-zoom',  'ZOOM', 'Ouvrir en plein ecran'],
+          ['schema-night', 'NUIT', 'Basculer le parchemin en mode nuit']
+        ];
+        for (var ti = 0; ti < boutons.length; ti++) {
+          var b = doc.createElement('button');
+          b.type = 'button';
+          b.className = 'schema-tool ' + boutons[ti][0];
+          b.textContent = boutons[ti][1];
+          b.setAttribute('title', boutons[ti][2]);
+          tools.appendChild(b);
+        }
+        root.appendChild(tools);
+      }
+    } catch (e) {}
+
     return root.innerHTML;
   } catch (e) { return html; }
 }
@@ -9265,6 +9511,11 @@ const mdToHtml = t => {
   if (!t || typeof t !== 'string') return '';
   _sectionCounter = 0;
   let s = (t||'').replace(/\r\n/g, "\n");
+  /* v83 : le modele ecrit souvent « Adam -> Seth<br/>Enosh -> Kenan » en
+     texte courant. Sans protection, l'echappement HTML plus bas transforme
+     la balise en texte visible : l'utilisateur voyait « <br/> » au milieu
+     de ses fleches. On la met de cote et on la restaure a la fin. */
+  s = s.replace(/<br\s*\/?>/gi, '@@BR@@');
   s = s.replace(/@url:\s*[`"']?([^`\s"'<>)]+)[`"']?/g, '$1');
   s = s.replace(/\[([^\]]+)\]\s*\((https?:[^\s)]+)\)/g, (m, txt, url) => {
     const u = String(url).replace(/"/g, '%22');
@@ -9305,7 +9556,15 @@ const mdToHtml = t => {
     const body = c.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
     let clean = sanitizeSchemaHtml(body);
     if (clean) clean = colorizeSchemaRefs(clean);
-    if (!clean && body.trim()) clean = asciiSchemaHtml(body);
+    /* v83 : si le corps ressemble a du HTML, on retire les balises avant
+       de le donner au parseur ascii — sinon on fabrique une boite qui
+       contient « <div class=... » en texte. */
+    if (!clean && body.trim()) {
+      const brut = /<[a-z][a-z0-9]*[\s>/]/i.test(body)
+        ? String(body).replace(/<[^>]*>/g, '\n')
+        : body;
+      clean = asciiSchemaHtml(brut);
+    }
     if (clean && String(clean).indexOf('schema-box') !== -1) clean = colorizeSchemaRefs(clean);
     if (!clean && body.trim()) {
       clean = '<pre class="schema-fallback">' + body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>';
@@ -9501,6 +9760,7 @@ const mdToHtml = t => {
     .replace(/@@SCHEMA(\d+)@@/g, (_, i) => '<div class="schema-card">' + (schemaBlocks[+i] || '') + '</div>')
     .replace(/@@RAW(\d+)@@/g, (_, i) => rawHtml[+i] || '')
     .replace(/@@MDLINK(\d+)@@/g, (_, i) => mdLinks[+i] || '')
+    .replace(/@@BR@@/g, '<br>')
   return s;
 };
 
@@ -27534,5 +27794,276 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   setTimeout(boot, 800);
 })();
 </script>
+<script id="v83-schema">
+/* ═══ v83 : schémas interactifs ═══
+   Pliage des branches · export SVG · zoom plein écran · mode nuit ·
+   mini-carte. Tout est en DÉLÉGATION : une carte est re-rendue à chaque
+   rendu de message, on ne peut pas attacher un gestionnaire par carte.
+   Les éléments d'interface (boutons, badge) sont retirés avant export. */
+(function () {
+  'use strict';
+  var CLE_NUIT = 'theologicus_schema_nuit';
+
+  function lireNuit() { try { return localStorage.getItem(CLE_NUIT) === '1'; } catch (e) { return false; } }
+  function ecrireNuit(v) { try { localStorage.setItem(CLE_NUIT, v ? '1' : '0'); } catch (e) {} }
+
+  function carteDe(el) { return el && el.closest ? el.closest('.schema-card') : null; }
+  function enfantsDe(g, cls) {
+    for (var i = 0; i < g.children.length; i++) {
+      if (String(g.children[i].className).indexOf(cls) !== -1) return g.children[i];
+    }
+    return null;
+  }
+
+  /* ─────────── PLIAGE ─────────── */
+  function basculer(btn) {
+    var g = btn.parentNode;
+    if (!g) return;
+    var plie = !g.classList.contains('schema-plie');
+    if (plie) g.classList.add('schema-plie'); else g.classList.remove('schema-plie');
+    btn.setAttribute('aria-expanded', plie ? 'false' : 'true');
+    btn.textContent = plie ? '+' : '\u2212';
+    var vieux = g.querySelector(':scope > .schema-badge');
+    if (vieux) vieux.parentNode.removeChild(vieux);
+    if (plie) {
+      var kids = enfantsDe(g, 'schema-kids');
+      var n = kids ? kids.querySelectorAll('.schema-box').length : 0;
+      var badge = document.createElement('span');
+      badge.className = 'schema-badge';
+      badge.textContent = '+' + n;
+      g.appendChild(badge);
+    }
+    var card = carteDe(g);
+    if (card) { redessiner(card); }
+  }
+
+  /* ─────────── EXPORT SVG ─────────── */
+  function cssSchema() {
+    var out = [];
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      try {
+        var rules = document.styleSheets[i].cssRules;
+        for (var j = 0; j < rules.length; j++) {
+          var t = rules[j].cssText || '';
+          if (t.indexOf('schema-') !== -1) out.push(t);
+        }
+      } catch (e) {}
+    }
+    return out.join('\n');
+  }
+  function horodatage() {
+    var d = new Date(), p = function (x) { return (x < 10 ? '0' : '') + x; };
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function telecharger(contenu, nom, type) {
+    try {
+      var blob = new Blob([contenu], { type: type + ';charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nom;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 500);
+      return true;
+    } catch (e) { return false; }
+  }
+  function exporterSvg(card) {
+    try {
+      var clone = card.cloneNode(true);
+      var junk = clone.querySelectorAll('.schema-tools, .schema-toggle, .schema-badge, .schema-minimap');
+      for (var i = 0; i < junk.length; i++) junk[i].parentNode.removeChild(junk[i]);
+      clone.classList.add('schema-export');
+      var W = Math.max(240, Math.ceil(card.scrollWidth));
+      var H = Math.max(160, Math.ceil(card.scrollHeight));
+      var ser = new XMLSerializer().serializeToString(clone);
+      var svg = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        + '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">\n'
+        + '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">\n'
+        + '<style>' + cssSchema() + '</style>\n'
+        + ser + '\n'
+        + '</foreignObject>\n</svg>';
+      if (telecharger(svg, 'schema-' + horodatage() + '.svg', 'image/svg+xml')) {
+        if (typeof toast === 'function') toast('Schéma exporté en SVG', 'success');
+      } else if (typeof toast === 'function') toast('Export impossible ici', 'error');
+    } catch (e) {
+      if (typeof toast === 'function') toast('Export impossible : ' + (e && e.message ? e.message : e), 'error');
+    }
+  }
+
+  /* ─────────── ZOOM PLEIN ÉCRAN ─────────── */
+  var zoomOuvert = null;
+  function fermerZoom() {
+    if (!zoomOuvert) return;
+    if (zoomOuvert.parentNode) zoomOuvert.parentNode.removeChild(zoomOuvert);
+    zoomOuvert = null;
+    document.removeEventListener('keydown', zoomKey, true);
+  }
+  function zoomKey(e) { if (e.key === 'Escape') { e.preventDefault(); fermerZoom(); } }
+  function ouvrirZoom(card) {
+    fermerZoom();
+    var echelle = 1;
+    var ov = document.createElement('div');
+    ov.className = 'schema-zoom-overlay';
+    var bar = document.createElement('div');
+    bar.className = 'schema-zoom-bar';
+    function bouton(txt, titre, fn) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'schema-zoom-btn'; b.textContent = txt; b.title = titre;
+      b.addEventListener('click', fn);
+      return b;
+    }
+    var clone = card.cloneNode(true);
+    clone.classList.add('schema-zoom-card');
+    var junk = clone.querySelectorAll('.schema-tools, .schema-minimap');
+    for (var i = 0; i < junk.length; i++) junk[i].parentNode.removeChild(junk[i]);
+    var stage = document.createElement('div');
+    stage.className = 'schema-zoom-stage';
+    stage.appendChild(clone);
+    function appliquer() { clone.style.transform = 'scale(' + echelle + ')'; }
+    bar.appendChild(bouton('\u2212', 'Réduire', function () { echelle = Math.max(0.3, echelle - 0.2); appliquer(); }));
+    bar.appendChild(bouton('+', 'Agrandir', function () { echelle = Math.min(4, echelle + 0.2); appliquer(); }));
+    bar.appendChild(bouton('SVG', 'Exporter en SVG', function () { exporterSvg(card); }));
+    bar.appendChild(bouton('\u2715', 'Fermer', fermerZoom));
+    ov.appendChild(bar);
+    ov.appendChild(stage);
+    ov.addEventListener('click', function (e) { if (e.target === ov || e.target === stage) fermerZoom(); });
+    document.body.appendChild(ov);
+    zoomOuvert = ov;
+    document.addEventListener('keydown', zoomKey, true);
+    appliquer();
+  }
+
+  /* ─────────── MODE NUIT ─────────── */
+  function appliquerNuit() {
+    var nuit = lireNuit();
+    var cartes = document.querySelectorAll('.schema-card');
+    for (var i = 0; i < cartes.length; i++) {
+      if (nuit) cartes[i].classList.add('schema-night'); else cartes[i].classList.remove('schema-night');
+    }
+    var btns = document.querySelectorAll('.schema-tool.schema-night');
+    for (var j = 0; j < btns.length; j++) btns[j].textContent = nuit ? 'JOUR' : 'NUIT';
+  }
+  function basculerNuit() { ecrireNuit(!lireNuit()); appliquerNuit(); }
+
+  /* ─────────── MINI-CARTE ─────────── */
+  var dejaVu = null;
+  try { dejaVu = new WeakSet(); } catch (e) { dejaVu = null; }
+
+  function redessiner(card) {
+    var mm = card.querySelector(':scope > .schema-minimap');
+    if (!mm) return;
+    var cv = mm.firstChild;
+    if (!cv || !cv.getContext) return;
+    var W = card.scrollWidth, H = card.scrollHeight;
+    var cw = card.clientWidth, ch = card.clientHeight;
+    var utile = (W > cw + 24) || (H > ch + 24);
+    mm.hidden = !utile;
+    if (!utile) return;
+    var ctx = cv.getContext('2d');
+    var vw = cv.width, vh = cv.height;
+    ctx.clearRect(0, 0, vw, vh);
+    var k = Math.min(vw / W, vh / H);
+    var ox = (vw - W * k) / 2, oy = (vh - H * k) / 2;
+    var cr = card.getBoundingClientRect();
+    var nuit = card.classList.contains('schema-night');
+    var boites = card.querySelectorAll('.schema-box');
+    for (var i = 0; i < boites.length; i++) {
+      var r = boites[i].getBoundingClientRect();
+      var x = ox + (r.left - cr.left + card.scrollLeft) * k;
+      var y = oy + (r.top - cr.top + card.scrollTop) * k;
+      var w = Math.max(1.5, r.width * k), h = Math.max(1.5, r.height * k);
+      var role = boites[i].getAttribute('data-role');
+      ctx.fillStyle = nuit ? 'rgba(180,205,235,0.55)' : (role ? 'rgba(90,62,30,0.75)' : 'rgba(90,62,30,0.45)');
+      ctx.fillRect(x, y, w, h);
+    }
+    /* cadre = ce qu'on voit actuellement */
+    ctx.strokeStyle = nuit ? 'rgba(255,215,0,0.95)' : 'rgba(180,40,40,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(ox + card.scrollLeft * k, oy + card.scrollTop * k, cw * k, ch * k);
+    mm.__k = k; mm.__ox = ox; mm.__oy = oy;
+  }
+
+  function initMinimap(card) {
+    if (!card) return;
+    if (dejaVu) { if (dejaVu.has(card)) return; dejaVu.add(card); }
+    if (card.querySelector(':scope > .schema-minimap')) return;
+    if (lireNuit()) card.classList.add('schema-night');
+    var mm = document.createElement('div');
+    mm.className = 'schema-minimap';
+    mm.title = 'Vue d\'ensemble — glissez pour vous déplacer';
+    var cv = document.createElement('canvas');
+    cv.width = 132; cv.height = 96;
+    cv.className = 'schema-minimap-canvas';
+    mm.appendChild(cv);
+    card.appendChild(mm);
+    card.addEventListener('scroll', function () { redessiner(card); }, { passive: true });
+    /* Glisser sur la mini-carte fait défiler la carte */
+    var glisse = false;
+    var aller = function (ev) {
+      var k = mm.__k; if (!k) return;
+      var r = cv.getBoundingClientRect();
+      var px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      var py = (ev.touches ? ev.touches[0].clientY : ev.clientY) - r.top;
+      card.scrollLeft = (px - mm.__ox) / k - card.clientWidth / 2;
+      card.scrollTop = (py - mm.__oy) / k - card.clientHeight / 2;
+    };
+    cv.addEventListener('pointerdown', function (ev) { glisse = true; aller(ev); ev.preventDefault(); });
+    cv.addEventListener('pointermove', function (ev) { if (glisse) aller(ev); });
+    window.addEventListener('pointerup', function () { glisse = false; });
+    setTimeout(function () { redessiner(card); }, 120);
+    setTimeout(function () { redessiner(card); }, 700);
+  }
+
+  /* ─────────── DÉLÉGATION ─────────── */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var btn = t.closest('.schema-toggle');
+    if (btn) { e.preventDefault(); e.stopPropagation(); basculer(btn); return; }
+    var outil = t.closest('.schema-tool');
+    if (outil) {
+      e.preventDefault(); e.stopPropagation();
+      var card = carteDe(outil);
+      if (outil.classList.contains('schema-svg')) exporterSvg(card);
+      else if (outil.classList.contains('schema-zoom')) ouvrirZoom(card);
+      else if (outil.classList.contains('schema-night')) basculerNuit();
+      return;
+    }
+  }, false);
+
+  /* ─────────── INITIALISATION ─────────── */
+  function initCartes(root) {
+    var cartes = (root && root.querySelectorAll ? root.querySelectorAll('.schema-card') : document.querySelectorAll('.schema-card'));
+    for (var i = 0; i < cartes.length; i++) initMinimap(cartes[i]);
+  }
+  function demarrer() {
+    appliquerNuit();
+    initCartes(document);
+    try {
+      var obs = new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var aj = muts[i].addedNodes;
+          for (var j = 0; j < aj.length; j++) {
+            var n = aj[j];
+            if (!n || n.nodeType !== 1) continue;
+            if (n.classList && n.classList.contains('schema-card')) initMinimap(n);
+            else if (n.querySelectorAll) initCartes(n);
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+    window.addEventListener('resize', function () { initCartes(document); }, { passive: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+
+  window.__schemaV83 = {
+    basculer: basculer, exporterSvg: exporterSvg, ouvrirZoom: ouvrirZoom, fermerZoom: fermerZoom,
+    basculerNuit: basculerNuit, appliquerNuit: appliquerNuit, redessiner: redessiner, initMinimap: initMinimap
+  };
+})();
+</script>
+
 </body>
 </html>
