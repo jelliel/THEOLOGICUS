@@ -28711,7 +28711,15 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       } else if (d.s) {
         h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' + ech(d.s) + '</div>';
       }
-      if (d.def) { h += '<div class="hb-lig"><span class="hb-cle">Sens (en)</span><br>' + ech(d.def) + '</div>'; vide = false; }
+      if (d.defFr) {
+        h += '<div class="hb-lig"><span class="hb-cle">Sens</span><br>'
+          + ech(d.defFr) + ' <span style="color:#8fa3b8;font-size:10px;">'
+          + '(trad. auto.)</span></div>';
+        if (d.def) h += '<div class="hb-lig" style="color:#8fa3b8;'
+          + 'font-size:11px;">source (en) : ' + ech(d.def) + '</div>';
+        vide = false;
+      } else if (d.def) { h += '<div class="hb-lig"><span class="hb-cle">'
+        + 'Sens (en)</span><br>' + ech(d.def) + '</div>'; vide = false; }
       var ana = analyser(d.m);
       if (ana) { h += '<div class="hb-lig"><span class="hb-cle">Analyse</span> ' + ech(ana) + '</div>'; }
       if (d.m) { h += '<div class="hb-lig" style="color:#6f8296;font-size:10px;">code ' + ech(d.m) + '</div>'; }
@@ -28749,7 +28757,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       mot.classList.add('hb-actif');
       window.__ensureStrongsHb().then(function () {
         var st = (window.__strongsHb || {})[d.s];
-        if (st) { d.lem = st[0] || ''; d.lemTr = st[1] || ''; d.def = st[2] || ''; }
+        if (st) { d.lem = st[0] || ''; d.lemTr = st[1] || ''; d.def = st[2] || ''; d.defFr = st[3] || ''; }
         afficher(mot, d);
       });
     }
@@ -28818,6 +28826,315 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     window.__hbV89 = { analyser: analyser, cacher: cacher };
   })();
 </script>
+<script id="v90-gr">
+  /* ==================================================================
+     v90 — MOT À MOT GREC DANS L'INFOBULLE BIBLIQUE (NOUVEAU TESTAMENT)
+
+     Même principe que l'hébreu (v89), pour les livres 40 à 66. Sous le
+     verset français, la ligne grecque du texte SBLGNT découpée en mots
+     cliquables ; chaque mot ouvre :
+
+        translittération · lemme · entrée Strong · sens · analyse
+        grammaticale · code brut MorphGNT
+
+     Sources (chargées à la volée) :
+       biblegr/bN.js      -> __bibleGr[livre][chap][verset] =
+                             "mot|translit|Strong|morph|lemme ..."
+       biblegr/strongs.js -> __strongsGr["3056"] =
+                             [lemme, translit, déf(en), déf(fr)]
+
+     ATTENTION AU FORMAT : MorphGNT écrit « N- ----NSF- » — un espace dans
+     le code. Les mots d'un verset étant séparés par des espaces, le code
+     est stocké SANS espace (« N-----NSF- ») ; on le reconstitue ici pour
+     l'affichage du code brut.
+
+     RÈGLE D'OR : sans donnée, on n'affiche rien.
+       - 94,1 % des mots sont reliés à une entrée Strong UNE SEULE fois ;
+         4,4 % étaient ambigus (plusieurs entrées) et 1,6 % sans entrée :
+         ces mots n'ont PAS de numéro Strong, on n'en invente pas un ;
+       - le texte critique omet des versets que la BJ porte (Mt 17,21 ;
+         Jn 7,53–8,11 ; Rm 16,25-27 …). Leurs numéros ne se décalent pas,
+         donc on les signale « absent du texte grec » au lieu de décaler.
+     ================================================================== */
+  (function () {
+    var promesses = {};
+
+    function charger(fichier, global, cle) {
+      var g = window[global];
+      if (g && (cle === null || g[cle])) return Promise.resolve(true);
+      if (promesses[fichier]) return promesses[fichier];
+      promesses[fichier] = new Promise(function (res) {
+        var sc = document.createElement('script');
+        sc.src = fichier;
+        sc.onerror = function () { sc.remove(); res(false); };
+        sc.onload = function () {
+          var g2 = window[global];
+          res(!!(g2 && (cle === null || g2[cle])));
+        };
+        document.head.appendChild(sc);
+      });
+      return promesses[fichier];
+    }
+    window.__ensureBibleGr = function (n) {
+      return charger('biblegr/b' + n + '.js', '__bibleGr', n);
+    };
+    window.__ensureStrongsGr = function () {
+      return charger('biblegr/strongs.js', '__strongsGr', null);
+    };
+
+    /* ── Décodage du code MorphGNT ─────────────────────────────────────
+       Les positions ont été MESURÉES sur les 137 554 mots (inv2_grec.py)
+       puis confirmées par le README de morphgnt/sblgnt. Décodage complet
+       cette fois : la grille est régulière et documentée, contrairement
+       au code hébreu de Westminster laissé volontairement partiel. */
+    var POS = {
+      'N-': 'nom', 'V-': 'verbe', 'A-': 'adjectif', 'D-': 'adverbe',
+      'P-': 'préposition', 'C-': 'conjonction', 'I-': 'interjection',
+      'X-': 'particule', 'RA': 'article',
+      'RD': 'pronom démonstratif', 'RI': 'pronom interrogatif/indéfini',
+      'RP': 'pronom personnel', 'RR': 'pronom relatif'
+    };
+    var CAS = { N: 'nominatif', G: 'génitif', D: 'datif', A: 'accusatif', V: 'vocatif' };
+    var NOMBRE = { S: 'singulier', P: 'pluriel' };
+    var GENRE = { M: 'masculin', F: 'féminin', N: 'neutre' };
+    var TEMPS = {
+      P: 'présent', I: 'imparfait', F: 'futur',
+      A: 'aoriste', X: 'parfait', Y: 'plus-que-parfait'
+    };
+    var VOIX = { A: 'actif', M: 'moyen', P: 'passif' };
+    var MODE = {
+      I: 'indicatif', D: 'impératif', S: 'subjonctif',
+      O: 'optatif', N: 'infinitif', P: 'participe'
+    };
+    var DEGRE = { C: 'comparatif', S: 'superlatif' };
+    var PERSONNE = { '1': '1re pers.', '2': '2e pers.', '3': '3e pers.' };
+
+    function analyser(code) {
+      if (!code || code.length < 10) return '';
+      var pos = code.slice(0, 2);
+      var p = code.slice(2);            /* 8 caractères */
+      var nom = POS[pos];
+      if (!nom) return '';
+      if (pos === 'V-') {
+        var b = [nom, MODE[p.charAt(3)], TEMPS[p.charAt(1)], VOIX[p.charAt(2)]];
+        if (PERSONNE[p.charAt(0)]) b.push(PERSONNE[p.charAt(0)]);
+        if (NOMBRE[p.charAt(5)]) b.push(NOMBRE[p.charAt(5)]);
+        if (p.charAt(3) === 'P') {
+          if (CAS[p.charAt(4)]) b.push(CAS[p.charAt(4)]);
+          if (GENRE[p.charAt(6)]) b.push(GENRE[p.charAt(6)]);
+        }
+        return b.filter(Boolean).join(', ');
+      }
+      var n = [nom];
+      if (CAS[p.charAt(4)]) n.push(CAS[p.charAt(4)]);
+      if (NOMBRE[p.charAt(5)]) n.push(NOMBRE[p.charAt(5)]);
+      if (GENRE[p.charAt(6)]) n.push(GENRE[p.charAt(6)]);
+      if (DEGRE[p.charAt(7)]) n.push(DEGRE[p.charAt(7)]);
+      return n.join(', ');
+    }
+
+    /* Code brut tel que MorphGNT l'écrit : « N- ----NSF- ». */
+    function brut(code) {
+      if (!code || code.length < 10) return code || '';
+      return code.slice(0, 2) + ' ' + code.slice(2);
+    }
+
+    var style = document.createElement('style');
+    style.id = 'v90-gr-css';
+    style.textContent =
+      '.gr-ligne{line-height:2.1;margin:6px 0 2px;}' +
+      '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.gr:hover,.gr.gr-actif{background:rgba(79,142,247,0.25);' +
+      'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.gr-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
+      'text-transform:uppercase;margin:2px 0 0;}' +
+      '.gr-manque{font-size:10px;color:#c9a26d;margin:3px 0 0;}' +
+      '#gr-tip{position:fixed;z-index:4000;max-width:300px;background:#111a24;' +
+      'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
+      'padding:9px 11px;font-size:12px;line-height:1.5;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55);display:none;pointer-events:auto;}' +
+      '#gr-tip .gr-mot{font-size:22px;color:#9fd0ff;display:block;margin-bottom:2px;}' +
+      '#gr-tip .gr-lig{margin:3px 0;}' +
+      '#gr-tip .gr-cle{color:#8fa3b8;font-size:10px;text-transform:uppercase;' +
+      'letter-spacing:.6px;}' +
+      '#gr-tip .gr-lem{font-size:18px;color:#7fd1a0;}' +
+      '#gr-tip .gr-src{margin-top:6px;padding-top:5px;' +
+      'border-top:1px solid rgba(255,255,255,0.12);font-size:10px;color:#8fa3b8;}';
+    document.head.appendChild(style);
+
+    var tip = document.createElement('div');
+    tip.id = 'gr-tip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    function ech(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function afficher(mot, d) {
+      var h = '<span class="gr-mot">' + ech(d.g) + '</span>';
+      var vide = true;
+      if (d.t) {
+        h += '<div class="gr-lig"><span class="gr-cle">Translittération</span><br>'
+          + ech(d.t) + '</div>';
+        vide = false;
+      }
+      if (d.lem) {
+        h += '<div class="gr-lig"><span class="gr-cle">Lemme (entrée lexicale)</span><br>'
+          + '<span class="gr-lem">' + ech(d.lem) + '</span>'
+          + (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '')
+          + (d.s ? ' <span style="color:#8fa3b8">· Strong G' + ech(d.s) + '</span>' : '')
+          + '</div>';
+        vide = false;
+      }
+      if (d.defFr) {
+        h += '<div class="gr-lig"><span class="gr-cle">Sens</span><br>' + ech(d.defFr)
+          + ' <span style="color:#8fa3b8;font-size:10px;">(trad. auto.)</span></div>';
+        if (d.def) {
+          h += '<div class="gr-lig" style="color:#8fa3b8;font-size:11px;">'
+            + 'source (en) : ' + ech(d.def) + '</div>';
+        }
+        vide = false;
+      } else if (d.def) {
+        h += '<div class="gr-lig"><span class="gr-cle">Sens (en)</span><br>'
+          + ech(d.def) + '</div>';
+        vide = false;
+      }
+      var ana = analyser(d.m);
+      if (ana) {
+        h += '<div class="gr-lig"><span class="gr-cle">Analyse</span> ' + ech(ana) + '</div>';
+      }
+      if (d.m) {
+        h += '<div class="gr-lig" style="color:#6f8296;font-size:10px;">code '
+          + ech(brut(d.m)) + '</div>';
+      }
+      if (vide) h += '<div class="gr-lig">Aucune donnée pour ce mot.</div>';
+      h += '<div class="gr-src">Texte : SBLGNT (<a href="https://creativecommons.org/licenses/by/4.0/" '
+        + 'target="_blank" rel="noopener" style="color:#7fd1a0">CC BY 4.0</a>) — morphologie et '
+        + 'lemmes : MorphGNT, J. K. Tauber (<a href="https://creativecommons.org/licenses/by-sa/3.0/" '
+        + 'target="_blank" rel="noopener" style="color:#7fd1a0">CC BY-SA 3.0</a>).</div>';
+      tip.innerHTML = h;
+      tip.style.display = 'block';
+      var r = mot.getBoundingClientRect();
+      tip.style.left = Math.min(Math.max(8, r.left), (window.innerWidth || 400) - 310) + 'px';
+      tip.style.top = r.bottom + 6 + 'px';
+      var tr = tip.getBoundingClientRect();
+      if (tr.bottom > (window.innerHeight || 800) - 8) {
+        tip.style.top = Math.max(8, r.top - tr.height - 6) + 'px';
+      }
+    }
+
+    function cacher() {
+      tip.style.display = 'none';
+      var a = document.querySelectorAll('.gr.gr-actif');
+      for (var i = 0; i < a.length; i++) a[i].classList.remove('gr-actif');
+    }
+
+    function detail(mot) {
+      var d = {
+        g: mot.getAttribute('data-g') || '',
+        t: mot.getAttribute('data-t') || '',
+        s: mot.getAttribute('data-s') || '',
+        m: mot.getAttribute('data-m') || '',
+        lem: mot.getAttribute('data-l') || ''
+      };
+      var a = document.querySelectorAll('.gr.gr-actif');
+      for (var i = 0; i < a.length; i++) a[i].classList.remove('gr-actif');
+      mot.classList.add('gr-actif');
+      var fin = function () { afficher(mot, d); };
+      if (d.s) {
+        window.__ensureStrongsGr().then(function () {
+          var st = (window.__strongsGr || {})[d.s];
+          if (st) { d.lemTr = st[1] || ''; d.def = st[2] || ''; d.defFr = st[3] || ''; }
+          fin();
+        });
+      } else {
+        fin();
+      }
+    }
+
+    var attache = false;
+    function ecouter() {
+      if (attache) return;
+      attache = true;
+      document.addEventListener('mouseover', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.gr') : null;
+        if (m) { detail(m); return; }
+        if (tip.style.display === 'block' &&
+            !(e.target && e.target.closest && e.target.closest('#gr-tip'))) cacher();
+      });
+      document.addEventListener('click', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.gr') : null;
+        if (!m) return;
+        e.preventDefault();
+        e.stopPropagation();
+        detail(m);
+      }, true);
+    }
+    ecouter();
+
+    /* Injecte la ligne grecque dans l'infobulle biblique. */
+    function remplir(p, panneau) {
+      var livre = parseInt(p.book, 10);
+      var slot = panneau && panneau.querySelector('#hb-slot');
+      if (!slot) return;
+      window.__ensureBibleGr(livre).then(function (ok) {
+        if (!ok) return;
+        var liv = (window.__bibleGr || {})[livre] || {};
+        var ch = liv[String(p.ch)];
+        if (!ch) return;
+        var v1 = p.v1, v2 = p.v2 || p.v1;
+        var html = '', manquants = [], n;
+        for (n = v1; n <= v2; n++) {
+          var txt = ch[String(n)];
+          if (!txt) { manquants.push(n); continue; }
+          var mots = [];
+          txt.split(' ').forEach(function (w) {
+            if (!w) return;
+            var q = w.split('|');
+            mots.push('<span class="gr" data-g="' + ech(q[0] || '') + '"' +
+              ' data-t="' + ech(q[1] || '') + '"' +
+              ' data-s="' + ech(q[2] || '') + '"' +
+              ' data-m="' + ech(q[3] || '') + '"' +
+              ' data-l="' + ech(q[4] || '') + '">' + ech(q[0] || '') + '</span>');
+          });
+          if (mots.length) {
+            html += '<div class="gr-ligne">' + mots.join(' ') + '</div>';
+            html += '<div class="gr-sous">grec — verset ' + n +
+              ' — survolez un mot</div>';
+          } else {
+            manquants.push(n);
+          }
+        }
+        if (!html && !manquants.length) return;
+        if (manquants.length) {
+          /* Le texte critique omet ces versets ; la BJ les porte. */
+          html += '<div class="gr-manque">grec absent pour ' +
+            (manquants.length > 1
+              ? 'les versets ' + manquants[0] + '–' + manquants[manquants.length - 1]
+              : 'le verset ' + manquants[0]) +
+            ' (le texte critique ne les porte pas)</div>';
+        }
+        slot.innerHTML = html;
+        panneau.style.pointerEvents = 'auto';
+      });
+    }
+    window.__grRemplir = remplir;
+
+    /* v89 s'arrête aux livres 1-39 : on prend la suite pour 40-66. */
+    var precedent = window.__hbRemplir;
+    window.__hbRemplir = function (p, panneau) {
+      var livre = parseInt(p && p.book, 10);
+      if (livre >= 40 && livre <= 66) return remplir(p, panneau);
+      if (precedent) return precedent(p, panneau);
+    };
+
+    window.__grV90 = { analyser: analyser, brut: brut, cacher: cacher };
+  })();
+</script>
+
 
 </body>
 </html>

@@ -99,12 +99,95 @@ Deux précautions :
 
 Moteur : Argos Translate (en→fr), via LibreTranslate.
 
+## Grec — texte, lemmes et morphologie (Nouveau Testament)
+
+- Source : **MorphGNT — édition SBLGNT**, James K. Tauber, version 6.12,
+  DOI 10.5281/zenodo.376200. 27 fichiers au format
+  `BBCCVV POS parsing texte mot mot_normalisé lemme`. 137 547 mots.
+- Fichiers : `biblegr/b40.js` … `biblegr/b66.js` (un par livre), plus
+  `biblegr/strongs.js` (5 523 entrées grecques).
+- Deux licences distinctes, **vérifiées sur les pages officielles** et non
+  déduites d'un README :
+  - le texte SBLGNT est sous **CC BY 4.0**. La page
+    <https://sblgnt.com/license/> s'intitule « End User License Agreement »,
+    mais son contenu est bien le texte intégral de la licence Creative
+    Commons Attribution 4.0 ;
+  - la morphologie et la lemmatisation MorphGNT sont sous **CC BY-SA 3.0**.
+- Conséquence **assumée** : le corpus dérivé `biblegr/` est publié sous
+  **CC BY-SA 3.0**, avec attribution (SBLGNT + MorphGNT / J. K. Tauber)
+  affichée dans l'infobulle et reprise ici. C'est le prix du mot à mot
+  complet : les sources grecques libres de droits ne fournissent que le
+  texte, sans lemme ni analyse grammaticale.
+
+### Alignement des versets — pourquoi il manque des versets
+
+La BJ porte des versets que le **texte critique** n'a pas : Mt 17,21 ;
+Mc 7,16 ; Lc 23,17 ; Jn 7,53–8,11 (la péricope de la femme adultère) ;
+Rm 16,25-27 ; etc. Leur numérotation ne se **décale pas** : un verset
+absent est simplement sauté, ses voisins gardent leur numéro (vérifié :
+Jn 8 grec = 12 à 59, Rm 16 grec = 1 à 24). Un chapitre est donc émis dès
+que chaque verset grec appartient à la plage française.
+
+Chaque manque est confronté à la liste connue des omissions du texte
+critique : **0 manque inexpliqué** sur 260 chapitres. Ces versets ne sont
+pas passés sous silence — l'infobulle affiche « grec absent pour les
+versets … (le texte critique ne les porte pas) ».
+
+Un seul verset est écarté, faute d'équivalent français : **Ap 12,18**
+(« il se tint sur le sable de la mer »), que la BJ rattache à Ap 13,1.
+
+### Marques d'appareil critique non reproduites
+
+SBLGNT écrit ⸀ ⸂ ⸃ et trois variantes (5 114 et 1 764 occurrences). Elles
+ne se posent cependant pas toujours sur le même mot : en Mt 1,5,
+« ⸂Βόες … Ῥαχάβ, Βόες⸃ » encadre cinq mots. Leur sens exact n'ayant pas
+pu être établi avec certitude, elles sont **retirées** du mot affiché
+plutôt qu'interprétées : affirmer à tort qu'un mot est douteux serait une
+erreur d'édition, pas une prudence.
+
+### Lien vers Strong : 94,1 %, sans jamais deviner
+
+Les 5 449 lemmes distincts de MorphGNT ont été confrontés aux 5 523
+entrées grecques de Strong :
+
+| cas | lemmes | part des occurrences |
+|---|---|---|
+| une seule entrée Strong → **relié** | 4 923 | 94,1 % |
+| plusieurs entrées (ambigu) → **non relié** | 18 | 4,4 % |
+| aucune entrée (surtout des noms propres) → **non relié** | 508 | 1,6 % |
+
+Un lemme ambigu n'est pas relié : aucun numéro Strong n'est inventé. Ces
+mots affichent leur lemme et leur analyse grammaticale, sans numéro.
+Cas typique : Δαυίδ (David) n'est pas relié parce que Strong écrit Δαβίδ.
+
+### Translittération
+
+Mécanique, comme pour l'hébreu : esprit rude rendu « h », iota souscrit
+rendu par une voyelle longue, diphtongues (αι ει οι αυ ευ ου…) et gamma
+nasal (γγ γκ γξ γχ → ng nk nx nch) résolus par lecture anticipée d'une
+lettre. η et ω sont toujours longs. Aucune accentuation n'est
+reconstruite.
+
 ## Strong (hébreu et grec)
 
 - Source : Open Scriptures, « Unified Strong's Dictionaries »,
   https://github.com/openscriptures/strongs
 - Licence : **GNU GPL 3.0** pour la compilation XML. Les définitions
   originales de Strong (1890) sont dans le domaine public.
+- Les définitions sont **anglaises**. Elles sont traduites en français une
+  seule fois, en local, par LibreTranslate/Argos
+  (`_m/traduit_strongs.py`) — 8 674 entrées hébraïques et 5 523 grecques.
+  Même règle que pour l'arabe : la traduction est **automatique**, elle est
+  étiquetée « trad. auto. » dans l'application et la source anglaise reste
+  affichée en dessous.
+
+  La notation propre à Strong (le « X » des sens incertains, les groupes de
+  suffixes comme `god(-ly, -ward)`) **subsiste** dans le français rendu :
+  c'est un code editorial qu'aucune traduction automatique ne sait lire. Une
+  passe de « décodage » a été écrite puis **abandonnée**, parce qu'elle
+  fabriquait des formes inexistantes — `nature(-ral)` devenait « natureral »,
+  `write(-ing, -ten)` « writeing, writeten ». Inventer des mots est pire que
+  laisser une notation brute. Voir `_m/mesure_notation.py`.
 
 ## Contrôle qualité — aucune donnée inventée
 
@@ -123,3 +206,11 @@ Le corpus hébreu applique la même règle, mais au niveau du **chapitre** :
 si le nombre de versets du WLC ne concorde pas exactement avec celui du
 corpus français, le chapitre entier est omis. Résultat : 921 chapitres
 émis sur 931 (98,9 %) — voir le tableau ci-dessus.
+
+Le corpus grec ne peut pas suivre cette règle : le texte critique omet
+légitimement des versets, et les exclure reviendrait à supprimer des
+chapitres entiers (Rm 16, Jn 8). Il applique donc une variante stricte —
+émettre un chapitre seulement si chaque verset grec appartient à la plage
+française, puis vérifier un par un que les manques correspondent à une
+omission connue du texte critique. Résultat : **260 chapitres émis sur
+260**, 0 manque inexpliqué, 1 verset écarté (Ap 12,18).

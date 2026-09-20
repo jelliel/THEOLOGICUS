@@ -26,11 +26,13 @@ OUT = os.path.join(ROOT, "mobile", "www")
 
 COPY_DIRS = ["bible", "quran", "tafsir", "libs", "summa", "summafr", "fathers",
              "reformed", "orthodox", "islamic", "denzinger",
-             "quranwbw", "quranroots", "biblehb"]
+             "quranwbw", "quranroots", "biblehb", "biblegr"]
 EXPECTED = {
     "bible": ("b", ".js", 66),
     "quran": ("q", ".js", 114),
     "tafsir": ("s", ".js", 114),
+    "biblehb": ("b", ".js", 39),
+    "biblegr": ("b", ".js", 27),
 }
 
 

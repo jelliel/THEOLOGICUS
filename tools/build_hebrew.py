@@ -36,6 +36,7 @@ RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WLC = os.path.join(RACINE, '.workbuddy-ai', 'artifacts', '_m', 'data', 'wlc')
 STRONGS = os.path.join(RACINE, '.workbuddy-ai', 'artifacts', '_m', 'data',
                        'strongs.xhtml')
+HB_FR = os.path.join(RACINE, '.workbuddy-ai', 'artifacts', '_m', 'hb_fr.json')
 OUT = os.path.join(RACINE, 'biblehb')
 
 # fichier WLC -> numero de livre dans notre corpus francais (ordre catholique)
@@ -243,8 +244,17 @@ def lire_livre(fichier):
 
 
 def lire_strongs():
-    """-> {"7225": ["רֵאשִׁית", "ray-sheeth'", "beginning, chief(-est)..."]}"""
+    """-> {"7225": ["רֵאשִׁית", "ray-sheeth'", "beginning...", "commencement..."]}
+
+    Le 4e champ est la definition TRADUITE EN LOCAL (LibreTranslate/Argos,
+    voir _m/traduit_strongs.py) : vide si _m/hb_fr.json n'existe pas encore.
+    Traduction automatique : l'application l'etiquette « trad. auto. » et
+    garde l'anglais dessous. Meme regle que pour l'arabe et le grec.
+    """
     s = io.open(STRONGS, encoding='utf-8').read()
+    fr = {}
+    if os.path.exists(HB_FR):
+        fr = json.load(io.open(HB_FR, encoding='utf-8'))
     d = {}
     for m in re.finditer(r'<li value="(\d+)" id="ot:\1">(.*?)</li>', s, re.S):
         num, corps = m.group(1), m.group(2)
@@ -253,7 +263,7 @@ def lire_strongs():
         heb = nettoyer(i.group(2)) if i else ''
         kjv = re.search(r'<span class="kjv_def">(.*?)</span>', corps, re.S)
         definition = ' '.join(kjv.group(1).split()) if kjv else ''
-        d[num] = [heb, tr, definition]
+        d[num] = [heb, tr, definition, fr.get(num, '')]
     return d
 
 
