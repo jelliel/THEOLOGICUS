@@ -1,7 +1,38 @@
 # THEOLOGICUS — correctifs mobile
 
-Dernier commit : `2764182` · APK : **v2.0.62** (versionCode 62) · release CI
-attendue : `apk-v2.0.62`
+Dernier commit : `fb85e8f` · APK : **v2.0.64** (versionCode 64) · release CI
+attendue : `apk-v2.0.64`
+
+---
+
+# Questions de suivi trop longues — le défilement ne suffisait pas
+
+Redemandé le 20/09 : « je ne vois pas la totalité de ce qui est écrit ».
+Le marquee était pourtant livré depuis la v2.0.58. Mesuré dans un vrai
+Chrome : **il fonctionne** (323 px cachés, 340 px parcourus). Deux trous
+expliquaient que l'utilisateur ne le voie pas.
+
+1. **Animations désactivées au niveau du système** — « Supprimer les
+   animations » dans l'accessibilité Android → `prefers-reduced-motion`, le
+   marquee ne bouge plus, la puce garde `nowrap` : **le texte restait
+   coupé**. Une animation ne doit jamais être le seul moyen d'accéder au
+   contenu.
+2. **Mesure avant stabilisation de la mise en page** (polices non chargées,
+   panneau non visible) : `scrollWidth - clientWidth` vaut 0 et le
+   défilement **ne s'arme jamais**.
+
+Correctifs :
+- `chip-nomotion` : sans animation, la puce s'étale sur plusieurs lignes et
+  la question est lisible en entier. (Piège : il faut aussi repasser le
+  `span` interne en `white-space: normal`, sinon la puce s'étale mais le
+  texte reste coupé — vérifié, débordement 323 → 0.)
+- re-mesure après `document.fonts.ready`, au `load`, à chaque retour de
+  visibilité et via un `ResizeObserver` sur `#chat-container`.
+- vitesse 26 → 36 px/s, durée plafonnée à 12 s (au lieu de 20) ;
+  dégradé sur le bord droit pour *montrer* qu'il reste du texte.
+
+Banc **99/99** (nouveaux contrôles N5-N7). APK v2.0.64 contrôlé :
+versionCode 64, signature `93d832…` inchangée.
 
 ---
 
