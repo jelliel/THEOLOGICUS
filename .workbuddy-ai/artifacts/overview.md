@@ -867,14 +867,41 @@ pour servir d'identifiant (`Ilï` pour III, `XL` pour XI), donc les
 identifiants sont **séquentiels**. L'ordre du corps, lui, est sûr : Révélation,
 Foi, Science, Ablutions, Lotion, Menstrues…
 
-## Questions de suivi trop longues (commit en cours)
+## Questions de suivi trop longues (trois essais, le troisième tient)
 
 Les puces de suggestion étaient coupées (`nowrap` + `text-overflow: ellipsis`)
 et la fin du texte était perdue. Elles **défilent** maintenant, mais **seules
-celles qui débordent réellement** : `fitSuggestionChips()` mesure
-`scrollWidth - clientWidth` par puce, arme un `@keyframes chipMarquee` avec
-une course `--shift` et une durée `--dur` proportionnelle, et se remesure au
-redimensionnement (250 ms de débounce). Le texte complet reste en infobulle.
+celles qui débordent réellement**.
+
+1. **v2.0.58** — `@keyframes chipMarquee` + variables CSS `--shift` / `--dur`.
+   Juste sur le banc de test, jamais sur le téléphone.
+2. **v2.0.66** — la mesure. Sur Android WebView, `chip.scrollWidth` est **gelé
+   à `chip.clientWidth`** dès que le chip porte `overflow:hidden` +
+   `text-overflow:ellipsis` : le débordement valait donc 0 et le défilement
+   n'était jamais armé. Parade : mesurer le `<span>` intérieur, qui n'a pas
+   d'ellipsis. Toujours rien sur le téléphone.
+3. **v2.0.67** — le mouvement lui-même. Deux animations CSS différentes ont été
+   armées sans jamais bouger, alors que `getComputedStyle` rapportait le bon
+   nom d'animation : **la déclaration mentait, seule la mesure compte**. Le
+   défilement est désormais piloté en JavaScript (Web Animations API), en
+   `alternate` (le texte file vers la gauche jusqu'au bout de la question,
+   puis revient se remettre à gauche), et surtout **vérifié à l'exécution** :
+   900 ms après l'apparition de la puce, `verifierChipBouge()` lit le
+   déplacement réel du `<span>` ; s'il est nul, la puce passe en plusieurs
+   lignes (`chip-nomotion`) au lieu de rester coupée. Dans tous les cas la
+   question est lisible en entier.
+
+Détails qui comptent : rien ne tourne hors écran (`IntersectionObserver`), le
+doigt posé sur une puce fige le défilement (avec relance de sécurité au bout
+d'1,5 s, car `pointerup` peut ne pas arriver sur Android), une puce qui n'est
+pas encore mesurable au moment du rendu est **remeasure** plus tard au lieu
+d'être classée « le texte tient », et si « supprimer les animations » est
+activé côté système la puce s'étale d'emblée. Le texte complet reste en
+infobulle.
+
+**Leçon générale** : sur un WebView Android, une animation CSS peut exister
+dans `getComputedStyle` sans jamais s'exécuter. Tant qu'un contrôle ne mesure
+que la déclaration, il passe — et l'utilisateur voit une question coupée.
 
 ## T6 — Denzinger, le magistère (dernier de la liste)
 

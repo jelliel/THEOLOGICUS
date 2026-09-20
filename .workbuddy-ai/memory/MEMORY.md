@@ -8,12 +8,18 @@ Ici uniquement ce qui doit survivre.
 
 - Monolithe `THEOLOGICUS.html` (~1,2 Mo) + tranches JS : `bible/` (66),
   `quran/` (114), `tafsir/` (114), `libs/`, **`summa/`** (611 questions,
-  17 Mo), **`fathers/`** (118 œuvres, 36 Mo), **`reformed/`** (91 entrées,
-  27,8 Mo), **`orthodox/`** (43 entrées, 1,9 Mo), **`islamic/`** (93 livres,
-  5,4 Mo : Houdas & Marçais, le Sahih d'Al-Bukhari en français), **`denzinger/`**
-  (128 sections, 1,3 Mo : le magistère, éd. latine 1911). Chargés **à la
-  volée** par `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah`
-  / `__ensureSummaQuestion` / `theoCorpusWork`.
+  17 Mo, anglais), **`summafr/`** (613 questions, 20,2 Mo : trad. **Drioux**,
+  domaine public — mêmes ids, `1001` = Ia q.1), **`fathers/`** (118 œuvres,
+  36 Mo), **`reformed/`** (91 entrées, 27,8 Mo), **`orthodox/`** (43 entrées,
+  1,9 Mo), **`islamic/`** (93 livres, 5,4 Mo : Houdas & Marçais, le Sahih
+  d'Al-Bukhari en français), **`denzinger/`** (128 sections, 1,3 Mo : le
+  magistère, éd. latine 1911). Chargés **à la volée** par `__ensureBibleBook`
+  / `__ensureQuranSurah` / `__ensureTafsirSurah` / `__ensureSummaQuestion` /
+  `__ensureSummaFrQuestion` / `theoCorpusWork`. Le panneau de la Somme
+  s'ouvre en **français** (`__SUMMA_LANG_DEFAULT='fr'`), bouton FR/EN, repli
+  sur l'anglais si la question manque. `summafr/` n'est PAS dans
+  `THEO_CORPORA` (moteur des corpus patristiques) : la Somme a son propre
+  modal et son propre résolveur.
 - **`THEO_CORPORA` pilote tout** : un corpus = `{dir, pfx, idx, wrk, nms,
   label, tab, root, web}`. Ajouter une entrée suffit — onglets de la
   bibliothèque, `theoParseRef`, rendu du modal et `parseLibraryRef` s'en
@@ -28,9 +34,10 @@ Ici uniquement ce qui doit survivre.
   son poids disque. **Ne jamais tailler un corpus avant d'avoir mesuré.**
 - Les générateurs de corpus (`tools/build_summa.py`, `build_fathers.py`,
   `build_reformed.py`, `build_orthodox.py`, `build_islamic.py`,
-  `build_denzinger.py`) gardent leur cache HTTP dans `tools/.summa_cache/`,
-  `.fathers_cache/`, `.ccel_cache/`, `.orthodox_cache/`, `.islamic_cache/`,
-  `.denzinger_cache/` (tous gitignored). Relancer régénère tout sans réseau.
+  `build_denzinger.py`, `build_summa_fr.py`) gardent leur cache HTTP dans
+  `tools/.summa_cache/`, `.fathers_cache/`, `.ccel_cache/`, `.orthodox_cache/`,
+  `.islamic_cache/`, `.denzinger_cache/`, `.summafr_cache/` (tous gitignored).
+  Relancer régénère tout sans réseau.
 - **Vider le dossier de sortie avant chaque génération** (`rm -f denzinger/*.js`).
   Les fichiers d'une génération précédente y restent, sont `git add`-és et
   partent dans l'APK avec du contenu **faux** : piégé en T6 (165 fichiers
@@ -46,6 +53,13 @@ Ici uniquement ce qui doit survivre.
   (2) Les **chiffres romains OCR-isés ne sont pas fiables** (`Ilï`→III,
   `XL`→XI) : préférer un identifiant **séquentiel** à un identifiant calculé.
   Règle générale : l'ordre du texte est fiable, le chiffre ne l'est pas.
+  (3) Le **mot-clé lui-même** peut être méconnaissable (`giiKsrioN` pour
+  QUESTION, `AKTICLE`, `ARTICLE UAfIQUE` pour UNIQUE). Méthode qui marche :
+  générer toutes les valeurs romaines **syntaxiquement valides** que le token
+  peut représenter (table de confusions documentée), laisser la **suite**
+  trancher, et **valider par le compte attendu** — jamais l'inverse.
+  Ne pas `strip()` la ponctuation à gauche d'un token : « !X » (IX) devient
+  « X » et 9 se lit 10.
 - **`build_reformed.tokenize` ne lit `title=` que collé au nom de balise** :
   `<div2 id="…" title="…">` donne un titre vide. `build_orthodox.fix_titles()`
   remonte l'attribut en tête avant de parser.
@@ -119,6 +133,15 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   fixe** : masquer l'un révèle l'autre. Vérifier les collisions d'emplacement
   avant de conclure qu'un masquage a échoué.
 - **CRLF** : tout grep multi-ligne avec `\n` renvoie 0 alors que le code est là.
+  L'outil Edit échoue pareil → patcher via un script Python qui écrit `\r\n`.
+- **Animation CSS sur Android WebView** : une `@keyframes` peut être armée,
+  remonter dans `getComputedStyle().animationName`, et **ne jamais s'exécuter**.
+  Ne jamais écrire un test qui vérifie `animationName` : piloter le mouvement en
+  JS (`element.animate`) et **mesurer le déplacement réel** (N9/N10 du banc).
+- **`scrollWidth` gelé** sur `overflow:hidden` + `text-overflow:ellipsis`
+  (Android WebView) : mesurer l'élément **intérieur** sans ellipsis.
+- **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure
+  0. Ne jamais en conclure qu'il n'y a rien à faire — re-mesurer plus tard.
 - PowerShell depuis Bash est bloqué → outil PowerShell dédié.
 - `AndroidManifest.xml` n'a **pas** `android:largeHeap` : tout gros objet natif
   tue l'app (v65, d'où la sauvegarde par morceaux).
