@@ -26764,10 +26764,19 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   /* ── branchements ───────────────────────────────────────────────────── */
   /* Automatique au demarrage, mais jamais plus d'une fois par fenetre de
      6 h : GitHub limite les appels sans authentification. */
+  var essaisAuto = 0;
   function auto() {
-    var dernier = parseInt(lire(CLE_CHECK) || '0', 10);
     var maintenant = Date.now();
+    var dernier = parseInt(lire(CLE_CHECK) || '0', 10);
     if (dernier && (maintenant - dernier) < ATTENTE_AUTO) return;
+    /* La version peut arriver APRES ce controle (elle est lue dans
+       version.txt cote Windows). Sans elle aucune comparaison n'est
+       possible : on ne consomme PAS la fenetre de 6 h, on retente.
+       Sinon l'utilisateur n'etait prevenu qu'au prochain demarrage. */
+    if (!/^[0-9]/.test(window.THEO_VERSION || '')) {
+      if (essaisAuto++ < 12) setTimeout(auto, 5000);
+      return;
+    }
     ecrire(CLE_CHECK, String(maintenant));
     verifierEtAfficher({});
   }
@@ -26809,6 +26818,7 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
     assetVoulu: assetVoulu,
     afficher: afficher,
     fermer: fermerBandeau,
+    auto: auto,
     bandeau: function () { return document.getElementById('theo-maj-bandeau'); }
   };
 })();
