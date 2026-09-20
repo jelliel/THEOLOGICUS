@@ -1,5 +1,10 @@
 # v2.0.92 — le mot à mot latin (textes du magistère)
 
+*(Livré sous le tag `apk-v2.0.94` : la CI nomme la version
+`2.0.<nombre de commits>`, et ce changement a été poussé avec les notes de
+la v90 et le correctif de version. Le numéro d'ordre interne et le tag
+peuvent donc différer — seul le tag compte pour installer.)*
+
 Les mots latins de Denzinger deviennent cliquables. Chacun ouvre une bulle
 avec le lemme, le type, la flexion complète et le sens — en français, avec
 l'anglais de la source en dessous.
