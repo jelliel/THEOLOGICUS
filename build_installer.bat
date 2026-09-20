@@ -9,6 +9,10 @@ set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 set "PFX=THEOLOGICUS_signing.pfx"
 set "PFP=theologicus2026"
 set "PY=py -3.12"
+rem Version = nombre de commits, comme l APK (le fichier VERSION racine
+rem est perime a 1.0.10 : sans ça l exe s annonce 1.0.10).
+set "VER=2.0.0"
+for /f %%i in ('git rev-list --count HEAD 2^>nul') do set "VER=2.0.%%i"
 
 echo [1/5] Compilation de l'exe (PyInstaller)...
 %PY% -m PyInstaller --noconfirm --clean --windowed --name THEOLOGICUS --icon THEOLOGICUS.ico --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium --hidden-import clr_loader --hidden-import pythonnet --collect-all webview --collect-all pythonnet --collect-all clr_loader app.py || goto :err
@@ -18,12 +22,13 @@ copy /y THEOLOGICUS.html dist\THEOLOGICUS\ >nul || goto :err
 rem v33 : corpus decoupes — bible par livre (bible\b*.js), quran par sourate
 rem (quran\q*.js), tafsir par sourate (tafsir\s*.js) + index.js ; les monolithes
 rem ne sont plus expudies.
-if not exist "dist\THEOLOGICUS\bible" mkdir "dist\THEOLOGICUS\bible"
-copy /y bible\*.js dist\THEOLOGICUS\bible\ >nul || goto :err
-if not exist "dist\THEOLOGICUS\quran" mkdir "dist\THEOLOGICUS\quran"
-copy /y quran\*.js dist\THEOLOGICUS\quran\ >nul || goto :err
-if not exist "dist\THEOLOGICUS\tafsir" mkdir "dist\THEOLOGICUS\tafsir"
-copy /y tafsir\*.js dist\THEOLOGICUS\tafsir\ >nul || goto :err
+rem TOUS les corpus locaux (les memes que dans l APK) : sans eux les cinq
+rem onglets de bibliotheque et la Somme renvoient 404 dans l exe.
+for %%d in (bible quran tafsir summa summafr fathers reformed orthodox islamic denzinger) do (
+  if not exist "dist\THEOLOGICUS\%%d" mkdir "dist\THEOLOGICUS\%%d"
+  copy /y %%d\*.js dist\THEOLOGICUS\%%d\ >nul || goto :err
+  copy /y %%d\*.json dist\THEOLOGICUS\%%d\ >nul 2>&1
+)
 copy /y tafsir\index.json dist\THEOLOGICUS\tafsir\ >nul || goto :err
 del /q dist\THEOLOGICUS\bible_data.js 2>nul
 del /q dist\THEOLOGICUS\quran_data.js 2>nul
@@ -42,7 +47,7 @@ rem (Votre cle de developpement reste dans .\theologicus_keys.json.)
 py -3.12 -c "import json; json.dump({'mistral': ''}, open('dist/THEOLOGICUS/theologicus_keys.json', 'w', encoding='utf-8'), indent=2)" || goto :err
 
 rem v40 : tampon de version (VERSION -> HTML + version.txt dans dist)
-py -3.12 tools\stamp_version.py || goto :err
+py -3.12 tools\stamp_version.py dist\THEOLOGICUS %VER% || goto :err
 
 echo [3/5] Signature de l'exe...
 if exist "%SIGNTOOL%" (
@@ -53,7 +58,7 @@ if exist "%SIGNTOOL%" (
 
 echo [4/5] Compilation de l'installeur (Inno Setup)...
 if exist "%ISCC%" (
-  "%ISCC%" installer.iss || goto :err
+  "%ISCC%" installer.iss /DMyAppVersion=%VER% || goto :err
 ) else (
   echo [!] ISCC introuvable - installeur non compile
   goto :err

@@ -171,7 +171,17 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item THEOLOGICUS.html dist/THEOLOGICUS/
-          foreach ($d in 'bible','quran','tafsir','libs') { Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force }
+          # TOUS les corpus locaux, pas seulement bible/quran/tafsir : sans
+          # eux les cinq onglets de bibliotheque et la Somme renvoient 404
+          # dans l'exe, alors que l'APK les a.
+          foreach ($d in 'bible','quran','tafsir','libs','summa','summafr','fathers','reformed','orthodox','islamic','denzinger') {
+            if (Test-Path $d) {
+              Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force
+            } else {
+              Write-Error "corpus local manquant : $d"
+              exit 1
+            }
+          }
           Copy-Item THEOLOGICUS.ico dist/THEOLOGICUS/
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
           $v = "$env:VERSION_NAME"
@@ -182,6 +192,16 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path output | Out-Null
           Compress-Archive -Path dist/THEOLOGICUS -DestinationPath output/THEOLOGICUS-portable-win64.zip -Force
+
+      - name: Build the Inno Setup installer
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $iscc = Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { $iscc = 'iscc' }
+          & $iscc installer.iss "/DMyAppVersion=$env:VERSION_NAME"
+          Copy-Item dist/THEOLOGICUS-Setup-x64.exe output/ -Force
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -196,7 +216,7 @@ jobs:
         with:
           tag_name: apk-v${{ env.VERSION_NAME }}
           name: THEOLOGICUS v${{ env.VERSION_NAME }}
-          files: output/THEOLOGICUS-portable-win64.zip
+          files: output/*
           overwrite_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
