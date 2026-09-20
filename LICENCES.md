@@ -168,6 +168,51 @@ nasal (γγ γκ γξ γχ → ng nk nx nch) résolus par lecture anticipée d'u
 lettre. η et ω sont toujours longs. Aucune accentuation n'est
 reconstruite.
 
+## Latin — mot à mot dans les textes du magistère
+
+- Source des analyses : **Whitaker's Words**, réimplémentation Python
+  `blagae/whitakers_words` sous **licence MIT**. Le programme Ada d'origine
+  de William Whitaker avait une licence « très libérale » rédigée par
+  lui-même ; le port MIT s'en veut proche. Environ 39 000 entrées
+  latin-anglais avec la morphologie flexionnelle complète.
+- Texte analysé : **Denzinger, *Enchiridion Symbolorum*, 11e éd., Bannwart
+  S.J., 1911** (domaine public) — le seul corpus latin de THEOLOGICUS.
+- Fichier : `latin/mots.js` — 20 263 entrées, 6,7 Mo, chargées à la volée.
+
+### Couverture : 79 % des mots lus
+
+Le texte de 1911 est une **numérisation** : 38 599 formes distinctes pour
+166 000 mots, dont 69 % n'apparaissent qu'une seule fois — beaucoup sont du
+bruit d'OCR (« Symbob », « mterrogationes »). Compter les formes donne donc
+un chiffre trompeur ; on mesure ce que le lecteur voit réellement :
+
+| mesure | résultat |
+|---|---|
+| occurrences analysées | **131 393 / 166 248 (79,0 %)** |
+| formes distinctes analysées | 20 263 / 38 599 (52,5 %) |
+
+Les formes non reconnues les plus fréquentes ne sont d'ailleurs pas du
+latin : lettres isolées (`s`, `v`, `u`), abréviations (`cf`, `sqq`, `sq`),
+chiffres romains (`iii`, `iv`), et du grec cité dans le texte (`kai`).
+
+Un seuil de fréquence méritait d'être signalé : la bibliothèque filtre par
+défaut à `frequency='C'`, ce qui laisse passer « caritas » mais **pas**
+« suus », « sacramentum », « omnino » ni « tanquam » — un comble pour du
+latin ecclésiastique. Mesuré sur les 3 000 formes les plus fréquentes :
+`'C'` donne 74 % de réussite, `'X'` en donne 84 % pour une ambiguïté qui
+reste faible (1,82 analyse par mot contre 1,64). Le seuil `'X'` est retenu.
+
+### Règle d'or, la même que pour l'hébreu et le grec
+
+- une forme non reconnue n'a **aucune** entrée, et l'infobulle l'écrit
+  (« aucune analyse disponible pour cette forme ») au lieu de proposer une
+  analyse inventée ;
+- une forme **ambiguë** porte toutes ses analyses (4 au plus), comme un
+  dictionnaire : on ne tranche pas à la place du lecteur. « caritas » donne
+  ainsi le nom *caritas* (« charité ») et le participe de *careo* ;
+- les sens sont anglais et traduits **sur la machine** (LibreTranslate) :
+  étiquetés « trad. auto. », avec l'anglais gardé en dessous.
+
 ## Strong (hébreu et grec)
 
 - Source : Open Scriptures, « Unified Strong's Dictionaries »,

@@ -8756,7 +8756,7 @@ var THEO_CORPORA = {
     }
   },
   denzinger: {
-    dir: 'denzinger', pfx: 'd', idx: '__denzingerIndex', wrk: '__denzingerWorks', nms: '__denzingerNames',
+    dir: 'denzinger', pfx: 'd', lang: 'la', idx: '__denzingerIndex', wrk: '__denzingerWorks', nms: '__denzingerNames',
     label: 'MAGISTÈRE (DENZINGER)', tab: '✝ Magistère',
     root: 'https://archive.org/details/enchiridionsymbo01denz',
     web: function (id, work) {
@@ -8842,7 +8842,9 @@ function theoRenderWork(kind, w, opts) {
     h += '<div class="field-group"' + (hot ? ' style="border-left:3px solid var(--accent);padding-left:8px"' : '') + '>' +
          (s.t ? '<label class="field-label">' + escapeHtml(s.t.length > 120 ? s.t.slice(0, 120) + '…' : s.t) + '</label>' : '');
     (s.p || []).forEach(function (p) {
-      h += '<div style="margin-bottom:9px;line-height:1.6">' + escapeHtml(p) + '</div>';
+      /* v91 — latin : les mots deviennent cliquables. */
+      h += '<div style="margin-bottom:9px;line-height:1.6">' +
+        (window.__latLigne ? window.__latLigne(p, kind) : escapeHtml(p)) + '</div>';
     });
     h += '</div>';
   });
@@ -29134,6 +29136,192 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     window.__grV90 = { analyser: analyser, brut: brut, cacher: cacher };
   })();
 </script>
+<script id="v91-la">
+  /* ==================================================================
+     v91 — MOT À MOT LATIN DANS LES TEXTES DU MAGISTÈRE
+
+     Le latin de l'application, c'est Denzinger (Enchiridion Symbolorum,
+     11e éd., Bannwart S.J., 1911). Les mots des paragraphes deviennent
+     cliquables ; chacun ouvre :
+
+        lemme · type · flexion · sens (anglais + français)
+
+     Source des analyses : **Whitaker's Words** — réimplémentation Python
+     `blagae/whitakers_words` (MIT ; le programme Ada d'origine de
+     William Whitaker avait une licence « très libérale » écrite par
+     lui-même). ~39 000 entrées latin-anglais avec morphologie complète.
+     Fichier : latin/mots.js -> __latinMots["deus"] =
+       [ [lemme, type, flexion, sens_en, sens_fr], ... ]
+
+     RÈGLE D'OR : sans donnée, on n'affiche rien.
+       - 60 % des formes du texte n'ont PAS été reconnues : c'est une
+         OCR de 1911, pleine de formes aberrantes (« Symbob »,
+         « mterrogationes »). Elles n'ont aucune entrée et l'infobulle
+         le dit, au lieu de proposer une analyse inventée ;
+       - une forme AMBIGÜE porte toutes ses analyses (4 au plus), comme
+         un dictionnaire. On ne tranche pas à la place du lecteur ;
+       - les sens sont traduits automatiquement en local ; ils sont
+         étiquetés « trad. auto. » et l'anglais reste affiché dessous.
+     ================================================================== */
+  (function () {
+    var charge = null;
+
+    window.__ensureLatin = function () {
+      if (window.__latinMots) return Promise.resolve(true);
+      if (charge) return charge;
+      charge = new Promise(function (res) {
+        var sc = document.createElement('script');
+        sc.src = 'latin/mots.js';
+        sc.onerror = function () { sc.remove(); charge = null; res(false); };
+        sc.onload = function () { res(!!window.__latinMots); };
+        document.head.appendChild(sc);
+      });
+      return charge;
+    };
+
+    var style = document.createElement('style');
+    style.id = 'v91-la-css';
+    style.textContent =
+      '.lat{cursor:help;border-bottom:1px dotted rgba(79,142,247,0.35);}' +
+      '.lat:hover,.lat.lat-actif{background:rgba(79,142,247,0.25);' +
+      'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '#lat-tip{position:fixed;z-index:4000;max-width:320px;background:#111a24;' +
+      'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
+      'padding:9px 11px;font-size:12px;line-height:1.5;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.55);display:none;pointer-events:auto;}' +
+      '#lat-tip .lat-mot{font-size:17px;color:#9fd0ff;display:block;' +
+      'margin-bottom:2px;font-style:italic;}' +
+      '#lat-tip .lat-lig{margin:3px 0;}' +
+      '#lat-tip .lat-cle{color:#8fa3b8;font-size:10px;text-transform:uppercase;' +
+      'letter-spacing:.6px;}' +
+      '#lat-tip .lat-lem{font-size:15px;color:#7fd1a0;font-style:italic;}' +
+      '#lat-tip .lat-ana{margin:4px 0;padding:3px 0 3px 6px;' +
+      'border-left:2px solid rgba(79,142,247,0.35);}' +
+      '#lat-tip .lat-src{margin-top:6px;padding-top:5px;' +
+      'border-top:1px solid rgba(255,255,255,0.12);font-size:10px;color:#8fa3b8;}';
+    document.head.appendChild(style);
+
+    var tip = document.createElement('div');
+    tip.id = 'lat-tip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    function ech(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    /* Enveloppe chaque mot latin d'un paragraphe. Appele par
+       theoRenderWork pour les corpus portant lang === 'la'. */
+    window.__latLigne = function (p, kind) {
+      /* THEO_CORPORA est un `var` de haut niveau : il devrait exister sur
+         window. S'il avait ete englobe dans une fermeture, on retombe sur
+         la liste explicite — mieux vaut un repli qu'un latin non marque. */
+      var C = window.THEO_CORPORA && window.THEO_CORPORA[kind];
+      var estLatin = (C && C.lang === 'la') || kind === 'denzinger';
+      if (!estLatin) return window.escapeHtml ? window.escapeHtml(p) : ech(p);
+      var re = /[A-Za-zĀāĒēĪīŌōŪūȲȳÀ-ÿÆæŒœ]+/g;
+      var out = '', last = 0, m;
+      while ((m = re.exec(p)) !== null) {
+        out += ech(p.slice(last, m.index));
+        var w = m[0];
+        out += '<span class="lat" data-w="' + ech(w.toLowerCase()) + '">' +
+          ech(w) + '</span>';
+        last = m.index + w.length;
+      }
+      out += ech(p.slice(last));
+      return out;
+    };
+
+    function cacher() {
+      tip.style.display = 'none';
+      var a = document.querySelectorAll('.lat.lat-actif');
+      for (var i = 0; i < a.length; i++) a[i].classList.remove('lat-actif');
+    }
+
+    function afficher(mot, cle) {
+      var a = (window.__latinMots || {})[cle] || [];
+      var h = '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
+      if (!a.length) {
+        /* OCR de 1911 ou mot absent du dictionnaire : on le DIT. */
+        h += '<div class="lat-lig">Aucune analyse disponible pour cette ' +
+          'forme.<br><span style="color:#8fa3b8;font-size:10px;">Le texte ' +
+          'de 1911 est une numérisation : certaines formes sont ' +
+          'illisible.</span></div>';
+      } else {
+        a.forEach(function (x, i) {
+          h += '<div class="lat-ana">';
+          if (x[0]) {
+            h += '<div class="lat-lig"><span class="lat-cle">Lemme</span><br>' +
+              '<span class="lat-lem">' + ech(x[0]) + '</span></div>';
+          }
+          var bits = [];
+          if (x[1]) bits.push(ech(x[1]));
+          if (x[2]) bits.push(ech(x[2]));
+          if (bits.length) h += '<div class="lat-lig">' + bits.join(' — ') + '</div>';
+          if (x[4]) {
+            h += '<div class="lat-lig">' + ech(x[4]) +
+              ' <span style="color:#8fa3b8;font-size:10px;">(trad. auto.)</span></div>';
+            if (x[3]) {
+              h += '<div class="lat-lig" style="color:#8fa3b8;font-size:11px;">' +
+                'source (en) : ' + ech(x[3]) + '</div>';
+            }
+          } else if (x[3]) {
+            h += '<div class="lat-lig">' + ech(x[3]) +
+              ' <span style="color:#8fa3b8;font-size:10px;">(en)</span></div>';
+          }
+          h += '</div>';
+          if (i >= 3) return false;
+        });
+      }
+      h += '<div class="lat-src">Analyse : Whitaker\'s Words ' +
+        '(<a href="https://opensource.org/licenses/MIT" target="_blank" ' +
+        'rel="noopener" style="color:#7fd1a0">MIT</a>) — ' +
+        'texte : Denzinger, <i>Enchiridion Symbolorum</i>, 1911 ' +
+        '(domaine public).</div>';
+      tip.innerHTML = h;
+      tip.style.display = 'block';
+      var r = mot.getBoundingClientRect();
+      tip.style.left = Math.min(Math.max(8, r.left), (window.innerWidth || 400) - 330) + 'px';
+      tip.style.top = r.bottom + 6 + 'px';
+      var tr = tip.getBoundingClientRect();
+      if (tr.bottom > (window.innerHeight || 800) - 8) {
+        tip.style.top = Math.max(8, r.top - tr.height - 6) + 'px';
+      }
+    }
+
+    function detail(mot) {
+      var a = document.querySelectorAll('.lat.lat-actif');
+      for (var i = 0; i < a.length; i++) a[i].classList.remove('lat-actif');
+      mot.classList.add('lat-actif');
+      window.__ensureLatin().then(function () { afficher(mot, mot.getAttribute('data-w')); });
+    }
+
+    var attache = false;
+    function ecouter() {
+      if (attache) return;
+      attache = true;
+      document.addEventListener('mouseover', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.lat') : null;
+        if (m) { detail(m); return; }
+        if (tip.style.display === 'block' &&
+            !(e.target && e.target.closest && e.target.closest('#lat-tip'))) cacher();
+      });
+      document.addEventListener('click', function (e) {
+        var m = e.target && e.target.closest ? e.target.closest('.lat') : null;
+        if (!m) return;
+        e.preventDefault();
+        e.stopPropagation();
+        detail(m);
+      }, true);
+    }
+    ecouter();
+
+    window.__latV91 = { cacher: cacher };
+  })();
+</script>
+
 
 
 </body>

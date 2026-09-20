@@ -24,7 +24,7 @@ rem (quran\q*.js), tafsir par sourate (tafsir\s*.js) + index.js ; les monolithes
 rem ne sont plus expudies.
 rem TOUS les corpus locaux (les memes que dans l APK) : sans eux les cinq
 rem onglets de bibliotheque et la Somme renvoient 404 dans l exe.
-for %%d in (bible quran tafsir summa summafr fathers reformed orthodox islamic denzinger quranwbw quranroots biblehb biblegr) do (
+for %%d in (bible quran tafsir summa summafr fathers reformed orthodox islamic denzinger quranwbw quranroots biblehb biblegr latin) do (
   if not exist "dist\THEOLOGICUS\%%d" mkdir "dist\THEOLOGICUS\%%d"
   copy /y %%d\*.js dist\THEOLOGICUS\%%d\ >nul || goto :err
   copy /y %%d\*.json dist\THEOLOGICUS\%%d\ >nul 2>&1

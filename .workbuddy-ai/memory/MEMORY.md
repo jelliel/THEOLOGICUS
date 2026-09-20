@@ -77,6 +77,13 @@ Ici uniquement ce qui doit survivre.
   titre d'un psaume dans le verset 1, alors que le corpus français suit
   la numérotation massorétique. Mesuré : oshb.js 84,6 % de chapitres
   alignés, WLC **98,9 %**. Le WLC est de plus **vocalisé**.
+- **`latin/`** (`mots.js`, 20 263 entrées, 6,9 Mo) : mot à mot latin,
+  chargé par `__ensureLatin()`. Source **Whitaker's Words**
+  (`blagae/whitakers_words`, MIT). Construire avec
+  **`Parser(frequency='X')`** : le défaut `'C'` fait disparaître « suus »,
+  « sacramentum », « omnino », « tanquam ». Corpus concerné : **denzinger
+  seul** (le seul texte latin de l'app). Dépendance non versionnée :
+  `pip install git+https://github.com/blagae/whitakers_words.git`.
 - **`quranwbw/`** : tranches `[glose_en, translit, glose_fr]`. Le français
   vient de LibreTranslate **local** (23 667 gloses uniques, cache
   `tools/.glosses_fr.json`), complété d'un glossaire vérifié
@@ -195,6 +202,11 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
 - **Majuscules grecques hors table de translittération** : Ἐν → « n »,
   Βίβλος → « iblos ». Passer la base en minuscule après NFD.
 - **`_m/` → racine = trois `dirname`**, pas deux ni quatre. 4e occurrence.
+- **Regex : ne pas doubler les backslashes** dans un littéral
+  `/…/` hors gabarit — `/trad\\. auto\\./` cherche un backslash littéral.
+- **Mesurer une couverture en PONDÉRANT par les occurrences**, pas en
+  comptant les formes : sur du texte OCR, 52 % de formes mais 79 % des
+  mots lus. Le compte de formes fait paraître le résultat bien pire.
 - **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure
   0. Ne jamais en conclure qu'il n'y a rien à faire — re-mesurer plus tard.
 - **`extractSuggestionsHtml()` (v81)** : capturait tout le reste d'un message
