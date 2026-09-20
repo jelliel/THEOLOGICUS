@@ -4298,17 +4298,15 @@ body {
   background: linear-gradient(to right, transparent, var(--hull));
   pointer-events: none;
 }
+/* Le mouvement n'est PAS produit ici : il est pilote en JavaScript
+   (Web Animations API) par `fitSuggestionChips`.  Une animation CSS a
+   `@keyframes` + `var()` ne demarrait pas sur le WebView du telephone,
+   et `getComputedStyle` continuait de rapporter le bon nom d'animation :
+   impossible a voir d'ici.  Le JS, lui, bouge ou ne bouge pas — et on le
+   verifie a l'execution (`verifierChipBouge`) : s'il ne bouge pas, la puce
+   passe en plusieurs lignes au lieu de rester coupee. */
 .suggestion-chip.chip-scroll .chip-text {
-  animation: chipMarquee var(--dur, 8s) linear infinite alternate;
   will-change: transform;
-}
-/* Le survol fige le defilement : pratique pour lire une partie precisement. */
-.suggestion-chip.chip-scroll:hover .chip-text {
-  animation-play-state: paused;
-}
-@keyframes chipMarquee {
-  0%, 10%   { transform: translateX(0); }
-  90%, 100% { transform: translateX(var(--shift, -40px)); }
 }
 /* Filet de securite : si le systeme ou l'utilisateur a desactive les
    animations (« supprimer les animations » dans les options d'accessibilite
@@ -4331,7 +4329,7 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .suggestion-chip.chip-scroll .chip-text {
     animation: none;
-    transform: none;
+    transform: none !important;
   }
 }
 .suggestion-chip::before {
@@ -9425,6 +9423,7 @@ function suggestionChipHtml(t) {
    la largeur disponible change avec l'écran. */
 function fitSuggestionChips(root) {
   var chips = (root || document).querySelectorAll('.suggestion-chip');
+  var enAttente = false;
   /* « Supprimer les animations » (accessibilite Android) : on ne peut pas
      compter sur un defileement pour faire lire la fin d'une question. */
   var noMotion = !!(window.matchMedia &&
@@ -9432,6 +9431,7 @@ function fitSuggestionChips(root) {
   for (var i = 0; i < chips.length; i++) {
     var chip = chips[i];
     var span = chip.querySelector('.chip-text');
+    arreterChipScroll(chip);
     chip.classList.remove('chip-scroll');
     chip.classList.remove('chip-nomotion');
     chip.style.removeProperty('--dur');
@@ -9445,21 +9445,156 @@ function fitSuggestionChips(root) {
     var padL = parseFloat(cs.paddingLeft) || 0;
     var padR = parseFloat(cs.paddingRight) || 0;
     var contentW = chip.clientWidth - padL - padR;
+    /* Puce pas encore mesurable : panneau masque ou mise en page en
+       cours.  On ne conclut surtout pas « le texte tient », sinon la
+       question reste coupee pour de bon. */
+    if (contentW <= 0) { enAttente = true; continue; }
+    __chipTentatives = 0;
     var over = span.scrollWidth - contentW;
     if (over <= 6) continue;
     if (noMotion) { chip.classList.add('chip-nomotion'); continue; }
     /* 36 px par seconde, borne : ni interminable ni illisible. */
     var dur = Math.min(12, Math.max(4, over / 36));
-    span.style.setProperty('--shift', '-' + (over + 6) + 'px');
+    var shift = over + 6;
+    span.style.setProperty('--shift', '-' + shift + 'px');
     chip.style.setProperty('--dur', dur.toFixed(1) + 's');
-    chip.classList.add('chip-scroll');
-    /* Filet : si l'animation ne demarre pas quand meme, on etale le texte. */
-    if (getComputedStyle(span).animationName === 'none') {
-      chip.classList.remove('chip-scroll');
+    /* Le WebView Android n'a pas demarre l'animation CSS : on la pilote
+       ici.  `alternate` = le texte file vers la gauche jusqu'au bout de la
+       question, puis revient se remettre a gauche : aller-retour. */
+    if (typeof span.animate !== 'function') {
       chip.classList.add('chip-nomotion');
+      continue;
     }
+    var anim = null;
+    try {
+      anim = span.animate(
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-' + shift + 'px)' }],
+        { duration: Math.round(dur * 1000), iterations: Infinity,
+          direction: 'alternate', easing: 'linear', delay: 250, fill: 'both' });
+    } catch (e) { anim = null; }
+    if (!anim) { chip.classList.add('chip-nomotion'); continue; }
+    chip.__chipAnim = anim;
+    chip.__chipShift = shift;
+    chip.classList.add('chip-scroll');
+    /* Rien ne bouge tant que la puce n'est pas a l'ecran. */
+    anim.pause();
+    observerChip(chip);
+  }
+  /* Des puces n'etaient pas mesurables : on re-mesure un peu plus tard,
+     quelques fois seulement — jamais en boucle. */
+  if (enAttente && __chipTentatives < 4) {
+    __chipTentatives++;
+    setTimeout(function () {
+      var c = document.getElementById('chat-container');
+      if (c) fitSuggestionChips(c);
+    }, 400);
   }
 }
+
+var __chipTentatives = 0;
+
+/* Arret net : on annule l'animation et on sort de l'observateur. */
+function arreterChipScroll(chip) {
+  clearTimeout(chip.__chipVerifT);
+  chip.__chipVerifT = 0;
+  if (chip.__chipAnim) {
+    try { chip.__chipAnim.cancel(); } catch (e) {}
+    chip.__chipAnim = null;
+  }
+  if (__chipIO) { try { __chipIO.unobserve(chip); } catch (e) {} }
+  chip.__chipVisible = false;
+  chip.__chipVerifie = false;
+}
+
+/* Une seule animation a la fois doit tourner : une puce hors ecran est
+   en pause (sinon des dizaines d'animations ralentissent le chat sur
+   Android).  Des que la puce apparait, on la lance ; des qu'elle sort,
+   on la remet a zero pour recommencer la lecture depuis le debut. */
+var __chipIO = null;
+function observerChip(chip) {
+  if (typeof IntersectionObserver !== 'function') {
+    chip.__chipVisible = true;
+    demarrerChip(chip);
+    return;
+  }
+  if (!__chipIO) {
+    __chipIO = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var c = entries[i].target;
+        c.__chipVisible = !!entries[i].isIntersecting;
+        if (entries[i].isIntersecting) demarrerChip(c);
+        else if (c.__chipAnim) { try { c.__chipAnim.pause(); } catch (e) {} }
+      }
+    }, { rootMargin: '40px' });
+  }
+  try { __chipIO.unobserve(chip); __chipIO.observe(chip); } catch (e) {}
+}
+
+function demarrerChip(chip) {
+  var a = chip.__chipAnim;
+  if (!a) return;
+  try { a.play(); } catch (e) { return; }
+  verifierChipBouge(chip);
+}
+
+/* PARADE DECISIVE.  Deux versions en animation CSS ont ete armees sans
+   jamais bouger sur le telephone : `getComputedStyle` rapportait le bon
+   nom d'animation, tout avait l'air correct, et le texte restait coupe.
+   Ici on ne fait plus confiance a la declaration : une fois la puce
+   visible, on MESURE le deplacement reel du span.  S'il est nul, le
+   WebView n'anime rien et on bascule la puce en plusieurs lignes — la
+   question redevient lisible en entier, ce qui est le but. */
+function verifierChipBouge(chip) {
+  if (chip.__chipVerifie) return;
+  chip.__chipVerifie = true;
+  var span = chip.querySelector('.chip-text');
+  if (!span) return;
+  clearTimeout(chip.__chipVerifT);
+  chip.__chipVerifT = setTimeout(function () {
+    chip.__chipVerifT = 0;
+    if (!chip.__chipAnim) return;
+    /* page en arriere-plan : rien ne tourne, ce n'est pas un echec. */
+    if (document.hidden || !chip.__chipVisible) { chip.__chipVerifie = false; return; }
+    var tx = 0;
+    var m = /matrix\(([^)]+)\)/.exec(getComputedStyle(span).transform || '');
+    if (m) {
+      var p = m[1].split(',');
+      tx = parseFloat(p.length >= 6 ? p[4] : p[p.length - 2]) || 0;
+    }
+    if (Math.abs(tx) > 0.5) return;
+    /* rien n'a bouge : on ne laisse pas la question coupee. */
+    arreterChipScroll(chip);
+    chip.classList.remove('chip-scroll');
+    chip.classList.add('chip-nomotion');
+  }, 900);
+}
+
+/* Le doigt pose sur une puce arrete le defilement : on peut lire sans
+   courir apres le texte.  Securite : quoi qu'il arrive, on relance au
+   bout d'1,5 s (un `pointerup` peut ne pas arriver sur Android). */
+(function armerPauseAuDoigt() {
+  var chipDe = function (e) {
+    var t = e.target;
+    return t && t.closest ? t.closest('.suggestion-chip') : null;
+  };
+  document.addEventListener('pointerdown', function (e) {
+    var c = chipDe(e);
+    if (!c || !c.__chipAnim) return;
+    try { c.__chipAnim.pause(); } catch (err) {}
+    clearTimeout(c.__chipRepT);
+    c.__chipRepT = setTimeout(function () {
+      if (c.__chipAnim && c.__chipVisible) { try { c.__chipAnim.play(); } catch (err) {} }
+    }, 1500);
+  }, true);
+  var relancer = function (e) {
+    var c = chipDe(e);
+    if (!c) return;
+    clearTimeout(c.__chipRepT);
+    if (c.__chipAnim && c.__chipVisible) { try { c.__chipAnim.play(); } catch (err) {} }
+  };
+  document.addEventListener('pointerup', relancer, true);
+  document.addEventListener('pointercancel', relancer, true);
+})();
 
 /* Les puces sont parfois inserees avant que la mise en page soit stable
    (polices pas encore chargees, panneau pas encore affiche) : la mesure
