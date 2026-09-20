@@ -70,6 +70,19 @@ Ici uniquement ce qui doit survivre.
 - **`COPY_DIRS` de `tools/prepare_mobile.py`** : tout corpus oublié ici
   disparaît de l'APK sans erreur visible (déjà piégé avec `summa`, `fathers`,
   `reformed`).
+- **`biblehb/`** (39 livres + `strongs.js`, 12 Mo) : mot à mot hébreu,
+  `biblehb/bN.js` chargé par `__ensureBibleHb(n)`, dictionnaire par
+  `__ensureStrongsHb()`. Source **WLC** (`wlc/*.xml`, Open Scriptures),
+  **pas** `morphhb/oshb.js` : oshb.js est numéroté **KJV** et fond le
+  titre d'un psaume dans le verset 1, alors que le corpus français suit
+  la numérotation massorétique. Mesuré : oshb.js 84,6 % de chapitres
+  alignés, WLC **98,9 %**. Le WLC est de plus **vocalisé**.
+- **`quranwbw/`** : tranches `[glose_en, translit, glose_fr]`. Le français
+  vient de LibreTranslate **local** (23 667 gloses uniques, cache
+  `tools/.glosses_fr.json`), complété d'un glossaire vérifié
+  (`CORRECTIONS`/`EPITHETES` dans `tools/traduit_gloses.py`) parce
+  qu'Argos Translate massacrait les épithètes divines. Toujours étiqueté
+  « trad. auto. » dans l'UI, anglais source gardé dessous.
 - Capacitor 8, `com.theologicus.app`, webDir `mobile/www`, minSdk 24 →
   targetSdk 36, AGP 8.13.0, Gradle 8.14.3.
 - Clés API **jamais embarquées** : saisies au lancement,
@@ -143,6 +156,21 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   avant de conclure qu'un masquage a échoué.
 - **CRLF** : tout grep multi-ligne avec `\n` renvoie 0 alors que le code est là.
   L'outil Edit échoue pareil → patcher via un script Python qui écrit `\r\n`.
+- **`find('=')` sur une tranche JS** : le premier `=` est celui de
+  `(window.__x=window.__x||{})[N]=`. Toujours ancrer sur `find(']=')` puis
+  `+2`. Déjà rencontré 3 fois (oshb.js, versification.js,
+  `traduit_gloses.py`).
+- **Lettres hébraïques précomposées** (U+FB1D–FB4F : « shin pointé »,
+  « vav+holam », « dalet+dagesh ») : `strongs.xhtml` les utilise, et un
+  filtre `0x05D0–0x05EA` les supprime silencieusement. Toujours passer par
+  `unicodedata.normalize('NFD', …)` avant tout filtrage de l'hébreu.
+- **Ordre des diacritiques hébreux non garanti** entre les sources. Ne pas
+  supposer lettre→dagesh→voyelle.
+- **LibreTranslate** : `tools/start_libretranslate.py` peut annoncer
+  « Echec de l'installation » alors que le paquet est bien installé (le
+  sandbox bloque la lecture d'un `.pyc`, le contrôle `have_module`
+  renvoie False). Vérifier `importlib.util.find_spec('libretranslate')`
+  avant de conclure.
 - **Animation CSS sur Android WebView** : une `@keyframes` peut être armée,
   remonter dans `getComputedStyle().animationName`, et **ne jamais s'exécuter**.
   Ne jamais écrire un test qui vérifie `animationName` : piloter le mouvement en
