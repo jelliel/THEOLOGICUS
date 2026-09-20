@@ -1,6 +1,11 @@
 # v2.0.90 — le mot à mot grec du Nouveau Testament
 
-**Commit** `57b33c9` · **versionName** 2.0.90 · **versionCode** 91
+**Commit** `57b33c9` · **versionCode** 91 · **versionName** 2.0.91
+(tag de release `apk-v2.0.91`)
+
+Le nom de version vaut `2.0.<nombre de commits>` (règle de la CI). Comme la
+v90 a été livrée en deux commits — le code, puis ces notes — le compteur est
+passé de 89 à 91 : l'APK s'annonce **2.0.91**, pas 2.0.90.
 
 Quand tu ouvres un verset du Nouveau Testament, une ligne grecque apparaît
 maintenant sous le texte français, découpée en mots cliquables. Chaque mot
