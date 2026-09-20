@@ -114,6 +114,15 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
 
 ## Dépôt / CI
 
+- Deux jobs : `build` (APK) et `windows` (exe PyInstaller + zip portable +
+  installeur Inno Setup). **Ajouter un corpus = mettre à jour TROIS listes** :
+  `COPY_DIRS` de `tools/prepare_mobile.py`, la liste du job `windows` dans
+  `.github/workflows/build-apk.yml`, et `build_installer.bat`. Une liste
+  oubliée ne casse pas le build : elle donne des 404 à l'usage.
+- La version affichée vient de `git rev-list --count HEAD` (2.0.N). Le fichier
+  `VERSION` racine est **périmé à 1.0.10** : ne jamais s'en servir (la CI passe
+  la version en argument à `tools/stamp_version.py`).
+
 - `jelliel/THEOLOGICUS`, `main`. Commits en **anglais**.
 - Jamais committer : `android/local.properties`, `android/release.keystore`,
   `mobile/www/*`, `theologicus_keys.json`.

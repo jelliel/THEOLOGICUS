@@ -903,6 +903,37 @@ infobulle.
 dans `getComputedStyle` sans jamais s'exécuter. Tant qu'un contrôle ne mesure
 que la déclaration, il passe — et l'utilisateur voit une question coupée.
 
+## Version Windows (.exe) — parité avec l'APK (commit `7a892f9`)
+
+Le job `windows` de la CI construit un exe PyInstaller (pywebview + WebView2)
+et publiait `THEOLOGICUS-portable-win64.zip`. Deux manques, corrigés :
+
+- **Corpus non livrés.** Le build ne copiait que `bible/`, `quran/`, `tafsir/`,
+  `libs/` : les cinq onglets de bibliothèque et la Somme renvoyaient **404 dans
+  l'exe** alors que l'APK les avait tous. Les onze dossiers sont maintenant
+  copiés (`bible quran tafsir libs summa summafr fathers reformed orthodox
+  islamic denzinger`), avec échec franc si l'un manque.
+- **Installeur jamais compilé.** `installer.iss` (Inno Setup) existait mais n'était
+  appelé nulle part dans la CI. Elle l'installe et le compile désormais, en
+  `continue-on-error` pour que le zip portable continue d'être publié même si
+  Inno Setup pose problème. La version est injectée (`/DMyAppVersion=`) au lieu
+  d'être figée à `1.0.2`.
+
+`build_installer.bat` (build local) suit la même liste, et sa version vient
+maintenant du **nombre de commits** au lieu du fichier `VERSION` racine, qui est
+périmé à `1.0.10` — sinon l'exe s'annonçait `1.0.10` pendant que l'APK
+s'annonçait `2.0.NN`.
+
+Le défilement des questions de suivi, lui, était **déjà** dans l'exe : le job
+Windows copie `THEOLOGICUS.html` lui-même. Vérifié dans le zip publié en
+v2.0.69 : `span.animate(` présent, `@keyframes chipMarquee` à 0 occurrence.
+
+**Leçon** : chaque plateforme a sa liste de dossiers à embarquer. Quand un
+corpus est ajouté au plan T1→T7, trois listes doivent suivre :
+`tools/prepare_mobile.py` (`COPY_DIRS`), le job `windows` de la CI, et
+`build_installer.bat`. Une liste oubliée ne casse rien au build — elle produit
+des 404 à l'usage.
+
 ## T6 — Denzinger, le magistère (dernier de la liste)
 
 `tools/build_denzinger.py` → **128 sections**, 1,3 Mo, 292 alias, cinquième
