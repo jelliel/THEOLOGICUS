@@ -9437,7 +9437,15 @@ function fitSuggestionChips(root) {
     chip.style.removeProperty('--dur');
     if (!span) continue;
     span.style.removeProperty('--shift');
-    var over = chip.scrollWidth - chip.clientWidth;
+    /* `chip.scrollWidth` est gele a `chip.clientWidth` sur Android WebView
+       quand le chip a `overflow:hidden` + `text-overflow:ellipsis` : la
+       mesure rend 0 et le marquee n'est jamais arme.  Le span n'a pas
+       d'ellipsis, il rend la largeur reelle du texte. */
+    var cs = getComputedStyle(chip);
+    var padL = parseFloat(cs.paddingLeft) || 0;
+    var padR = parseFloat(cs.paddingRight) || 0;
+    var contentW = chip.clientWidth - padL - padR;
+    var over = span.scrollWidth - contentW;
     if (over <= 6) continue;
     if (noMotion) { chip.classList.add('chip-nomotion'); continue; }
     /* 36 px par seconde, borne : ni interminable ni illisible. */
