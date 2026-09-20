@@ -4289,6 +4289,15 @@ body {
 .suggestion-chip.chip-scroll {
   text-overflow: clip;
 }
+/* Un leger degrade au bord droit : on VOIT qu'il reste du texte. */
+.suggestion-chip.chip-scroll::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 16px;
+  background: linear-gradient(to right, transparent, var(--hull));
+  pointer-events: none;
+}
 .suggestion-chip.chip-scroll .chip-text {
   animation: chipMarquee var(--dur, 8s) linear infinite alternate;
   will-change: transform;
@@ -4300,6 +4309,30 @@ body {
 @keyframes chipMarquee {
   0%, 10%   { transform: translateX(0); }
   90%, 100% { transform: translateX(var(--shift, -40px)); }
+}
+/* Filet de securite : si le systeme ou l'utilisateur a desactive les
+   animations (« supprimer les animations » dans les options d'accessibilite
+   Android), le defilement ne se verrait pas et la question resteraient
+   coupee.  Dans ce cas on ne compte PLUS sur l'animation : la puce
+   s'etale sur plusieurs lignes et la question est lisible en entier. */
+.suggestion-chip.chip-nomotion {
+  white-space: normal;
+  text-overflow: clip;
+  max-width: 100%;
+  line-height: 1.45;
+}
+/* le span force nowrap pour le defilement : sans animation il faut le
+   rendre au texte, sinon la puce s'etale mais le texte reste coupe */
+.suggestion-chip.chip-nomotion .chip-text {
+  white-space: normal;
+  display: inline;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .suggestion-chip.chip-scroll .chip-text {
+    animation: none;
+    transform: none;
+  }
 }
 .suggestion-chip::before {
   content: '→';
@@ -9392,23 +9425,64 @@ function suggestionChipHtml(t) {
    la largeur disponible change avec l'écran. */
 function fitSuggestionChips(root) {
   var chips = (root || document).querySelectorAll('.suggestion-chip');
+  /* « Supprimer les animations » (accessibilite Android) : on ne peut pas
+     compter sur un defileement pour faire lire la fin d'une question. */
+  var noMotion = !!(window.matchMedia &&
+                    window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   for (var i = 0; i < chips.length; i++) {
     var chip = chips[i];
     var span = chip.querySelector('.chip-text');
     chip.classList.remove('chip-scroll');
+    chip.classList.remove('chip-nomotion');
     chip.style.removeProperty('--dur');
     if (!span) continue;
     span.style.removeProperty('--shift');
     var over = chip.scrollWidth - chip.clientWidth;
-    if (over > 6) {
-      /* 26 px par seconde, borné : ni interminable ni illisible. */
-      var dur = Math.min(20, Math.max(4, over / 26));
-      span.style.setProperty('--shift', '-' + (over + 6) + 'px');
-      chip.style.setProperty('--dur', dur.toFixed(1) + 's');
-      chip.classList.add('chip-scroll');
+    if (over <= 6) continue;
+    if (noMotion) { chip.classList.add('chip-nomotion'); continue; }
+    /* 36 px par seconde, borne : ni interminable ni illisible. */
+    var dur = Math.min(12, Math.max(4, over / 36));
+    span.style.setProperty('--shift', '-' + (over + 6) + 'px');
+    chip.style.setProperty('--dur', dur.toFixed(1) + 's');
+    chip.classList.add('chip-scroll');
+    /* Filet : si l'animation ne demarre pas quand meme, on etale le texte. */
+    if (getComputedStyle(span).animationName === 'none') {
+      chip.classList.remove('chip-scroll');
+      chip.classList.add('chip-nomotion');
     }
   }
 }
+
+/* Les puces sont parfois inserees avant que la mise en page soit stable
+   (polices pas encore chargees, panneau pas encore affiche) : la mesure
+   vaut alors 0 et le defilement ne s'arme jamais.  On re-mesure des que
+   c'est possible, et a chaque changement de largeur du panneau. */
+(function armSuggestionRefit() {
+  var enCours = false;
+  var refit = function () {
+    if (enCours) return;
+    enCours = true;
+    requestAnimationFrame(function () {
+      enCours = false;
+      var c = document.getElementById('chat-container');
+      if (c) fitSuggestionChips(c);
+    });
+  };
+  window.__refitSuggestionChips = refit;
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(refit).catch(function () {});
+  }
+  window.addEventListener('load', function () {
+    refit();
+    if (typeof ResizeObserver === 'function') {
+      var c = document.getElementById('chat-container');
+      if (c) new ResizeObserver(refit).observe(c);
+    }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) refit();
+  });
+})();
 
 // ── Extrait la section "Questions de suivi" et rend les puces instantanément ──
 function extractSuggestionsHtml(raw) {
