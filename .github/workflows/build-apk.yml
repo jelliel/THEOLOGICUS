@@ -174,7 +174,7 @@ jobs:
           # TOUS les corpus locaux, pas seulement bible/quran/tafsir : sans
           # eux les cinq onglets de bibliotheque et la Somme renvoient 404
           # dans l'exe, alors que l'APK les a.
-          foreach ($d in 'bible','quran','tafsir','libs','summa','summafr','fathers','reformed','orthodox','islamic','denzinger') {
+          foreach ($d in 'bible','quran','tafsir','libs','summa','summafr','fathers','reformed','orthodox','islamic','denzinger','quranwbw','quranroots') {
             if (Test-Path $d) {
               Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force
             } else {

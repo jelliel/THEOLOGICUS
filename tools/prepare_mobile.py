@@ -25,7 +25,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "mobile", "www")
 
 COPY_DIRS = ["bible", "quran", "tafsir", "libs", "summa", "summafr", "fathers",
-             "reformed", "orthodox", "islamic", "denzinger"]
+             "reformed", "orthodox", "islamic", "denzinger",
+             "quranwbw", "quranroots"]
 EXPECTED = {
     "bible": ("b", ".js", 66),
     "quran": ("q", ".js", 114),

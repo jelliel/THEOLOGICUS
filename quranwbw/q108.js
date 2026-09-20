@@ -1,0 +1,1 @@
+(window.__quranWbw=window.__quranWbw||{})[108]={"1":[["Indeed, We","innā"],["We have given you","aʿṭaynāka"],["Al-Kauthar","l-kawthara"]],"2":[["So pray","faṣalli"],["to your Lord","lirabbika"],["and sacrifice","wa-in'ḥar"]],"3":[["Indeed","inna"],["your enemy ","shāni-aka"],["he (is)","huwa"],["the one cut off","l-abtaru"]]};
