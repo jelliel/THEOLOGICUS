@@ -20514,12 +20514,52 @@ function initBibleVerseTooltip() {
     return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
                             n.closest('#lat-tip') || n.closest('#qw-tip')));
   }
+  /* v100 — LA COURSE. Mesuré au traceur CDP (2026-09-22, vidéo de Fatih) :
+     en descendant du lien vers la ligne de mots hébreux, le navigateur émet
+     UN SEUL `mouseout` sur le lien, avec `relatedTarget` = le fond de page —
+     pas le panneau. `dansPanneau()` renvoie donc false et le panneau se
+     referme AVANT que la souris ait atteint le mot. C'est le défaut signalé,
+     et il n'était pas un problème de z-index : le mot était bien peint
+     au-dessus, il n'était simplement plus atteignable.
+
+     La géométrie l'explique : le panneau est posé AU-DESSUS du lien (y=472
+     contre y=659), donc pour rejoindre un mot on sort forcément du lien par
+     un bord où le panneau n'est pas encore. Juger sur `relatedTarget` revient
+     à juger sur un chemin que la souris n'a pas encore parcouru.
+
+     On juge désormais sur la DESTINATION, avec un délai de grâce : on arme la
+     fermeture, et tout `mouseover` ultérieur visant le panneau, un mot ou une
+     fiche l'annule. Le panneau ne se referme que si la souris est réellement
+     partie ailleurs. Le délai (160 ms) est celui qu'il faut à une main humaine
+     pour traverser la gouttière entre le lien et le panneau. */
+  var _fermetureArmee = null;
+  function armerFermeture() {
+    if (_fermetureArmee) clearTimeout(_fermetureArmee);
+    _fermetureArmee = setTimeout(function () { _fermetureArmee = null; hideTip(); }, 160);
+  }
+  function annulerFermeture() {
+    if (_fermetureArmee) { clearTimeout(_fermetureArmee); _fermetureArmee = null; }
+  }
+  window.__annulerFermetureBible = annulerFermeture;
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
     if (!el) return;
     if (dansPanneau(e.relatedTarget)) return;   /* v93 : on entre dans le panneau */
-    hideTip();
+    armerFermeture();                           /* v100 : au lieu de hideTip() */
   });
+  /* v100 — tout ce qui doit retenir le panneau annule la fermeture armée.
+     On écoute en capture, sur `mouseover`, pour couvrir aussi les cas où le
+     curseur entre directement dans une fiche (qui vit dans BODY, pas dans le
+     panneau). */
+  document.addEventListener('mouseover', function (e) {
+    if (!_fermetureArmee) return;
+    const t = e.target;
+    if (t && t.closest && (t.closest('#bible-verse-tip') || t.closest('.hb') || t.closest('.gr') ||
+        t.closest('.lat') || t.closest('#hb-tip') || t.closest('#gr-tip') ||
+        t.closest('#lat-tip'))) {
+      annulerFermeture();
+    }
+  }, true);
 
   /* v2.0 — resolution LOCALE au tap. Jusqu'ici, taper une reference partait
      ouvrir BibleGateway : en mode avion, TOUTES les references de l'app
@@ -20711,12 +20751,34 @@ function initQuranVerseTooltip() {
     return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
                             n.closest('#lat-tip') || n.closest('#qw-tip')));
   }
+  /* v100 — même course que dans le panneau biblique, mesurée sur la vidéo :
+     en descendant du lien vers la ligne de mots arabes, un SEUL `mouseout`
+     sort du lien avec `relatedTarget` = fond de page. Le panneau se refermait
+     avant que la souris atteigne le mot, rendant la translittération
+     inaccessible — exactement ce que Fatih a filmé. Fermeture différée. */
+  var _fermetureArmeeQ = null;
+  function armerFermetureQ() {
+    if (_fermetureArmeeQ) clearTimeout(_fermetureArmeeQ);
+    _fermetureArmeeQ = setTimeout(function () { _fermetureArmeeQ = null; hideTip(); }, 160);
+  }
+  function annulerFermetureQ() {
+    if (_fermetureArmeeQ) { clearTimeout(_fermetureArmeeQ); _fermetureArmeeQ = null; }
+  }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.quran-ref, span.quran-ref');
     if (!el) return;
     if (dansPanneau(e.relatedTarget)) return;   /* on entre dans le panneau */
-    hideTip();
+    armerFermetureQ();                          /* v100 : au lieu de hideTip() */
   });
+  document.addEventListener('mouseover', function (e) {
+    if (!_fermetureArmeeQ) return;
+    const t = e.target;
+    if (t && t.closest && (t.closest('#quran-verse-tip') || t.closest('.qw') ||
+        t.closest('#qw-tip') || t.closest('#hb-tip') || t.closest('#gr-tip') ||
+        t.closest('#lat-tip'))) {
+      annulerFermetureQ();
+    }
+  }, true);
   /* Un clic sur un mot du mot a mot coranique doit ouvrir / garder sa fiche,
      pas refermer le panneau qui la contient. */
   document.addEventListener('click', function (e) {
@@ -20954,12 +21016,31 @@ function initTafsirVerseTooltip() {
     return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
                             n.closest('#lat-tip') || n.closest('#qw-tip')));
   }
+  /* v100 — même course que Bible et Coran : le `mouseout` du lien porte un
+     `relatedTarget` = fond de page tant que la souris n'a pas atteint le
+     panneau. On juge sur la destination, pas sur le chemin. */
+  var _fermetureArmeeT = null;
+  function armerFermetureT() {
+    if (_fermetureArmeeT) clearTimeout(_fermetureArmeeT);
+    _fermetureArmeeT = setTimeout(function () { _fermetureArmeeT = null; hideTip(); }, 160);
+  }
+  function annulerFermetureT() {
+    if (_fermetureArmeeT) { clearTimeout(_fermetureArmeeT); _fermetureArmeeT = null; }
+  }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.tafsir-ref, span.tafsir-ref');
     if (!el) return;
     if (dansPanneau(e.relatedTarget)) return;
-    hideTip();
+    armerFermetureT();                          /* v100 : au lieu de hideTip() */
   });
+  document.addEventListener('mouseover', function (e) {
+    if (!_fermetureArmeeT) return;
+    const t = e.target;
+    if (t && t.closest && (t.closest('#tafsir-verse-tip') || t.closest('#hb-tip') ||
+        t.closest('#gr-tip') || t.closest('#lat-tip') || t.closest('#qw-tip'))) {
+      annulerFermetureT();
+    }
+  }, true);
 }
 initTafsirVerseTooltip();
 
