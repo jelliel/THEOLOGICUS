@@ -1089,7 +1089,7 @@
 /* Références bibliques dans les commentaires annotés */
 .atc-tip-a .atc-vref{color:#ffcc80;font-weight:700;cursor:pointer;border-bottom:1px dotted rgba(255,204,128,.55);padding:0 1px;border-radius:2px;transition:all .15s ease}
 .atc-tip-a .atc-vref:hover{background:rgba(255,204,128,.14);text-shadow:0 0 8px rgba(255,204,128,.35)}
-#verse-mini-tip{position:fixed;z-index:130000;width:min(360px,88vw);background:#fffdf5;color:#4a3520;border:1px solid #8a6d3b;border-radius:10px;padding:11px 13px;box-shadow:0 8px 26px rgba(0,0,0,.5);font-family:Georgia,'Times New Roman',serif;font-size:12.5px;line-height:1.6;display:none}
+#verse-mini-tip{position:fixed;z-index:var(--z-panneau,9000);width:min(360px,88vw);max-height:60vh;overflow-y:auto;overscroll-behavior:contain;background:#fffdf5;color:#4a3520;border:1px solid #8a6d3b;border-radius:10px;padding:11px 13px;box-shadow:0 8px 26px rgba(0,0,0,.5);font-family:Georgia,'Times New Roman',serif;font-size:12.5px;line-height:1.6;display:none}
 #verse-mini-tip .vmt-ref{font-weight:700;color:#8a5a20;margin-bottom:5px;font-size:12.5px}
 #verse-mini-tip .vmt-txt{font-style:normal;color:#3d2b16}
 #verse-mini-tip .vmt-suite{color:#8a7040;font-size:11px;margin-top:5px}
@@ -20498,8 +20498,22 @@ function initBibleVerseTooltip() {
      le mot), mais le mot n'est ni `a.bible-ref` ni `span.bible-ref` : on
      refermait donc le panneau a l'instant ou l'on entrait dedans, emportant
      l'infobulle du mot avec lui. On ne referme que si l'on sort VRAIMENT du
-     panneau. */
-  function dansPanneau(n) { return !!(n && tip.contains(n)); }
+     panneau.
+
+     v99 — MESURÉ : `tip.contains(f)` est TOUJOURS FAUX pour une fiche de mot.
+     Les quatre fiches (`#hb-tip`, `#gr-tip`, `#lat-tip`, `#qw-tip`) sont
+     créées par `document.body.appendChild(...)` : elles sont FRÈRES du
+     panneau, pas descendantes. Le test ne couvrait donc en réalité que le cas
+     « le mot est dans le panneau », pas « la souris entre dans la fiche ».
+     On ajoute la seconde branche, explicitement. Comportement mesuré
+     inchangé (la fiche survivait déjà, par chance géométrique) — mais il ne
+     dépend plus de cette chance. */
+  function dansPanneau(n) {
+    if (!n) return false;
+    if (tip.contains(n)) return true;
+    return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
+                            n.closest('#lat-tip') || n.closest('#qw-tip')));
+  }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
     if (!el) return;
@@ -20674,15 +20688,29 @@ function initQuranVerseTooltip() {
     if (!p) return;
     showTip(el, p);
   });
-  /* v96 — le mot arabe (`.qw`) vit DANS ce panneau, exactement comme le mot
-     hebreu vit dans `#bible-verse-tip` (defaut corrige en v93 cote Bible,
-     jamais reporte ici). Passer du lien `a.quran-ref` a un mot declenche un
-     `mouseout` sur le lien dont `relatedTarget` est le mot : le mot n'etant
-     ni `a.quran-ref` ni `span.quran-ref`, on refermait le panneau a l'instant
-     ou l'on entrait dedans. On ne referme donc que si l'on sort VRAIMENT.
-     Regle generale : un conteneur ouvert au survol doit tester
-     `relatedTarget`, jamais la seule classe du `target`. */
-  function dansPanneau(n) { return !!(n && tip.contains(n)); }
+  /* v99 — MESURÉ (CDP, 2026-09-22) : ce garde n'est en pratique JAMAIS
+     atteint avec une fiche pour `relatedTarget`. Sur six mots parcourus au
+     clavier-souris réel, sept `mouseout` sortent du lien — tous vers le MOT
+     (`span.gr`), aucun vers une fiche de mot. En sortant du mot vers la fiche,
+     le navigateur n'émet d'ailleurs aucun `mouseout` du lien du tout.
+
+     Conséquence : la protection actuelle est INCIDENTE, pas structurelle.
+     Elle tient parce que la souris passe du mot à la fiche sans traverser un
+     tiers, et parce que `__placerFiche` (v94) ne pose jamais une fiche sur son
+     mot. Si l'un de ces deux faits changeait — fiche plus longue, mot collé au
+     lien, placement en échec — `tip.contains(fiche)` serait FAUX et le panneau
+     se refermerait en emportant la fiche qu'on est en train de lire.
+
+     On rend donc le test EXPLICITE au lieu de compter sur la géométrie :
+     on ne referme que si la souris ne va ni dans le panneau NI dans une fiche
+     de mot. Le comportement mesuré ne change pas (6/6 mots), mais il ne
+     dépend plus d'un hasard de positionnement. */
+  function dansPanneau(n) {
+    if (!n) return false;
+    if (tip.contains(n)) return true;
+    return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
+                            n.closest('#lat-tip') || n.closest('#qw-tip')));
+  }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.quran-ref, span.quran-ref');
     if (!el) return;
@@ -20916,8 +20944,16 @@ function initTafsirVerseTooltip() {
     showTip(el, p);
   });
   /* v96 — meme regle que pour la Bible et le Coran : le tafsir peut contenir
-     du texte repere, on ne referme que sur une VRAIE sortie du panneau. */
-  function dansPanneau(n) { return !!(n && tip.contains(n)); }
+     du texte repere, on ne referme que sur une VRAIE sortie du panneau.
+     v99 — et le test couvre desormais explicitement les fiches de mot, qui
+     sont des FRERES du panneau (enfants de `body`) et jamais ses descendants :
+     `tip.contains(fiche)` seul ne pouvait pas les voir. */
+  function dansPanneau(n) {
+    if (!n) return false;
+    if (tip.contains(n)) return true;
+    return !!(n.closest && (n.closest('#hb-tip') || n.closest('#gr-tip') ||
+                            n.closest('#lat-tip') || n.closest('#qw-tip')));
+  }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.tafsir-ref, span.tafsir-ref');
     if (!el) return;
@@ -23215,18 +23251,43 @@ initTafsirVerseTooltip();
     }
     tip.style.display = 'block';
     var r = el.getBoundingClientRect();
-    var w = tip.offsetWidth || 300, h = tip.offsetHeight || 100;
-    var x = Math.max(10, Math.min(r.left + r.width/2 - w/2, window.innerWidth - w - 10));
-    var y = r.bottom + 8;
-    if (y + h > window.innerHeight - 10) y = Math.max(10, r.top - h - 8);
-    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    /* v97 — placement par le helper PARTAGE, comme les panneaux de verset.
+       L'ancien calcul ne bornait que la droite et le bas : une citation
+       longue posee pres du bord gauche sortait de l'ecran, et la reference
+       etait coupee. `__placerFiche` essaie dessous, dessus, droite, gauche
+       et borne les quatre bords. On retombe sur l'ancien calcul si le
+       helper n'est pas encore charge. */
+    if (window.__placerFiche) {
+      window.__placerFiche(tip, el);
+    } else {
+      var w = tip.offsetWidth || 300, h = tip.offsetHeight || 100;
+      var x = Math.max(10, Math.min(r.left + r.width/2 - w/2, window.innerWidth - w - 10));
+      var y = r.bottom + 8;
+      if (y + h > window.innerHeight - 10) y = Math.max(10, r.top - h - 8);
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    }
   });
+  /* v97 — on ne referme la citation que si la souris sort VRAIMENT de la
+     zone. `t.matches(':hover')` ne suffisait pas : la fiche de mot s'ouvre
+     par-dessus, et le seul fait de la survoler faisait sortir `verse-mini-tip`
+     de l'etat :hover — le panneau se refermait pendant qu'on lisait la fiche,
+     emportant le contexte. On teste le `relatedTarget`, comme partout
+     ailleurs dans l'app. */
   document.addEventListener('mouseout', function(e){
     var el = e.target.closest ? e.target.closest('.atc-vref') : null;
     if (!el) return;
+    var vers = e.relatedTarget;
+    if (vers && vers.closest &&
+        (vers.closest('#verse-mini-tip') || vers.closest('#hb-tip') ||
+         vers.closest('#gr-tip') || vers.closest('#lat-tip') ||
+         vers.closest('#qw-tip'))) return;
     setTimeout(function(){
       var t = document.getElementById('verse-mini-tip');
-      if (t && !t.matches(':hover')) t.style.display = 'none';
+      if (!t) return;
+      if (t.matches(':hover')) return;
+      var f = document.querySelector('#hb-tip:hover, #gr-tip:hover, #lat-tip:hover, #qw-tip:hover');
+      if (f) return;
+      t.style.display = 'none';
     }, 250);
   });
 })();
@@ -26443,8 +26504,14 @@ html[data-theme="v6-cyber"] #archives-panel{ background:rgba(18,12,28,0.96) !imp
 <style id="v37-translit-css">
 
 /* ═══ v37 — TRANSLITTÉRATION AU SURVOL ═══ */
+/* v97 — ce panneau est un PANNEAU DE VERSET (il affiche un verset translittéré
+   sous le curseur) : il doit vivre SOUS les fiches de mot, dans l'échelle
+   partagée. Il était à --z-mot (9500), soit à égalité avec les fiches ; à
+   z-index égal c'est le dernier venu dans le DOM qui est peint, et ici la
+   fiche perdait. Même famille que bible/quran/tafsir-verse-tip : 9000. */
 #v37-tip{
-  position:fixed; z-index:129999; max-width:360px; min-width:150px;
+  position:fixed; z-index:var(--z-panneau,9000); max-width:360px; min-width:150px;
+  max-height:60vh; overflow-y:auto; overscroll-behavior:contain;
   padding:10px 14px 11px; border-radius:12px;
   background:rgba(7,11,18,.96);
   border:1px solid var(--glass-border, rgba(120,165,225,.28));
@@ -29590,7 +29657,6 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     window.__latV91 = { cacher: cacher };
   })();
 </script>
-
 
 
 </body>
