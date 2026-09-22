@@ -185,23 +185,62 @@
          plus son contenu, et une fiche coupee vaut moins qu'un panneau
          partiellement cache. Si meme 140 px ne tiennent nulle part, on
          garde le meilleur des quatre candidats internes. */
+      /* v102 — LE REPLI v101 NE POUVAIT PAS ATTEINDRE LA FENETRE ETROITE.
+         Mesure sur la copie INSTALLEE (2.0.112), fiche grecque a max-width
+         300px contre un panneau de 360x403 en 32,118 :
+
+           fenetre    bandes libres (h/b/g/d)        repli v101   resultat
+           784x705    104 / 170 /  18 / 378 px        oui          hors-droite, 0 %
+           584x605    104 /  70 /  18 / 178 px        NON          dessus, 52 % cache
+           500x665    104 / 130 /  18 /  94 px        NON          dessus, 45 % cache
+
+         La plus grande bande vaut 178 px puis 94 px : TOUTES sont plus
+         etroites que la fiche (300 px). Le repli v101 ne plafonnait que la
+         HAUTEUR. Il placait donc une fiche de 300 px de large dans une bande
+         de 94 px : le test `touche > 0` des candidats exterieurs la rejetait,
+         et l'on retombait sur les quatre candidats INTERNES, donc sur le
+         panneau.
+
+         Or `#gr-tip` est en `max-width:300px` : sa largeur est un PLAFOND,
+         pas une contrainte. On peut la reduire. C'est ce que fait ce repli :
+         on plafonne la fiche a la bande libre dans les DEUX dimensions, et
+         on n'exige plus qu'elle tienne dans une seule.
+
+         On ne descend jamais sous une surface lisible : 150 px de large et
+         120 px de haut. En dessous, une fiche tronquee vaudrait moins qu'un
+         panneau partiellement cache. Et on restaure tout si rien ne
+         s'ameliore — un repli ne doit jamais DEGRADER. */
       if (candidate.surPanneau && hote) {
-        var bande = 0;
-        var bandes = [
-          hote.top - MARGE - ECART,
-          (vh - MARGE - ECART) - hote.bottom,
-          hote.left - MARGE - ECART,
-          (vw - MARGE - ECART) - hote.right
+        var LARGEUR_MINI = 150, HAUTEUR_MINI = 120;
+        /* Les quatre bandes libres autour du panneau hote, DANS l'ecran. */
+        var bande = [
+          { horiz: false, taille: hote.top - MARGE - ECART  },   /* au-dessus  */
+          { horiz: false, taille: (vh - MARGE - ECART) - hote.bottom }, /* dessous */
+          { horiz: true,  taille: hote.left - MARGE - ECART },   /* a gauche   */
+          { horiz: true,  taille: (vw - MARGE - ECART) - hote.right }   /* a droite */
         ];
-        for (var bi = 0; bi < bandes.length; bi++) {
-          if (bandes[bi] > bande) bande = bandes[bi];
-        }
-        var HAUTEUR_MINI = 140;
-        if (bande >= HAUTEUR_MINI && bande < fh) {
-          fiche.style.maxHeight = Math.floor(bande) + 'px';
-          var reduit = placer(fw, Math.floor(bande));
-          if (!reduit.surPanneau) candidate = reduit;
-          else fiche.style.maxHeight = '';   /* pas concluant : on restaure */
+        /* On essaie les bandes de la plus grande a la plus petite : la
+           premiere qui accueille une fiche lisible est la bonne. */
+        bande.sort(function (a, b) { return b.taille - a.taille; });
+        for (var bi = 0; bi < bande.length; bi++) {
+          var b = bande[bi];
+          /* Une bande VERTICALE limite la hauteur ; une bande HORIZONTALE
+             limite la largeur. On ne plafonne que ce que la bande contraint,
+             pour ne pas retrecir la fiche sans raison. */
+          var lw = b.horiz ? Math.min(fw, Math.floor(b.taille)) : fw;
+          var lh = b.horiz ? fh : Math.min(fh, Math.floor(b.taille));
+          if (lw < LARGEUR_MINI || lh < HAUTEUR_MINI) continue;
+          var ancienW = fiche.style.maxWidth, ancienH = fiche.style.maxHeight;
+          if (lw < fw) fiche.style.maxWidth = lw + 'px';
+          if (lh < fh) fiche.style.maxHeight = lh + 'px';
+          var reduit = placer(lw, lh);
+          if (!reduit.surPanneau && !reduit.surLeMot) {
+            candidate = reduit;
+            break;
+          }
+          /* Pas concluant : on restaure et on essaie la bande suivante. */
+          fiche.style.maxWidth = ancienW;
+          fiche.style.maxHeight = ancienH;
         }
       }
       fiche.style.left = candidate.p.left + 'px';

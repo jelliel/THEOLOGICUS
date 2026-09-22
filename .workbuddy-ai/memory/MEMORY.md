@@ -11,8 +11,8 @@ journaux datés `.workbuddy-ai/memory/AAAA-MM-JJ.md`, bancs
   `summa/` (611 q., 17 Mo, EN), `summafr/` (613 q., 20,2 Mo, Drioux,
   id `1001` = Ia q.1), `fathers/` (118, 36 Mo), `reformed/` (91, 27,8 Mo),
   `orthodox/` (43), `islamic/` (93), `denzinger/` (128), `quranwbw/`,
-  `quranroots/`, `biblehb/` (39 + `strongs.js`, 12 Mo), `biblegr/` (27 +
-  `strongs.js`, 6,4 Mo), `latin/` (`mots.js`).
+  `quranroots/`, `biblehb/` (39 + `strongs.js`), `biblegr/` (27 + `strongs.js`),
+  `latin/` (`mots.js`). **16 corpus au total.**
 - Loaders : `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah` /
   `__ensureSummaQuestion` / `__ensureSummaFrQuestion` / `__ensureBibleHb` /
   `__ensureStrongsHb` / `__ensureBibleGr` / `__ensureStrongsGr` /
@@ -42,18 +42,16 @@ journaux datés `.workbuddy-ai/memory/AAAA-MM-JJ.md`, bancs
 
 ## Échelle z-index — une seule échelle, nommée
 
-Valeurs dans `:root`, **ordonnées**. Toute zone gelée en dur hors échelle finit
-par piéger un élément qu'on croit au-dessus et qui peint dessous.
-Garde-fou : skill `theologicus-zindex-guard`.
+Valeurs dans `:root`, **ordonnées**. Garde-fou : skill `theologicus-zindex-guard`.
 
 ```
 --z-content:1  --z-sticky-sub:10  --z-subnav:99  --z-sticky:100
 --z-panel:199  --z-fab:200  --z-sidebar:999  --z-overlay:1000
 --z-modal-lg:2000  --z-modal:3000  --z-popup:5000
---z-panneau:9000      ← panneaux de verset (Bible, Coran, Tafsir, mini, v37)
---z-mot:9500          ← fiches de mot : au-dessus du contenu expliqué
+--z-panneau:9000   ← panneaux de verset (Bible, Coran, Tafsir, mini, v37)
+--z-mot:9500       ← fiches de mot : au-dessus du contenu expliqué
 --z-toast:10000
---z-bulle:100000      ← bulle d'annotation ; --z-au-dessus:100002 (bannières)
+--z-bulle:100000   ← bulle d'annotation ; --z-au-dessus:100002 (bannières)
 ```
 
 - **CINQ panneaux de verset, pas trois** : `#bible-verse-tip`, `#quran-verse-tip`,
@@ -88,17 +86,25 @@ découlent tous.
   juger un chemin que le curseur n'a pas fini de parcourir.** Correctif :
   **armer** la fermeture au `mouseout` (160 ms), l'**annuler** sur tout
   `mouseover` visant le panneau, un mot ou une fiche. Bible / Coran / Tafsir.
-- **v101 — LE PLACEMENT NE REGARDAIT QUE LE MOT.** `__placerFiche` minimisait
-  `aireRecouvrement(boite, mot)` et rien d'autre. Le mot étant *dans* le panneau,
-  les quatre candidats y entrent tous : mesuré dessous 84 000 px², dessus
-  47 850, droite 84 000, gauche 76 055 — « dessus » gagnait en cachant 33 % du
-  panneau. **Correctif** : les panneaux deviennent des **obstacles explicites**
-  (score séparé mot/panneau, le mot prime) ; **quatre candidats HORS panneau
-  essayés d'abord** (`hors-droite|gauche|haut|bas`, retenus seulement s'ils
-  tiennent à l'écran sans bornage) ; **à défaut, plafonner la hauteur de la fiche
-  à la plus grande bande libre** (jamais sous 140 px) — `overflow-y:auto` fait le
-  reste. Résultat : **0 % du panneau caché** à 984×765, 784×705, 500×665 et
-  584×605 (fiche ramenée de 280 à 274 px).
+- **v101 — LE PLACEMENT NE REGARDAIT QUE LE MOT.** Les panneaux deviennent des
+  **obstacles explicites** (score séparé mot/panneau, le mot prime) ; **quatre
+  candidats HORS panneau** (`hors-droite|gauche|haut|bas`) essayés d'abord,
+  retenus seulement s'ils tiennent à l'écran **sans bornage**.
+- **v102 — LE REPLI NE PLAFONNAIT QUE LA HAUTEUR, DONC IL MANQUAIT LA FENÊTRE
+  ÉTROITE.** Les fiches sont en **`max-width:300px`** : leur largeur est un
+  plafond. Bandes libres mesurées autour du panneau : 784×705 → 378 px (le repli
+  marchait), **584×605 → 178 px**, **500×665 → 94 px** — plus étroites que la
+  fiche. Le repli posait 300 px dans 94 px, le test `touche > 0` rejetait tous
+  les candidats extérieurs, retour aux candidats **internes** : 52 % et 45 % du
+  panneau cachés. **La v101 n'avait été validée que là où la bande faisait
+  ≥ 280 px.** Correctif : plafonner **les DEUX dimensions**, contraintes
+  seulement par ce que la bande limite (verticale → hauteur, horizontale →
+  largeur), bandes parcourues **de la plus grande à la plus petite**, plancher
+  **150×120 px**, et **restauration** si une bande ne convient pas. Résultat sur
+  la copie **installée** : `hors-droite` à 984/784/**584** (fiche **200**×363),
+  `hors-bas` à 500/420 (300×**146**) — **0 % du panneau caché aux cinq
+  tailles**. **Leçon : un banc qui ne descend pas assez bas ne prouve rien sur
+  une fenêtre étroite.**
 - `dansPanneau(n)` teste `tip.contains(n)` **et** `n.closest('#hb-tip'|…)` : les
   fiches sont enfants de `BODY`, donc `tip.contains(f)` est **toujours faux**.
   Durcissement, pas correction d'un bug actif — ne pas le présenter autrement.
@@ -135,15 +141,25 @@ découlent tous.
 ## Bancs de test headless (CDP) — pièges vérifiés
 
 - **Contre-épreuve obligatoire** : lancer le MÊME banc sur la baseline
-  (`git show HEAD:THEOLOGICUS.html` + tranches dans `_v96/avant/`) et sur
-  `mobile/www`. Un banc vert des deux côtés ne prouve **rien** ; le delta est la
-  preuve. `THEO_WWW` choisit la racine, corpus copiés à côté.
-- **Servir le nom réellement présent sur disque** : `/THEOLOGICUS.html` quand le
-  fichier s'appelle `index.html` rend un 404 de 3 octets.
+  (`git show HEAD:THEOLOGICUS.html` + tranches dans `_v96/avant/`) et sur la
+  cible. Un banc vert des deux côtés ne prouve **rien** ; le delta est la preuve.
+  `THEO_WWW` choisit la racine, corpus copiés à côté.
+- **Vérifier d'abord que le banc CHARGE la page.** `_v94/verif.js`,
+  `_v96/verif.js`, `_v95/verif_fix.js` servent `/index.html` ; une racine qui
+  porte `THEOLOGICUS.html` rend un **404 de 3 octets**, tous les `z-index` à
+  `auto` et `__placerFiche` à `undefined` — **cela ressemble exactement à une
+  régression totale**. `THEO_INDEX` règle `_v94`/`_v95` ; `_v96` n'a pas de
+  variable → pointer `THEO_WWW` sur `mobile/www`, et **synchroniser
+  `mobile/www/index.html` avec `THEOLOGICUS.html` au préalable** (gitignoré).
+- **Un banc qui n'ouvre aucun panneau mesure le vide.** Vécu v102 : appeler
+  `__placerFiche` sans panneau ouvert rend une fiche à 0×0 (`pos: "dessous"`) —
+  `hote` vaut `null`, les candidats extérieurs ne sont **même pas construits**.
+- **Un banc qui descend trop peu ne prouve rien** : valider à 984/784 px a laissé
+  passer le défaut v102, visible seulement sous 300 px de bande libre.
+- **Ne jamais FABRIQUER un panneau** : un `<div>` nu sans la feuille du module
+  fait mesurer le banc lui-même.
 - **Attendre une CONDITION, pas un `sleep`** : sinon tout `z-index` calculé vaut
   `auto`. Idem pour les mots de mot à mot (chargement **asynchrone**).
-- **Ne jamais FABRIQUER un panneau** dans un banc : un `<div>` nu sans la feuille
-  du module fait mesurer le banc lui-même.
 - `#setup-wizard-overlay.active` **et** `#auth-overlay` recouvrent tout au premier
   lancement. `remove()` ; `display:none` ne suffit pas pour `#auth-overlay`.
 - La délégation écoute sur `#chat-container` : injecter le `.message` **dedans**.
@@ -159,6 +175,8 @@ découlent tous.
 - Instrumenter `style.display` par `Object.defineProperty` sur l'**instance**
   casse `getComputedStyle` et ne se désinstalle pas : `delete`.
 - **`node -e` mange les regex** et heredoc mange backticks/`${}` : écrire un `.js`.
+- **Chemins : `node --check /tmp/x.js` rend `C:\tmp\x.js` introuvable.** Écrire
+  les fichiers de travail dans le projet, jamais dans `/tmp`.
 
 ## Build Android / Windows — CLÉ CRITIQUE
 
@@ -170,8 +188,9 @@ RSA 4096. **Ne jamais remplacer ce JKS** : plus aucune mise à jour publiable.
 SHA-256 `93d8324058f1ecd1d252d97b976854ffaf2a976605b9658983d17db6d70f5e67`.
 Vérifier par `apksigner verify --print-certs`, **jamais** `META-INF/*.RSA`.
 
-Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`.
-Procédure complète → skill `theologicus-apk-build`.
+Chaîne hors dépôt : `C:\Users\to shr\.workbuddy-ai\binaries\android-tools\`
+(corriger le chemin : `C:\Users\toshr\...`). Procédure complète → skill
+`theologicus-apk-build`.
 
 - `./gradlew` échoue sur `metadata.bin (Access is denied)` : relancer avec
   `dangerouslyDisableSandbox`.
@@ -190,10 +209,42 @@ Procédure complète → skill `theologicus-apk-build`.
 - **Vérifier le contenu livré, pas seulement la version** : neutraliser des DEUX
   côtés **le placeholder `__THEO_VERSION__` et la valeur tamponnée**.
 - **L'installeur se teste en l'installant pour de vrai** (`/VERYSILENT`…). Banc
-  `_v96/installe.js` (10/10). **`THEOLOGICUS.exe` ne se lance pas depuis le
-  sandbox** : servir le dossier **installé** + Chrome headless.
+  `_v96/installe.js` (10/10) et `_v101/verif_v102.js` (5/5). **`THEOLOGICUS.exe`
+  ne se lance pas depuis le sandbox** : servir le dossier **installé** + Chrome
+  headless.
 - `tools/check_syntax.js` (57 blocs, 5 ignorés) **avant toute compilation**
   (incident v66). Limite : ne valide pas un script isolé (voir v101).
+
+### Rebuild local de l'installeur Windows — l'ordre exact
+
+`cmd //c build_installer.bat` **ne s'exécute pas depuis Bash** (`cmd.exe` est
+bloqué par le sandbox). Rejouer chaque étape à la main, **dans cet ordre** :
+
+1. `py -3.12 -m PyInstaller` — **pas de `--clean`** ; supprimer
+   `build/THEOLOGICUS` et `dist/THEOLOGICUS` à la main avant.
+2. `cp -r` les 16 corpus dans `dist/THEOLOGICUS/` — **par-dessus, sans jamais
+   supprimer le dossier** : `COLLECT` vient d'y écrire l'exe. Purger *avant*
+   PyInstaller, jamais après (piégé : l'exe détruit, `signtool` échoue sur un
+   `File not found` annoncé `exit=0`).
+3. `theologicus_keys.json` remis à `{"mistral": ""}` ; `libs/fonts` (24 fichiers).
+4. `py -3.12 tools/stamp_version.py dist/THEOLOGICUS <version>` — **la version en
+   argument**, jamais celle du fichier `VERSION` racine.
+5. `signtool sign /f THEOLOGICUS_signing.pfx /p theologicus2026 /fd SHA256
+   /td SHA256 /tr http://timestamp.digicert.com` sur l'exe, **puis** sur
+   l'installeur (la signature de l'installeur invalide celle de l'exe si on
+   l'oublie : resigner les deux à la fin).
+6. `ISCC installer.iss /DMyAppVersion=<version>` → ~75 s, sortie
+   `dist/THEOLOGICUS-Setup-x64.exe`.
+7. Copier l'installeur + `dist/THEOLOGICUS/THEOLOGICUS.exe` dans `output/`.
+
+**Si la source change après compilation, tout recommencer à partir de l'étape 2**
+(l'exe PyInstaller reste valable : c'est une coquille, le HTML est une donnée).
+
+Chaîne en place : `py -3.12`, **PyInstaller 6.22.3**, `ISCC` dans
+`%LOCALAPPDATA%\Programs\Inno Setup 6\`, `signtool` dans
+`Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`, PFX à la racine.
+`output/` et `dist/` sont **gitignorés**. Volume : `dist/` ≈ 275 Mo +
+`output/` ≈ 170 Mo.
 
 ## Dépôt / CI
 
@@ -201,8 +252,7 @@ Procédure complète → skill `theologicus-apk-build`.
   **Ajouter un corpus = TROIS listes** : `COPY_DIRS` de `prepare_mobile.py`, la
   liste du job `windows`, `build_installer.bat`. Une liste oubliée ne casse pas
   le build : elle donne des 404 à l'usage.
-- **Le `dist/` local est un vestige : il ne se régénère pas tout seul.** Le purger
-  avant tout rebuild.
+- **Le `dist/` local est un vestige : il ne se régénère pas tout seul.**
 - Version = `git rev-list --count HEAD` (2.0.N). `VERSION` racine remis à jour.
 - `jelliel/THEOLOGICUS`, `main`. **Commits en anglais.** Jamais committer :
   `android/local.properties`, `android/release.keystore`, `mobile/www/*`,
@@ -222,51 +272,28 @@ Procédure complète → skill `theologicus-apk-build`.
 - Le tag `apk-v2.0.N` vient de `git rev-list --count HEAD` : ne pas annoncer un
   numéro avant de l'avoir lu dans l'API.
 - **Le sandbox bloque le téléchargement des assets de Release** : vérifier par
-  l'API Actions, pas en récupérant le binaire.
+  l'API Actions, pas en récupérant le binaire. (`curl -I` sur
+  `releases/download/...` rend bien un **200** ; c'est le *téléchargement* qui
+  échoue — et il réussit dans `/tmp` avec un `cd` séparé.)
 - **Commits : jamais `printf`** (« 100% » = format invalide). `git commit -F`.
-- **Disque C: plein (99 %, ~2,9 Go libres).** Les profils Chrome des bancs CDP
-  s'accumulent dans `%TEMP%\theo-*` et ont déjà provoqué un `ENOSPC` bloquant Bash
-  **et** PowerShell. Nettoyer après une campagne de bancs — vérifié v101 : la
-  campagne laissait **724 Mo** de profils, leur suppression ne rend pas de place
-  visible à `df` tant que Windows n'a pas purgé la corbeille, mais c'est bien du
-  volume à récupérer.
-- **Les `.apk` de `artifacts/` ne sont PAS suivis par git.** `git ls-files
-  .workbuddy-ai/artifacts/` rend 25 fichiers (`.md` + `.js`). Les 23 APK
-  (≈ 600 Mo, plus anciens = 15/09) sont des **résidus locaux reconstructibles**
-  depuis les Releases GitHub : ~600 Mo récupérables sur accord.
-  **Correction** : une version antérieure de cette note affirmait le contraire ;
-  elle venait d'un `git add -A` échoué en silence (disque plein).
-
-## Rebuild local de l'installeur Windows — l'ordre exact
-
-`cmd //c build_installer.bat` **ne s'exécute pas depuis Bash** (`cmd.exe` est
-bloqué par le sandbox). Rejouer chaque étape à la main, **dans cet ordre** :
-
-1. `py -3.12 -m PyInstaller` — **pas de `--clean`** ; supprimer
-   `build/THEOLOGICUS` à la main avant.
-2. `cp -r` les 16 corpus dans `dist/THEOLOGICUS/` — **par-dessus, sans jamais
-   supprimer le dossier** : `COLLECT` vient d'y écrire l'exe. Purger *avant*
-   PyInstaller, jamais après (piégé : l'exe détruit, `signtool` échoue sur un
-   `File not found` annoncé `exit=0`).
-3. `theologicus_keys.json` remis à `{"mistral": ""}`.
-4. `tools/stamp_version.py dist/THEOLOGICUS <version>` — **la version en
-   argument**, jamais celle du fichier `VERSION` racine.
-5. `signtool sign` sur l'exe, puis sur l'installeur.
-6. `ISCC installer.iss /DMyAppVersion=<version>` → ~70 s de compression.
-7. Copier `dist/THEOLOGICUS-Setup-x64.exe` + `dist/THEOLOGICUS/THEOLOGICUS.exe`
-   dans `output/`.
-
-**Vérifier le contenu livré, pas la version** : neutraliser des DEUX côtés le
-placeholder `__THEO_VERSION__` **et** la valeur tamponnée, puis comparer.
-**Tester l'installeur en l'installant pour de vrai**
-(`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=… /LOG=…`) et servir le dossier
-**installé** — `THEOLOGICUS.exe` ne se lance pas depuis le sandbox.
-
-Chaîne en place (vérifié 22/09) : `py -3.12` (3.12 disponible), **PyInstaller
-6.22.3**, `ISCC` dans `%LOCALAPPDATA%\Programs\Inno Setup 6\`, `signtool` dans
-`Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`, PFX
-`THEOLOGICUS_signing.pfx` à la racine. `output/` et `dist/` sont **gitignorés**.
-Volume : `dist/` ≈ 275 Mo (dont 226 Mo de `THEOLOGICUS/`) + `output/` ≈ 170 Mo.
+- **Disque C: plein (99 %, ~2,3–2,9 Go libres).** Les profils Chrome des bancs
+  CDP s'accumulent dans `%TEMP%\theo-*` (724 Mo relevés) et ont déjà provoqué un
+  `ENOSPC` bloquant Bash **et** PowerShell. Nettoyer après une campagne.
+- **Les 23 `.apk` de `artifacts/` (428 Mo) sont des résidus locaux** : **11
+  identiques** à un asset de Release, **12 différents** (≈ 140 Mo, dont
+  `theologicus.apk` d'origine et le `debug`) donc **non prouvés
+  retéléchargeables** — et quatre portent un nom qui désigne une AUTRE version
+  que leur contenu. **Décision de l'utilisateur : on ne supprime rien.**
+- **Ils n'étaient hors git que par accident de `git add`, PAS par une règle.**
+  Aucun motif `.apk` n'existait dans `.gitignore` : `git check-ignore` rendait
+  **rien** et `git add -A` les **prenait** (vérifié le 2026-09-22). Motifs
+  `*.apk` / `*.aab` ajoutés à `.gitignore` (l. 30) — la seule façon durable de
+  garder 428 Mo de binaires hors du dépôt est de l'écrire, pas de s'en souvenir.
+  Contrôle : `git check-ignore -v` doit nommer le motif, et `git ls-files
+  "*.apk"` doit rendre **0** (aucun APK légitime n'était suivi).
+- **Une taille n'est pas une empreinte.** `ls -la` qui concorde n'autorise aucune
+  conclusion : `cmp` ou `md5sum`, jamais `stat`. Deux APK de même taille peuvent
+  différer intégralement (même contenu, signature différente).
 
 ## Fragilités du code
 
@@ -281,8 +308,7 @@ Volume : `dist/` ≈ 275 Mo (dont 226 Mo de `THEOLOGICUS/`) + `output/` ≈ 170 
 - **`_m/` → racine = trois `dirname`.**
 - **Regex : ne pas doubler les backslashes** dans un littéral `/…/`.
 - **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure 0.
-- **`extractSuggestionsHtml()` (v81)** capturait tout le reste d'un message. Une
-  extraction doit avoir un filet : si rien ne sort, ne rien retirer.
+- **`extractSuggestionsHtml()` (v81)** capturait tout le reste d'un message.
 - **Références FR** : « Gn 5,1 » (virgule) autant que « Gn 5:1 ».
 - **Ne pas dépendre d'une portée locale** pour fermer un panneau :
   `closeArchivesPanel()` (const locale) → `ReferenceError` avalé par `catch(e){}`.

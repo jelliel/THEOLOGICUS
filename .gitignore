@@ -23,6 +23,13 @@ theologicus_keys.json
 
 output/
 
+# APK residuels de .workbuddy-ai/artifacts/ : 23 fichiers, 428 Mo, non suivis.
+# AUCUN motif ne les couvrait : ils n'etaient hors git que parce que personne
+# ne les avait `git add`. Un `git add -A` les faisait entrer (mesure : le
+# 2026-09-22). Les livrables viennent des Releases GitHub, pas d'ici.
+*.apk
+*.aab
+
 # Caches HTTP des generateurs de corpus (jamais versionner)
 tools/.summa_cache/
 tools/.fathers_cache/
