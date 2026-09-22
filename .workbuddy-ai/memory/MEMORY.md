@@ -122,6 +122,45 @@ découlent tous.
   `left:0; top:0`. `check_syntax.js` ne l'a pas vu : **extraire et tester le bloc
   isolément** (`awk` entre balises, `node --check`) avant de conclure.
 
+## Schémas parchemin (```schema)
+
+- **v103 — LES LIBELLES ETAIENT TRANCHES EN DEUX** (« Muham / mad »).
+  `.schema-row` possède `flex-wrap:wrap`, mais **`.schema-tree .schema-kids`
+  NON**. Sans repli, une ligne d'enfants trop large ne se replie pas : elle se
+  **comprime** (`flex-shrink` vaut 1 par défaut). La boîte descend sous la
+  largeur de son mot le plus long, et **`overflow-wrap:anywhere` — hérité de
+  `.message-content`** (qui le pose pour contenir les URL géantes) — tranche le
+  mot sans trait d'union. Mesuré, arbre en colonne de 380 px : « Musaylima »
+  97 px nécessaires / 90 px obtenus, « Al-Mukhtar » 101/90, « (Guerrier) »
+  92/90. Correctif : `flex-wrap` sur `.schema-kids`, `flex-shrink:0` sur ses
+  groupes, `overflow-wrap/word-break: normal` sur `.schema-box`. **3 → 0.**
+- **Il existe DEUX feuilles de schéma** : la `<style>` principale (l. ~1482) et
+  une **copie dans `exportCss()`** (l. ~15545) pour l'export HTML autonome.
+  Toute retouche doit être faite **des deux côtés**, sinon l'export reste cassé.
+- **Trois hypothèses ont été réfutées par la mesure avant de trouver la cause**
+  (foreignObject de l'export, `flex-shrink` seul, `overflow-wrap` hérité seul).
+  Les deux premiers bancs ne reproduisaient pas parce qu'ils **donnaient trop
+  de place à la ligne**. Même piège que v102 : *un banc trop confortable ne
+  prouve rien.*
+
+## Rail latéral / burger (trois traits en haut à gauche)
+
+- **v103 — LE BURGER NE FAISAIT RIEN SUR WINDOWS.** Une **accolade fermante en
+  trop** dans `<style id="v6-ui-css">` fermait `@media screen and
+  (max-width:640px)` avant l'heure et laissait une accolade orpheline →
+  **erreur de syntaxe CSS**. Le parseur **abandonne tout ce qui suit** : le
+  `@media (min-width:901px)` — seul porteur du repli (`margin-left:-268px`) —
+  n'était **jamais enregistré**. Le burger basculait bien `sidebar-open`, rien
+  n'écoutait. Sous 1024 px ça marchait parce qu'**une autre feuille** s'en
+  charge. Correctif : remettre `#v6-more-menu` **dans** son `@media`.
+- **Diagnostic décisif : `textContent` contient la règle mais
+  `document.styleSheets` ne la contient pas** → la feuille est tronquée par une
+  erreur de syntaxe. Contrôle mécanique : compter les accolades **hors
+  commentaires** (`re.sub(r'/\*.*?\*/','',s,flags=re.S)`) sur le bloc `<style>`.
+- **Seuil désaccordé, laissé tel quel** : le CSS replie dès **901 px**, le JS
+  n'ouvre au démarrage qu'à partir de **1024 px**. Entre les deux le rail
+  démarre replié. Bénin, mais ne pas s'en étonner.
+
 ## Annotations et commentaires (Add to chat)
 
 - **v95 — un span VIDE de 3 px tuait le clic.** Une plage commençant ou finissant
@@ -146,11 +185,21 @@ découlent tous.
   `THEO_WWW` choisit la racine, corpus copiés à côté.
 - **Vérifier d'abord que le banc CHARGE la page.** `_v94/verif.js`,
   `_v96/verif.js`, `_v95/verif_fix.js` servent `/index.html` ; une racine qui
-  porte `THEOLOGICUS.html` rend un **404 de 3 octets**, tous les `z-index` à
-  `auto` et `__placerFiche` à `undefined` — **cela ressemble exactement à une
-  régression totale**. `THEO_INDEX` règle `_v94`/`_v95` ; `_v96` n'a pas de
-  variable → pointer `THEO_WWW` sur `mobile/www`, et **synchroniser
-  `mobile/www/index.html` avec `THEOLOGICUS.html` au préalable** (gitignoré).
+  ne porte que `THEOLOGICUS.html` rend un **404 de 3 octets**, tous les
+  `z-index` à `auto` et `__placerFiche` à `undefined` — **cela ressemble
+  exactement à une régression totale**.
+  **Correction le 2026-09-22 : `THEO_INDEX=/THEOLOGICUS.html` NE règle PAS
+  `_v94`** quand `THEO_WWW` vaut `mobile/www` (qui n'a que `index.html`) : cela
+  produit un 404 et des échecs 6-8 alors que le code est sain. La bonne
+  méthode est **l'inverse** de ce qui était noté : **synchroniser
+  `mobile/www/index.html` avec `THEOLOGICUS.html` (`cp`, puis `cmp`) et lancer
+  SANS `THEO_INDEX`** — `/index.html` est alors servi. Contrôle : le banc doit
+  afficher `auCentreFiche`/`auCentreMot`, pas `placerFiche type undefined`.
+- **Avant d'accuser un correctif, refaire tourner le banc sur HEAD.** `git show
+  HEAD:THEOLOGICUS.html > mobile/www/index.html`, même banc, même racine. Si
+  HEAD échoue aussi, c'est le banc. Script prêt :
+  `_v103/check_baseline.js` (compare les erreurs de syntaxe HEAD vs version
+  en cours d'édition).
 - **Un banc qui n'ouvre aucun panneau mesure le vide.** Vécu v102 : appeler
   `__placerFiche` sans panneau ouvert rend une fiche à 0×0 (`pos: "dessous"`) —
   `hote` vaut `null`, les candidats extérieurs ne sont **même pas construits**.
@@ -165,7 +214,11 @@ découlent tous.
 - La délégation écoute sur `#chat-container` : injecter le `.message` **dedans**.
 - `let state` (~l. 8115) est au niveau d'un `<script>` : **pas** `window.state`.
 - **Un backtick dans un commentaire à l'intérieur d'un gabarit JS casse le
-  fichier** — piégé trois fois.
+  fichier** — piégé **quatre fois** (v103, commentaire CSS dans `exportCss()`,
+  qui est une chaîne entre backticks). Le symptôme : `check_syntax.js` signale
+  `Unexpected identifier` sur un bloc de 11 000 lignes, sans rapport visible.
+  Un commentaire *dans une feuille `<style>`* peut en porter sans risque ;
+  c'est le **gabarit JS** qui est mortel.
 - Viser le **centre exact** du `getBoundingClientRect()`.
 - `elementFromPoint` ne départage pas deux éléments **qui ne se chevauchent
   pas** : forcer le recouvrement d'abord.
@@ -276,6 +329,19 @@ Chaîne en place : `py -3.12`, **PyInstaller 6.22.3**, `ISCC` dans
   `releases/download/...` rend bien un **200** ; c'est le *téléchargement* qui
   échoue — et il réussit dans `/tmp` avec un `cd` séparé.)
 - **Commits : jamais `printf`** (« 100% » = format invalide). `git commit -F`.
+- **NE JAMAIS lancer `git stash` ici — un `git stash` interrompu (SIGTERM) a
+  détruit `.git/refs` et le fichier `.pack`** (2026-09-22). Symptôme trompeur :
+  `git` répond **« not a git repository »** alors que `.git/` existe. Ne pas
+  conclure à une perte de données. **Récupération, dans cet ordre :**
+  1. `ls .git/` → repérer ce qui manque (`refs/`, `objects/pack/*.pack`).
+  2. `mkdir -p .git/refs/heads .git/refs/tags .git/refs/remotes/origin`.
+  3. Lire la dernière ligne de `.git/logs/refs/heads/main` : elle donne le SHA
+     exact (les reflogs survivent). L'écrire dans `.git/refs/heads/main`.
+  4. `git fetch origin main` → re-télécharge un pack complet (57 Mo ici).
+  5. `git fsck` : si des « failed to load pack » persistent, **déplacer** (pas
+     supprimer) les `.idx` orphelins et `multi-pack-index` vers `.git/_orphelins/`.
+  6. Vérifier `git rev-parse HEAD` == `git ls-remote origin main`.
+  **Le distant est la sauvegarde** : tout ce qui a été poussé est récupérable.
 - **Disque C: plein (99 %, ~2,3–2,9 Go libres).** Les profils Chrome des bancs
   CDP s'accumulent dans `%TEMP%\theo-*` (724 Mo relevés) et ont déjà provoqué un
   `ENOSPC` bloquant Bash **et** PowerShell. Nettoyer après une campagne.
@@ -314,8 +380,10 @@ Chaîne en place : `py -3.12`, **PyInstaller 6.22.3**, `ISCC` dans
 
 - Bloc « SECURITY PROTECTION » (v66) : l'IIFE englobe
   `init(Bible|Quran|Tafsir)VerseTooltip`. Recompter les accolades avant retouche.
-- **CRLF** : tout grep multi-ligne avec `\n` renvoie 0 alors que le code est là.
-  L'outil Edit échoue pareil → patcher via un script Python écrivant `\r\n`.
+- **CRLF — FAUX pour `THEOLOGICUS.html`** (vérifié le 2026-09-22 : `s.count(
+  '\r\n') == 0`, le fichier est en **LF**). L'outil **Edit y fonctionne
+  normalement**, inutile de passer par un script Python. La note CRLF venait
+  d'un autre fichier du projet. Vérifier avant de contourner.
 - **`find('=')` sur une tranche JS** : le premier `=` est celui de
   `(window.__x=window.__x||{})[N]=`. Ancrer sur `find(']=')` puis `+2`.
 - **Lettres hébraïques précomposées** (U+FB1D–FB4F) : un filtre `0x05D0–0x05EA`

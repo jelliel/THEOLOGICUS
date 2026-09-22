@@ -1,0 +1,43 @@
+v103 — stop slicing schema labels, and make the burger collapse the rail
+
+Two defects, both found by measuring rather than by reading the report.
+
+1. Schema labels were cut in half ("Muham/mad", "Al-Mukhta/r", "Guerri/er").
+
+   `.schema-row` has flex-wrap:wrap, but `.schema-tree .schema-kids` does NOT.
+   Without wrapping, a row of children that is too wide does not reflow: it
+   compresses, because flex-shrink defaults to 1. A box then falls below the
+   width of its longest word, and overflow-wrap:anywhere — inherited from
+   .message-content, which sets it to contain giant URLs — slices the word with
+   no hyphen. Measured on a tree in a 380px column: Musaylima needs 97px and
+   got 90px, Al-Mukhtar 101 vs 90, (Guerrier) 92 vs 90. Three boxes sliced.
+
+   Fix: flex-wrap on .schema-kids, flex-shrink:0 on its groups, and
+   overflow-wrap/word-break reset to normal on .schema-box. Applied also to the
+   duplicate stylesheet in exportCss(), which serves the standalone HTML export.
+   Measured after: 0 boxes sliced, and the card still does not overflow the
+   bubble. Differential verified against HEAD: 3 sliced -> 0.
+
+2. The burger (three bars, top left) did nothing on Windows.
+
+   A stray closing brace inside <style id="v6-ui-css"> closed a
+   @media screen and (max-width:640px) block early and left an orphan brace.
+   That is a CSS syntax error, and the parser dropped everything after it — so
+   @media (min-width:901px), which carries the only rule that collapses the
+   rail (margin-left:-268px), was never registered. The burger did toggle the
+   sidebar-open class; nothing listened. Widths below 1024px worked only
+   because a different stylesheet handles them.
+
+   Fix: put #v6-more-menu back inside its media block, as the neighbouring v43
+   comment already stated ("le menu lui-meme recoit une hauteur max").
+   Verified in the browser: the 901px media rule now appears in the CSSOM (it
+   did not before), and at 1200px the rail goes visible -> hidden with
+   margin-left 0 -> -268px. All four widths tested now toggle.
+
+Non-regression, all green: _v100 10/10, _v96 0, _v94 identical to baseline,
+_v97 exhaustif/garde_fiche/garde_z/cas_dangereux 0, _v95 0, check_syntax 0.
+
+Note on method: three hypotheses were refuted by measurement before the real
+cause was found (export foreignObject sizing, flex-shrink alone, inherited
+word-break alone). The first two benches failed to reproduce because they gave
+the row too much room — the same trap recorded for v102.
