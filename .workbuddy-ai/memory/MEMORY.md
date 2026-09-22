@@ -60,6 +60,59 @@ Ici uniquement ce qui doit survivre.
   tester `relatedTarget`, jamais la seule classe du `target`.**
 - Le `click` de v89 fait `stopPropagation()` en capture : il protège déjà les
   mots hb/gr du `closeTip()` du panneau. Sans lui, un clic fermerait tout.
+- **v94 — la fiche de mot doit passer DEVANT le panneau.** `#hb-tip`,
+  `#gr-tip`, `#lat-tip`, `#qw-tip` étaient en `z-index:4000` alors que le
+  panneau est `var(--z-popup)` = **5000** : la fiche existait, peinte derrière,
+  et l'on croyait que le survol avait tout fermé. Chaque carte de mot utilise
+  désormais `var(--z-mot)` = **6000**, au-dessus de `--z-popup`.
+- `window.__placerFiche(fiche, mot)` (bloc `<script id="v94-fiche-placement">`,
+  **avant** `v89-hb`) place une fiche sans jamais recouvrir son mot : dessous,
+  dessus, droite, gauche, puis borne dans l'écran. Réutiliser ce helper plutôt
+  que replacer à la main.
+
+## Annotations et commentaires (Add to chat)
+
+- **v95 — un span VIDE de 3 px tuait le clic.** Une plage qui commence ou finit
+  pile sur la frontière d'un nœud texte (`startOffset === longueur du nœud`)
+  fait insérer par `highlightRangeByTextNodes` (branche multi-nœuds) un
+  `<span data-hl-id=X></span>` vide, **avant** le vrai span qui porte le même
+  id. `querySelector('[data-hl-id]')` rend le vide, donc le clic. L'annotation
+  est posée, elle paraît morte. Corrigé : on saute toute tranche vide
+  (`r.collapsed || r.startOffset === r.endOffset`), un span vide ne compte plus
+  comme « déjà posé », et la branche multi-nœuds ne renvoie plus `true`
+  inconditionnellement (elle renvoyait vrai même si 100 % des
+  `surroundContents` échouaient → `applyHighlights` ne tentait jamais le repli
+  `wrapOnce`).
+- **Pourquoi le symptôme est asymétrique** : une phrase produit plusieurs spans
+  larges, le vide se noie dedans ; un mot n'a qu'un vrai span, le vide de 3 px
+  est collé à côté. Ne pas conclure « le mot marche, la phrase non » : le
+  défaut touche les deux.
+- **Un toast ne doit jamais mentir.** Le succès de `runCommentLLM` vérifie
+  qu'un span non vide existe avant d'annoncer « cliquez le passage surligné ».
+  Même règle à tenir pour toute confirmation future.
+- Le module **v86** (`<script id="v86-mot">`) écrit `window._atcSel` et fait
+  `stopPropagation()` quand il résout un mot sous le curseur. Il cohabite avec
+  le gestionnaire de `#chat-container` ; ce n'est **pas** la cause du défaut
+  ci-dessus (test de causalité l'a écarté), ne pas repartir sur cette piste.
+
+## Bancs de test headless (CDP) — pièges vérifiés
+
+- `#setup-wizard-overlay.active` (`position:fixed`, z-index 2000) **et**
+  `#auth-overlay` recouvrent tout au premier lancement : la souris n'atteint
+  jamais le contenu. Les `remove()` avant de mesurer.
+- `let state` (l. ~8115) est au niveau d'un `<script>` : **ce n'est pas**
+  `window.state`. Y accéder par son nom nu depuis `Runtime.evaluate` marche ;
+  `window.state` rend `undefined`.
+- La délégation d'événements écoute sur `#chat-container` : un `.message`
+  injecté dans `document.body` ne reçoit rien. L'injecter **dans** le
+  conteneur.
+- Dans un fichier de banc, un **backtick** dans un commentaire à l'intérieur
+  d'un gabarit JS casse le fichier (`missing ) after argument list`).
+- Viser le **centre exact** du `getBoundingClientRect()` d'un span : un clic
+  décalé mesure autre chose.
+- Toujours comparer à une **baseline** : `.workbuddy-ai/artifacts/_v95/avant/`
+  (`git show HEAD:THEOLOGICUS.html`) + tranches JS, choisie par `THEO_WWW`.
+  C'est ce qui prouve que le delta vient du correctif et pas du banc.
 
 ## Signature release — FICHIER CRITIQUE
 
@@ -159,12 +212,18 @@ Chaîne hors dépôt : `C:\Users\toshr\.workbuddy-ai\binaries\android-tools\`
   (U+06D6–U+06ED). Les filtrer avant de découper (le comptage donnait 31,8 %
   de désalignement avec api.quran.com ; après exclusion **100 % sur 311 versets**).
 - **Un nœud texte n'a pas `.closest()`** : passer par `node.parentNode.closest()`.
+- **`range` sur une frontière de nœud texte = span vide** : `surroundContents`
+  insère alors un `<span data-hl-id=X></span>` de 3 px, **avant** le vrai span
+  du même id, et `querySelector` rend le vide. Mesurer
+  `startOffset === longueur du nœud` et sauter la tranche. Détail et correctif :
+  section « Annotations et commentaires ».
 - **`m.ts === s.msgTs`** : un id DOM donne la CHAÎNE, `m.ts` est un NOMBRE.
   Re-numériser ce qu'on lit d'un `id`.
 - **En headless, l'app démarre derrière `#auth-overlay`** qui recouvre tout et
   **se réinstalle** si on se contente de `display:none`. La retirer du DOM
   (`o.remove()`) avant toute sonde qui utilise des coordonnées, sinon
-  `elementFromPoint` ne renvoie jamais la cible.
+  `elementFromPoint` ne renvoie jamais la cible. Idem
+  `#setup-wizard-overlay.active` (`position:fixed`, z-index 2000).
 - **`AndroidManifest.xml` n'a pas `android:largeHeap`** : tout gros objet natif
   tue l'app.
 - **Messages de commit : jamais `printf`** (un `%` — « 100% » — est un format
