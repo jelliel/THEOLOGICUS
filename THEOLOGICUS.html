@@ -20465,9 +20465,18 @@ function initBibleVerseTooltip() {
     if (!p) return;
     showTip(el, p);
   });
+  /* v93 — le mot a mot hebreu/grec/latin vit DANS le panneau. Quand la souris
+     passe du lien vers un mot, `mouseover` sort bien du lien (relatedTarget =
+     le mot), mais le mot n'est ni `a.bible-ref` ni `span.bible-ref` : on
+     refermait donc le panneau a l'instant ou l'on entrait dedans, emportant
+     l'infobulle du mot avec lui. On ne referme que si l'on sort VRAIMENT du
+     panneau. */
+  function dansPanneau(n) { return !!(n && tip.contains(n)); }
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
-    if (el) hideTip();
+    if (!el) return;
+    if (dansPanneau(e.relatedTarget)) return;   /* v93 : on entre dans le panneau */
+    hideTip();
   });
 
   /* v2.0 — resolution LOCALE au tap. Jusqu'ici, taper une reference partait
@@ -20478,7 +20487,9 @@ function initBibleVerseTooltip() {
      l'evenement normalement. */
   document.addEventListener('click', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
-    if (!el) { closeTip(); return; }
+    /* v93 — un clic sur un mot du mot a mot (hebreu, grec, latin) doit ouvrir
+       /garder sa fiche, pas refermer le panneau qui la contient. */
+    if (!el) { if (!dansPanneau(e.target)) closeTip(); return; }
     const p = parseRef(el.textContent);
     if (!p) return;
     e.preventDefault();

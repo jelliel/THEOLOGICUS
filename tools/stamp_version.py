@@ -19,8 +19,20 @@ def main(argv):
     if len(argv) > 2:
         version = argv[2].strip()
     else:
-        with open(os.path.join(ROOT, "VERSION"), encoding="utf-8") as f:
-            version = f.read().strip()
+        version = ""
+        vp = os.path.join(ROOT, "VERSION")
+        if os.path.isfile(vp):
+            with open(vp, encoding="utf-8") as f:
+                version = f.read().strip()
+        # Le fichier VERSION racine est PERIME (1.0.10) : s'en servir sans le
+        # dire a deja produit un build qui s'annoncait 1.0.33 alors qu'il
+        # portait un tout autre code. On crie plutot que de se tromper.
+        if not version:
+            print("AVERTISSEMENT : aucune version fournie et fichier VERSION "
+                  "illisible — le tampon de version est ABANDONNE.")
+            return 1
+        print("AVERTISSEMENT : version deduite du fichier VERSION racine (%s), "
+              "qui est PERIME. Passer la version en argument." % version)
     html_path = os.path.join(out_dir, "THEOLOGICUS.html")
     with open(html_path, encoding="utf-8", newline="") as f:
         html = f.read()
