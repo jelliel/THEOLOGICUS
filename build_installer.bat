@@ -9,15 +9,35 @@ set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 set "PFX=THEOLOGICUS_signing.pfx"
 set "PFP=theologicus2026"
 set "PY=py -3.12"
-rem Version = nombre de commits, comme l APK (le fichier VERSION racine
-rem est perime a 1.0.10 : sans ça l exe s annonce 1.0.10).
-set "VER=2.0.0"
+rem Version = nombre de commits, comme l APK.
+rem ATTENTION : si la commande git ne repond pas, la boucle for /f ne s execute
+rem PAS du tout et VER reste a la valeur par defaut — c est comme ca que le
+rem build du 16/09 s est annonce 1.0.33 (le fichier VERSION racine, perime a
+rem 1.0.10) alors que le depot etait a 2.0.38. On refuse desormais de
+rem compiler avec une version par defaut.
+set "VER="
 for /f %%i in ('git rev-list --count HEAD 2^>nul') do set "VER=2.0.%%i"
+if not defined VER (
+  echo [X] Version introuvable : la commande git rev-list a echoue.
+  echo     Lance le build depuis une copie de travail git valide, ou passe la
+  echo     version a la main :  set VER=2.0.NN  ^&^& build_installer.bat
+  pause
+  exit /b 1
+)
+echo Version : %VER%
 
 echo [1/5] Compilation de l'exe (PyInstaller)...
-%PY% -m PyInstaller --noconfirm --clean --windowed --name THEOLOGICUS --icon THEOLOGICUS.ico --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium --hidden-import clr_loader --hidden-import pythonnet --collect-all webview --collect-all pythonnet --collect-all clr_loader app.py || goto :err
+rem Pas de --clean : il bute sur le garde-fou de suppression en masse
+rem (build\THEOLOGICUS, ~590 fichiers). Supprimer build\THEOLOGICUS a la main.
+if exist "build\THEOLOGICUS" rd /s /q "build\THEOLOGICUS"
+%PY% -m PyInstaller --noconfirm --windowed --name THEOLOGICUS --icon THEOLOGICUS.ico --hidden-import webview.platforms.winforms --hidden-import webview.platforms.edgechromium --hidden-import clr_loader --hidden-import pythonnet --collect-all webview --collect-all pythonnet --collect-all clr_loader app.py || goto :err
 
 echo [2/5] Copie des fichiers de donnees...
+rem Purger dist\THEOLOGICUS avant de le repeupler : les fichiers d un build
+rem precedent y restent sinon, sont compresses dans l installeur et livrent du
+rem contenu PERIME. Vecu : l installeur du 22/09 annoncait 1.0.33 et ne portait
+rem que bible/quran/tafsir/libs, sans biblehb — donc aucun mot a mot hebreu.
+if exist "dist\THEOLOGICUS" rd /s /q "dist\THEOLOGICUS"
 copy /y THEOLOGICUS.html dist\THEOLOGICUS\ >nul || goto :err
 rem v33 : corpus decoupes — bible par livre (bible\b*.js), quran par sourate
 rem (quran\q*.js), tafsir par sourate (tafsir\s*.js) + index.js ; les monolithes
