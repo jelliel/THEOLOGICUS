@@ -22247,8 +22247,10 @@ initTafsirVerseTooltip();
          Le span vide passe en premier dans querySelector('[data-hl-id]'),
          et c'est LUI que le clic atteint : l'annotation semble morte alors
          qu'elle est bien posee. On saute donc toute tranche vide. */
+      /* v95 — Ne pas non plus tenter d'enrouler une tranche qui n'existe
+         pas : `range.startOffset === range.endOffset` signifie que la
+         tranche est vide (voir ci-dessus). */
       if (r.collapsed || r.startOffset === r.endOffset) continue;
-      /* Un noeud texte ne peut pas etre enroule s'il n'est pas dans un element. */
       try {
         const span = document.createElement('span');
         span.className = cls || 'atc-hl';
