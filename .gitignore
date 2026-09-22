@@ -30,6 +30,23 @@ output/
 *.apk
 *.aab
 
+# Secrets a la racine du depot : meme piege que les APK, mais l'enjeu n'est pas
+# le poids. `THEOLOGICUS_signing.pfx` est la cle de signature des Releases : si
+# elle entre dans l'historique, n'importe qui peut publier un APK que nos
+# utilisateurs installeraient. Un fichier nomme "mistral api key.txt" y dormait
+# aussi. Aucun motif ne les couvrait (verifie le 2026-09-22) : seul `git add -A`
+# les separait du depot public.
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.pem
+*.key
+*api key*.txt
+*mistral*key*
+*secret*
+*credential*
+
 # Caches HTTP des generateurs de corpus (jamais versionner)
 tools/.summa_cache/
 tools/.fathers_cache/
