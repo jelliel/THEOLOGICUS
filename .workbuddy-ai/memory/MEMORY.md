@@ -224,10 +224,49 @@ Procédure complète → skill `theologicus-apk-build`.
 - **Le sandbox bloque le téléchargement des assets de Release** : vérifier par
   l'API Actions, pas en récupérant le binaire.
 - **Commits : jamais `printf`** (« 100% » = format invalide). `git commit -F`.
-- **Disque C: plein (99 %, ~3,5 Go libres).** Les profils Chrome des bancs CDP
+- **Disque C: plein (99 %, ~2,9 Go libres).** Les profils Chrome des bancs CDP
   s'accumulent dans `%TEMP%\theo-*` et ont déjà provoqué un `ENOSPC` bloquant Bash
-  **et** PowerShell. Nettoyer après une campagne de bancs. Les `.apk` de
-  `artifacts/` (~1,1 Go) sont **suivis par git** : ne pas les supprimer sans accord.
+  **et** PowerShell. Nettoyer après une campagne de bancs — vérifié v101 : la
+  campagne laissait **724 Mo** de profils, leur suppression ne rend pas de place
+  visible à `df` tant que Windows n'a pas purgé la corbeille, mais c'est bien du
+  volume à récupérer.
+- **Les `.apk` de `artifacts/` ne sont PAS suivis par git.** `git ls-files
+  .workbuddy-ai/artifacts/` rend 25 fichiers (`.md` + `.js`). Les 23 APK
+  (≈ 600 Mo, plus anciens = 15/09) sont des **résidus locaux reconstructibles**
+  depuis les Releases GitHub : ~600 Mo récupérables sur accord.
+  **Correction** : une version antérieure de cette note affirmait le contraire ;
+  elle venait d'un `git add -A` échoué en silence (disque plein).
+
+## Rebuild local de l'installeur Windows — l'ordre exact
+
+`cmd //c build_installer.bat` **ne s'exécute pas depuis Bash** (`cmd.exe` est
+bloqué par le sandbox). Rejouer chaque étape à la main, **dans cet ordre** :
+
+1. `py -3.12 -m PyInstaller` — **pas de `--clean`** ; supprimer
+   `build/THEOLOGICUS` à la main avant.
+2. `cp -r` les 16 corpus dans `dist/THEOLOGICUS/` — **par-dessus, sans jamais
+   supprimer le dossier** : `COLLECT` vient d'y écrire l'exe. Purger *avant*
+   PyInstaller, jamais après (piégé : l'exe détruit, `signtool` échoue sur un
+   `File not found` annoncé `exit=0`).
+3. `theologicus_keys.json` remis à `{"mistral": ""}`.
+4. `tools/stamp_version.py dist/THEOLOGICUS <version>` — **la version en
+   argument**, jamais celle du fichier `VERSION` racine.
+5. `signtool sign` sur l'exe, puis sur l'installeur.
+6. `ISCC installer.iss /DMyAppVersion=<version>` → ~70 s de compression.
+7. Copier `dist/THEOLOGICUS-Setup-x64.exe` + `dist/THEOLOGICUS/THEOLOGICUS.exe`
+   dans `output/`.
+
+**Vérifier le contenu livré, pas la version** : neutraliser des DEUX côtés le
+placeholder `__THEO_VERSION__` **et** la valeur tamponnée, puis comparer.
+**Tester l'installeur en l'installant pour de vrai**
+(`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=… /LOG=…`) et servir le dossier
+**installé** — `THEOLOGICUS.exe` ne se lance pas depuis le sandbox.
+
+Chaîne en place (vérifié 22/09) : `py -3.12` (3.12 disponible), **PyInstaller
+6.22.3**, `ISCC` dans `%LOCALAPPDATA%\Programs\Inno Setup 6\`, `signtool` dans
+`Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`, PFX
+`THEOLOGICUS_signing.pfx` à la racine. `output/` et `dist/` sont **gitignorés**.
+Volume : `dist/` ≈ 275 Mo (dont 226 Mo de `THEOLOGICUS/`) + `output/` ≈ 170 Mo.
 
 ## Fragilités du code
 
