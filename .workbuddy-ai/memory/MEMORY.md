@@ -294,6 +294,21 @@ Chaîne en place : `py -3.12`, **PyInstaller 6.22.3**, `ISCC` dans
 - **Une taille n'est pas une empreinte.** `ls -la` qui concorde n'autorise aucune
   conclusion : `cmp` ou `md5sum`, jamais `stat`. Deux APK de même taille peuvent
   différer intégralement (même contenu, signature différente).
+- **SECRETS A LA RACINE — aucun motif ne les couvrait** (vérifié 2026-09-22,
+  `git check-ignore` ne nommait rien) : `THEOLOGICUS_signing.pfx` (la clé de
+  signature des Releases, mot de passe dans le même dossier), `signing_key.pem`,
+  `signing_cert.pem`, et **« mistral api key.txt »**. Un seul `git add -A` les
+  publiait. Enjeu ≠ les APK : une clé de signature divulguée laisse n'importe qui
+  publier une mise à jour que l'app accepterait. Motifs ajoutés : `*.pfx` `*.p12`
+  `*.jks` `*.keystore` `*.pem` `*.key` + `*api key*.txt` `*secret*`
+  `*credential*`. **Contrôle de non-régression obligatoire** :
+  `git ls-files | git check-ignore --stdin` doit rendre **vide** (sinon un fichier
+  déjà suivi tombe sous les nouveaux motifs). `build_installer.bat` ne référence
+  le `.pfx` que par nom local ; la CI signe depuis les secrets du dépôt.
+- **Règle générale : ce qui doit rester hors du dépôt s'écrit dans `.gitignore`,
+  cela ne se retient pas.** Deux pièges le même jour (APK, secrets) — dans les
+  deux cas je croyais à une règle qui n'existait pas. Vérifier par
+  `git check-ignore` et `git add -An`, jamais par souvenir.
 
 ## Fragilités du code
 
