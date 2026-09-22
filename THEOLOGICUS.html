@@ -1492,6 +1492,14 @@ body {
   box-shadow: none;
   line-height: 1.35;
   box-sizing: border-box;
+  /* v103 : `overflow-wrap` et `word-break` s'HERITENT de `.message-content`
+     (qui pose `anywhere` / `break-word` pour contenir les URL geantes).
+     Sur une boite de schema cela tranche un nom propre au milieu :
+     « Muham / mad ». Un libelle de schema est court et precis : il ne doit
+     jamais etre coupe. Filet de secours si une boite restait trop etroite
+     malgre le repli ci-dessus. */
+  overflow-wrap: normal;
+  word-break: normal;
   transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 .schema-box:hover {
@@ -1513,7 +1521,21 @@ body {
 }
 /* Arbre généré : groupes + connecteurs en équerre (comme référence parchemin) */
 .schema-tree .schema-group { display: flex; flex-direction: column; align-items: center; position: relative; padding: 0 14px; }
-.schema-tree .schema-kids { display: flex; justify-content: center; align-items: flex-start; padding-top: 24px; position: relative; }
+.schema-tree .schema-kids { display: flex; justify-content: center; align-items: flex-start; padding-top: 24px; position: relative;
+  /* v103 : `flex-wrap` MANQUAIT — d'ou les mots coupes en deux.
+     `.schema-row` possede flex-wrap:wrap, mais PAS `.schema-kids`. Sans repli,
+     une ligne d'enfants trop large ne se replie pas : elle se COMPRIME
+     (flex-shrink vaut 1 par defaut). La boite descend alors sous la largeur de
+     son mot le plus long, et `overflow-wrap:anywhere` — herite de
+     `.message-content` — tranche le mot sans trait d'union.
+     Mesure sur un arbre en colonne de 380 px, 5 enfants :
+        « Musaylima »  demande 97 px, boite 90 px -> « Musayli / ma »
+        « Al-Mukhtar » demande 101 px, boite 90 px -> « Al-Mukhta / r »
+        « (Guerrier) » demande  92 px, boite 90 px -> « Guerri / er »
+     Apres correction : 0 boite coupee, et la carte ne deborde pas. */
+  flex-wrap: wrap; row-gap: 24px; }
+/* Ne jamais laisser un groupe se compresser sous la taille de son contenu. */
+.schema-tree .schema-kids > .schema-group { flex-shrink: 0; }
 .schema-tree .schema-kids::before { content: ''; position: absolute; top: 0; left: 50%; margin-left: -1px; height: 13px; border-left: 2px solid var(--sch-edge, #8a6d3b); }
 .schema-tree .schema-rail { position: absolute; top: 12px; height: 0; border-top: 2px solid var(--sch-edge, #8a6d3b); }
 .schema-tree .schema-rail.l { left: 0; right: 50%; }
@@ -15545,13 +15567,20 @@ function exportCss(){
   .schema-card{background:#f4ecd8;border:1px solid #c9b48a;border-radius:10px;padding:16px 18px;margin:14px 0;font-family:Georgia,serif;color:#4a3520;overflow-x:auto;}
   .schema-layer{display:block;text-align:center;}
   .schema-row{display:flex;justify-content:center;align-items:stretch;gap:18px;flex-wrap:wrap;margin:4px 0;}
-  .schema-box{display:inline-block;background:transparent;border:2px solid #8a6d3b;border-radius:5px;padding:8px 14px;min-width:90px;text-align:center;color:#4a3520;line-height:1.35;}
+  /* v103 : memes regles que la feuille principale — cette copie sert a l'export
+     HTML autonome, elle doit suivre. overflow-wrap:normal empeche un nom
+     propre d'etre tranche (« Muham / mad »).
+     ATTENTION : cette chaine est UN GABARIT JS (backticks). Un backtick, meme
+     dans un commentaire, ferme le gabarit et casse tout le bloc en silence. */
+  .schema-box{display:inline-block;background:transparent;border:2px solid #8a6d3b;border-radius:5px;padding:8px 14px;min-width:90px;text-align:center;color:#4a3520;line-height:1.35;overflow-wrap:normal;word-break:normal;}
   .schema-box em,.schema-box i{font-style:italic;color:#6b4f2a;font-size:.9em;display:block;margin-top:2px;}
   .schema-box b,.schema-box strong{font-weight:700;color:#3a2812;}
   .schema-edge{stroke:#8a6d3b;stroke-width:2;fill:none;}
   .schema-card pre.schema-fallback{background:transparent;border:none;margin:0;padding:0;color:#4a3520;font-family:'Courier New',monospace;font-size:12.5px;line-height:1.5;text-align:left;overflow-x:auto;}
   .schema-tree .schema-group{display:flex;flex-direction:column;align-items:center;position:relative;padding:0 14px;}
-  .schema-tree .schema-kids{display:flex;justify-content:center;align-items:flex-start;padding-top:24px;position:relative;}
+  /* v103 : flex-wrap MANQUAIT ici aussi (la feuille principale l'a) -> mots coupes. */
+  .schema-tree .schema-kids{display:flex;justify-content:center;align-items:flex-start;padding-top:24px;position:relative;flex-wrap:wrap;row-gap:24px;}
+  .schema-tree .schema-kids > .schema-group{flex-shrink:0;}
   .schema-tree .schema-kids::before{content:'';position:absolute;top:0;left:50%;margin-left:-1px;height:13px;border-left:2px solid #8a6d3b;}
   .schema-tree .schema-rail{position:absolute;top:12px;height:0;border-top:2px solid #8a6d3b;}
   .schema-tree .schema-rail.l{left:0;right:50%;} .schema-tree .schema-rail.r{right:0;left:50%;}
@@ -23562,7 +23591,17 @@ body{ margin:0; }
   #v7-conv-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 320 px : 320 - 196 - 8 - 40 - 46 - 8 = 24 px — titre quasi invisible, ok.
      360 px : 360 - 312 = 48 px — titre a 1-2 mots ; ok. */
-}
+  /* v103 — CE BLOC ETAIT COUPE EN DEUX PAR UNE ACCOLADE FERMANT EN TROP.
+     L'accolade fermante qui precedait #v6-more-menu fermait le @media avant
+     l'heure ; l'accolade suivante, orpheline, etait une ERREUR DE SYNTAXE CSS.
+     Le parseur abandonnait tout ce qui suivait : le @media (min-width:901px)
+     du rail lateral n'etait JAMAIS enregistre. Consequences, mesurees a
+     1200 px : le burger basculait bien la classe `sidebar-open`, mais le rail
+     restait visible (margin-left 0 au lieu de -268px) — « le sidebar ne se
+     cache pas » sur Windows. Les largeurs < 1024 px marchaient parce qu'une
+     AUTRE feuille (surcouche mobile) les prend en charge.
+     `#v6-more-menu` est remis DANS le @media, comme l'annonce le commentaire
+     v43 ci-dessus (« le menu lui-meme recoit une hauteur max »). */
   #v6-more-menu {
     top: calc(52px + env(safe-area-inset-top, 0px));
     max-height: calc(100vh - 70px);
