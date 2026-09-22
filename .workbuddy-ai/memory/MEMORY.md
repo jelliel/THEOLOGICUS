@@ -78,12 +78,31 @@ par piéger un élément qu'on croit au-dessus et qui peint dessous (v96 : fiche
   `.lat` dans `#hb-slot` **à l'intérieur** de `#bible-verse-tip` ; `.qw` (arabe)
   dans `#quran-verse-tip`. Le panneau passe alors en `pointer-events:auto`.
   **Tafsir n'a légitimement aucun mot** — ne pas le compter comme un défaut.
-- **Le mot vit DANS le panneau, pas dans le lien. Racine de trois défauts.**
+- **Le mot vit DANS le panneau, pas dans le lien. Racine de quatre défauts.**
   Passer du lien (`a.bible-ref`, `a.quran-ref`) au mot déclenche `mouseout` sur
   le lien avec `relatedTarget` = le mot. Le mot n'étant ni `a.bible-ref` ni
   `span.bible-ref`, un test qui ne regarde que la classe du `target` referme.
   **Règle : un conteneur ouvert au survol doit tester `relatedTarget`.**
   Corrigé Bible **v93**, Coran + Tafsir **v96**.
+- **v100 — MAIS `relatedTarget` NE SUFFIT PAS, et c'est le défaut le plus
+  tenace.** Mesuré : en descendant du lien vers la ligne de mots, le navigateur
+  émet **UN SEUL `mouseout`** sur le lien, avec `relatedTarget` = **le fond de
+  page** — pas le panneau. `dansPanneau()` renvoie `false` et le panneau se
+  referme **avant que la souris atteigne le mot** : la translittération et les
+  Strong deviennent inatteignables. La géométrie rend cela inévitable : le
+  panneau est posé **au-dessus** du lien (y=472 contre y=659), donc rejoindre
+  un mot oblige à sortir du lien par un bord où le panneau n'est pas encore.
+  **Juger sur `relatedTarget`, c'est juger un chemin que le curseur n'a pas fini
+  de parcourir.** Correctif : **armer** la fermeture au `mouseout` (160 ms) et
+  l'**annuler** par tout `mouseover` visant le panneau, un mot ou une fiche.
+  Appliqué Bible / Coran / Tafsir. (`#verse-mini-tip` avait déjà ce motif avec
+  250 ms + `:hover` ; `#v37-tip` se déclenche sur le mot lui-même.)
+- **Tester la visibilité d'une fiche : `offsetParent !== null` est FAUX pour
+  tout élément `position:fixed`.** Les quatre fiches sont en `position:fixed` —
+  ce test déclare « cachée » une fiche parfaitement peinte. Juger sur la boîte
+  **peinte** (`getBoundingClientRect`) + `display`/`visibility` calculés.
+  Et **mesurer pendant que la souris est SUR la cible**, pas après l'avoir
+  quittée (sinon on mesure un état déjà refermé).
 - `dansPanneau(n)` (Bible, Coran, Tafsir) teste `tip.contains(n)` **et**
   `n.closest('#hb-tip'|'#gr-tip'|'#lat-tip'|'#qw-tip')`. Le second terme est
   indispensable : les fiches sont des enfants de `BODY`, donc `tip.contains(f)`
