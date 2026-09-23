@@ -14568,6 +14568,20 @@ function getVoiceForLang(lang) {
     }
     const v = voices.find(v => _langMatches(v, prefix));
     if (v) return v;
+    // v106 — LE DEFAUT DE PRONONCIATION ETAIT ICI.
+    // Quand on demandait une langue PRECISE et qu'aucune voix ne correspondait
+    // (cas mesure : hebreu et grec sur cette machine), le code ne sortait pas :
+    // il TOMBAIT dans les paliers fr-FR plus bas et retournait la voix
+    // francaise. Or makeUtterance teste `if (v)` pour decider du repli
+    // phonetique : v etant une voix FR, transliterateForSpeech() n'etait
+    // JAMAIS atteint. Le mot hebreu etait lu par une voix francaise — soit
+    // saute, soit baragouine — et tout le dictionnaire phonetique du fichier
+    // (_HE_PHON, _HE_VOWEL, _EL_PHON) etait du CODE MORT.
+    // On ne sert JAMAIS une voix d'une autre langue que celle demandee ici :
+    // mieux vaut null, qui laisse le champ libre au repli phonetique.
+    // (Le prefixe 'fr' garde le droit de tomber dans le repli ci-dessous,
+    // puisqu'une voix francaise y est precisement ce qu'on cherche.)
+    if (prefix !== 'fr') return null;
   }
   // Repli français renforcé : prioriser fr-FR sur fr-BE/fr-CA
   for (const tier of QUALITY_TIERS) {
@@ -14653,13 +14667,21 @@ function splitByLanguage(text) {
   if (!text || !text.trim()) return [];
   const segments = [];
   // Étape 1: couper par ponctuation forte pour isoler les phrases
-  const sentences = text.split(/([.!?:;…]+[\s"]*|["«»]\s*)/g);
+  // v106 — le deux-points d'une REFERENCE ne doit PAS couper la phrase.
+  // « Exode 24:12 » etait scinde en « Exode 24: » puis « 12 » : deux segments,
+  // donc deux respirations TTS au milieu de la reference (« Exode vingt-quatre »
+  // / « douze »). On protege le motif <chiffres>:<chiffres> — et aussi
+  // <Livre> <chiffres>:<chiffres> — par un marqueur temporaire, retire ensuite.
+  // Le deux-points reste un vrai separateur partout ailleurs.
+  const _DP = '\u0001';   // marqueur de deux-points interne (jamais dans le texte)
+  const garde = text.replace(/(\d)\s*:\s*(\d)/g, '$1' + _DP + '$2');
+  const sentences = garde.split(/([.!?:;…]+[\s"]*|["«»]\s*)/g);
   let buffer = '';
   for (let i = 0; i < sentences.length; i++) {
     buffer += sentences[i];
     const isBreak = /[.!?:;…]/.test(sentences[i]) || i === sentences.length - 1;
     if (!isBreak) continue;
-    const chunk = buffer.trim();
+    const chunk = buffer.replace(new RegExp(_DP, 'g'), ':').trim();
     buffer = '';
     if (!chunk) continue;
     // Découpage fin : sépare les passages en écriture étrangère (hébreu, grec…)
@@ -14670,7 +14692,7 @@ function splitByLanguage(text) {
     }
   }
   if (buffer.trim()) {
-    for (const seg of splitMixedSegments(buffer.trim())) {
+    for (const seg of splitMixedSegments(buffer.replace(new RegExp(_DP, 'g'), ':').trim())) {
       for (const s of chunkText(seg.text, 180)) segments.push({ text: s, lang: seg.lang });
     }
   }
@@ -14879,6 +14901,14 @@ function makeUtterance(text, lang) {
       v = refreshVoices().find(vv => pattern.test(vv.name));
     }
     const tag = l === 'grec' ? 'el-GR' : 'he-IL';
+    // v106 — SECOND VERROU. Meme si getVoiceForLang() se remettait un jour a
+    // rendre la voix francaise, on refuse ici toute voix qui n'appartient PAS
+    // a la langue demandee : sinon le repli phonetique ne se declencherait
+    // jamais et le mot serait lu (ou saute) par une voix incapable de le dire.
+    if (v && !_langMatches(v, prefix)) {
+      console.warn('[' + l.toUpperCase() + ' TTS] Voix hors-langue refusee:', v.name, '(' + v.lang + ') — repli phonetique');
+      v = null;
+    }
     console.log('[' + l.toUpperCase() + ' TTS] Voix trouvée:', v ? v.name + ' (' + v.lang + ')' : 'AUCUNE');
     if (v) {
       utt.voice = v;

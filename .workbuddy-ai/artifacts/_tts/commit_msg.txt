@@ -1,0 +1,40 @@
+v106 — make the phonetic fallback actually reachable, and stop cutting references
+
+The reported symptom was bad pronunciation in spoken readings. The machine
+exposes 23 voices but none for Hebrew, Greek or Latin; Arabic has a real one
+(Microsoft Naayf, ar-SA). The fault was not the engine — it was three defects
+in our own chain, all measured in a real browser.
+
+1. The phonetic fallback was dead code. getVoiceForLang() searched the
+   requested language, found nothing for Hebrew or Greek, and then FELL
+   THROUGH to the French tiers, returning the French voice. makeUtterance
+   tests `if (v)` to choose the fallback, so with a French voice in hand
+   transliterateForSpeech() was never reached. Measured before the fix:
+   hebreu -> "Google français (fr-FR)" reading raw Hebrew; grec -> the same.
+   getVoiceForLang now returns null when a specific non-French language has
+   no voice, leaving the fallback free to run.
+
+2. A second lock in makeUtterance refuses any voice whose language does not
+   match the one requested, so this cannot silently return even if the
+   first defence changes.
+
+3. References were cut in two. "Exode 24:12" was split into "Exode 24:" then
+   "12", because the sentence splitter treats a colon as a boundary — two
+   segments, two breaths in the middle of the reference. "Coran 20:12 et
+   5:72" became three fragments. A colon between digits is now protected
+   before splitting and restored after; a colon elsewhere still separates.
+
+Measured after: Hebrew renders as "yehochoua" and Greek as "logos" through
+the French voice, so the dictionary already written in the file — _HE_PHON,
+_HE_VOWEL, _EL_PHON — finally does its job. References stay whole.
+
+Latin is unchanged and this is deliberate: it is not in SCRIPT_RANGES, so it
+is read by the French voice. Latin shares the Latin alphabet and French
+pronunciation of Latin is a legitimate convention; no TTS provider covers
+Latin anyway, ElevenLabs and Supertonic included.
+
+Verified: new TTS bench 0 failures, movable-tooltip bench 24/24, z-index
+exhaustive 0, overlap 0, both guards 0, 59 script blocks parse clean.
+Counter-proof: the same bench on the pre-fix baseline fails 6 tests,
+including the two stolen voices and both broken references — so the bench
+measures the fix and not itself.

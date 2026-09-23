@@ -56,3 +56,10 @@ tools/.orthodox_cache/
 tools/.islamic_cache/
 tools/.denzinger_cache/
 tools/.summafr_cache/
+
+# Extraits video/audio des diagnostics TTS (v106) : captures de travail, pas des
+# livrables. Les .wav pesent plusieurs Mo et les .jpg sont des images extraites
+# d'une video locale — aucun interet dans l'historique public.
+.workbuddy-ai/artifacts/_tts/*.wav
+.workbuddy-ai/artifacts/_tts/*.jpg
+.workbuddy-ai/artifacts/_tts/*.mp4
