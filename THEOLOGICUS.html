@@ -1247,9 +1247,10 @@
 
      Ordre voulu, du bas vers le haut :
        --z-popup    5000    infobulles legeres, menus
-       --z-toast   10000    notifications (au-dessus du contenu)
        --z-panneau  9000    panneau de verset, qui fait naitre la fiche
-       --z-mot      9500    fiche d'un mot : JUSTE au-dessus du panneau
+       --z-mot      9900    fiche d un mot : au-dessus du panneau ET de la carte
+       --z-carte    9800    carte laterale (translitteration, citation)
+       --z-toast   10000    notifications (au-dessus du contenu)
        --z-bulle  100000    bulle d'annotation : coiffe tout le contenu
        --z-au-dessus 100002 bandeaux et overlays hors contenu
 
@@ -1257,9 +1258,30 @@
      ce sont deux elements de premier niveau, leurs z-index se comparent
      directement. Il suffit donc que --z-mot depasse --z-panneau. Ne JAMAIS
      remonter l'un sans l'autre : #qw-tip est reste a 6000 sous un panneau
-     a 99999, et c'est exactement le defaut qui a echappe a la v94. */
+     a 99999, et c'est exactement le defaut qui a echappe a la v94.
+
+     v105 — --z-carte : la carte de translitteration (#v37-tip) etait a
+     --z-panneau, donc AU MEME rang que le panneau du verset. Deux elements
+     de premier niveau a z-index EGAL sont peints dans l'ordre du DOM, et
+     les panneaux de verset sont ajoutes en dernier : #v37-tip passait donc
+     DERRIERE eux (capture 2026-09-23 114434, « HÉBREU BIBLIQUE » encadre).
+     Elle est un CONTENU, pas un fond : elle prend un rang nomme au-dessus
+     du panneau.
+
+     v105f — MAIS LA FICHE DE MOT RESTE LA PLUS HAUTE DES TROIS.
+     Le banc exhaustif l'a attrape : avec --z-carte a 9800 et --z-mot a 9500,
+     les quatre fiches passaient SOUS la carte de translitteration. Or la
+     fiche est le detail le plus fin : elle nait du survol d'un MOT, elle est
+     minuscule, elle vit le temps d'un regard. La carte, elle, est une
+     surface large qui reste posee. Une carte qui recouvre la fiche du mot
+     qu'on est en train de lire est exactement le defaut qu'on vient de
+     corriger, deplace d'un cran.
+     Ordre definitif : panneau (9000) < carte (9800) < fiche de mot (9900).
+     L'invariant « toute fiche domine tout panneau » est ainsi preserve, et
+     la carte gagne sur le panneau — ce que l'utilisateur demandait. */
   --z-panneau: 9000;
-  --z-mot: 9500;
+  --z-carte: 9800;
+  --z-mot: 9900;
   --z-bulle: 100000;
   --z-au-dessus: 100002;
 
@@ -19737,6 +19759,89 @@ if (document.readyState === 'loading') {
   <small style="color:#666;font-size:10px;margin-top:10px">Propriété: ambassa2ur (toshryzen@gmail.com)</small>
 </div>
 
+<script id="v105c-pointeur">
+  /* ==================================================================
+     v105c — OU SE TROUVE REELLEMENT LE POINTEUR ?
+
+     Trois panneaux (Bible, Coran, Tafsir) referment leur bulle apres un
+     delai de grace de 160 ms arme par un `mouseout` sur le LIEN de
+     reference. Or ces panneaux se peignent AU-DESSUS de ce lien : le seul
+     `mouseout` emis est celui du lien, et `relatedTarget` vaut alors le
+     fond de page meme quand la souris est en realite posee sur le panneau.
+
+     MESURE (banc CDP, 921x838, 2026-09-23) : le panneau ouvert, la poignee
+     de deplacement est bien la cible du pointeur (`elementFromPoint` ->
+     `v105-poignee`, point 885,112). UN SEUL deplacement de souris vers
+     (5,5) fait passer le panneau a `display:none`, et le minuteur
+     enregistre est exactement celui de `armerFermeture` (160 ms). Personne
+     ne l'avait annule : la souris etait pourtant encore sur la carte au
+     moment de l'armement. Consequence pour l'utilisateur : impossible de
+     saisir la poignee, la bulle s'evanouit avant qu'on l'atteigne.
+
+     `relatedTarget` ne repond pas a la question « ou est la souris ? ».
+     On tient donc un point, mis a jour en CAPTURE sur tout deplacement, et
+     on interroge `elementFromPoint` — la seule lecture qui dit la verite
+     sur ce qui est sous le curseur.
+     ================================================================== */
+  (function () {
+    var pt = null;
+    function noter(e) {
+      if (e && typeof e.clientX === 'number') pt = { x: e.clientX, y: e.clientY };
+    }
+    document.addEventListener('pointerover', noter, true);
+    document.addEventListener('pointermove', noter, true);
+    document.addEventListener('mouseover', noter, true);
+    document.addEventListener('mousemove', noter, true);
+
+    /* Le pointeur est-il sous l'une des surfaces qui RETIENNENT une bulle ?
+       On enumere des SELECTEURS, pas des identifiants : une poignee vit dans
+       un hote en `pointer-events:none` et doit compter pour elle-meme. */
+    var RETIENT = '#bible-verse-tip,#quran-verse-tip,#tafsir-verse-tip,' +
+                  '#verse-mini-tip,#v37-tip,.v105-poignee,' +
+                  '#hb-tip,#gr-tip,#lat-tip,#qw-tip,' +
+                  '.hb,.gr,.lat,.qw';
+    /* v105d — LA GOUTTIERE.
+       MESURE (banc CDP, 2026-09-23, parcours utilisateur REEL) : la reference
+       est a (54,501), le panneau s'ouvre a (20,534) et sa poignee est a
+       (353,539). Pour saisir la poignee, la souris doit donc traverser une
+       bande d'environ 33 px ou elle n'est NI sur le lien NI sur le panneau.
+       A cet instant `armerFermeture` tire (le `mouseout` du lien), et 160 ms
+       plus tard le panneau est `display:none` : mesure des pas 1 a 8, le
+       panneau est mort des le pas 2. Le deplacement etait donc IMPOSSIBLE —
+       non pas parce que la poignee etait mal posee, mais parce que la bulle
+       s'evaporait pendant le trajet qui y mene.
+
+       Regle : tant que le pointeur est dans la REGION de la carte — sa boite
+       gonflee d'une marge de transit — il n'y a rien a fermer. On ne referme
+       que sur une sortie FRANCHE. La marge n'est pas un confort : c'est la
+       largeur de la gouttiere entre le lien et la bulle, mesuree a 33 px. */
+    var MARGE = 48;
+    function dansRegion(boite) {
+      if (!pt || !boite) return false;
+      return pt.x >= boite.left - MARGE && pt.x <= boite.right + MARGE &&
+             pt.y >= boite.top - MARGE && pt.y <= boite.bottom + MARGE;
+    }
+    function dansRetenant(racine) {
+      if (!pt) return false;
+      /* 1. La region de la carte (boite + marge de transit). */
+      if (racine && racine.getBoundingClientRect) {
+        var b = racine.getBoundingClientRect();
+        if (b.width > 0 && b.height > 0 && dansRegion(b)) return true;
+      }
+      /* 2. La pile reelle sous le pointeur. */
+      var n = document.elementFromPoint(pt.x, pt.y);
+      if (!n) return false;
+      if (racine && racine.contains && racine.contains(n)) return true;
+      return !!(n.closest && n.closest(RETIENT));
+    }
+    window.__v105cPointeur = {
+      point: function () { return pt; },
+      dansRetenant: dansRetenant,
+      dansRegion: dansRegion
+    };
+  })();
+</script>
+
 <script>
 /* ═══ v66 — verrouillage au lancement : plus robuste, plus rapide, et
    « Se souvenir de moi » pour le mot de passe admin (7 jours). ═══
@@ -20436,7 +20541,20 @@ function initBibleVerseTooltip() {
      un tap a l'exterieur. */
   let pinned = false;
   function hideTip() { if (pinned) return; tip.style.opacity = '0'; tip.style.display = 'none'; }
-  function closeTip() { pinned = false; tip.style.pointerEvents = 'none'; tip.style.opacity = '0'; tip.style.display = 'none'; }
+  function closeTip() {
+    /* v105b — un drag d'infobulle qui vient de se terminer ne doit PAS etre
+       pris pour un « clic a l'exterieur ». Les panneaux sont en
+       `pointer-events:none` : la capture du pointeur est refusee, le
+       `pointerup` tombe sur le fond de page, et le `click` qui suit visait
+       BODY. La bulle se refermait donc a l'instant ou l'utilisateur venait
+       de la poser. Fenetre volontairement courte (300 ms) : un vrai clic
+       ailleurs reste traite normalement. */
+    if (window.__v105DernierDrag && (Date.now() - window.__v105DernierDrag) < 300) {
+      window.__v105DernierDrag = 0;
+      return;
+    }
+    pinned = false; tip.style.pointerEvents = 'none'; tip.style.opacity = '0'; tip.style.display = 'none';
+  }
 
   /* v2.0 — table de versification (generee par tools/build_versification.js).
      Elle repond a "ce verset existe-t-il ?" sans charger la tranche du livre :
@@ -20478,7 +20596,11 @@ function initBibleVerseTooltip() {
     var tr = tip.getBoundingClientRect();
     if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
     if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
-    tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+    /* v105b — si l'utilisateur a deplace ce panneau, on respecte sa place. */
+    if (!(window.__v105Ancre && window.__v105Ancre(tip, 'bible-verse-tip'))) {
+      tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px';
+    }
+    tip.style.opacity = '1';
   }
 
   function showTip(el, p) {
@@ -20509,10 +20631,23 @@ function initBibleVerseTooltip() {
     const tr = tip.getBoundingClientRect();
     if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
     if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
-    tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+    /* v105b — une bulle deplacee a la main garde sa place d'une ouverture a
+       l'autre ; le placement automatique reste celui d'avant sinon. */
+    if (!(window.__v105Ancre && window.__v105Ancre(tip, 'bible-verse-tip'))) {
+      tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px';
+    }
+    tip.style.opacity = '1';
     if (typeof window.__hbRemplir === 'function') window.__hbRemplir(p, tip);
   }
-  function hideTip() { tip.style.opacity = '0'; tip.style.display = 'none'; }
+  function hideTip() {
+    /* v105b — une poignee tenue RETIENT le panneau : on ne referme jamais
+       sous la main qui le deplace. Sans ce verrou au niveau le plus bas,
+       la fermeture partait par un chemin indirect (delai de grace deja
+       arme, `closeTip`, changement de mot) et la bulle disparaissait en
+       plein deplacement. */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
+    tip.style.opacity = '0'; tip.style.display = 'none';
+  }
 
   document.addEventListener('mouseover', function (e) {
     const el = e.target.closest && e.target.closest('a.bible-ref, span.bible-ref');
@@ -20562,9 +20697,52 @@ function initBibleVerseTooltip() {
      partie ailleurs. Le délai (160 ms) est celui qu'il faut à une main humaine
      pour traverser la gouttière entre le lien et le panneau. */
   var _fermetureArmee = null;
+  /* v105c — la position reelle du pointeur vient du traqueur partage
+     (`#v105c-pointeur`), qui la met a jour en capture. On ne se fie JAMAIS a
+     `relatedTarget` : le panneau recouvre le lien, donc le `mouseout` du lien
+     annonce le fond de page meme quand la souris est sur le panneau. */
+  function _pointeurDansCarte() {
+    var tr = window.__v105cPointeur;
+    if (!tr) return false;
+    return tr.dansRetenant(tip);
+  }
+  /* v105c — LE PANNEAU MOURAIT EN PLEIN DEPLACEMENT.
+     MESURE (banc CDP, 921x838) : a la fin de l'ouverture, la poignee est bien
+     la cible du pointeur (`elementFromPoint` -> `v105-poignee`, point 885,112).
+     Un seul `Input.dispatchMouseEvent` vers (5,5) suffit a faire passer le
+     panneau a `display:none` — et le minuteur enregistre est exactement
+     `setTimeout(..., 160)` dont le corps est `_fermetureArmee = null; hideTip()`.
+     Autrement dit : `armerFermeture()` a tire et PERSONNE ne l'a annulee.
+
+     La cause est structurelle, pas geometrique. Le panneau s'ouvre AU-DESSUS
+     du lien de reference ; le seul `mouseout` emis est donc celui DU LIEN, et
+     `relatedTarget` vaut le fond de page (v100 l'avait deja mesure) meme quand
+     la souris se trouve en realite sur le panneau. Armer sur cette seule foi,
+     c'est condamner le panneau des que la souris s'eloigne de plus de 160 ms
+     du lien — c'est-a-dire des que l'utilisateur tend la main vers la poignee.
+     C'est le defaut signale, et ce n'etait ni un z-index ni un probleme de
+     poignee.
+
+     REGLE : on n'arme que si le pointeur n'est PAS dans la carte. On interroge
+     la DESTINATION reelle avec `elementFromPoint`, pas la classe de la cible ni
+     le chemin suppose. Si le pointeur est encore sur le panneau ou sur sa
+     poignee, il n'y a rien a fermer : on n'arme pas. */
   function armerFermeture() {
+    /* v105b — on ne referme jamais pendant qu'une poignee est tenue : le
+       doigt qui deplace la bulle sort du lien par construction. */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
+    /* v105c — le pointeur est encore DANS la carte : il n'y a rien a fermer. */
+    if (_pointeurDansCarte()) return;
     if (_fermetureArmee) clearTimeout(_fermetureArmee);
-    _fermetureArmee = setTimeout(function () { _fermetureArmee = null; hideTip(); }, 160);
+    _fermetureArmee = setTimeout(function () {
+      _fermetureArmee = null;
+      /* v105d — on REJUGE au moment de fermer. La decision prise a l'armement
+         ne vaut plus rien 160 ms plus tard : c'est exactement le temps que met
+         la souris a traverser la gouttiere jusqu'a la poignee. Fermer sur un
+         verdict perime etait le defaut. */
+      if (_pointeurDansCarte() || (tip.dataset && tip.dataset.v105Retenu)) return;
+      hideTip();
+    }, 160);
   }
   function annulerFermeture() {
     if (_fermetureArmee) { clearTimeout(_fermetureArmee); _fermetureArmee = null; }
@@ -20585,7 +20763,12 @@ function initBibleVerseTooltip() {
     const t = e.target;
     if (t && t.closest && (t.closest('#bible-verse-tip') || t.closest('.hb') || t.closest('.gr') ||
         t.closest('.lat') || t.closest('#hb-tip') || t.closest('#gr-tip') ||
-        t.closest('#lat-tip'))) {
+        t.closest('#lat-tip') ||
+        /* v105c — la poignee de deplacement et la carte de translitteration
+           retiennent aussi le panneau : on les vise par leur CLASSE, pas par
+           leur parent, car la poignee est un enfant en `pointer-events:auto`
+           d'un hote en `none`. */
+        t.closest('.v105-poignee') || t.closest('#v37-tip'))) {
       annulerFermeture();
     }
   }, true);
@@ -20726,7 +20909,11 @@ function initQuranVerseTooltip() {
     const tr = tip.getBoundingClientRect();
     if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
     if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
-    tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+    /* v105b — respect d'une position posee a la main (cf. __v105Ancre). */
+    if (!(window.__v105Ancre && window.__v105Ancre(tip, 'quran-verse-tip'))) {
+      tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px';
+    }
+    tip.style.opacity = '1';
     const playBtn = tip.querySelector('#quran-audio-btn');
     if (playBtn) {
       playBtn.addEventListener('click', function(e) {
@@ -20741,6 +20928,8 @@ function initQuranVerseTooltip() {
     }
   }
   function hideTip() {
+    /* v105b — une poignee tenue RETIENT le panneau (cf. hideTip de la Bible). */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
     tip.style.opacity = '0';
     tip.style.display = 'none';
     tip.style.pointerEvents = 'none';
@@ -20787,12 +20976,26 @@ function initQuranVerseTooltip() {
      inaccessible — exactement ce que Fatih a filmé. Fermeture différée. */
   var _fermetureArmeeQ = null;
   function armerFermetureQ() {
+    /* v105b — jamais de fermeture pendant qu'une poignee est tenue. */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
+    /* v105c — le pointeur est-il encore DANS la carte ? Si oui, il n'y a rien
+       a fermer : le `mouseout` du lien annonce le fond de page alors que la
+       souris est posee sur le panneau, qui le recouvre. Armer sur cette seule
+       foi tuait le panneau 160 ms plus tard, poignee comprise. */
+    if (window.__v105cPointeur && window.__v105cPointeur.dansRetenant(tip)) return;
     if (_fermetureArmeeQ) clearTimeout(_fermetureArmeeQ);
-    _fermetureArmeeQ = setTimeout(function () { _fermetureArmeeQ = null; hideTip(); }, 160);
+    _fermetureArmeeQ = setTimeout(function () {
+      _fermetureArmeeQ = null;
+      /* v105d — on rejuge a l'echeance : le verdict de l'armement est perime. */
+      if (tip.dataset && tip.dataset.v105Retenu) return;
+      if (window.__v105cPointeur && window.__v105cPointeur.dansRetenant(tip)) return;
+      hideTip();
+    }, 160);
   }
   function annulerFermetureQ() {
     if (_fermetureArmeeQ) { clearTimeout(_fermetureArmeeQ); _fermetureArmeeQ = null; }
   }
+  window.__annulerFermetureQuran = annulerFermetureQ;   /* v105b */
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.quran-ref, span.quran-ref');
     if (!el) return;
@@ -21007,7 +21210,11 @@ function initTafsirVerseTooltip() {
     const tr = tip.getBoundingClientRect();
     if (x + tr.width > window.innerWidth - 10) x = window.innerWidth - tr.width - 10;
     if (y + tr.height > window.innerHeight - 10) y = r.top - tr.height - 8;
-    tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px'; tip.style.opacity = '1';
+    /* v105b — respect d'une position posee a la main (cf. __v105Ancre). */
+    if (!(window.__v105Ancre && window.__v105Ancre(tip, 'tafsir-verse-tip'))) {
+      tip.style.left = Math.max(10, x) + 'px'; tip.style.top = Math.max(10, y) + 'px';
+    }
+    tip.style.opacity = '1';
 
     const enText = items.map(v => v.t).join('\n\n');
     const copyBtn = tip.querySelector('#tafsir-copy');
@@ -21025,7 +21232,15 @@ function initTafsirVerseTooltip() {
       trBtn.disabled = false; trBtn.textContent = '🌐 Traduire';
     };
   }
-  function hideTip() { tip.style.opacity = '0'; tip.style.display = 'none'; }
+  function hideTip() {
+    /* v105b — une poignee tenue RETIENT le panneau : on ne referme jamais
+       sous la main qui le deplace. Sans ce verrou au niveau le plus bas,
+       la fermeture partait par un chemin indirect (delai de grace deja
+       arme, `closeTip`, changement de mot) et la bulle disparaissait en
+       plein deplacement. */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
+    tip.style.opacity = '0'; tip.style.display = 'none';
+  }
 
   document.addEventListener('mouseover', function (e) {
     const el = e.target.closest && e.target.closest('a.tafsir-ref, span.tafsir-ref');
@@ -21050,12 +21265,23 @@ function initTafsirVerseTooltip() {
      panneau. On juge sur la destination, pas sur le chemin. */
   var _fermetureArmeeT = null;
   function armerFermetureT() {
+    /* v105b — jamais de fermeture pendant qu'une poignee est tenue. */
+    if (tip.dataset && tip.dataset.v105Retenu) return;
+    /* v105c — pointeur encore dans la carte : rien a fermer (cf. Bible). */
+    if (window.__v105cPointeur && window.__v105cPointeur.dansRetenant(tip)) return;
     if (_fermetureArmeeT) clearTimeout(_fermetureArmeeT);
-    _fermetureArmeeT = setTimeout(function () { _fermetureArmeeT = null; hideTip(); }, 160);
+    _fermetureArmeeT = setTimeout(function () {
+      _fermetureArmeeT = null;
+      /* v105d — on rejuge a l'echeance (cf. Bible). */
+      if (tip.dataset && tip.dataset.v105Retenu) return;
+      if (window.__v105cPointeur && window.__v105cPointeur.dansRetenant(tip)) return;
+      hideTip();
+    }, 160);
   }
   function annulerFermetureT() {
     if (_fermetureArmeeT) { clearTimeout(_fermetureArmeeT); _fermetureArmeeT = null; }
   }
+  window.__annulerFermetureTafsir = annulerFermetureT;  /* v105b */
   document.addEventListener('mouseout', function (e) {
     const el = e.target.closest && e.target.closest('a.tafsir-ref, span.tafsir-ref');
     if (!el) return;
@@ -26626,11 +26852,11 @@ html[data-theme="v6-cyber"] #archives-panel{ background:rgba(18,12,28,0.96) !imp
 /* ═══ v37 — TRANSLITTÉRATION AU SURVOL ═══ */
 /* v97 — ce panneau est un PANNEAU DE VERSET (il affiche un verset translittéré
    sous le curseur) : il doit vivre SOUS les fiches de mot, dans l'échelle
-   partagée. Il était à --z-mot (9500), soit à égalité avec les fiches ; à
+   partagée. Il était à --z-mot, soit à égalité avec les fiches ; a
    z-index égal c'est le dernier venu dans le DOM qui est peint, et ici la
    fiche perdait. Même famille que bible/quran/tafsir-verse-tip : 9000. */
 #v37-tip{
-  position:fixed; z-index:var(--z-panneau,9000); max-width:360px; min-width:150px;
+  position:fixed; z-index:var(--z-carte,9800); max-width:360px; min-width:150px;
   max-height:60vh; overflow-y:auto; overscroll-behavior:contain;
   padding:10px 14px 11px; border-radius:12px;
   background:rgba(7,11,18,.96);
@@ -27071,6 +27297,10 @@ html[data-theme="v6-cyber"] #v37-tip{ background:rgba(18,12,28,.96); }
     }
     x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
     y = Math.max(8, Math.min(y, window.innerHeight - th - 8));
+    /* v105b — `place()` est appele a CHAQUE mot survole. Sans ce garde, une
+       carte deplacee a la main sautait a sa place automatique des le mot
+       suivant : le deplacement ne tenait pas. */
+    if (window.__v105Ancre && window.__v105Ancre(tip, 'v37-tip')) return;
     tip.style.left = Math.round(x) + 'px';
     tip.style.top = Math.round(y) + 'px';
   }
@@ -27175,6 +27405,507 @@ html[data-theme="v6-cyber"] #v37-tip{ background:rgba(18,12,28,.96); }
   };
 })();
 
+</script>
+
+<script id="v105-cartes-deplacables">
+  /* ==================================================================
+     v105 — INFOBULLES DEPLACABLES (versets, sourates, tafsir, fiches de mot,
+     cartes de translitteration et de citation)
+
+     Demande utilisateur : « je veux une option de pouvoir deplacer les
+     infobulles des versets/sourates ». Ces panneaux s'ouvrent tout seuls
+     pres de la souris et recouvrent parfois le texte qu'on est en train de
+     lire ; les deplacer vaut mieux que les fermer.
+
+     REGLE DE CONCEPTION — LE DRAG NE DOIT PAS CASSER LE SURVOL.
+     Toute la mecanique du mot a mot (v89/v90/v100/v101) repose sur le
+     `mouseover` / `mouseout` entre le lien, les mots et la fiche. Un
+     element qui accepte le clic devient une cible de survol : des qu'une
+     infobulle est `pointer-events:auto`, la souris qui la traverse emet
+     des evenements qui n'allaient pas a elle. On ne touche donc PAS au
+     `pointer-events` tant que la souris n'a pas REELLEMENT servi a
+     deplacer la bulle.
+
+     Principe retenu, par poignee et non par survol de la bulle entiere :
+       - une PETITE poignee est posee sur la bulle. Elle seule accepte le
+         pointeur ; la bulle garde son `pointer-events` d'origine.
+       - la poignee est visible au survol (et toujours visible sur les
+         cartes qui n'ont aucune interaction : translitteration, citation).
+       - tirer la poignee deplace la bulle, position memorisee.
+       - une fois la bulle DEPLACEE A LA MAIN, elle devient « posee » :
+         `pointer-events:auto` pour qu'on puisse la reprendre et la relire
+         au doigt, et l'utilisateur ferme avec la poignee ✕ de la bulle.
+       - double-clic sur la poignee (ou bouton ✕) : retour au placement
+         automatique.
+       - clavier : la poignee est focusable, les fleches deplacent, Echap
+         rend la main.
+
+     Un placement manuel ne doit JAMAIS faire disparaitre la bulle : on
+     borne la position a l'ecran. */
+  (function () {
+    'use strict';
+
+    /* Les bulles a rendre deplacables, du plus general au plus precis.
+       `poignee:true`  -> petite poignee visible au survol
+       `toujours`      -> poignee toujours visible (aucune interaction a
+                          preserver sur ces cartes) */
+    var CIBLES = [
+      { sel: '#bible-verse-tip',  nom: 'bible-verse-tip'  },
+      { sel: '#quran-verse-tip',  nom: 'quran-verse-tip'  },
+      { sel: '#tafsir-verse-tip', nom: 'tafsir-verse-tip' },
+      { sel: '#verse-mini-tip',   nom: 'verse-mini-tip'   },
+      { sel: '#v37-tip',          nom: 'v37-tip',  toujours: true },
+      { sel: '#hb-tip',           nom: 'hb-tip'    },
+      { sel: '#gr-tip',           nom: 'gr-tip'    },
+      { sel: '#lat-tip',          nom: 'lat-tip'   },
+      { sel: '#qw-tip',           nom: 'qw-tip'    }
+    ];
+
+    var CLE_ON   = 'v105-deplacer-on';
+    var CLE_POS  = 'v105-pos-';       /* + nom de la bulle */
+    var TAILLE   = 22;                /* cote de la poignee, en px */
+    var PAS      = 12;                /* deplacement clavier, en px */
+
+    var actif = true;
+    try { actif = window.localStorage.getItem(CLE_ON) !== 'off'; } catch (e) {}
+
+    function lire(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+    function ecrire(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+    function effacer(k) { try { window.localStorage.removeItem(k); } catch (e) {} }
+
+    /* ── plaque de deplacement : injectee UNE fois, partagee ──────────── */
+    var plaque = document.createElement('style');
+    plaque.id = 'v105-deplacer-css';
+    plaque.textContent =
+      '.v105-poignee{position:absolute;top:4px;right:4px;width:' + TAILLE + 'px;height:' + TAILLE + 'px;' +
+      'z-index:2;border-radius:6px;border:1px solid rgba(255,255,255,.22);' +
+      'background:rgba(10,16,28,.72);color:#cfe2ff;font-size:11px;line-height:1;' +
+      'font-family:Consolas,Monaco,monospace;display:flex;align-items:center;justify-content:center;' +
+      'cursor:move;touch-action:none;user-select:none;-webkit-user-select:none;' +
+      'opacity:0;transition:opacity .12s ease;pointer-events:auto;' +
+      'box-shadow:0 2px 8px rgba(0,0,0,.45);}' +
+      /* visible quand on survole la bulle, ou quand la poignee a le focus */
+      '.v105-hote:hover > .v105-poignee,.v105-poignee:focus{opacity:1;}' +
+      /* cartes sans interaction : poignee toujours la */
+      '.v105-poignee.v105-toujours{opacity:.62;}' +
+      '.v105-poignee.v105-toujours:hover{opacity:1;}' +
+      '.v105-poignee.v105-tire{opacity:1;cursor:grabbing;background:rgba(79,142,247,.85);color:#08101c;}' +
+      /* une bulle DEPLACEE a la main se prend au doigt : on peut la relire
+         et la reprendre. Le double-clic sur la poignee la remet en place. */
+      '.v105-posee{outline:1px dashed rgba(79,142,247,.45);outline-offset:1px;}' +
+      '.v105-poignee .v105-x{position:absolute;left:-1px;top:-1px;width:9px;height:9px;' +
+      'border-radius:50%;border:1px solid rgba(255,255,255,.35);background:#33405a;' +
+      'font-size:0;line-height:0;cursor:pointer;}' +
+      '.v105-poignee .v105-x:hover{background:#e53935;}';
+    document.head.appendChild(plaque);
+
+    /* Restaure les positions memorisees. On ne l'applique qu'a une bulle
+       VISIBLE (display != none) : sinon on mesurerait 0x0 et l'on
+       bornerait la position sur du vide. */
+    function restaurer(el, nom) {
+      var brut = lire(CLE_POS + nom);
+      if (!brut) return false;
+      var p = null;
+      try { p = JSON.parse(brut); } catch (e) { return false; }
+      if (!p || typeof p.l !== 'number' || typeof p.t !== 'number') return false;
+      poser(el, p.l, p.t);
+      el.classList.add('v105-posee');
+      return true;
+    }
+
+    /* Borne la position a l'ECRAN. La bulle peut etre plus grande que
+       l'ecran (verset long) : on laisse alors son bord haut-gauche dans
+       l'ecran plutot que de la repousser indefiniment. */
+    function poser(el, l, t) {
+      var vw = window.innerWidth || 400, vh = window.innerHeight || 800;
+      var w = el.offsetWidth || 0, h = el.offsetHeight || 0;
+      var maxL = Math.max(4, vw - Math.min(w, vw) - 4);
+      var maxT = Math.max(4, vh - Math.min(h, vh) - 4);
+      el.style.left = Math.round(Math.min(Math.max(4, l), maxL)) + 'px';
+      el.style.top  = Math.round(Math.min(Math.max(4, t), maxT)) + 'px';
+    }
+
+    /* v105b — on memorise la position VOULUE, pas le rectangle peint.
+       Plusieurs panneaux portent `transform: translateY(6px)` tant qu'ils
+       n'ont pas leur classe `show` : `getBoundingClientRect()` renvoie alors
+       une position decalee de 6 px, et cette erreur se figeait dans la
+       memoire — une bulle repositionnee « sautait » de 6 px a chaque
+       ouverture. On lit donc d'abord `style.left/top`, qui est ce que l'on a
+       ecrit, et le rectangle seulement en dernier recours (panneau jamais
+       positionne a la main). */
+    function memoriser(el, nom) {
+      var l = parseFloat(el.style.left), t = parseFloat(el.style.top);
+      if (!isFinite(l) || !isFinite(t)) {
+        var r = el.getBoundingClientRect();
+        l = r.left; t = r.top;
+      }
+      ecrire(CLE_POS + nom, JSON.stringify({ l: Math.round(l), t: Math.round(t) }));
+    }
+
+    /* Remet la bulle dans la main du placement automatique : on efface la
+       position et on laisse la prochaine ouverture la replacer. */
+    function liberer(el, nom) {
+      effacer(CLE_POS + nom);
+      el.classList.remove('v105-posee');
+      poser(el, -9999, -9999);
+      el.style.left = '-9999px';
+      el.style.top = '-9999px';
+    }
+
+    function nouerPoignee(el, nom, toujours) {
+      if (el.querySelector(':scope > .v105-poignee')) return;
+      /* La poignee est en position absolue : l'hote doit l'ancrer. Les
+         panneaux de verset et les fiches sont deja en `position:fixed`,
+         ce qui suffit ; on le force par securite. */
+      try {
+        if (getComputedStyle(el).position === 'static') el.style.position = 'fixed';
+      } catch (e) {}
+      el.classList.add('v105-hote');
+
+      var g = document.createElement('div');
+      g.className = 'v105-poignee' + (toujours ? ' v105-toujours' : '');
+      g.setAttribute('role', 'button');
+      g.setAttribute('tabindex', '0');
+      g.setAttribute('aria-label', 'Deplacer cette infobulle');
+      g.title = 'Glisser pour deplacer — double-clic : remettre en place';
+      g.textContent = '⠿';
+
+      /* bouton de remise en place */
+      var x = document.createElement('span');
+      x.className = 'v105-x';
+      x.title = 'Remettre l infobulle a sa place automatique';
+      x.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        liberer(el, nom);
+      });
+      g.appendChild(x);
+
+      var sx = 0, sy = 0, ol = 0, ot = 0, tire = false, bouge = false, pointeur = null;
+
+      /* v105b — LE DRAG ECHOUAIT SUR LES PANNEAUX EN pointer-events:none.
+         Mesure au traceur : POINTERDOWN arrivait bien sur la poignee, puis
+         POINTERUP arrivait sur `chat-container` et le `click` sur `BODY`.
+         Cause : `setPointerCapture()` n'est accorde qu'a un element
+         ATTEIGNABLE ; or #bible-verse-tip, #quran-verse-tip,
+         #tafsir-verse-tip et #v37-tip sont en `pointer-events:none` — c'est
+         precisement ce qui protege leur survol. La capture etait donc refusee
+         EN SILENCE, et pointermove/pointerup partaient au premier element
+         sous le curseur. Consequences en cascade : la bulle ne bougeait pas,
+         et le `click` sur BODY declenchait `closeTip()` — elle disparaissait.
+         On n'utilise donc la capture QUE comme confort, et on ecoute TOUJOURS
+         en plus sur `document` pendant le drag : c'est le seul moyen fiable
+         de suivre un pointeur dont la cible ne veut pas du pointeur. */
+      var surDoc = null;
+      function detacherDoc() {
+        if (!surDoc) return;
+        document.removeEventListener('pointermove', surDoc.move, true);
+        document.removeEventListener('pointerup', surDoc.up, true);
+        document.removeEventListener('pointercancel', surDoc.up, true);
+        surDoc = null;
+      }
+
+      function pointermove(e) {
+        if (!tire) return;
+        if (pointeur !== null && e.pointerId !== undefined && e.pointerId !== pointeur) return;
+        if (e.cancelable !== false) e.preventDefault();
+        e.stopPropagation();
+        var dl = e.clientX - sx, dt = e.clientY - sy;
+        if (Math.abs(dl) > 2 || Math.abs(dt) > 2) bouge = true;
+        poser(el, ol + dl, ot + dt);
+      }
+
+      g.addEventListener('pointerdown', function (e) {
+        if (!actif) return;
+        /* v105e — LE BOUTON ✕ ETAIT AVALE PAR LA POIGNEE.
+           MESURE (banc CDP) : le ✕ est un ENFANT de la poignee. Un appui sur
+           le ✕ atteint donc la poignee d'abord, et le `pointerdown` partait en
+           DRAG : trace enregistree, `pointerdown -> v105-x`, puis
+           `pointerup -> v105-poignee v105-tire`, puis `click -> v105-poignee`.
+           Le `click` n'atteignait JAMAIS le ✕, dont l'ecouteur ne s'executait
+           pas : la bulle restait posee (`posee: true`, memoire conservee) et le
+           bouton paraissait mort. Un bouton qui ne fait rien est un bouton qui
+           n'existe pas.
+           On refuse donc de demarrer un drag quand l'appui vise le ✕ (ou l'un
+           de ses descendants) : l'evenement poursuit sa route normalement et
+           le `click` du ✕ fait son travail. */
+        if (e.target && e.target.closest && e.target.closest('.v105-x')) return;
+        e.preventDefault(); e.stopPropagation();
+        /* v105b — ATTRAPER LA POIGNEE NE DOIT PAS FERMER LA BULLE.
+           Les panneaux referment sur `mouseout` du lien, apres un delai de
+           grace de 160 ms (v100). Le doigt qui part du lien pour attraper la
+           poignee traverse une zone ou le panneau n'est pas encore : la
+           fermeture s'arme, et elle se declenche PENDANT le deplacement,
+           emportant la bulle sous la main.
+           On annule donc la fermeture des qu'on prend la poignee, et on la
+           retient tant que le doigt est pose. */
+        if (window.__annulerFermetureBible) { try { window.__annulerFermetureBible(); } catch (err) {} }
+        if (window.__annulerFermetureQuran) { try { window.__annulerFermetureQuran(); } catch (err) {} }
+        if (window.__annulerFermetureTafsir) { try { window.__annulerFermetureTafsir(); } catch (err) {} }
+        if (el.dataset) el.dataset.v105Retenu = '1';
+        var r = el.getBoundingClientRect();
+        ol = r.left; ot = r.top;
+        sx = e.clientX; sy = e.clientY;
+        tire = true; bouge = false; pointeur = e.pointerId;
+        try { g.setPointerCapture(e.pointerId); } catch (err) {}
+        /* Le filet de securite, qui ne depend PAS de la capture. */
+        detacherDoc();
+        surDoc = { move: pointermove, up: finir };
+        document.addEventListener('pointermove', pointermove, true);
+        document.addEventListener('pointerup', finir, true);
+        document.addEventListener('pointercancel', finir, true);
+        g.classList.add('v105-tire');
+        el.classList.add('v105-posee');
+      });
+
+      g.addEventListener('pointermove', pointermove);
+
+      function finir(e) {
+        if (!tire) return;
+        if (e && pointeur !== null && e.pointerId !== undefined && e.pointerId !== pointeur) return;
+        tire = false;
+        detacherDoc();
+        try { if (pointeur !== null) g.releasePointerCapture(pointeur); } catch (err) {}
+        pointeur = null;
+        g.classList.remove('v105-tire');
+        if (el.dataset) delete el.dataset.v105Retenu;
+        if (bouge) {
+          memoriser(el, nom);
+          /* La bulle a ete deplacee a la main : elle prend le pointeur,
+             pour qu'on puisse la deplacer et la relire au doigt. On ne
+             touche jamais a cette propriete AVANT le deplacement : c'est
+             ce qui preserve le survol du mot a mot. */
+          el.style.pointerEvents = 'auto';
+        } else {
+          /* Simple clic : rien n'a bouge, on ne « pose » pas la bulle. */
+          if (!lire(CLE_POS + nom)) el.classList.remove('v105-posee');
+        }
+        /* La bulle doit RESTER a l'ecran apres le relachement : on annule
+           une derniere fois la fermeture armee, sinon le panneau disparait
+           au moment precis ou l'on vient de le poser. */
+        if (window.__annulerFermetureBible) { try { window.__annulerFermetureBible(); } catch (err) {} }
+        if (window.__annulerFermetureQuran) { try { window.__annulerFermetureQuran(); } catch (err) {} }
+        if (window.__annulerFermetureTafsir) { try { window.__annulerFermetureTafsir(); } catch (err) {} }
+        /* v105b — on note la fin du drag : le `click` de relachement peut
+           viser BODY (capture refusee sur un hote en pointer-events:none) et
+           fermerait la bulle via closeTip(). Voir __v105DragRecent. */
+        window.__v105DernierDrag = Date.now();
+        if (window.__v105DernierDragCible === undefined) window.__v105DernierDragCible = null;
+      }
+      g.addEventListener('pointerup', finir);
+      g.addEventListener('pointercancel', finir);
+      g.addEventListener('lostpointercapture', finir);
+
+      /* Empeche le clic de deplacer le point d'insertion dans la page.
+         v105b — on marque aussi l'instant : le `pointerup` d'un drag peut
+         tomber HORS de la poignee (les panneaux sont en pointer-events:none,
+         la capture est refusee) et produire un `click` sur BODY, que le
+         gestionnaire global de la page interprete comme « clic a l'exterieur »
+         -> `closeTip()`. La bulle disparaissait donc au relachement. On
+         publie un horodatage que `closeTip` consulte. */
+      g.addEventListener('click', function (e) {
+        e.stopPropagation();
+        window.__v105DernierDrag = Date.now();
+      });
+
+      g.addEventListener('dblclick', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        liberer(el, nom);
+      });
+
+      g.addEventListener('keydown', function (e) {
+        if (!actif) return;
+        var r = el.getBoundingClientRect();
+        var dl = 0, dt = 0;
+        if (e.key === 'ArrowLeft') dl = -PAS;
+        else if (e.key === 'ArrowRight') dl = PAS;
+        else if (e.key === 'ArrowUp') dt = -PAS;
+        else if (e.key === 'ArrowDown') dt = PAS;
+        else if (e.key === 'Escape') { liberer(el, nom); e.preventDefault(); e.stopPropagation(); return; }
+        else if (e.key === 'Enter' || e.key === ' ') { liberer(el, nom); e.preventDefault(); e.stopPropagation(); return; }
+        else return;
+        e.preventDefault(); e.stopPropagation();
+        poser(el, r.left + dl, r.top + dt);
+        memoriser(el, nom);
+        el.classList.add('v105-posee');
+        el.style.pointerEvents = 'auto';
+      });
+
+      el.appendChild(g);
+
+      /* Si une position a ete memorisee ET que la bulle est visible, on la
+         restaure. Sinon on laisse le placement automatique decider. */
+      try {
+        var cs = getComputedStyle(el);
+        if (cs.display !== 'none') restaurer(el, nom);
+      } catch (err) {}
+    }
+
+    /* ── surveillance : les bulles sont creees a la demande ────────────
+       v105b — LE CRITERE ETAIT LE MAUVAIS. On memorisait l'ELEMENT vu
+       (`connus[nom] === el`) et on le declarait equipe pour toujours. Or
+       ces panneaux se REMPLISSENT en reecrivant `innerHTML` :
+         - `#bible-verse-tip` : son rendu pose le texte du verset ;
+         - `#v37-tip`         : `show()` fait `tip.innerHTML = ...` a chaque
+                                mot nouveau survole.
+       Reecrire `innerHTML` DETRUIT la poignee, enfant comme les autres — et
+       la memoire, elle, disait encore « deja fait ». Mesure : la poignee
+       `oui` au bout de 15 s, puis `non` des le PREMIER survol, et plus
+       jamais remise. Le deplacement etait donc mort sur les deux surfaces
+       les plus utilisees.
+       Le bon critere n'est pas « l'element a-t-il change ? » mais « la
+       poignee est-elle LA, maintenant ? ». On teste sa presence a chaque
+       passage. Meme lecon que v104 : un garde-fou conditionne a une
+       detection parfaite s'efface sur les cas limites. */
+    function balayer() {
+      CIBLES.forEach(function (c) {
+        var el = document.getElementById(c.sel.slice(1));
+        if (!el) return;
+        /* `nouerPoignee` teste deja `:scope > .v105-poignee` et ne fait
+           rien si la poignee est la : cet appel est idempotent et sans
+           cout. On le fait donc TOUJOURS. */
+        nouerPoignee(el, c.nom, !!c.toujours);
+      });
+    }
+
+    /* Les modules d'infobulle s'enregistrent differes (`__corpusHook`) :
+       on balaie donc regulierement, sans jamais bloquer.
+
+       v105b — LE BALAYAGE NE DOIT JAMAIS RENONCER. Une premiere version
+       s'arretait au bout de 240 tours (~60 s). Or les panneaux Coran,
+       Tafsir et mini-verse ne sont PAS crees au chargement : ils naissent
+       quand l'utilisateur ouvre pour la premiere fois le corpus concerne,
+       ce qui peut arriver bien apres la minute. Mesure : `#bible-verse-tip`
+       et `#quran-verse-tip` restaient SANS poignee alors que
+       `#tafsir-verse-tip` et les quatre fiches en avaient une — un correctif
+       partiel qui ne se voit que sur les corpus ouverts tardivement.
+       On garde donc un rythme rapide au demarrage, puis on ralentit a la
+       seconde sans jamais s'arreter : couter un `getElementById` par cible
+       et par seconde est sans consequence. */
+    var essais = 0;
+    var lent = null;
+    var minuteur = setInterval(function () {
+      essais++;
+      balayer();
+      if (essais >= 40) {                  /* ~10 s : rythme rapide */
+        clearInterval(minuteur);
+        if (!lent) lent = setInterval(balayer, 1000);
+      }
+    }, 250);
+    if (document.readyState !== 'loading') balayer();
+    else document.addEventListener('DOMContentLoaded', balayer);
+
+    /* On ouvre une infobulle : on l'equipe AU MOMENT OU ELLE APPARAIT.
+       Le balayage periodique suffit en theorie, mais il peut y avoir une
+       seconde de retard — et ce retard tombe exactement au premier survol,
+       c'est-a-dire quand l'utilisateur essaie d'attraper la poignee.
+       `pointerover` est capture : on re-equipe tout ce qui existe. C'est
+       aussi ce qui repare une poignee detruite par une reecriture
+       d'`innerHTML` (voir `balayer`), sans attendre le tour suivant. */
+    document.addEventListener('pointerover', function () { balayer(); }, true);
+
+    /* Un redimensionnement peut laisser une bulle posee hors de l'ecran :
+       on la ramene. On ne touche pas a une bulle que l'utilisateur n'a pas
+       deplacee. */
+    window.addEventListener('resize', function () {
+      CIBLES.forEach(function (c) {
+        var el = document.getElementById(c.sel.slice(1));
+        if (!el || !lire(CLE_POS + c.nom)) return;
+        if (getComputedStyle(el).display === 'none') return;
+        var r = el.getBoundingClientRect();
+        poser(el, r.left, r.top);
+      });
+    });
+
+    function setActif(v) {
+      actif = !!v;
+      ecrire(CLE_ON, actif ? 'on' : 'off');
+      document.documentElement.classList.toggle('v105-off', !actif);
+      libeller();
+    }
+    function libeller() {
+      var b = document.getElementById('v105-deplacer-toggle');
+      if (b) b.textContent = '◈ DÉPLACER LES INFOBULLES : ' + (actif ? 'ON' : 'OFF');
+    }
+
+    /* ── interrupteur dans le menu « Plus » ──────────────────────────── */
+    if (!document.getElementById('v105-deplacer-off-css')) {
+      var off = document.createElement('style');
+      off.id = 'v105-deplacer-off-css';
+      off.textContent = 'html.v105-off .v105-poignee{display:none !important;}';
+      document.head.appendChild(off);
+    }
+    if (!actif) document.documentElement.classList.add('v105-off');
+
+    var triesMenu = 0;
+    var tMenu = setInterval(function () {
+      triesMenu++;
+      var m = document.getElementById('v6-more-menu');
+      if (!m) { if (triesMenu > 240) clearInterval(tMenu); return; }
+      if (document.getElementById('v105-deplacer-toggle')) { clearInterval(tMenu); return; }
+      var l = document.createElement('div');
+      l.className = 'mm-label';
+      l.textContent = 'Lecture';
+      var b = document.createElement('button');
+      b.className = 'hud-btn';
+      b.type = 'button';
+      b.id = 'v105-deplacer-toggle';
+      b.title = 'Faire glisser les infobulles de verset, de sourate et de mot';
+      b.textContent = '◈ DÉPLACER LES INFOBULLES : ' + (actif ? 'ON' : 'OFF');
+      b.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        setActif(!actif);
+      });
+      m.appendChild(l);
+      m.appendChild(b);
+      clearInterval(tMenu);
+    }, 250);
+
+    /* ── Les panneaux doivent RESPECTER une position posee a la main ────
+       v105b — `showTip()` (bible), et ses jumeaux `quran`/`tafsir`,
+       ecrivent `tip.style.left/top` a CHAQUE ouverture, sans condition.
+       Une bulle que l'utilisateur a deplacee revenait donc a sa place
+       automatique des le verset suivant : le deplacement ne tenait pas.
+       On publie ici un garde-fou que ces fonctions appellent AVANT de
+       poser leur propre position. Il ne fait rien si l'utilisateur n'a
+       jamais deplace la bulle — le placement automatique reste donc
+       exactement celui d'avant sur le chemin normal. */
+    window.__v105Ancre = function (el, nom) {
+      if (!el) return false;
+      if (nom === undefined || nom === null) {
+        var t = el.id;
+        for (var i = 0; i < CIBLES.length; i++) if (CIBLES[i].nom === t) { nom = t; break; }
+      }
+      if (!nom) return false;
+      var brut = lire(CLE_POS + nom);
+      if (!brut) return false;          /* jamais deplacee : on ne touche a rien */
+      try {
+        var p = JSON.parse(brut);
+        if (!p || typeof p.l !== 'number' || typeof p.t !== 'number') return false;
+        poser(el, p.l, p.t);
+        el.classList.add('v105-posee');
+        /* Une bulle posee reste joignable : sans cela on ne pourrait ni la
+           relire ni la reprendre la ou on l'a laissee. */
+        el.style.pointerEvents = 'auto';
+        return true;
+      } catch (e) { return false; }
+    };
+
+    /* ── API de test ─────────────────────────────────────────────────── */
+    window.__V105 = {
+      setActif: setActif, isActif: function () { return actif; },
+      cibles: CIBLES.map(function (c) { return c.sel; }),
+      balayer: balayer,
+      poser: poser, memoriser: memoriser, liberer: liberer,
+      ancre: window.__v105Ancre,
+      poignee: function (nom) {
+        var c = CIBLES.filter(function (x) { return x.nom === nom; })[0];
+        if (!c) return null;
+        var el = document.getElementById(c.sel.slice(1));
+        return el ? el.querySelector(':scope > .v105-poignee') : null;
+      },
+      lirePosition: function (nom) { return lire(CLE_POS + nom); }
+    };
+  })();
 </script>
 
 <script id="v35-reduce-fx-js">
@@ -28765,7 +29496,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
          z-index se comparent donc directement.
          max-height + overflow : sans eux, une glose longue debordait de
          l'ecran et etait coupee. On borne a 60vh et on laisse defiler. */
-      '#qw-tip{position:fixed;z-index:var(--z-mot,9500);max-width:290px;max-height:60vh;' +
+      '#qw-tip{position:fixed;z-index:var(--z-mot,9900);max-width:290px;max-height:60vh;' +
       'overflow-y:auto;overscroll-behavior:contain;background:#1b2430;color:#e8e0cc;' +
       'border:1px solid rgba(245,197,66,0.45);border-radius:8px;padding:9px 11px;font-size:12px;' +
       'line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,0.5);display:none;pointer-events:auto;}' +
@@ -29370,7 +30101,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       'border-bottom-color:#4f8ef7;color:#fff;}' +
       '.hb-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;direction:ltr;text-align:left;}' +
-      '#hb-tip{position:fixed;z-index:var(--z-mot,9500);max-width:300px;max-height:60vh;' +
+      '#hb-tip{position:fixed;z-index:var(--z-mot,9900);max-width:300px;max-height:60vh;' +
       'overflow-y:auto;overscroll-behavior:contain;background:#111a24;' +
       'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
       'padding:9px 11px;font-size:12px;line-height:1.5;' +
@@ -29645,7 +30376,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       '.gr-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;}' +
       '.gr-manque{font-size:10px;color:#c9a26d;margin:3px 0 0;}' +
-      '#gr-tip{position:fixed;z-index:var(--z-mot,9500);max-width:300px;max-height:60vh;' +
+      '#gr-tip{position:fixed;z-index:var(--z-mot,9900);max-width:300px;max-height:60vh;' +
       'overflow-y:auto;overscroll-behavior:contain;background:#111a24;' +
       'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
       'padding:9px 11px;font-size:12px;line-height:1.5;' +
@@ -29874,7 +30605,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       '.lat{cursor:help;border-bottom:1px dotted rgba(79,142,247,0.35);}' +
       '.lat:hover,.lat.lat-actif{background:rgba(79,142,247,0.25);' +
       'border-bottom-color:#4f8ef7;color:#fff;}' +
-      '#lat-tip{position:fixed;z-index:var(--z-mot,9500);max-width:320px;max-height:60vh;' +
+      '#lat-tip{position:fixed;z-index:var(--z-mot,9900);max-width:320px;max-height:60vh;' +
       'overflow-y:auto;overscroll-behavior:contain;background:#111a24;' +
       'color:#dbe8f5;border:1px solid rgba(79,142,247,0.5);border-radius:8px;' +
       'padding:9px 11px;font-size:12px;line-height:1.5;' +

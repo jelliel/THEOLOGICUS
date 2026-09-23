@@ -1,0 +1,45 @@
+'use strict';
+const http=require('http'),fs=require('fs'),path=require('path'),os=require('os');
+const {spawn}=require('child_process');const WebSocket=require('ws');
+const PORT=8903,CDP=9443;
+const CHROME='C://Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const ROOT=path.resolve('C:/Theologicus/mobile/www');
+const MIME={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json','.css':'text/css','.png':'image/png'};
+const serve=()=>new Promise(res=>{const s=http.createServer((q,rp)=>{let p=decodeURIComponent(q.url.split('?')[0]);if(p==='/')p='/index.html';const f=path.join(ROOT,p);if(!f.startsWith(ROOT)||!fs.existsSync(f)){rp.writeHead(404);rp.end('404');return;}rp.writeHead(200,{'Content-Type':MIME[path.extname(f).toLowerCase()]||'application/octet-stream'});fs.createReadStream(f).pipe(rp);});s.listen(PORT,'127.0.0.1',()=>res(s));});
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{
+const srv=await serve();const prof=fs.mkdtempSync(path.join(os.tmpdir(),'theo105c-'));
+const ch=spawn(CHROME,['--headless=new','--remote-debugging-port='+CDP,'--user-data-dir='+prof,'--no-first-run','--disable-gpu','--window-size=921,838','about:blank'],{stdio:'ignore'});
+let t=null;for(let i=0;i<60;i++){await sleep(500);try{const l=await(await fetch('http://127.0.0.1:'+CDP+'/json/list')).json();t=l.find(x=>x.type==='page');if(t&&t.webSocketDebuggerUrl)break;}catch(e){}}
+const ws=new WebSocket(t.webSocketDebuggerUrl,{perMessageDeflate:false,maxPayload:64*1024*1024});
+await new Promise(r=>ws.on('open',r));let id=0;const pend=new Map();
+ws.on('message',raw=>{const m=JSON.parse(raw.toString());if(m.id&&pend.has(m.id)){pend.get(m.id)(m);pend.delete(m.id);}});
+const send=(me,pa)=>new Promise(res=>{const i=++id;pend.set(i,res);ws.send(JSON.stringify({id:i,method:me,params:pa||{}}));});
+const ev=async e=>{const r=await send('Runtime.evaluate',{expression:e,returnByValue:true,awaitPromise:true});if(r.result&&r.result.exceptionDetails)return{__err:((r.result.exceptionDetails.exception||{}).description||'').slice(0,300)};return r.result&&r.result.result?r.result.result.value:undefined;};
+const souris=async(x,y,type,b)=>{await send('Input.dispatchMouseEvent',{type:type||'mouseMoved',x:Math.round(x),y:Math.round(y),button:(type==='mousePressed'||type==='mouseReleased')?'left':'none',buttons:b!==undefined?b:(type==='mousePressed'?1:0),clickCount:1});};
+await send('Page.enable');await send('Runtime.enable');
+await send('Emulation.setDeviceMetricsOverride',{width:921,height:838,deviceScaleFactor:1,mobile:false});
+await send('Page.navigate',{url:'http://127.0.0.1:'+PORT+'/index.html'});await sleep(9000);
+await ev(`(()=>{['auth-overlay','setup-wizard-overlay','theo-maj-bandeau'].forEach(function(k){var e=document.getElementById(k);if(e)e.remove();});if(window.__theoMaj)window.__theoMaj.verifierEtAfficher=function(){return Promise.resolve(null);};if(!document.getElementById('v105-bench-css')){var st=document.createElement('style');st.id='v105-bench-css';st.textContent='.welcome-banner,.v12-welcome{pointer-events:none !important;visibility:hidden !important;}#theo-maj-bandeau{pointer-events:none !important;visibility:hidden !important;}';document.head.appendChild(st);}return true;})()`);
+await sleep(500);
+await ev(`(async()=>{try{if(window.__loadBibleNow)window.__loadBibleNow();}catch(e){}for(var i=0;i<40;i++){if(window.__corpusReady&&window.__corpusReady.bible)break;await new Promise(r=>setTimeout(r,250));}var a=document.createElement('span');a.className='bible-ref';a.textContent='Is 66:24';a.style.cssText='position:fixed;left:20px;top:482px;z-index:50000;color:#fff;background:#333;padding:6px;font-size:16px;';document.body.appendChild(a);return true;})()`);
+await sleep(2000);
+await souris(300,700);await sleep(200);
+const bb=await ev(`(()=>{var r=document.querySelector('span.bible-ref').getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);
+await souris(bb.x,bb.y);await sleep(2500);
+const av=await ev(`(async()=>{var p=document.getElementById('bible-verse-tip');p.style.display='block';p.style.opacity='1';p.classList.remove('v105-posee');p.style.pointerEvents='';await new Promise(r=>setTimeout(r,250));window.__V105.balayer();window.__V105.poser(p,60,383);await new Promise(r=>setTimeout(r,150));var g=p.querySelector(':scope > .v105-poignee');g.style.opacity='1';var r=g.getBoundingClientRect();return{x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)};})()`);
+await ev(`(()=>{var p=document.getElementById('bible-verse-tip');p.dataset.v105Retenu='1';window.__log=[];
+ document.addEventListener('click',function(e){var t=e.target;window.__log.push('CLICK target='+(t.id||t.className||t.tagName)+' dansPanneau='+(window.__dp?window.__dp(t):'?'));},true);
+ document.addEventListener('pointerdown',function(e){window.__log.push('PDOWN '+(e.target.id||e.target.className));},true);
+ document.addEventListener('pointerup',function(e){window.__log.push('PUP '+(e.target.id||e.target.className));},true);
+ return true;})()`);
+console.log('prise =',JSON.stringify(av));
+console.log('elementFromPoint =',JSON.stringify(await ev(`(function(){var e=document.elementFromPoint(${av.x},${av.y});return e?(e.id||e.className||e.tagName):null;})()`)));
+await souris(av.x,av.y);await sleep(150);
+await souris(av.x,av.y,'mousePressed',1);await sleep(150);
+for(let i=1;i<=6;i++){await souris(av.x+20*i,av.y+15*i,'mouseMoved',1);await sleep(70);}
+await souris(av.x+120,av.y+90,'mouseReleased',0);await sleep(500);
+console.log('LOG =',JSON.stringify(await ev(`window.__log`)));
+console.log('ETAT =',JSON.stringify(await ev(`(()=>{var p=document.getElementById('bible-verse-tip');return{style:{l:p.style.left,t:p.style.top},disp:p.style.display,pe:p.style.pointerEvents,posee:p.classList.contains('v105-posee'),memo:window.__V105.lirePosition('bible-verse-tip')};})()`)));
+ws.close();ch.kill();srv.close();process.exit(0);
+})().catch(e=>{console.log('CRASH',e);process.exit(1);});
