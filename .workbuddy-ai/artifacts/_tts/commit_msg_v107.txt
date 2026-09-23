@@ -1,0 +1,43 @@
+v107 — stop reading French with the English voice
+
+The report was that French words were spoken with an English accent.
+The cause was not the voice selection: it was the language detector.
+
+detectScriptLang() bounded its English stop-word list with \b. In
+JavaScript \w is ASCII-only ([A-Za-z0-9_]), so an accented French vowel
+is NOT a word character and creates a boundary. Short English
+function words therefore matched INSIDE ordinary French words:
+
+    'tres'            -> tre[ S ]             ("s")
+    'apres', 'des'    -> apr[ S ]             ("s")
+    'poeme'           -> po[ ME ]             ("me")
+    'societe'         -> soci[ T ]e           ("t")
+    'these' (NFD)     -> [ THE ] + accent     ("the")
+
+Once a chunk was labelled 'anglais', makeUtterance() selected the
+English voice, so a French sentence was read aloud in English — exactly
+the symptom reported.
+
+Measured on the unfixed build: 21 of 104 accented French words and 16
+of 30 natural French sentences resolved to 'anglais', and 16 of those
+30 sentences received "Google US English (en-US)" instead of
+"Google francais (fr-FR)". Counter-proof: bench_v107_langue.js fails 6
+tests before this change and passes 0 after.
+
+Fix, two tiers, both required:
+  1. Unicode-aware delimiters ((?<![\p{L}\p{N}])...)(?![\p{L}\p{N}]))
+     instead of \b, so an accent can no longer fabricate a boundary;
+  2. normalise to NFC before testing, otherwise a decomposed "these"
+     keeps its combining accent and the "the" is still a word.
+
+Also added a French-marker guard ahead of the English verdict: a
+non-ambiguous French function word (le/la/les/des/que/dans/pour/ne/pas/
+est/sont/avec/par...) settles the chunk as French outright. The words
+that are English AND French (on, son, sont, mais, pas, plus, pour,
+dans, sur) are deliberately NOT used as markers — that was the trap.
+An English verdict now also needs at least two stop-words, or one
+supported by a short chunk, instead of a single match.
+
+Verified: bench_v107_langue.js 0 failures; bench_v106_tts.js 0;
+_v97/exhaustif.js (every word card beats every panel) 0;
+_v105/bench_v105.js 0. No regressions.

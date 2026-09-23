@@ -14484,13 +14484,57 @@ const SCRIPT_RANGES = [
 ];
 
 // ── Détection simple : script ou français ──
+// v107 — LE PIEGE ETAIT ICI, ET IL N ETAIT PAS OU ON LE CROYAIT.
+// La liste anglaise était bornée par \b…\b. Or \b s appuie sur \w, qui en
+// JavaScript est ASCII SEULEMENT ([A-Za-z0-9_]) : une lettre accentuée (è, é,
+// à) n est PAS un caractère de mot, elle crée donc une frontière. Résultat,
+// des mots-outils anglais très courts matchaient À L INTÉRIEUR de mots
+// français parfaitement ordinaires, et la phrase française partait en
+// 'anglais' — donc lue par la VOIX ANGLAISE :
+//
+//     'très'               -> trè[ S ]              (mot anglais "s")
+//     'après', 'dès', ...  -> aprè[ S ]             (mot anglais "s")
+//     'poème', 'problème'  -> poè[ ME ]             (mot anglais "me")
+//     'société', 'piété'   -> socié[ T ]é           (mot anglais "t")
+//     'thèse'  en NFD      -> [ THE ] + accent      (mot anglais "the")
+//
+// La correction a deux étages, et il faut les DEUX :
+//   1. des délimiteurs Unicode ((?<![\p{L}\p{N}])…(?![\p{L}\p{N}])) au lieu
+//      de \b — c est la vraie réparation, elle rend l accent inoffensif ;
+//   2. la normalisation NFC avant tout test — sinon 'thèse' reste décomposé
+//      et l accent combinant U+0300 continue de fabriquer une frontière.
+// Contre-épreuve : _tts/bench_v107_langue.js échoue 6 fois sur la version
+// d avant, passe à 0 après. Ne jamais revenir à \b ici.
 function detectScriptLang(text) {
   for (const s of SCRIPT_RANGES) {
     if (s.re.test(text)) return s.id;
   }
-  // Détection anglais : mots courants anglais
-  const englishWords = /\b(the|and|of|in|to|for|with|on|at|by|from|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|could|should|may|might|shall|can|need|dare|ought|used|this|that|these|those|I|you|he|she|it|we|they|me|him|her|us|them|my|your|his|its|our|their|mine|yours|hers|ours|theirs|what|which|who|whom|whose|where|when|why|how|all|each|every|both|few|more|most|other|some|such|no|not|only|own|same|so|than|too|very|just|because|as|until|while|of|at|by|for|with|about|against|between|through|during|before|after|above|below|to|from|up|down|in|out|on|off|over|under|again|further|then|once|here|there|when|where|why|how|all|any|both|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|s|t|can|will|just|don|should|now)\b/i;
-  if (englishWords.test(text) && text.split(/\s+/).length >= 3) {
+  if (!text) return 'francais';
+  // NFC d abord : sinon « thèse » reste « the » + accent combinant + « se »,
+  // et le « the » est bien vu comme un mot (piège mesuré, cf. plus haut).
+  const t = text.normalize('NFC');
+
+  // ── Garde-fou français AVANT toute conclusion anglaise ──
+  // Un mot-outil français non ambigu est la signature d une phrase française.
+  // « le/la/les/des/du/que/qui/dans/pour/sur/ne/pas/plus/est/sont/avec/par »
+  // n existent pas en anglais : s il y en a, c est du français, point final.
+  // (On ne teste PAS « on », « son », « sont », « mais », « pas », « plus »,
+  //  « pour », « dans », « sur » : ce sont des mots anglais AUSSI — c est
+  //  exactement le piège.)
+  const _MARQUEURS_FR = /(?<![\p{L}])(le|la|les|un|une|des|du|de|et|est|sont|que|qui|dans|pour|par|avec|ne|ce|cette|ces|son|sa|ses|au|aux|en|il|elle|ils|elles|nous|vous|mais|ou|donc|or|ni|car|si|comme|tout|tous|toute|toutes|meme|aussi|bien|peut|doit|fait|ete|avoir|etre|sur|plus|pas|sans|sous|entre|vers|chez|apres|avant|depuis|pendant|lorsque|quand|ainsi|alors|deja|encore|toujours|jamais|rien|personne|chaque|quelque|quelques|plusieurs|certain|certains)(?![\p{L}])/iu;
+  if (_MARQUEURS_FR.test(t)) return 'francais';
+
+  // ── Détection anglais : mots courants anglais ──
+  // Délimiteurs Unicode, JAMAIS \b (voir le commentaire d en-tête).
+  const englishWords = /(?<![\p{L}\p{N}])(the|and|of|in|to|for|with|on|at|by|from|is|are|was|were|be|been|being|have|has|had|do|does|did|will|would|could|should|may|might|shall|can|need|dare|ought|used|this|that|these|those|I|you|he|she|it|we|they|me|him|her|us|them|my|your|his|its|our|their|mine|yours|hers|ours|theirs|what|which|who|whom|whose|where|when|why|how|all|each|every|both|few|more|most|other|some|such|no|not|only|own|same|so|than|too|very|just|because|as|until|while|about|against|between|through|during|before|after|above|below|up|down|out|off|over|under|again|further|then|once|here|there|any|nor|don|now)(?![\p{L}\p{N}])/iu;
+  const n = (t.match(/(?<![\p{L}\p{N}])[\p{L}\p{N}]+(?![\p{L}\p{N}])/gu) || []).length;
+  // Un texte court n a pas assez de matière : on ne le déclare pas anglais.
+  if (n < 3) return 'francais';
+  // On exige une VRAIE densité d anglais : au moins deux mots-outils anglais,
+  // ou un ratio d au moins 20 % des mots. Un seul petit mot (« so », « no »,
+  // « as ») ne suffit plus à basculer une phrase française.
+  const trouves = t.match(new RegExp(englishWords.source, 'giu')) || [];
+  if (trouves.length >= 2 || (trouves.length === 1 && n <= 5 && trouves[0].length >= 3)) {
     return 'anglais';
   }
   return 'francais';

@@ -1,0 +1,15 @@
+docs — record the TTS diagnosis, distil the long-term notes
+
+Memory only; no application change.
+
+- Distil MEMORY.md (20.8 KB, truncated by the system, down to 17.6 KB): build
+  detail lives in the theologicus-apk-build skill, stacking traps in
+  theologicus-zindex-guard, incidents in the dated logs. Merge the schema
+  section into the fragile-code list, which had begun duplicating it.
+- Add the durable TTS rules: a voice must never be served for a language it
+  cannot speak, a colon inside a reference is not a sentence break, Latin is
+  read in French on purpose, and testing pipeline stages in isolation proves
+  nothing because the defect lived in the queue.
+- New skill theologicus-tts-diagnostic: the five causes by frequency, the
+  measured voice inventory, the engine comparison, and the instruction to
+  instrument the chain before reaching for a third-party engine.
