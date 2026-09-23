@@ -31,73 +31,59 @@ journaux datés `.workbuddy-ai/memory/AAAA-MM-JJ.md`, bancs
 
 ## Échelle z-index — une seule échelle, nommée
 
-Valeurs dans `:root`, **ordonnées**. Garde-fou : skill
-`theologicus-zindex-guard` (statique + navigateur).
+Valeurs dans `:root`, **ordonnées**. Détail, pièges (1 à 9) et suites de
+régression : skill **`theologicus-zindex-guard`** — le consulter, ne pas
+reconstruire de mémoire.
 
 ```
 --z-content:1  --z-sticky-sub:10  --z-subnav:99  --z-sticky:100
 --z-panel:199  --z-fab:200  --z-sidebar:999  --z-overlay:1000
 --z-modal-lg:2000  --z-modal:3000  --z-popup:5000
---z-panneau:9000   ← panneaux de verset (Bible, Coran, Tafsir, mini)
---z-carte:9800     ← carte latérale : translittération #v37-tip
---z-mot:9900       ← fiches de mot : LA PLUS HAUTE des trois
+--z-panneau:9000   <- panneaux de verset (Bible, Coran, Tafsir, mini)
+--z-carte:9800     <- carte laterale : translitteration #v37-tip
+--z-mot:9900       <- fiches de mot : LA PLUS HAUTE des trois
 --z-toast:10000
---z-bulle:100000   ← bulle d'annotation ; --z-au-dessus:100002
+--z-bulle:100000   <- bulle d'annotation ; --z-au-dessus:100002
 ```
 
-**Ordre imposé : `--z-panneau` < `--z-carte` < `--z-mot`.** L'invariant testé
-mécaniquement par `_v97/exhaustif.js` est « **toute fiche domine tout
-panneau** » (croisement des 5 panneaux × 4 fiches). Insérer un rang au mauvais
-endroit le casse : en v105, `--z-carte:9800` **au-dessus** de `--z-mot:9500`
-faisait passer les 4 fiches sous la carte. **Un fallback `var(--x,N)` faux ne se
-déclenche jamais tant que la variable existe** — le tenir à jour quand même.
+**Ordre imposé : `--z-panneau` < `--z-carte` < `--z-mot`.** L'invariant testé par
+`_v97/exhaustif.js` est « **toute fiche domine tout panneau** ». Insérer un rang
+au mauvais endroit le casse. **Un fallback `var(--x,N)` faux ne se déclenche
+jamais tant que la variable existe** — le tenir à jour quand même.
 
-- **CINQ panneaux, pas trois** : `#bible-verse-tip`, `#quran-verse-tip`,
-  `#tafsir-verse-tip` en **inline JS** (`style.cssText`) **et** `#verse-mini-tip`
-  (feuille), `#v37-tip` (feuille, `var(--z-carte,9800)`). Un grep des feuilles
-  n'en voit que deux : c'est l'erreur qui produit un correctif partiel.
-- Les quatre fiches (`#hb-tip`, `#gr-tip`, `#lat-tip`, `#qw-tip`) **et** les
-  panneaux sont enfants de premier niveau de `document.body` : leurs z-index se
-  comparent *directement*. `tip.contains(fiche)` est **toujours faux** ;
-  `dansPanneau()` doit aussi tester `n.closest('#hb-tip'|…)`.
+- **CINQ panneaux, pas trois** : les 3 verse-tip en **inline JS**
+  (`style.cssText`) + `#verse-mini-tip` et `#v37-tip` en feuille. Un grep des
+  feuilles n'en voit que deux : c'est l'erreur qui produit un correctif partiel.
+- Les 4 fiches et les panneaux sont enfants de premier niveau de `body` → leurs
+  z-index se comparent *directement*. `tip.contains(fiche)` est **toujours faux**.
 - **Un enfant DOM ne peint jamais au-dessus de son parent par z-index.**
-- **Aucun `transform`/`filter`/`opacity < 1` sur un ancêtre** : chacun crée un
-  contexte d'empilement qui annule le z-index. Le duel se conclut par
-  `elementFromPoint`, **jamais** par comparaison de nombres.
-- **À z-index égal, c'est l'ORDRE DU DOM qui tranche** (`indexOf` dans
-  `document.body.children`) : `#v37-tip` = 93, `#bible-verse-tip` = 122. Un
-  élément plus tôt perd même à rang égal.
-- **Un contenu non modal ne doit pas porter de littéral numérique** : un
-  littéral ne se compare à rien, il se fait oublier. Contrôle déterministe du
-  garde-fou.
+- **Aucun `transform`/`filter`/`opacity < 1` sur un ancêtre** (contexte
+  d'empilement). Le duel se conclut par `elementFromPoint`, jamais par des nombres.
+- **À z-index égal, l'ORDRE DU DOM tranche** (`#v37-tip` = 93,
+  `#bible-verse-tip` = 122).
+- **Un contenu non modal ne doit pas porter de littéral numérique.**
 
 ## Mot à mot dans les infobulles — le mot vit DANS le panneau
 
-**C'est la racine de cinq défauts** (v93, v96, v100, v101–v104). Survol,
-placement et fermeture en découlent tous.
+**C'est la racine de cinq défauts** (v93, v96, v100, v101–v104). Détail : skill
+`theologicus-zindex-guard`.
 
-- Ligne de mots cliquables : `.hb` (Tahoma), `.gr`, `.lat` dans `#hb-slot`
-  **à l'intérieur** de `#bible-verse-tip` ; `.qw` dans `#quran-verse-tip`.
-  `#hb-slot` n'est rempli que pour les livres 1..39 (le NT est grec).
-  Le panneau passe alors `pointer-events:auto`. **Tafsir n'a légitimement
-  aucun mot.**
-- **Ne jamais fermer un panneau sur le seul critère de `relatedTarget`.** Le
-  panneau est **au-dessus** du lien : le seul `mouseout` émis est celui DU LIEN
-  et `relatedTarget` vaut le fond de page. **Armer + annuler**, et juger sur la
-  **position réelle du pointeur** (`#v105c-pointeur` : point mis à jour en
-  capture + `elementFromPoint`, boîte gonflée de **48 px**).
+- Ligne de mots cliquables `.hb`/`.gr`/`.lat` dans `#hb-slot` **à l'intérieur**
+  de `#bible-verse-tip` ; `.qw` dans `#quran-verse-tip`. `#hb-slot` n'est rempli
+  que pour les livres 1..39 (le NT est grec). Le panneau passe alors
+  `pointer-events:auto`. **Tafsir n'a légitimement aucun mot.**
+- **Ne jamais fermer un panneau sur le seul `relatedTarget`** : le panneau est
+  **au-dessus** du lien, donc le seul `mouseout` est celui DU LIEN et
+  `relatedTarget` vaut le fond de page. **Armer + annuler**, et juger sur la
+  **position réelle du pointeur**.
 - **Un placement qui ne connaît que sa cible est aveugle** : il doit connaître
-  les **obstacles** (les cinq panneaux). Quatre candidats HORS panneau essayés
-  d'abord, retenus seulement s'ils tiennent à l'écran **sans bornage** ;
-  plafonner les **deux** dimensions (la largeur aussi), bandes **de la plus
-  grande à la plus petite**, plancher **150×120 px**, **restauration** si une
-  bande ne convient pas.
+  les **obstacles**. Quatre candidats HORS panneau d'abord, plafonner les
+  **deux** dimensions, plancher **150×120 px**, **restauration** si une bande
+  ne convient pas.
 - **Un garde-fou conditionné à une détection parfaite s'efface sur les cas
-  limites** (v104 : le repli ne se déclenchait que si un mot était *strictement
-  contenu* dans un panneau) — **le fallback doit avoir son propre critère.**
+  limites** — **le fallback doit avoir son propre critère.**
 - `window.__placerFiche(fiche, mot)` : **réutiliser, jamais replacer à la main.**
-- Tester un mot de **1 px** : un mot large ne teste rien (`ECART` 6 px annule le
-  recouvrement).
+- Tester un mot de **1 px** : un mot large ne teste rien.
 
 ## v105 — infobulles déplaçables (`#v105-cartes-deplacables`)
 
@@ -128,28 +114,37 @@ Cinq règles durables :
 Détail des pièges mesurés : journal `2026-09-23.md` et skill
 `theologicus-zindex-guard`.
 
-## Schémas parchemin, rail latéral, annotations
+## TTS — la voix ne doit jamais venir d'une autre langue (v106)
 
-- **DEUX feuilles de schéma** : le `<style>` principal (~l. 1482) **et** une
-  copie dans `exportCss()` (~l. 15545). Toute retouche **doit** être faite des
-  deux côtés, sinon l'export reste cassé.
-- `.schema-kids` n'avait pas `flex-wrap` (contrairement à `.schema-row`) : les
-  libellés se **comprimaient** et `overflow-wrap:anywhere` hérité les tranchait
-  en deux (v103, 3 → 0). Correctif : `flex-wrap`+`row-gap` sur `.schema-kids`,
-  `flex-shrink:0` sur les groupes, `overflow-wrap:normal` sur `.schema-box`.
-- **Une accolade fermante en trop dans un `<style>` fait que le parseur
-  ABANDONNE tout ce qui suit** — `@media (min-width:901px)` (seul porteur du
-  repli du rail) n'était jamais enregistré, et le burger semblait mort sur
-  Windows (v103). Diagnostic décisif : la règle est dans `textContent` mais
-  **pas** dans `document.styleSheets` → feuille tronquée. Contrôle : compter les
-  accolades **hors commentaires** (`re.sub(r'/\*.*?\*/','',s,flags=re.S)`).
-- Seuil désaccordé, laissé tel quel : le CSS replie dès **901 px**, le JS
-  n'ouvre au démarrage qu'à partir de **1024 px** — entre les deux le rail
-  démarre replié. Bénin.
-- **Annotations** : `range` sur une frontière de nœud texte insère un
-  `<span data-hl-id>` **vide** avant le vrai span (v95) → sauter toute tranche
-  vide, et vérifier qu'un span **non vide** existe avant d'annoncer « cliquez le
-  passage surligné » (un toast ne doit jamais mentir).
+Chaine : `cleanMd` → `prosodyPreprocess` → `splitByLanguage` →
+`splitMixedSegments` → `chunkText(180)` → `makeUtterance` → file
+`speakNextSegment` (avance sur `onend`). Mode `readLangMode` (`'fr'` par
+defaut = français forcé, sauf écritures non-latines).
+
+- **`getVoiceForLang(lang)` doit rendre `null`, jamais la voix française,
+  quand `lang` n'est pas le français.** Il tombait dans les paliers fr-FR
+  quand aucune voix n'existait (`hebreu`, `grec`) : `makeUtterance` testant
+  `if (v)`, **le repli phonétique `transliterateForSpeech()` n'était jamais
+  atteint** et tout `_HE_PHON`/`_HE_VOWEL`/`_EL_PHON` était du code mort.
+  Garde `if (prefix !== 'fr') return null;` + second verrou
+  `!_langMatches(v, prefix)` dans `makeUtterance`. Résultat : `יְהוֹשֻׁעַ` →
+  « yehochoua », `λόγος` → « logos ».
+- **Le deux-points d'une référence n'est pas une fin de phrase.**
+  `Exode 24:12` était scindé en `"Exode 24:"` + `"12"` → deux respirations au
+  milieu de la référence. Protéger `(\d)\s*:\s*(\d)` par un marqueur avant le
+  split, le restaurer après. Un `:` ailleurs sépare toujours.
+- **Latin : pas dans `SCRIPT_RANGES`, donc lu en français. C'est voulu** (même
+  alphabet, convention légitime). **Aucun TTS ne couvre le latin** — ni
+  ElevenLabs ni Supertonic. Question close, ne pas rouvrir.
+- Aucune voix hébreu/grec/latin sur la machine ; `ar-SA` (Microsoft Naayf) est
+  la seule voix non-latine utile. `_langMatches` gère l'alias `iw` de Windows.
+- **Tester les étages un par un ne prouve rien** : `normalizeArabicSpeech`,
+  `chunkText`, `makeUtterance` étaient tous corrects isolément ; c'est la
+  **file réelle** qui révélait le défaut. Instrumenter `speechSynthesis.speak`
+  (sonde `_tts/sonde_speak.js`) pour voir ce qui part vraiment au moteur.
+- En headless, les utterances échouent en `not-allowed` (pas de périphérique
+  audio) : **c'est normal et ça n'invalide pas la sonde** — le journal
+  `SPEAK`/`ONERROR` reste probant.
 
 ## Build / signature — CLÉ CRITIQUE
 
@@ -226,6 +221,9 @@ lui-même ». Ci-dessous seulement ce qui se réapprend mal :
   brut quand l'app borne à l'écran** : le bornage est un service.
 - **Un banc trop confortable ne prouve rien** (v102 : vert à 984 px, cassé sous
   300 px). Un banc qui n'ouvre aucun panneau mesure le vide.
+- **Tester les étages en isolement ne prouve rien** : v106, chaque étage du TTS
+  était correct un par un, et le défaut vivait dans la file. Instrumenter le
+  point d'entrée réel (`speechSynthesis.speak`) plutôt que la fonction interne.
 - **Un `sleep` ne remplace pas une condition** : sinon tout `z-index` calculé
   vaut `auto` et les mots ne sont pas chargés.
 - **Un backtick dans un commentaire à l'intérieur d'un gabarit JS casse le
@@ -236,31 +234,48 @@ lui-même ». Ci-dessous seulement ce qui se réapprend mal :
 
 ## Fragilités du code
 
+Toutes vérifiées sur pièce — ne pas les redécouvrir.
+
 - Bloc « SECURITY PROTECTION » (v66) : l'IIFE englobe
   `init(Bible|Quran|Tafsir)VerseTooltip`. Recompter les accolades avant retouche.
-- `find('=')` sur une tranche JS : le premier `=` est celui de
-  `(window.__x=window.__x||{})[N]=`. Ancrer sur `find(']=')` puis `+2`.
+- **Une accolade fermante en trop dans un `<style>` fait ABANDONNER au parseur
+  tout ce qui suit** : la règle est dans `textContent` mais absente de
+  `document.styleSheets` → feuille tronquée. Compter les accolades **hors
+  commentaires** (`re.sub(r'/\*.*?\*/','',s,flags=re.S)`).
+- **DEUX feuilles de schéma** : le `<style>` principal **et** une copie dans
+  `exportCss()`. Toute retouche doit être faite des deux côtés.
 - **Lettres hébraïques précomposées** (U+FB1D–FB4F) : un filtre `0x05D0–0x05EA`
   les supprime silencieusement. Normaliser en NFD avant filtrage.
-- `_m/` → racine = trois `dirname`. Regex : ne pas doubler les backslashes dans
-  un littéral `/…/`.
-- Mesure nulle ≠ « ça tient » : une puce rendue avant stabilisation mesure 0.
-- `extractSuggestionsHtml()` (v81) capturait tout le reste d'un message.
-- Références FR : « Gn 5,1 » (virgule) autant que « Gn 5:1 ».
-- Ne pas dépendre d'une portée locale pour fermer un panneau :
-  `closeArchivesPanel()` (const locale) → `ReferenceError` avalé par `catch(e){}`.
+- Détection de rôle par `nodeType === 3` : `box.textContent` colle « Abraham »
+  + « patriarche ». Descendre dans les nœuds texte individuels.
+- Texte arabe : les signes d'annotation ne sont **PAS** des mots
+  (U+06D6–U+06ED) — les filtrer avant de découper.
+- `range` sur une frontière de nœud texte insère un `<span data-hl-id>` **vide**
+  (v95) → sauter toute tranche vide, et ne pas annoncer « cliquez le passage
+  surligné » avant qu'un span **non vide** existe (un toast ne doit jamais mentir).
 - `sanitizeSchemaHtml()` et ALLOW : `TBODY`, `THEAD`, `A`, `SUP`, `SUB` refusés
   → un `<table>` perdait TOUTES ses lignes.
 - `colorizeSchemaRefs()` filtrait sur `indexOf(':')` : un schéma en virgule
   française sortait immédiatement. Filtrer sur `indexOf('<')`.
+- Ne pas dépendre d'une portée locale pour fermer un panneau :
+  `closeArchivesPanel()` (const locale) → `ReferenceError` avalé par `catch(e){}`.
 - `<br/>` du modèle visible : stocker en `@@BR@@` après normalisation CRLF.
-- Détection de rôle par `nodeType === 3` : `box.textContent` colle « Abraham »
-  + « patriarche ». Descendre dans les nœuds texte individuels.
-- Texte arabe : les signes d'annotation ne sont **PAS** des mots
-  (U+06D6–U+06ED). Les filtrer avant de découper.
+- `find('=')` sur une tranche JS : le premier `=` est celui de
+  `(window.__x=window.__x||{})[N]=`. Ancrer sur `find(']=')` puis `+2`.
 - Un nœud texte n'a pas `.closest()` : `node.parentNode.closest()`.
 - `m.ts === s.msgTs` : un id DOM donne la **CHAÎNE**, `m.ts` est un NOMBRE.
+- Références FR : « Gn 5,1 » (virgule) autant que « Gn 5:1 ».
+- Mesure nulle ≠ « ça tient » : une puce rendue avant stabilisation mesure 0.
+- `extractSuggestionsHtml()` (v81) capturait tout le reste d'un message.
+- `_m/` → racine = trois `dirname`. Regex : ne pas doubler les backslashes
+  dans un littéral `/…/`.
 - `AndroidManifest.xml` n'a pas `android:largeHeap`.
+- `.schema-kids` n'avait pas `flex-wrap` (contrairement à `.schema-row`) : les
+  libellés se comprimaient et `overflow-wrap:anywhere` hérité les tranchait en
+  deux (v103). `flex-shrink:0` sur les groupes, `overflow-wrap:normal` sur
+  `.schema-box`.
+- Seuil désaccordé laissé tel quel : le CSS replie dès **901 px**, le JS
+  n'ouvre au démarrage qu'à partir de **1024 px**. Bénin.
 
 ## Décisions produit arrêtées
 
