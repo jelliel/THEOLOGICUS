@@ -6,43 +6,32 @@ journaux datés `.workbuddy-ai/memory/AAAA-MM-JJ.md`, bancs
 
 ## Application
 
-- Monolithe `THEOLOGICUS.html` (~1,35 Mo) + tranches JS à la volée : `bible/`
-  (66 + `versification.js`), `quran/` (114), `tafsir/` (114), `libs/`,
-  `summa/` (611 q., 17 Mo, EN), `summafr/` (613 q., 20,2 Mo, Drioux,
-  id `1001` = Ia q.1), `fathers/` (118, 36 Mo), `reformed/` (91, 27,8 Mo),
-  `orthodox/` (43), `islamic/` (93), `denzinger/` (128), `quranwbw/`,
-  `quranroots/`, `biblehb/` (39 + `strongs.js`), `biblegr/` (27 + `strongs.js`),
-  `latin/` (`mots.js`). **16 corpus au total.**
-- Loaders : `__ensureBibleBook` / `__ensureQuranSurah` / `__ensureTafsirSurah` /
-  `__ensureSummaQuestion` / `__ensureSummaFrQuestion` / `__ensureBibleHb` /
-  `__ensureStrongsHb` / `__ensureBibleGr` / `__ensureStrongsGr` /
-  `__ensureLatin` / `theoCorpusWork`. Somme en FR par défaut, repli EN.
-  `summafr/` n'est PAS dans `THEO_CORPORA` : modal et résolveur propres.
-- **`THEO_CORPORA` pilote tout** : `{dir, pfx, idx, wrk, nms, label, tab, root,
-  web}`. Une entrée suffit (onglets, `theoParseRef`, modal, `parseLibraryRef`).
-  Résolution : **fathers → reformed → orthodox → islamic → denzinger**.
-  Un titre dans deux corpus renvoie le premier : précédence, pas un bug.
-- **Vider le dossier de sortie avant chaque génération**, sinon des fichiers
-  d'une génération précédente partent avec du contenu **faux**.
-- **Les `.js` de `assets/` sont déflatés à 0,19 dans l'APK** (51,86 → 9,74 Mo).
-  Ne jamais tailler un corpus sans l'avoir mesuré.
-- Licences : WLC (hb), MorphGNT/SBLGNT (gr — `biblegr/` **CC BY-SA 3.0**),
-  Whitaker's Words (latin, MIT, `Parser(frequency='X')` — le défaut `'C'`
-  supprime « suus », « sacramentum », « omnino »), Strong's Open Scriptures
-  **GPL 3.0**, OSHB **CC BY 4.0**, Quranic Arabic Corpus **GPL sans
-  modification**, Denzinger 1911 (domaine public).
-- Génération : `tools/build_*.py` + `versification.js`. Caches HTTP
-  `tools/.<nom>_cache/` gitignored → relance hors réseau.
+- Monolithe `THEOLOGICUS.html` (~1,35 Mo, **LF** — Edit fonctionne directement,
+  jamais CRLF : `s.count('\r\n') == 0`) + tranches JS à la volée : 16 corpus
+  (`bible/`, `quran/`, `tafsir/`, `libs/`, `summa/` EN 611 q., `summafr/` Drioux
+  613 q. id `1001` = Ia q.1, `fathers/` 118, `reformed/` 91, `orthodox/` 43,
+  `islamic/` 93, `denzinger/` 128, `quranwbw/`, `quranroots/`, `biblehb/` 39 +
+  `strongs.js`, `biblegr/` 27 + `strongs.js`, `latin/` `mots.js`).
+  Loaders `__ensure{Bible,Quran,Tafsir,Summa,SummaFr,BibleHb,StrongsHb,
+  BibleGr,StrongsGr,Latin}`. `summafr/` n'est PAS dans `THEO_CORPORA`.
+- **`THEO_CORPORA` pilote tout** : `{dir,pfx,idx,wrk,nms,label,tab,root,web}`.
+  Précédence des corpus chrétiens : **fathers → reformed → orthodox → islamic →
+  denzinger**. Un titre dans deux corpus renvoie le premier.
+- `.js` d'`assets/` déflatés à 0,19 dans l'APK (51,86 → 9,74 Mo) : mesurer
+  avant de tailler. Caches HTTP `tools/.<nom>_cache/` gitignored.
 - Capacitor 8, `com.theologicus.app`, webDir `mobile/www`, minSdk 24 →
-  targetSdk 36, AGP 8.13.0, Gradle 8.14.3. Clés API jamais embarquées
-  (`localStorage['__serverKeys']`, shim v34).
-- v2.0 : références bibliques résolues **en local** au tap. Tables
-  `bible/versification.js` + `quran/versification.js` **générées** — régénérer
-  après tout changement du corpus.
+  targetSdk 36, AGP 8.13.0, Gradle 8.14.3. Clés API en `localStorage['__serverKeys']`
+  (shim v34), **jamais embarquées**.
+- Licences : WLC (hb), MorphGNT/SBLGNT (`biblegr/` **CC BY-SA 3.0**),
+  Whitaker's Words (latin MIT, **`Parser(frequency='X')` — le défaut `'C'`
+  supprime « suus », « sacramentum », « omnino »**), Strong's OS **GPL 3.0**,
+  OSHB **CC BY 4.0**, Quranic Arabic Corpus **GPL sans modification**,
+  Denzinger 1911 (domaine public).
 
 ## Échelle z-index — une seule échelle, nommée
 
-Valeurs dans `:root`, **ordonnées**. Garde-fou : skill `theologicus-zindex-guard`.
+Valeurs dans `:root`, **ordonnées**. Garde-fou : skill
+`theologicus-zindex-guard`.
 
 ```
 --z-content:1  --z-sticky-sub:10  --z-subnav:99  --z-sticky:100
@@ -51,377 +40,318 @@ Valeurs dans `:root`, **ordonnées**. Garde-fou : skill `theologicus-zindex-guar
 --z-panneau:9000   ← panneaux de verset (Bible, Coran, Tafsir, mini, v37)
 --z-mot:9500       ← fiches de mot : au-dessus du contenu expliqué
 --z-toast:10000
---z-bulle:100000   ← bulle d'annotation ; --z-au-dessus:100002 (bannières)
+--z-bulle:100000   ← bulle d'annotation ; --z-au-dessus:100002
 ```
 
-- **CINQ panneaux de verset, pas trois** : `#bible-verse-tip`, `#quran-verse-tip`,
-  `#tafsir-verse-tip` (z-index **inline via JS**) **et** `#verse-mini-tip`,
-  `#v37-tip` (déclarés dans une **feuille de style**). **Un grep des feuilles
-  n'en voit que deux : c'est l'erreur qui produit un correctif partiel.**
-- **Les quatre fiches** (`#hb-tip`, `#gr-tip`, `#lat-tip`, `#qw-tip`) et les
+- **CINQ panneaux, pas trois** : `#bible-verse-tip`, `#quran-verse-tip`,
+  `#tafsir-verse-tip` en **inline JS** (`style.cssText`) **et** `#verse-mini-tip`,
+  `#v37-tip` en **feuille de style**. Un grep des feuilles n'en voit que deux :
+  c'est l'erreur qui produit un correctif partiel.
+- Les quatre fiches (`#hb-tip`, `#gr-tip`, `#lat-tip`, `#qw-tip`) **et** les
   panneaux sont enfants de premier niveau de `document.body` : leurs z-index se
-  comparent *directement* — c'est ce qui autorise `--z-mot > --z-panneau`.
+  comparent *directement*. `tip.contains(fiche)` est **toujours faux** ;
+  `dansPanneau()` doit aussi tester `n.closest('#hb-tip'|…)`.
 - **Un enfant DOM ne peint jamais au-dessus de son parent par z-index.**
 - **Aucun `transform`/`filter`/`opacity < 1` sur un ancêtre** : chacun crée un
-  contexte d'empilement qui annule le z-index. D'où un duel conclu par
-  `elementFromPoint`, jamais par comparaison de nombres.
-- **Un contenu non modal ne doit pas porter de littéral numérique** : un littéral
-  ne se compare à rien, il se fait oublier. Contrôle déterministe du garde-fou.
+  contexte d'empilement qui annule le z-index. Le duel se conclut par
+  `elementFromPoint`, **jamais** par comparaison de nombres.
+- **Un contenu non modal ne doit pas porter de littéral numérique** : un
+  littéral ne se compare à rien, il se fait oublier. Contrôle déterministe du
+  garde-fou.
 
 ## Mot à mot dans les infobulles — le mot vit DANS le panneau
 
-**C'est la racine de cinq défauts.** Le survol, le placement et la fermeture en
-découlent tous.
+**C'est la racine de cinq défauts.** Survol, placement, fermeture en découlent.
 
-- Ligne de mots cliquables sous le verset : `.hb` (hébreu, Tahoma), `.gr`,
-  `.lat` dans `#hb-slot` **à l'intérieur** de `#bible-verse-tip` ; `.qw` (arabe)
-  dans `#quran-verse-tip`. Le panneau passe alors en `pointer-events:auto`.
-  **Tafsir n'a légitimement aucun mot** — ne pas le compter comme un défaut.
-- **v93/v96 — tester `relatedTarget`, pas la classe du `target`.** Le mot n'a ni
-  la classe du lien ni celle d'un `span.bible-ref`.
-- **v100 — `relatedTarget` NE SUFFIT PAS.** Mesuré : en descendant du lien vers
-  la ligne de mots, **UN SEUL `mouseout`**, `relatedTarget` = le fond de page. Le
-  panneau est posé **au-dessus** du lien : rejoindre un mot oblige à sortir par
-  un bord où le panneau n'est pas encore. **Juger sur `relatedTarget`, c'est
-  juger un chemin que le curseur n'a pas fini de parcourir.** Correctif :
-  **armer** la fermeture au `mouseout` (160 ms), l'**annuler** sur tout
-  `mouseover` visant le panneau, un mot ou une fiche. Bible / Coran / Tafsir.
-- **v101 — LE PLACEMENT NE REGARDAIT QUE LE MOT.** Les panneaux deviennent des
-  **obstacles explicites** (score séparé mot/panneau, le mot prime) ; **quatre
-  candidats HORS panneau** (`hors-droite|gauche|haut|bas`) essayés d'abord,
-  retenus seulement s'ils tiennent à l'écran **sans bornage**.
-- **v102 — LE REPLI NE PLAFONNAIT QUE LA HAUTEUR, DONC IL MANQUAIT LA FENÊTRE
-  ÉTROITE.** Les fiches sont en **`max-width:300px`** : leur largeur est un
-  plafond. Bandes libres mesurées autour du panneau : 784×705 → 378 px (le repli
-  marchait), **584×605 → 178 px**, **500×665 → 94 px** — plus étroites que la
-  fiche. Le repli posait 300 px dans 94 px, le test `touche > 0` rejetait tous
-  les candidats extérieurs, retour aux candidats **internes** : 52 % et 45 % du
-  panneau cachés. **La v101 n'avait été validée que là où la bande faisait
-  ≥ 280 px.** Correctif : plafonner **les DEUX dimensions**, contraintes
-  seulement par ce que la bande limite (verticale → hauteur, horizontale →
-  largeur), bandes parcourues **de la plus grande à la plus petite**, plancher
-  **150×120 px**, et **restauration** si une bande ne convient pas. Résultat sur
-  la copie **installée** : `hors-droite` à 984/784/**584** (fiche **200**×363),
-  `hors-bas` à 500/420 (300×**146**) — **0 % du panneau caché aux cinq
-  tailles**. **Leçon : un banc qui ne descend pas assez bas ne prouve rien sur
-  une fenêtre étroite.**
-- `dansPanneau(n)` teste `tip.contains(n)` **et** `n.closest('#hb-tip'|…)` : les
-  fiches sont enfants de `BODY`, donc `tip.contains(f)` est **toujours faux**.
-  Durcissement, pas correction d'un bug actif — ne pas le présenter autrement.
-- Le `click` de v89 fait `stopPropagation()` en capture : protège les mots hb/gr.
-- **v96 — `tailleFiche()` lisait `offsetHeight`, or une fiche `max-height` est
-  peinte plus courte** : fiche posée sur son propre mot pendant que `data-pos`
-  disait « dessus ». Repli : `hauteurPeinte()` lit la chaîne de `max-height`.
-- `window.__placerFiche(fiche, mot)` : **réutiliser ce helper, jamais replacer à
-  la main.**
-- **Un balayage avec un mot large ne teste rien** (`dessous` gagne toujours,
-  l'`ECART` de 6 px annule le recouvrement) : faux mot de **1 px**.
-- **Une erreur de syntaxe dans un `<script>` tue TOUT le bloc en silence.** Vécu
-  v101 : un `/* … */` inline dans mon propre commentaire fermait celui-ci
-  prématurément → `__placerFiche` jamais publié → toutes les fiches à
-  `left:0; top:0`. `check_syntax.js` ne l'a pas vu : **extraire et tester le bloc
-  isolément** (`awk` entre balises, `node --check`) avant de conclure.
+- Ligne de mots cliquables : `.hb` (Tahoma), `.gr`, `.lat` dans `#hb-slot`
+  **à l'intérieur** de `#bible-verse-tip` ; `.qw` dans `#quran-verse-tip`.
+  `#hb-slot` n'est rempli que pour les livres 1..39 (le NT est grec).
+  Le panneau passe alors `pointer-events:auto`. **Tafsir n'a légitimement
+  aucun mot.**
+- **v93/v96 — tester `relatedTarget`, pas la classe du `target`.** Le mot n'a
+  ni la classe du lien ni celle d'un `span.bible-ref`.
+- **v100 — `relatedTarget` NE SUFFIT PAS.** Mesuré : un seul `mouseout` en
+  descendant du lien vers le panneau (le panneau est **au-dessus** du lien),
+  `relatedTarget` = fond de page. Correctif : **armer** la fermeture (160 ms)
+  au `mouseout`, l'**annuler** sur tout `mouseover` panneau/mot/fiche.
+- **v101 — LE PLACEMENT NE REGARDAIT QUE LE MOT.** Panneaux = obstacles
+  explicites, score séparé mot/panneau, mot prime ; **quatre candidats HORS
+  panneau** essayés d'abord, retenus seulement s'ils tiennent à l'écran **sans
+  bornage**.
+- **v102 — LE REPLI NE PLAFONNAIT QUE LA HAUTEUR.** Fiches `max-width:300px` :
+  la largeur est aussi un plafond. Bandes 784×705 → 378 px, 584×605 → 178,
+  500×665 → **94** — plus étroites que la fiche → candidats extérieurs rejetés,
+  retour aux internes : 52 % et 45 % du panneau cachés. **Le banc validé à
+  ≥ 280 px ne prouve rien sur une fenêtre plus étroite.** Correctif : plafonner
+  les **deux** dimensions, contraintes seulement par ce que la bande limite,
+  bandes **de la plus grande à la plus petite**, plancher **150×120 px**,
+  **restauration** si une bande ne convient pas.
+- **v104 — LE REPLI ETAIT CONDITIONNE A `hote`.** Le repli v101/v102 (plafonner
+  la fiche pour la sortir du panneau) ne se declenchait que si un mot etait
+  *strictement contenu* dans un panneau. Un mot au ras du bord (padding,
+  debordement de ligne) rend `hote === null` : la reduction etait **sautee** et
+  la fiche restait **DESSUS** le panneau. Ce n'etait **pas** un defaut
+  d'empilement (9500 > 9000, `elementFromPoint` donnait bien la fiche).
+  Correctif : declencher des `candidate.surPanneau`, et prendre comme reference
+  `hote` **ou** le premier panneau que la fiche recouvre (`aireRecouvrement > 0`).
+  **Regle : un garde-fou conditionne a une detection parfaite est un garde-fou
+  qui s'efface sur les cas limites — le fallback doit avoir son propre critere.**
+- **v96 — `tailleFiche()` lisait `offsetHeight`** ; une fiche `max-height` est
+  peinte plus courte. Repli : `hauteurPeinte()` lit la chaîne `max-height`.
+- `window.__placerFiche(fiche, mot)` : **réutiliser, jamais replacer à la main.**
+- Un balayage avec un mot large ne teste rien (`dessous` gagne, `ECART` 6 px
+  annule le recouvrement) : faux mot de **1 px**.
+- **Une erreur de syntaxe dans un `<script>` tue TOUT le bloc en silence.**
+  Vécu v101 : un `/* … */` inline fermait le commentaire → `__placerFiche`
+  jamais publié → fiches à `left:0; top:0`. `check_syntax.js` ne l'a pas vu :
+  **extraire et tester le bloc isolément** (`awk` entre balises, `node --check`)
+  avant de conclure.
 
 ## Schémas parchemin (```schema)
 
-- **v103 — LES LIBELLES ETAIENT TRANCHES EN DEUX** (« Muham / mad »).
-  `.schema-row` possède `flex-wrap:wrap`, mais **`.schema-tree .schema-kids`
-  NON**. Sans repli, une ligne d'enfants trop large ne se replie pas : elle se
-  **comprime** (`flex-shrink` vaut 1 par défaut). La boîte descend sous la
-  largeur de son mot le plus long, et **`overflow-wrap:anywhere` — hérité de
-  `.message-content`** (qui le pose pour contenir les URL géantes) — tranche le
-  mot sans trait d'union. Mesuré, arbre en colonne de 380 px : « Musaylima »
-  97 px nécessaires / 90 px obtenus, « Al-Mukhtar » 101/90, « (Guerrier) »
-  92/90. Correctif : `flex-wrap` sur `.schema-kids`, `flex-shrink:0` sur ses
-  groupes, `overflow-wrap/word-break: normal` sur `.schema-box`. **3 → 0.**
-- **Il existe DEUX feuilles de schéma** : la `<style>` principale (l. ~1482) et
-  une **copie dans `exportCss()`** (l. ~15545) pour l'export HTML autonome.
-  Toute retouche doit être faite **des deux côtés**, sinon l'export reste cassé.
-- **Trois hypothèses ont été réfutées par la mesure avant de trouver la cause**
-  (foreignObject de l'export, `flex-shrink` seul, `overflow-wrap` hérité seul).
-  Les deux premiers bancs ne reproduisaient pas parce qu'ils **donnaient trop
-  de place à la ligne**. Même piège que v102 : *un banc trop confortable ne
-  prouve rien.*
+- **v103 — LES LIBELLES ETAIENT TRANCHES EN DEUX.** `.schema-row` a
+  `flex-wrap:wrap` mais **`.schema-tree .schema-kids` NON**. Sans repli, les
+  enfants se **compriment** (`flex-shrink:1`) sous la largeur du mot le plus
+  long, et **`overflow-wrap:anywhere` hérité** de `.message-content` tranche
+  sans trait d'union. Mesuré en 380 px : Musaylima 97→90, Al-Mukhtar 101→90,
+  (Guerrier) 92→90. Correctif : `flex-wrap`+`row-gap` sur `.schema-kids`,
+  `flex-shrink:0` sur les groupes, `overflow-wrap/word-break:normal` sur
+  `.schema-box`. **3 → 0 coupé.**
+- **Il existe DEUX feuilles de schéma** : `<style>` principale (~l. 1482) **et**
+  une copie dans `exportCss()` (~l. 15545). Toute retouche **DOIT** être faite
+  des deux côtés, sinon l'export reste cassé.
 
 ## Rail latéral / burger (trois traits en haut à gauche)
 
 - **v103 — LE BURGER NE FAISAIT RIEN SUR WINDOWS.** Une **accolade fermante en
-  trop** dans `<style id="v6-ui-css">` fermait `@media screen and
-  (max-width:640px)` avant l'heure et laissait une accolade orpheline →
-  **erreur de syntaxe CSS**. Le parseur **abandonne tout ce qui suit** : le
-  `@media (min-width:901px)` — seul porteur du repli (`margin-left:-268px`) —
-  n'était **jamais enregistré**. Le burger basculait bien `sidebar-open`, rien
-  n'écoutait. Sous 1024 px ça marchait parce qu'**une autre feuille** s'en
-  charge. Correctif : remettre `#v6-more-menu` **dans** son `@media`.
-- **Diagnostic décisif : `textContent` contient la règle mais
-  `document.styleSheets` ne la contient pas** → la feuille est tronquée par une
-  erreur de syntaxe. Contrôle mécanique : compter les accolades **hors
-  commentaires** (`re.sub(r'/\*.*?\*/','',s,flags=re.S)`) sur le bloc `<style>`.
-- **Seuil désaccordé, laissé tel quel** : le CSS replie dès **901 px**, le JS
-  n'ouvre au démarrage qu'à partir de **1024 px**. Entre les deux le rail
-  démarre replié. Bénin, mais ne pas s'en étonner.
+  trop** dans `<style id="v6-ui-css">` fermait `@media (max-width:640px)`
+  avant l'heure → **erreur de syntaxe CSS** → le parseur **abandonne tout ce
+  qui suit** : `@media (min-width:901px)` (seul porteur du repli
+  `margin-left:-268px`) n'était **jamais enregistré**. Le burger basculait
+  bien `sidebar-open`, rien n'écoutait. Correctif : remettre `#v6-more-menu`
+  **dans** son `@media`.
+- Diagnostic décisif : `textContent` contient la règle mais
+  `document.styleSheets` ne la contient pas → feuille tronquée. Contrôle
+  mécanique : compter les accolades **hors commentaires**
+  (`re.sub(r'/\*.*?\*/','',s,flags=re.S)`).
+- Seuil désaccordé, laissé tel quel : CSS replie dès **901 px**, JS n'ouvre
+  au démarrage qu'à partir de **1024 px** → entre les deux le rail démarre
+  replié. Bénin.
 
 ## Annotations et commentaires (Add to chat)
 
-- **v95 — un span VIDE de 3 px tuait le clic.** Une plage commençant ou finissant
-  pile sur la frontière d'un nœud texte (`startOffset === longueur du nœud`) fait
-  insérer un `<span data-hl-id=X></span>` vide **avant** le vrai span, même id.
-  `querySelector('[data-hl-id]')` rend le vide, donc le clic. Corrigé : sauter
-  toute tranche vide, un span vide ne compte plus comme « déjà posé », et la
-  branche multi-nœuds ne renvoie plus `true` inconditionnellement.
-- **Symptôme asymétrique** : une phrase produit plusieurs spans larges, le vide
-  se noie ; un mot n'a qu'un vrai span, le vide est collé à côté. Ne pas conclure
-  « le mot marche, la phrase non » : le défaut touche les deux.
-- **Un toast ne doit jamais mentir** : vérifier qu'un span non vide existe avant
-  d'annoncer « cliquez le passage surligné ».
-- Le module **v86** (`window._atcSel`) cohabite avec `#chat-container` ; ce n'est
-  **pas** la cause du v95 (causalité testée) — ne pas repartir sur cette piste.
-
-## Bancs de test headless (CDP) — pièges vérifiés
-
-- **Contre-épreuve obligatoire** : lancer le MÊME banc sur la baseline
-  (`git show HEAD:THEOLOGICUS.html` + tranches dans `_v96/avant/`) et sur la
-  cible. Un banc vert des deux côtés ne prouve **rien** ; le delta est la preuve.
-  `THEO_WWW` choisit la racine, corpus copiés à côté.
-- **Vérifier d'abord que le banc CHARGE la page.** `_v94/verif.js`,
-  `_v96/verif.js`, `_v95/verif_fix.js` servent `/index.html` ; une racine qui
-  ne porte que `THEOLOGICUS.html` rend un **404 de 3 octets**, tous les
-  `z-index` à `auto` et `__placerFiche` à `undefined` — **cela ressemble
-  exactement à une régression totale**.
-  **Correction le 2026-09-22 : `THEO_INDEX=/THEOLOGICUS.html` NE règle PAS
-  `_v94`** quand `THEO_WWW` vaut `mobile/www` (qui n'a que `index.html`) : cela
-  produit un 404 et des échecs 6-8 alors que le code est sain. La bonne
-  méthode est **l'inverse** de ce qui était noté : **synchroniser
-  `mobile/www/index.html` avec `THEOLOGICUS.html` (`cp`, puis `cmp`) et lancer
-  SANS `THEO_INDEX`** — `/index.html` est alors servi. Contrôle : le banc doit
-  afficher `auCentreFiche`/`auCentreMot`, pas `placerFiche type undefined`.
-- **Avant d'accuser un correctif, refaire tourner le banc sur HEAD.** `git show
-  HEAD:THEOLOGICUS.html > mobile/www/index.html`, même banc, même racine. Si
-  HEAD échoue aussi, c'est le banc. Script prêt :
-  `_v103/check_baseline.js` (compare les erreurs de syntaxe HEAD vs version
-  en cours d'édition).
-- **Un banc qui n'ouvre aucun panneau mesure le vide.** Vécu v102 : appeler
-  `__placerFiche` sans panneau ouvert rend une fiche à 0×0 (`pos: "dessous"`) —
-  `hote` vaut `null`, les candidats extérieurs ne sont **même pas construits**.
-- **Un banc qui descend trop peu ne prouve rien** : valider à 984/784 px a laissé
-  passer le défaut v102, visible seulement sous 300 px de bande libre.
-- **Ne jamais FABRIQUER un panneau** : un `<div>` nu sans la feuille du module
-  fait mesurer le banc lui-même.
-- **Attendre une CONDITION, pas un `sleep`** : sinon tout `z-index` calculé vaut
-  `auto`. Idem pour les mots de mot à mot (chargement **asynchrone**).
-- `#setup-wizard-overlay.active` **et** `#auth-overlay` recouvrent tout au premier
-  lancement. `remove()` ; `display:none` ne suffit pas pour `#auth-overlay`.
-- La délégation écoute sur `#chat-container` : injecter le `.message` **dedans**.
-- `let state` (~l. 8115) est au niveau d'un `<script>` : **pas** `window.state`.
-- **Un backtick dans un commentaire à l'intérieur d'un gabarit JS casse le
-  fichier** — piégé **quatre fois** (v103, commentaire CSS dans `exportCss()`,
-  qui est une chaîne entre backticks). Le symptôme : `check_syntax.js` signale
-  `Unexpected identifier` sur un bloc de 11 000 lignes, sans rapport visible.
-  Un commentaire *dans une feuille `<style>`* peut en porter sans risque ;
-  c'est le **gabarit JS** qui est mortel.
-- Viser le **centre exact** du `getBoundingClientRect()`.
-- `elementFromPoint` ne départage pas deux éléments **qui ne se chevauchent
-  pas** : forcer le recouvrement d'abord.
-- **`offsetParent !== null` est FAUX pour tout `position:fixed`** — les quatre
-  fiches le sont. Juger sur la boîte **peinte** + `display`/`visibility`. Et
-  **mesurer pendant que la souris est SUR la cible**, pas après l'avoir quittée.
-- Instrumenter `style.display` par `Object.defineProperty` sur l'**instance**
-  casse `getComputedStyle` et ne se désinstalle pas : `delete`.
-- **`node -e` mange les regex** et heredoc mange backticks/`${}` : écrire un `.js`.
-- **Chemins : `node --check /tmp/x.js` rend `C:\tmp\x.js` introuvable.** Écrire
-  les fichiers de travail dans le projet, jamais dans `/tmp`.
+- **v95 — un span VIDE de 3 px tuait le clic.** Une plage sur la frontière
+  d'un nœud texte insérait un `<span data-hl-id=X></span>` vide **avant** le
+  vrai span. `querySelector('[data-hl-id]')` rendait le vide. Corrigé :
+  sauter toute tranche vide.
+- Symptôme asymétrique : un mot n'a qu'un vrai span, le vide est collé à
+  côté. Ne pas conclure « le mot marche, la phrase non » — le défaut touche
+  les deux. Un toast ne doit jamais mentir : vérifier qu'un span non vide
+  existe avant d'annoncer « cliquez le passage surligné ».
+- v86 (`window._atcSel`) cohabite avec `#chat-container` ; ce n'est **pas** la
+  cause du v95 (causalité testée).
 
 ## Build Android / Windows — CLÉ CRITIQUE
 
 ```
 C:\Users\toshr\.workbuddy-ai\keys\theologicus-release.jks   alias: theologicus
-C:\Users\toshr\.workbuddy-ai\keys\theologicus-release.PASSWORD.txt (+ .base64.txt ← CI)
+…\+ .PASSWORD.txt et .base64.txt ← CI
 ```
-RSA 4096. **Ne jamais remplacer ce JKS** : plus aucune mise à jour publiable.
+RSA 4096. **Ne jamais remplacer** : plus aucune mise à jour publiable.
 SHA-256 `93d8324058f1ecd1d252d97b976854ffaf2a976605b9658983d17db6d70f5e67`.
-Vérifier par `apksigner verify --print-certs`, **jamais** `META-INF/*.RSA`.
-
-Chaîne hors dépôt : `C:\Users\to shr\.workbuddy-ai\binaries\android-tools\`
-(corriger le chemin : `C:\Users\toshr\...`). Procédure complète → skill
+Vérifier par `apksigner verify --print-certs`. Procédure complète → skill
 `theologicus-apk-build`.
 
 - `./gradlew` échoue sur `metadata.bin (Access is denied)` : relancer avec
   `dangerouslyDisableSandbox`.
-- **`APK_VERSION_NAME` obligatoire**, sinon repli sur `1.0.<code>`.
+- `APK_VERSION_NAME` obligatoire, sinon repli sur `1.0.<code>`.
 - **Ne pas lancer `prepare_mobile.py`** en local : son `rmtree(mobile/www)` est
   bloqué. Régénérer `mobile/www/index.html` puis `copytree(dirs_exist_ok=True)`
   par corpus. Jamais `npx cap sync`.
-- **Tout dossier ajouté doit être dans `COPY_DIRS`**, sinon la CI livre une app
-  sans corpus (piégé avec `summa`, `fathers`, `reformed`).
-- **PyInstaller : pas de `--clean`.** **Purger `dist\THEOLOGICUS` AVANT.** Le
-  supprimer après détruit le binaire et fait échouer `signtool`. `COLLECT`
-  **recrée** le dossier — purger avant, copier par-dessus ensuite.
-- **`cmd //c fichier.bat` ne s'exécute PAS depuis Bash** : rejouer étape par étape.
-- **`signtool` renvoie `exit=0` même en échec** (`Number of errors: 1`). Lire la
-  sortie. `verify /pa` échoue toujours en « root not trusted » — normal.
-- **Vérifier le contenu livré, pas seulement la version** : neutraliser des DEUX
-  côtés **le placeholder `__THEO_VERSION__` et la valeur tamponnée**.
-- **L'installeur se teste en l'installant pour de vrai** (`/VERYSILENT`…). Banc
-  `_v96/installe.js` (10/10) et `_v101/verif_v102.js` (5/5). **`THEOLOGICUS.exe`
-  ne se lance pas depuis le sandbox** : servir le dossier **installé** + Chrome
+- Tout dossier ajouté doit être dans `COPY_DIRS`, sinon la CI livre une app
+  sans corpus (piégé `summa`, `fathers`, `reformed`).
+- **PyInstaller : pas de `--clean`.** Purger `dist\THEOLOGICUS` **AVANT**.
+  `COLLECT` recrée le dossier — purger avant, copier par-dessus ensuite.
+- `cmd //c fichier.bat` ne s'exécute pas depuis Bash : rejouer étape par étape.
+- `signtool` rend `exit=0` même en échec : lire la sortie. `verify /pa` échoue
+  en « root not trusted » — normal.
+- Vérifier le **contenu** livré, pas seulement la version : neutraliser des
+  deux côtés le placeholder `__THEO_VERSION__` et la valeur tamponnée.
+- L'installeur se teste en l'installant pour de vrai. `THEOLOGICUS.exe` ne se
+  lance pas depuis le sandbox : servir le dossier **installé** + Chrome
   headless.
 - `tools/check_syntax.js` (57 blocs, 5 ignorés) **avant toute compilation**
-  (incident v66). Limite : ne valide pas un script isolé (voir v101).
+  (incident v66). Ne valide pas un script isolé.
 
 ### Rebuild local de l'installeur Windows — l'ordre exact
 
-`cmd //c build_installer.bat` **ne s'exécute pas depuis Bash** (`cmd.exe` est
-bloqué par le sandbox). Rejouer chaque étape à la main, **dans cet ordre** :
+`cmd //c build_installer.bat` ne s'exécute pas depuis Bash. Rejouer à la main :
 
 1. `py -3.12 -m PyInstaller` — **pas de `--clean`** ; supprimer
-   `build/THEOLOGICUS` et `dist/THEOLOGICUS` à la main avant.
-2. `cp -r` les 16 corpus dans `dist/THEOLOGICUS/` — **par-dessus, sans jamais
-   supprimer le dossier** : `COLLECT` vient d'y écrire l'exe. Purger *avant*
-   PyInstaller, jamais après (piégé : l'exe détruit, `signtool` échoue sur un
-   `File not found` annoncé `exit=0`).
-3. `theologicus_keys.json` remis à `{"mistral": ""}` ; `libs/fonts` (24 fichiers).
-4. `py -3.12 tools/stamp_version.py dist/THEOLOGICUS <version>` — **la version en
-   argument**, jamais celle du fichier `VERSION` racine.
+   `build/THEOLOGICUS` et `dist/THEOLOGICUS` **avant**.
+2. `cp -r` les 16 corpus dans `dist/THEOLOGICUS/` — **par-dessus, sans
+   supprimer** (l'exe vient d'y être écrit). Purger *avant* PyInstaller,
+   jamais après (sinon exe détruit, `signtool` échoue sur `File not found`
+   annoncé `exit=0`).
+3. `theologicus_keys.json` = `{"mistral": ""}` ; `libs/fonts` (24 fichiers).
+4. `py -3.12 tools/stamp_version.py dist/THEOLOGICUS <version>` — version
+   en argument, jamais celle du `VERSION` racine.
 5. `signtool sign /f THEOLOGICUS_signing.pfx /p theologicus2026 /fd SHA256
-   /td SHA256 /tr http://timestamp.digicert.com` sur l'exe, **puis** sur
-   l'installeur (la signature de l'installeur invalide celle de l'exe si on
-   l'oublie : resigner les deux à la fin).
-6. `ISCC installer.iss /DMyAppVersion=<version>` → ~75 s, sortie
-   `dist/THEOLOGICUS-Setup-x64.exe`.
-7. Copier l'installeur + `dist/THEOLOGICUS/THEOLOGICUS.exe` dans `output/`.
+   /td SHA256 /tr http://timestamp.digicert.com` sur l'exe **puis** sur
+   l'installeur (l'installeur invalide la signature de l'exe si on l'oublie :
+   resigner les deux à la fin).
+6. `ISCC installer.iss /DMyAppVersion=<version>` → ~75 s.
+7. Copier installeur + `dist/THEOLOGICUS/THEOLOGICUS.exe` dans `output/`.
 
-**Si la source change après compilation, tout recommencer à partir de l'étape 2**
-(l'exe PyInstaller reste valable : c'est une coquille, le HTML est une donnée).
-
-Chaîne en place : `py -3.12`, **PyInstaller 6.22.3**, `ISCC` dans
-`%LOCALAPPDATA%\Programs\Inno Setup 6\`, `signtool` dans
-`Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`, PFX à la racine.
-`output/` et `dist/` sont **gitignorés**. Volume : `dist/` ≈ 275 Mo +
-`output/` ≈ 170 Mo.
+**Si la source change après compilation, tout recommencer à partir de
+l'étape 2** (l'exe PyInstaller est une coquille, le HTML est une donnée).
 
 ## Dépôt / CI
 
 - Deux jobs : `build` (APK) et `windows` (exe + zip + installeur Inno).
-  **Ajouter un corpus = TROIS listes** : `COPY_DIRS` de `prepare_mobile.py`, la
-  liste du job `windows`, `build_installer.bat`. Une liste oubliée ne casse pas
-  le build : elle donne des 404 à l'usage.
-- **Le `dist/` local est un vestige : il ne se régénère pas tout seul.**
-- Version = `git rev-list --count HEAD` (2.0.N). `VERSION` racine remis à jour.
+  **Ajouter un corpus = TROIS listes** : `COPY_DIRS` de `prepare_mobile.py`,
+  la liste du job `windows`, `build_installer.bat`. Une liste oubliée ne casse
+  pas le build : elle donne des 404 à l'usage.
+- `dist/` local = vestige, ne se régénère pas tout seul.
+- Version = `git rev-list --count HEAD` (2.0.N). `VERSION` racine remis à
+  jour. **Ne pas annoncer un numéro avant de l'avoir lu dans l'API.**
 - `jelliel/THEOLOGICUS`, `main`. **Commits en anglais.** Jamais committer :
   `android/local.properties`, `android/release.keystore`, `mobile/www/*`,
   `theologicus_keys.json`. Pas de `gh` CLI. `GIT_TERMINAL_PROMPT=0`.
 - **`git fetch` n'écrit pas de refs de suivi** : `git ls-remote` pour l'état
   distant. Vérifier une publication par `curl -sL` de `raw.githubusercontent.com`
   + `cmp`.
-- **Le workflow filtre sur `paths:`** — un push ne touchant aucun chemin listé ne
-  déclenche **RIEN** (vécu : commit `.workbuddy-ai/` seul → ni run ni Release ; de
-  l'extérieur cela ressemble à « le push n'est pas arrivé »). Chemins surveillés :
-  `THEOLOGICUS.html`, `bible/**`, `quran/**`, `tafsir/**`, `libs/**`, `android/**`,
-  `tools/**`, `app.py`, `installer.iss`, `build_installer.bat`, `THEOLOGICUS.ico`,
-  `VERSION`, `package*.json`, `capacitor.config.json`, le workflow lui-même.
+- **Le workflow filtre sur `paths:`** — un push ne touchant aucun chemin listé
+  ne déclenche **RIEN**. Chemins surveillés : `THEOLOGICUS.html`, `bible/**`,
+  `quran/**`, `tafsir/**`, `libs/**`, `android/**`, `tools/**`, `app.py`,
+  `installer.iss`, `build_installer.bat`, `THEOLOGICUS.ico`, `VERSION`,
+  `package*.json`, `capacitor.config.json`, le workflow lui-même.
 - **Après un push, prouver qu'un run CI existe** : interroger
-  `api.github.com/repos/jelliel/THEOLOGICUS/actions/runs` et comparer `head_sha`.
-- **Toute modification du workflow doit être revalidée en YAML avant commit.**
-- Le tag `apk-v2.0.N` vient de `git rev-list --count HEAD` : ne pas annoncer un
-  numéro avant de l'avoir lu dans l'API.
-- **Le sandbox bloque le téléchargement des assets de Release** : vérifier par
-  l'API Actions, pas en récupérant le binaire. (`curl -I` sur
-  `releases/download/...` rend bien un **200** ; c'est le *téléchargement* qui
-  échoue — et il réussit dans `/tmp` avec un `cd` séparé.)
-- **Commits : jamais `printf`** (« 100% » = format invalide). `git commit -F`.
-- **NE JAMAIS lancer `git stash` ici — un `git stash` interrompu (SIGTERM) a
-  détruit `.git/refs` et le fichier `.pack`** (2026-09-22). Symptôme trompeur :
-  `git` répond **« not a git repository »** alors que `.git/` existe. Ne pas
-  conclure à une perte de données. **Récupération, dans cet ordre :**
-  1. `ls .git/` → repérer ce qui manque (`refs/`, `objects/pack/*.pack`).
+  `api.github.com/repos/jelliel/THEOLOGICUS/actions/runs` et comparer
+  `head_sha`.
+- Le sandbox bloque le téléchargement des assets de Release : vérifier par
+  l'API Actions, pas en récupérant le binaire.
+- Commits : jamais `printf` (« 100% » = format invalide). `git commit -F`.
+- **NE JAMAIS lancer `git stash` ici** — un `git stash` interrompu (SIGTERM)
+  a détruit `.git/refs` et le `.pack` (2026-09-22). Symptôme trompeur : git
+  répond « not a git repository » alors que `.git/` existe. Récupération :
+  1. `ls .git/` → repérer ce qui manque.
   2. `mkdir -p .git/refs/heads .git/refs/tags .git/refs/remotes/origin`.
-  3. Lire la dernière ligne de `.git/logs/refs/heads/main` : elle donne le SHA
-     exact (les reflogs survivent). L'écrire dans `.git/refs/heads/main`.
-  4. `git fetch origin main` → re-télécharge un pack complet (57 Mo ici).
-  5. `git fsck` : si des « failed to load pack » persistent, **déplacer** (pas
-     supprimer) les `.idx` orphelins et `multi-pack-index` vers `.git/_orphelins/`.
+  3. Lire `.git/logs/refs/heads/main` → SHA exact. L'écrire dans
+     `.git/refs/heads/main`.
+  4. `git fetch origin main` → pack complet (57 Mo).
+  5. `git fsck` ; si « failed to load pack » persistent, **déplacer** les
+     `.idx` orphelins et `multi-pack-index` vers `.git/_orphelins/`.
   6. Vérifier `git rev-parse HEAD` == `git ls-remote origin main`.
   **Le distant est la sauvegarde** : tout ce qui a été poussé est récupérable.
-- **Disque C: plein (99 %, ~2,3–2,9 Go libres).** Les profils Chrome des bancs
-  CDP s'accumulent dans `%TEMP%\theo-*` (724 Mo relevés) et ont déjà provoqué un
-  `ENOSPC` bloquant Bash **et** PowerShell. Nettoyer après une campagne.
-- **Les 23 `.apk` de `artifacts/` (428 Mo) sont des résidus locaux** : **11
-  identiques** à un asset de Release, **12 différents** (≈ 140 Mo, dont
-  `theologicus.apk` d'origine et le `debug`) donc **non prouvés
-  retéléchargeables** — et quatre portent un nom qui désigne une AUTRE version
-  que leur contenu. **Décision de l'utilisateur : on ne supprime rien.**
-- **Ils n'étaient hors git que par accident de `git add`, PAS par une règle.**
-  Aucun motif `.apk` n'existait dans `.gitignore` : `git check-ignore` rendait
-  **rien** et `git add -A` les **prenait** (vérifié le 2026-09-22). Motifs
-  `*.apk` / `*.aab` ajoutés à `.gitignore` (l. 30) — la seule façon durable de
-  garder 428 Mo de binaires hors du dépôt est de l'écrire, pas de s'en souvenir.
-  Contrôle : `git check-ignore -v` doit nommer le motif, et `git ls-files
-  "*.apk"` doit rendre **0** (aucun APK légitime n'était suivi).
-- **Une taille n'est pas une empreinte.** `ls -la` qui concorde n'autorise aucune
-  conclusion : `cmp` ou `md5sum`, jamais `stat`. Deux APK de même taille peuvent
-  différer intégralement (même contenu, signature différente).
+- Disque C: plein (99 %, ~2,3–2,9 Go libres). Profils Chrome des bancs CDP
+  dans `%TEMP%\theo-*` (724 Mo) — nettoyer après campagne.
+- Les 23 `.apk` d'`artifacts/` (428 Mo) sont des résidus locaux. **Décision
+  utilisateur : on ne supprime rien.** Ils n'étaient hors git que par accident
+  de `git add`, **PAS** par une règle. `*.apk` `*.aab` ajoutés à `.gitignore`.
 - **SECRETS A LA RACINE — aucun motif ne les couvrait** (vérifié 2026-09-22,
-  `git check-ignore` ne nommait rien) : `THEOLOGICUS_signing.pfx` (la clé de
-  signature des Releases, mot de passe dans le même dossier), `signing_key.pem`,
-  `signing_cert.pem`, et **« mistral api key.txt »**. Un seul `git add -A` les
-  publiait. Enjeu ≠ les APK : une clé de signature divulguée laisse n'importe qui
-  publier une mise à jour que l'app accepterait. Motifs ajoutés : `*.pfx` `*.p12`
-  `*.jks` `*.keystore` `*.pem` `*.key` + `*api key*.txt` `*secret*`
-  `*credential*`. **Contrôle de non-régression obligatoire** :
-  `git ls-files | git check-ignore --stdin` doit rendre **vide** (sinon un fichier
-  déjà suivi tombe sous les nouveaux motifs). `build_installer.bat` ne référence
-  le `.pfx` que par nom local ; la CI signe depuis les secrets du dépôt.
-- **Règle générale : ce qui doit rester hors du dépôt s'écrit dans `.gitignore`,
-  cela ne se retient pas.** Deux pièges le même jour (APK, secrets) — dans les
-  deux cas je croyais à une règle qui n'existait pas. Vérifier par
-  `git check-ignore` et `git add -An`, jamais par souvenir.
+  `git check-ignore` ne nommait rien) : `THEOLOGICUS_signing.pfx` (clé de
+  signature Releases, mot de passe dans le même dossier), `signing_key.pem`,
+  `signing_cert.pem`, « mistral api key.txt ». Un seul `git add -A` les
+  publiait. Motifs ajoutés : `*.pfx` `*.p12` `*.jks` `*.keystore` `*.pem`
+  `*.key` + `*api key*.txt` `*secret*` `*credential*`. **Contrôle non-
+  régression obligatoire** : `git ls-files | git check-ignore --stdin` doit
+  rendre **vide**.
+- **Règle générale : ce qui doit rester hors du dépôt s'écrit dans
+  `.gitignore`, cela ne se retient pas.** Deux pièges le même jour (APK,
+  secrets) — dans les deux cas je croyais à une règle qui n'existait pas.
+  Vérifier par `git check-ignore` et `git add -An`.
+
+## Bancs de test headless (CDP) — pièges vérifiés
+
+- **Contre-épreuve obligatoire** : lancer le MÊME banc sur la baseline
+  (`git show HEAD:THEOLOGICUS.html`) et sur la cible. Vert des deux côtés ne
+  prouve **rien** ; le delta est la preuve.
+- **Servir le bon nom de fichier.** La copie publiée est
+  `mobile/www/index.html`. `/THEOLOGICUS.html` renvoie 404 → tous les z-index
+  à `auto`, `__placerFiche` à `undefined` — ressemble à une régression
+  totale. **Méthode qui marche** : `cp THEOLOGICUS.html mobile/www/index.html`
+  + `cmp`, puis banc **sans** `THEO_INDEX`.
+- **Avant d'accuser un correctif, refaire tourner le banc sur HEAD.** Si HEAD
+  échoue aussi, c'est le banc. Script prêt : `_v103/check_baseline.js`.
+- Un banc qui n'ouvre aucun panneau mesure le vide (v102 : `__placerFiche`
+  sans panneau = fiche 0×0, `hote` null).
+- Un banc qui descend trop peu ne prouve rien (v102 validé à 984 px, cassé
+  sous 300 px).
+- Ne jamais **fabriquer** un panneau : un `<div>` nu sans sa feuille fait
+  mesurer le banc lui-même.
+- **Attendre une CONDITION, pas un `sleep`** : sinon tout `z-index` calculé
+  vaut `auto`. Idem pour les mots (chargement asynchrone).
+- `#setup-wizard-overlay.active` **et** `#auth-overlay` recouvrent tout au
+  premier lancement. `remove()` ; `display:none` ne suffit pas pour
+  `#auth-overlay`.
+- **`#theo-maj-bandeau`** (bandeau « mise a jour disponible », `z-index:99997`)
+  s'affiche seul au chargement, recouvre le bas de l'ecran et **intercepte la
+  souris** : un `mouseMoved` vers un mot du bas tombe sur lui et le survol ne
+  declenche rien — cela ressemble a un defaut d'empilement. Le neutraliser dans
+  tout banc qui vise le bas de l'ecran (`remove()` + `clearInterval`).
+- `let state` (~l. 8115) est au niveau d'un `<script>` : **pas** `window.state`.
+- **Un backtick dans un commentaire à l'intérieur d'un gabarit JS casse le
+  fichier** — piégé **quatre fois** (v103, commentaire CSS dans `exportCss()`,
+  qui est une chaîne entre backticks). `check_syntax.js` signale
+  `Unexpected identifier` sur un bloc de 11 000 lignes, sans rapport visible.
+  Un commentaire *dans une feuille `<style>`* peut en porter sans risque ;
+  c'est le **gabarit JS** qui est mortel.
+- Viser le **centre exact** du `getBoundingClientRect()`. `elementFromPoint`
+  ne départage pas deux éléments qui ne se chevauchent pas.
+- `offsetParent !== null` est **FAUX** pour tout `position:fixed`. Les quatre
+  fiches le sont. Juger sur la boîte **peinte** + `display`/`visibility`.
+  **Mesurer pendant que la souris est SUR la cible.**
+- Instrumenter `style.display` par `Object.defineProperty` sur l'**instance**
+  casse `getComputedStyle` et ne se désinstalle pas : `delete`.
+- `node -e` mange les regex et heredoc mange backticks/`${}` : écrire un `.js`.
+- Chemins : `node --check /tmp/x.js` rend `C:\tmp\x.js` introuvable. Écrire
+  les fichiers de travail dans le projet, jamais dans `/tmp`.
 
 ## Fragilités du code
 
 - Bloc « SECURITY PROTECTION » (v66) : l'IIFE englobe
-  `init(Bible|Quran|Tafsir)VerseTooltip`. Recompter les accolades avant retouche.
-- **CRLF — FAUX pour `THEOLOGICUS.html`** (vérifié le 2026-09-22 : `s.count(
-  '\r\n') == 0`, le fichier est en **LF**). L'outil **Edit y fonctionne
-  normalement**, inutile de passer par un script Python. La note CRLF venait
-  d'un autre fichier du projet. Vérifier avant de contourner.
-- **`find('=')` sur une tranche JS** : le premier `=` est celui de
+  `init(Bible|Quran|Tafsir)VerseTooltip`. Recompter les accolades avant
+  retouche.
+- `find('=')` sur une tranche JS : le premier `=` est celui de
   `(window.__x=window.__x||{})[N]=`. Ancrer sur `find(']=')` puis `+2`.
 - **Lettres hébraïques précomposées** (U+FB1D–FB4F) : un filtre `0x05D0–0x05EA`
   les supprime silencieusement. Normaliser en NFD avant filtrage.
-- **`_m/` → racine = trois `dirname`.**
-- **Regex : ne pas doubler les backslashes** dans un littéral `/…/`.
-- **Mesure nulle ≠ « ça tient »** : une puce rendue avant stabilisation mesure 0.
-- **`extractSuggestionsHtml()` (v81)** capturait tout le reste d'un message.
-- **Références FR** : « Gn 5,1 » (virgule) autant que « Gn 5:1 ».
-- **Ne pas dépendre d'une portée locale** pour fermer un panneau :
-  `closeArchivesPanel()` (const locale) → `ReferenceError` avalé par `catch(e){}`.
-- **`sanitizeSchemaHtml()` et ALLOW** : `TBODY`, `THEAD`, `A`, `SUP`, `SUB`
+- `_m/` → racine = trois `dirname`.
+- Regex : ne pas doubler les backslashes dans un littéral `/…/`.
+- Mesure nulle ≠ « ça tient » : une puce rendue avant stabilisation mesure 0.
+- `extractSuggestionsHtml()` (v81) capturait tout le reste d'un message.
+- Références FR : « Gn 5,1 » (virgule) autant que « Gn 5:1 ».
+- Ne pas dépendre d'une portée locale pour fermer un panneau :
+  `closeArchivesPanel()` (const locale) → `ReferenceError` avalé par
+  `catch(e){}`.
+- `sanitizeSchemaHtml()` et ALLOW : `TBODY`, `THEAD`, `A`, `SUP`, `SUB`
   refusés → un `<table>` perdait TOUTES ses lignes.
-- **`colorizeSchemaRefs()` filtrait sur `indexOf(':')`** : un schéma en virgule
+- `colorizeSchemaRefs()` filtrait sur `indexOf(':')` : un schéma en virgule
   française sortait immédiatement. Filtrer sur `indexOf('<')`.
-- **`<br/>` du modèle visible** : stocker en `@@BR@@` après normalisation CRLF.
-- **Détection de rôle par `nodeType === 3`** : `box.textContent` colle
-  « Abraham » + « patriarche ». Descendre dans les nœuds texte individuels.
-- **Texte arabe : les signes d'annotation ne sont PAS des mots**
+- `<br/>` du modèle visible : stocker en `@@BR@@` après normalisation CRLF.
+- Détection de rôle par `nodeType === 3` : `box.textContent` colle « Abraham »
+  + « patriarche ». Descendre dans les nœuds texte individuels.
+- Texte arabe : les signes d'annotation ne sont **PAS** des mots
   (U+06D6–U+06ED). Les filtrer avant de découper.
-- **Un nœud texte n'a pas `.closest()`** : `node.parentNode.closest()`.
-- **`range` sur une frontière de nœud texte = span vide** → section v95.
-- **`m.ts === s.msgTs`** : un id DOM donne la CHAÎNE, `m.ts` est un NOMBRE.
-- **`AndroidManifest.xml` n'a pas `android:largeHeap`.**
+- Un nœud texte n'a pas `.closest()` : `node.parentNode.closest()`.
+- `range` sur une frontière de nœud texte = span vide → v95.
+- `m.ts === s.msgTs` : un id DOM donne la **CHAÎNE**, `m.ts` est un NOMBRE.
+- `AndroidManifest.xml` n'a pas `android:largeHeap`.
 
 ## Décisions produit arrêtées
 
-- Gestes : **appui long** → bulle « Add to chat » ; **double-tap** → encadrement ;
+- Gestes : appui long → bulle « Add to chat » ; double-tap → encadrement ;
   tap sur passage annoté → son commentaire (400 ms).
-- Verrou : aucune pénalité au changement de fenêtre (chrono en pause), difficulté
-  montante plafonnée à 3, question ratée qui revient, « souvenir de moi » 7 jours.
-- Références : lien **local d'abord**, web en secours.
-- **Le panneau ☷ RÉFÉRENCES n'a AUCUNE citation de verset** : 35 documents, 0
-  citation. Les nombres entre parenthèses sont des **dates de publication**
-  ((1964), (251), (380)). Un résolveur de citations y serait du code mort —
-  vérifié, puis refusé.
-- Traduction embarquée = « BJ 1998 » → **sous droits** : conditionne l'export et
+- Verrou : aucune pénalité au changement de fenêtre (chrono en pause),
+  difficulté montante plafonnée à 3, question ratée qui revient, « souvenir
+  de moi » 7 jours.
+- Références : lien local d'abord, web en secours.
+- Le panneau ☷ RÉFÉRENCES n'a AUCUNE citation de verset : 35 documents,
+  0 citation. Les nombres entre parenthèses sont des **dates de publication**
+  ((1964), (251), (380)). Un résolveur de citations y serait du code mort.
+- Traduction embarquée = « BJ 1998 » → sous droits : conditionne l'export et
   le comparateur de traductions.
 - LibreTranslate : voir `artifacts/LIBRETRANSLATE.md`. L'**IP du PC change
-  (DHCP)** → relancer `tools/start_libretranslate.py`. Dernier relevé : WiFi
-  `192.168.100.71`, Tailscale `100.74.55.70`.
+  (DHCP)** → relancer `tools/start_libretranslate.py`. WiFi `192.168.100.71`,
+  Tailscale `100.74.55.70`.

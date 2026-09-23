@@ -1,0 +1,31 @@
+v104 — stop the word card from covering the verse panel at its edges
+
+The Hebrew word card (#hb-tip) could stay painted ON TOP of the verse
+panel (#bible-verse-tip). Reported on a screenshot of Is 66:24 (921x838),
+card of "tamut" (Strong 4191) sitting over the panel.
+
+This was not a stacking bug: the card is at 9500, the panel at 9000, and
+elementFromPoint confirmed the card wins. The defect was in __placerFiche:
+the v101/v102 fallback — the one that caps the card so it leaves the
+panel — was gated on `hote`, i.e. on a word STRICTLY contained in a
+panel. A word at the very edge (panel padding, line overflow) makes
+`hote` null, so the reduction was skipped and the card stayed on the
+panel.
+
+Fix: trigger the fallback as soon as `candidate.surPanneau`, and use
+`hote` when available, otherwise the first panel the card actually
+overlaps. Applies to the two scriptural panels and the four cards, which
+share this helper.
+
+Measured with a new bench (_v104/bench_overlap.js, 5/5): word mid-panel,
+then panel pushed against the bottom of the window with the last verse's
+word — 0 px overlap in both cases.
+
+Non-regression: _v94 8/8, _v97 exhaustif 11/11 + garde_fiche 7/7 +
+cas_dangereux 3/3, _v96 12/12, _v95 all OK, z-index guard static 0 /
+browser 0, check_syntax 0 errors.
+
+Bench trap worth recording: #theo-maj-bandeau (the "update available"
+bar, z-index 99997) shows up on its own, covers the bottom strip and
+swallows the mouse — a synthetic hover then misses its target and looks
+like a stacking bug. It is absent from the user's screenshot.

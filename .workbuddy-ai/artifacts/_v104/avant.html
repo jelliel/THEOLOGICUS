@@ -29095,29 +29095,14 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
          120 px de haut. En dessous, une fiche tronquee vaudrait moins qu'un
          panneau partiellement cache. Et on restaure tout si rien ne
          s'ameliore — un repli ne doit jamais DEGRADER. */
-      if (candidate.surPanneau) {
-        /* v104 — la fiche recouvre un panneau. Le panneau de reference est
-           `hote` (le mot strictement contenu dans un panneau). Mais un mot
-           a l'interieur du panneau peut se retrouver a 1 px du bord (padding,
-           debordement de ligne), et `hote` devient alors null : la reduction
-           etait sautee et la fiche restait DESSUS le panneau (capture du
-           2026-09-22 204216). On prend donc le premier panneau que la fiche
-           recouvre reellement, `hote` ou non. */
-        var ref = hote;
-        if (!ref) {
-          var fr0 = fiche.getBoundingClientRect();
-          for (var oi = 0; oi < obs.length; oi++) {
-            if (aireRecouvrement(fr0, obs[oi]) > 0) { ref = obs[oi]; break; }
-          }
-        }
-        if (ref) {
+      if (candidate.surPanneau && hote) {
         var LARGEUR_MINI = 150, HAUTEUR_MINI = 120;
-        /* Les quatre bandes libres autour du panneau de reference, DANS l'ecran. */
+        /* Les quatre bandes libres autour du panneau hote, DANS l'ecran. */
         var bande = [
-          { horiz: false, taille: ref.top - MARGE - ECART  },   /* au-dessus  */
-          { horiz: false, taille: (vh - MARGE - ECART) - ref.bottom }, /* dessous */
-          { horiz: true,  taille: ref.left - MARGE - ECART },   /* a gauche   */
-          { horiz: true,  taille: (vw - MARGE - ECART) - ref.right }   /* a droite */
+          { horiz: false, taille: hote.top - MARGE - ECART  },   /* au-dessus  */
+          { horiz: false, taille: (vh - MARGE - ECART) - hote.bottom }, /* dessous */
+          { horiz: true,  taille: hote.left - MARGE - ECART },   /* a gauche   */
+          { horiz: true,  taille: (vw - MARGE - ECART) - hote.right }   /* a droite */
         ];
         /* On essaie les bandes de la plus grande a la plus petite : la
            premiere qui accueille une fiche lisible est la bonne. */
@@ -29141,7 +29126,6 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           /* Pas concluant : on restaure et on essaie la bande suivante. */
           fiche.style.maxWidth = ancienW;
           fiche.style.maxHeight = ancienH;
-        }
         }
       }
       fiche.style.left = candidate.p.left + 'px';
