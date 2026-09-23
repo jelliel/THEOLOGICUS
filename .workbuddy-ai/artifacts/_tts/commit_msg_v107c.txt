@@ -1,0 +1,33 @@
+tools — sync_html.py, so a fix reaches every copy of the app
+
+The app is one HTML file, but it lives in four places: the source, the
+Android webDir (mobile/www/index.html), the Windows distribution
+(dist/THEOLOGICUS/THEOLOGICUS.html) and the local install that is
+actually launched (_inst_v102/THEOLOGICUS.html). A fix applied to the
+source alone reaches none of the others.
+
+That is exactly what happened with v107: the repository was correct and
+the Windows app still read French in an English voice. Measured —
+dist/THEOLOGICUS/THEOLOGICUS.html was the 2.0.112 build from 22/09 and
+sent 6 of 6 French sentences to "Google US English".
+
+Worth recording why replacing the file is enough: the exe does NOT embed
+the HTML. THEOLOGICUS.exe contains zero occurrences of "<!DOCTYPE html"
+and of "detectScriptLang", and so does build/THEOLOGICUS/THEOLOGICUS.pkg.
+app.py line 120 sets proxy_server.SERVE_DIR to the folder of the exe, so
+the app serves THEOLOGICUS.html from disk. No PyInstaller rebuild needed.
+
+The second half of the trap is that WebView2 keeps the HTML it loaded at
+start-up, so replacing the file under a running app changes nothing on
+screen. The app has to be quit and relaunched.
+
+sync_html.py copies the source onto the three known targets, verifies
+each by md5, and refuses to overwrite a target that is LARGER than the
+source, so a truncated file can never clobber a complete copy. --check
+audits without copying.
+
+Also recorded in the APK skill, and in the day's log: identify a running
+installation by its THEOLOGICUS.log (written inside its own folder), not
+by the process path, which the sandbox refuses; and verify a copy by its
+measured verdict, never by a header marker, since a comment mentioning
+the fix proves nothing about behaviour.

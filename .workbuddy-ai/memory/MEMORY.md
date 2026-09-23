@@ -142,6 +142,32 @@ defaut = français forcé, sauf écritures non-latines).
   `chunkText`, `makeUtterance` étaient tous corrects isolément ; c'est la
   **file réelle** qui révélait le défaut. Instrumenter `speechSynthesis.speak`
   (sonde `_tts/sonde_speak.js`) pour voir ce qui part vraiment au moteur.
+
+### v107 — `\b` est ASCII : un accent fabrique une frontière
+
+**Toute liste de mots bornée par `\b` est fausse en français.** `\w` vaut
+`[A-Za-z0-9_]` **même avec le flag `u`** : `è`, `é`, `à` ne sont pas des
+caractères de mot, donc `\b` voit une frontière en plein milieu d'un mot.
+`\bs\b` matche dans `très`, `\bme\b` dans `poème`, `\bt\b` dans `société`,
+`\bthe\b` dans `thèse` **une fois en NFD** (U+0300 non-`\w`). Conséquence
+vécue : 16/30 phrases françaises reçoivent la voix **anglaise**.
+**Deuxième site : `speakBibleRefs()`** — `\b` devant un nom de livre accentué
+(`Ésaïe`, `Ézéchiel`, `Éphésiens`) ne matche **jamais** : l'espace et `É` sont
+tous deux non-mots, donc aucune frontière. L'étape « noms complets » en ratait
+**3 sur 7** — masqué par les initiales ASCII (`Genèse`, `Jérémie`) et par le
+repli générique qui produit le même libellé.
+Correctif : lookarounds `(?<![\p{L}\p{N}])…(?![\p{L}\p{N}])` **et** `NFC`
+avant tout test (les deux sont nécessaires). Verdict anglais exigeant
+(≥ 2 mots-outils) + garde-fou de marqueurs français non ambigus ; **exclure
+`on`, `son`, `sont`, `mais`, `pas`, `plus`, `pour`, `dans`, `sur`** — anglais
+ET français, c'est le piège. Contre-épreuve `_tts/bench_v107_langue.js`
+(6 → 0, test 7b : 3/7 → 7/7). Détail : journal `2026-09-23.md`.
+
+**Un test de bout en bout peut masquer le défaut qu'il prétend mesurer** : le
+repli générique produisait la même sortie que l'étape cassée, donc le test
+passait sur la version d'avant. **Tester l'étage précis qu'on répare.** Et
+`git show HEAD:` après un commit renvoie la version **corrigée** : prendre
+`HEAD~1` et vérifier le md5.
 - En headless, les utterances échouent en `not-allowed` (pas de périphérique
   audio) : **c'est normal et ça n'invalide pas la sonde** — le journal
   `SPEAK`/`ONERROR` reste probant.
