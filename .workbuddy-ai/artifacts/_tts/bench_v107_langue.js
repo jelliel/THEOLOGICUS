@@ -34,7 +34,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascri
 // et detectScriptLang n existe pas (piege rencontre, voir journal).
 const CIBLE = process.argv[2] || 'courant';      // 'courant' | 'avant'
 const NOM = process.argv[3] || (CIBLE === 'avant' ? 'AVANT (non corrige)' : 'version courante');
-const PAGE = CIBLE === 'avant' ? 'AVANT_v106.html' : 'THEOLOGICUS.html';
+const PAGE = CIBLE === 'avant' ? 'AVANT_v107.html' : 'THEOLOGICUS.html';
 
 const serve = () => new Promise(res => {
   const s = http.createServer((q, rp) => {
@@ -240,6 +240,63 @@ const PHRASES_SCRIPT = [
   const voixAnglaise = r6.filter(r => r.lang === 'anglais');
   for (const r of r6) console.log('     ' + (r.lang === 'anglais' ? 'ANGLAIS !!' : 'ok        ') + ' ' + (r.lang + '            ').slice(0, 12) + ' voix=' + String(r.voice) + '  | ' + r.t);
   ok('6. aucune phrase francaise ne recoit la voix anglaise', voixAnglaise.length === 0, voixAnglaise.length + ' phrases');
+
+  // ---- 7. references bibliques : un nom accentue doit etre DEVELOPPE ----
+  // Meme famille de defaut : \b est ASCII, donc devant « Ésaïe » (espace + É
+  // sont tous deux non-mots) aucune frontiere n'existe et la reference n'etait
+  // pas transformee pour la lecture.
+  console.log('\n--- 7. references bibliques a nom accentue (developpees pour la lecture) ---');
+  const REFS = [
+    ["Ésaïe 7:14 est cité.",              "Ésaïe"],
+    ["Ainsi Ésaïe 7:14 fut relu.",        "Ésaïe"],
+    ["Ézéchiel 36:26 annonce la promesse.","Ézéchiel"],
+    ["Éphésiens 2:8 est décisif.",        "Éphésiens"],
+    ["Genèse 1:1 commence la Bible.",     "Genèse"],
+    ["Jérémie 31:33 le dit.",             "Jérémie"],
+    ["Hébreux 11:1 définit la foi.",      "Hébreux"],
+    ["Exode 20:3 ouvre le décalogue.",    "Exode"],
+  ];
+  const r7 = await ev(`(()=>{
+    const R = ${JSON.stringify(REFS)};
+    const res = [];
+    for (const p of R) {
+      const t = p[0], nom = p[1];
+      let out = null;
+      try { out = (typeof speakBibleRefs === 'function') ? speakBibleRefs(t) : null; } catch (e) { out = 'ERR ' + String(e).slice(0, 60); }
+      res.push({ t: t, nom: nom, out: out });
+    }
+    return res; })()`);
+  let rates7 = 0;
+  for (const x of r7) {
+    const okDev = x.out && x.out !== x.t && String(x.out).includes('chapitre');
+    if (!okDev) rates7++;
+    console.log('     ' + (okDev ? 'ok        ' : 'NON DEVELOPPE !!') + ' ' + x.t + (x.out && x.out !== x.t ? '  -> ' + x.out : ''));
+  }
+  ok('7. toute reference a nom accentue est developpee pour la lecture', rates7 === 0, rates7 + ' non developpees');
+
+  // ---- 7b. le motif de l ETAPE 2 (noms complets) doit matcher un nom accentue ----
+  // Le test 7 seul ne suffit PAS : le repli generique (etape 3) produit la meme
+  // sortie et masque le defaut. On teste donc le motif de l etape 2 isolement.
+  // Mesure : le motif \b(Ésaïe|…) de l ancienne version ne matche RIEN.
+  console.log('\n--- 7b. le motif de l etape 2 matche-t-il un nom accentue ? ---');
+  const r7b = await ev(`(()=>{
+    const NOMS = ['Ésaïe','Ézéchiel','Éphésiens','Genèse','Jérémie','Hébreux','Exode'];
+    const ANCIEN = /\\b(Ésaïe|Ézéchiel|Éphésiens|Genèse|Jérémie|Hébreux|Exode)\\s+(\\d+)\\s*:\\s*(\\d+)/g;
+    const NOUVEAU = /(?<![\\p{L}\\p{N}])(Ésaïe|Ézéchiel|Éphésiens|Genèse|Jérémie|Hébreux|Exode)\\s+(\\d+)\\s*:\\s*(\\d+)/gu;
+    const res = [];
+    for (const n of NOMS) {
+      const t = 'Ainsi ' + n + ' 7:14 fut cité.';
+      res.push({ nom: n, ancien: (t.match(ANCIEN) || []).length, nouveau: (t.match(NOUVEAU) || []).length });
+    }
+    return res; })()`);
+  let anciensRates = 0, nouveauxOk = 0;
+  for (const x of r7b) {
+    if (x.ancien === 0) anciensRates++;
+    if (x.nouveau === 1) nouveauxOk++;
+    console.log('     ' + x.nom.padEnd(12) + ' ancien=' + x.ancien + '  nouveau=' + x.nouveau + (x.ancien === 0 ? '   (l ancien ratait)' : ''));
+  }
+  ok('7b. le motif Unicode matche TOUS les noms accentues', nouveauxOk === r7b.length, nouveauxOk + '/' + r7b.length);
+  console.log('     (rappel de la contre-epreuve : le motif \\b en ratait ' + anciensRates + '/' + r7b.length + ')');
 
   console.log('');
   console.log('ECHECS = ' + ech + (ech ? '  -> A CORRIGER' : '  -> TOUT OK'));

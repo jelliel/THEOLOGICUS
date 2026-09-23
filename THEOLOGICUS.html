@@ -14442,21 +14442,26 @@ function speakBibleRefs(s) {
   };
   // 1) Abréviations : Jr 17:13 → Jérémie chapitre 17, verset 13
   //    Autoriser espaces optionnels autour des « : » et « - »
+  // v107 — \b EST ASCII : devant « Ésaïe », « Ézéchiel », « Éphésiens », un \b
+  // de gauche ne matche JAMAIS (l'espace et « É » sont tous deux non-mots,
+  // donc aucune frontière n'existe) → la référence n'était pas développée pour
+  // la lecture. On remplace par des délimiteurs Unicode, comme dans
+  // detectScriptLang. Même piège, même remède.
   const bookKeys = Object.keys(bookMap).sort((a,b) => b.length - a.length);
-  const abbrPattern = new RegExp('\\b(' + bookKeys.join('|') + ')\\s+(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?','g');
+  const abbrPattern = new RegExp('(?<![\\p{L}\\p{N}])(' + bookKeys.join('|') + ')\\s+(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?','gu');
   s = s.replace(abbrPattern, (m, abbr, ch, v1, v2) => {
     return replacer(bookMap[abbr] || abbr, ch, v1, v2);
   });
   // 2) Noms complets + variantes sans accents : Ésaïe, Esaie, Esaïe…
   //    On ajoute des variantes communes pour chaque nom du bookMap
   const fullNames = Object.values(bookMap).sort((a,b) => b.length - a.length);
-  const fullPattern = new RegExp('\\b(' + fullNames.join('|') + ')\\s+(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?','g');
+  const fullPattern = new RegExp('(?<![\\p{L}\\p{N}])(' + fullNames.join('|') + ')\\s+(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?','gu');
   s = s.replace(fullPattern, (m, name, ch, v1, v2) => {
     return replacer(name, ch, v1, v2);
   });
   // 3) Fallback générique : tout « Mot Number:Number » ou « Mot Number:Number-Number »
   //    Protège contre la lecture TTS « 65 (lapse de temps) 4 » ou « octobre 2011 »
-  s = s.replace(/\b([\p{L}]{2,})\s+(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?/gu, (m, word, ch, v1, v2) => {
+  s = s.replace(/(?<![\p{L}\p{N}])([\p{L}]{2,})\s+(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?/gu, (m, word, ch, v1, v2) => {
     if (/verset|chapitre/i.test(word)) return m;
     return v2 ? `${word} chapitre ${ch}, versets ${v1} à ${v2}` : `${word} chapitre ${ch}, verset ${v1}`;
   });

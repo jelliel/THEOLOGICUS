@@ -1,0 +1,25 @@
+v107b — accented book names were invisible to the reference expander
+
+Same root cause as v107, second damage site: \b is ASCII-only, so it saw
+no word boundary before an accented book name.
+
+    \b(Ésaïe|Ézéchiel|Éphésiens|...)\s+(\d+)\s*:\s*(\d+)
+
+In "Ainsi Ésaïe 7:14", the character before É is a space and É itself is
+not a word character, so space->É is a non-word/non-word transition and NO
+boundary exists. The pattern matched nothing. Measured: the step-2 pattern
+(complete book names) failed on 3 of 7 names — Ésaïe, Ézéchiel, Éphésiens.
+Genèse, Jérémie, Hébreux and Exode matched, because they begin with an
+ASCII letter, which is exactly why the flaw stayed hidden.
+
+The three patterns of speakBibleRefs() now use
+(?<![\p{L}\p{N}])...(?![\p{L}\p{N}]) with the u flag.
+
+A note on the proof, because the first attempt was not one: an end-to-end
+test of speakBibleRefs() passes on the unfixed build too, since the
+generic fallback (step 3) happens to produce the same wording and masks
+the defect. bench_v107_langue.js therefore tests the step-2 pattern
+directly (test 7b): old pattern 3/7, new pattern 7/7.
+
+Verified: bench_v107_langue.js 0 failures (7b included);
+bench_v106_tts.js 0; _v97/exhaustif.js 0; _v105/bench_v105.js 0.
