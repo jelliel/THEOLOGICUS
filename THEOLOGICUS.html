@@ -14863,6 +14863,67 @@ function _humanizePitch(basePitch, segLen) {
   return Math.max(0.85, Math.min(1.25, basePitch + wobble));
 }
 
+// ── v108 — LE CAS « AUCUNE VOIX POUR CETTE LANGUE », ENFIN SIGNALÉ ──
+// Mesuré sur un poste Windows SANS pack de langue français :
+//   detectScriptLang('Très tôt…')  -> 'francais'        (détection correcte)
+//   getVoiceForLang('francais')    -> null              (aucune voix)
+//   énoncé émis                    -> voice=null, lang='fr-FR'
+//   voix réellement appliquée      -> Microsoft George (en-GB), la voix PAR DÉFAUT
+// Le moteur n'applique donc PAS « la voix la plus proche du tag », contrairement
+// à ce que supposait le commentaire de la branche française ci-dessous : il
+// applique sa voix par défaut, et le français sort avec un accent anglais.
+// Rien ne le signalait — c'est ce silence qui a coûté plusieurs allers-retours
+// de diagnostic, la détection de langue ayant été mise en cause à tort.
+var _voixManquanteSignalee = {};
+var _NOMS_LANGUE_TTS = {
+  francais: 'française', arabe: 'arabe', hebreu: 'hébraïque',
+  grec: 'grecque', anglais: 'anglaise', espagnol: 'espagnole',
+  allemand: 'allemande', italien: 'italienne', portugais: 'portugaise'
+};
+function signalerVoixManquante(lang) {
+  console.warn('[TTS] AUCUNE VOIX pour « ' + lang + ' » : le moteur appliquera sa voix '
+    + 'par défaut, donc une AUTRE langue. Installez une voix ' + (_NOMS_LANGUE_TTS[lang] || lang) + '.');
+  if (_voixManquanteSignalee[lang]) return;
+  _voixManquanteSignalee[lang] = true;
+  var CLE = 'theo_voix_manquante_ignoree';
+  try { if (localStorage.getItem(CLE)) return; } catch (e) {}
+  try {
+    var old = document.getElementById('v108-voix-manquante');
+    if (old) old.remove();
+    var nom = _NOMS_LANGUE_TTS[lang] || lang;
+    var b = document.createElement('div');
+    b.id = 'v108-voix-manquante';
+    b.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);'
+      + 'z-index:var(--z-toast,10000);max-width:min(580px,94vw);box-sizing:border-box;'
+      + 'background:rgba(13,22,38,.98);color:#eaf4ff;border:1px solid rgba(245,197,66,.65);'
+      + 'border-left:4px solid #f5c542;border-radius:10px;padding:12px 14px;'
+      + 'font:13px/1.55 system-ui,Segoe UI,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.55);';
+    b.innerHTML =
+      '<div style="font-weight:700;color:#f5c542;margin-bottom:6px;">'
+      + 'Voix ' + nom + ' absente de ce système</div>'
+      + '<div style="opacity:.9;">Aucune voix <b>' + nom + '</b> n\'est installée sur cet appareil. '
+      + 'Le texte est donc lu par la voix <b>par défaut</b> du système — d\'où l\'accent étranger.</div>'
+      + '<div style="opacity:.9;margin-top:8px;">Pour l\'installer : <b>Paramètres → Heure et langue → '
+      + 'Parole → Voix → Ajouter des voix → Français</b>. Puis <b>fermez et relancez</b> l\'application.</div>'
+      + '<div style="opacity:.65;margin-top:6px;font-size:12px;">En PowerShell administrateur : '
+      + '<code>Add-WindowsCapability -Online -Name Language.Speech~~~fr-FR~0.0.1.0</code></div>'
+      + '<div style="display:flex;gap:8px;margin-top:10px;">'
+      + '<button id="v108-vm-fermer" style="background:#1c3a78;color:#d6e4ff;border:1px solid #3d6fd8;'
+      + 'padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;">Fermer</button>'
+      + '<button id="v108-vm-plus" style="background:#333;color:#ccc;border:none;'
+      + 'padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;">Ne plus afficher</button>'
+      + '</div>';
+    document.body.appendChild(b);
+    var f = b.querySelector('#v108-vm-fermer');
+    if (f) f.addEventListener('click', function () { b.remove(); });
+    var p = b.querySelector('#v108-vm-plus');
+    if (p) p.addEventListener('click', function () {
+      try { localStorage.setItem(CLE, '1'); } catch (e) {}
+      b.remove();
+    });
+  } catch (e) {}
+}
+
 function makeUtterance(text, lang) {
   // ── Normalisation spécifique par langue ──
   // Pour l'arabe : nettoyer le tashkeel / harakat qui embrouillent le TTS
@@ -14905,9 +14966,13 @@ function makeUtterance(text, lang) {
       utt.voice = fr;
       // Forcer fr-FR si la voix est fr-BE
       utt.lang = _normVoiceLang(fr.lang).startsWith('fr-BE') ? 'fr-FR' : (fr.lang || 'fr-FR');
+    } else {
+      // v108 — MESURÉ, PAS SUPPOSÉ : le moteur NE choisit PAS « la voix la plus
+      // proche » du tag. Il applique sa voix PAR DÉFAUT. Sur un poste sans pack
+      // français, c'est Microsoft George (en-GB) : le français est lu en anglais.
+      // On le dit à l'utilisateur au lieu de le faire en silence.
+      signalerVoixManquante('francais');
     }
-    // Si aucune voix FR n'est installée, on garde utt.lang = 'fr-FR' : le moteur
-    // choisira la voix la plus proche de ce tag plutôt que la voix par défaut.
   } else if (l === 'arabe') {
     // ── Voix arabe : recherche approfondie avec fallback ──
     let ar = getVoiceForLang('arabe');

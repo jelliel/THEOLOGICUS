@@ -1,0 +1,51 @@
+v108 — say when no voice exists, instead of reading French in English
+
+The user reported, after installing the update, that Windows still read
+French in an English voice. The detection fix from v107 was working; the
+cause was elsewhere, and it was measurable in one command.
+
+Measured on this Windows machine:
+
+  detectScriptLang('Très tôt les chrétiens…')  ->  'francais'   correct
+  getVoiceForLang('francais')                  ->  null         no voice
+  utterance emitted                            ->  voice=null, lang='fr-FR'
+  voice actually applied                       ->  Microsoft George (en-GB)
+
+The installed languages are en-MU, en-GB, en-US, ar-SA, he, el, syr-Syrc.
+There is no French. The only OneCore voices present are Microsoft George,
+Hazel and Susan (en-GB) and Naayf (ar-SA). So French text cannot be read
+by a French voice on this machine at all — which is also why the v107
+update changed nothing on screen: before and after, the engine fell back
+to the same default English voice.
+
+Two things were wrong on the app side.
+
+1. A comment in makeUtterance asserted that with lang='fr-FR' and no
+   matching voice, "the engine will pick the closest voice to this tag
+   rather than the default". Measured: it does not. WebView2 applies its
+   default voice. The comment is now replaced by the measurement, and the
+   else branch reports the situation.
+
+2. Nothing told the user. The app read French with an English accent in
+   complete silence. signalerVoixManquante(lang) now logs a warning and
+   shows a dismissible banner naming the missing language, the reason,
+   and the two ways to install it (Settings path and the PowerShell
+   Add-WindowsCapability command). Once per session per language, with a
+   "ne plus afficher" that persists.
+
+Verified in the real application, not in a stand-in: the exe was launched
+with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS enabling remote debugging and
+an isolated WEBVIEW2_USER_DATA_FOLDER, then queried over CDP. WebView2
+reports total=4 voices, fr=0, default "Microsoft George - English (United
+Kingdom)"; makeUtterance returns voice=null, lang='fr-FR'; the banner
+"Voix française absente de ce système" is in the DOM; the console carries
+"[TTS] AUCUNE VOIX pour « francais »…".
+
+Worth recording for the next diagnosis: the 325 voices Edge lists in
+headless mode — including 13 French "Online (Natural)" ones — are an Edge
+browser feature. WebView2 exposes only the 4 local OneCore voices. Any
+measurement of voice availability made in Chrome or Edge is therefore
+unrepresentative of the packaged app; it has to be made in WebView2.
+
+Non-regression: bench_v107_langue.js 0, bench_v106_tts.js 0,
+_v97/exhaustif.js 0, _v105/bench_v105.js OK.
