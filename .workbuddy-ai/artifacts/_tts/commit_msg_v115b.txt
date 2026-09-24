@@ -1,0 +1,11 @@
+v115 — docs: keep the built-in default voice, record persistence convention
+
+The user decided not to bake the ElevenLabs "Emilie" voice in as the default:
+"laisse la voix par defaut, je vais la configurer de moi meme". No change to
+elevenlabs.voix — and none is needed, because v115 persists whatever the user
+configures to %LOCALAPPDATA%/THEOLOGICUS/, so a manually chosen voice is now
+restored on every update instead of being lost.
+
+Records the durable convention in project memory: any config the user must not
+retype after an update belongs outside the install directory and outside
+localStorage-only storage.

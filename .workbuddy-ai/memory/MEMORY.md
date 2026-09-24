@@ -25,6 +25,31 @@ banc). Journaux `.workbuddy-ai/memory/AAAA-MM-JJ.md` ; bancs `.workbuddy-ai/arti
   refuse d'écraser une cible plus grosse). **Un correctif non synchronisé est
   invisible.** L'exe Windows lit le HTML **sur le disque** → redémarrage requis.
 
+## Persistance de la configuration — HORS dossier d'installation (v115)
+
+**Règle : toute config que l'utilisateur ne doit pas retaper après une MAJ va
+dans `%LOCALAPPDATA%/THEOLOGICUS/`. Jamais dans le dossier d'install, jamais
+seulement dans `localStorage`.**
+
+- `_app_data_dir()` (`proxy_server.py`) → `%LOCALAPPDATA%/THEOLOGICUS/` (repli
+  `~/THEOLOGICUS`). Ni `robocopy` vers `_inst_v102` ni la réinstallation Inno ne
+  le touchent.
+- Routes : **`/config`** (GET/POST — config TTS complète : moteur, voix, clé,
+  narration, ton) et **`/theologicus-keys`** (GET/POST — clés API). Migration
+  one-shot depuis `SERVE_DIR` si le fichier durable est absent.
+- Côté HTML : `ttsCfgSet()` écrit en miroir (`ttsEcrireConfigDisque`, POST) ;
+  `ttsRestaurerConfigDisque()` au `DOMContentLoaded`, **le disque prime** sur
+  localStorage (vérité quand localStorage a été effacé), puis resynchronise
+  l'UI via `_ttsUIRecharger` — la restauration est **asynchrone**. Repli
+  silencieux si `/config` est absent (mobile/standalone).
+- **Piège mesuré** : `build_windows.py` écrit `{"mistral":""}` dans `dist`, et
+  `robocopy /E` le recopie sur `_inst_v102` → **la clé API était effacée à
+  chaque build**. C'est la cause réelle du « j'ai dû tout reconfigurer ».
+- Toute route ajoutée à `proxy_server.py` est **compilée dans l'exe** → rebuild.
+
+Bancs : `artifacts/_tts/verify_config.js` (15/15) et `verify_config_route.py`
+(9/9, vrai gestionnaire proxy sur port libre — 8765 est pris par l'app).
+
 ## z-index — une seule échelle, nommée
 
 `:root`, **ordonnées**. Pièges 1–9 : skill zindex.
