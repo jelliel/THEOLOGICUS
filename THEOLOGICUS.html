@@ -7820,7 +7820,7 @@ window.__ensureTafsirSurah = function(p){
           <input type="checkbox" id="tts-narration" style="width:auto;margin:0">
           <span>🎙 Mode narrateur (voix chaleureuses, débit posé)</span>
         </label>
-        <div class="field-hint">Ralentit le débit, abaisse légèrement la hauteur et privilégie une voix de narration plutôt que robotique. S'applique aux trois moteurs (système, ElevenLabs, Supertonic).</div>
+        <div class="field-hint">Ralentit le débit, abaisse légèrement la hauteur et privilégie une voix de narration plutôt que robotique. La voix adapte aussi son ton toute seule : un verset ou « Ainsi parle le Seigneur » se lit plus lent et grave (solennel), une parole rassurante (« ne crains pas », « paix ») plus douce. S'applique aux trois moteurs (système, ElevenLabs, Supertonic).</div>
       </div>
 
       <div id="tts-el-block" class="field-group" style="display:none">
@@ -15041,13 +15041,73 @@ function signalerVoixManquante(lang) {
   } catch (e) {}
 }
 
+// ── Ton théologique : la voix respecte la charge du texte ──
+// Un lecteur humain ne lit pas un verset d'Écriture, une parole rassurante ou
+// une explication de la même manière. On détecte, dans le texte français
+// nettoyé, des marqueurs de ton et on en déduit une prosodie (débit, hauteur,
+// volume) :
+//   - solennel/imposant : citation (« … »), « Ainsi parle le Seigneur »,
+//     « Écoutez », Alléluia/Amen, « car il est écrit », « Gloire à Dieu »,
+//     « jugement », « Jésus-Christ »…
+//   - rassurant : « ne crains pas », « paix », « grâce », « Dieu est amour »,
+//     « repos », « je suis avec vous »…
+//   - explicatif : « c'est-à-dire », « par exemple », « en d'autres termes »…
+// Ces multiplicateurs se combinent AVEC le mode narrateur (ralenti global) et
+// avec _humanizeRate/Pitch (variation segment par segment). Neutre = 1/0/1.
+function ttsTonTheologique(texte) {
+  const t = (texte || '');
+  const low = t.toLowerCase();
+  const SOLENNEL = [
+    /[«»]/,
+    /ainsi parle (le seigneur|dieu)/,
+    /(^|\b)dit (le seigneur|dieu)\b/,
+    /parole (du seigneur|de dieu)/,
+    /écoutez?[, ]/,
+    /\balléluia\b|\bamen\b/,
+    /car il est écrit/,
+    /gloire (à dieu|au père)/,
+    /(^|\b)jugement\b/,
+    /crainte (de dieu|du seigneur)/,
+    /(^|\b)jésus-?christ\b/,
+  ];
+  const RASSURANT = [
+    /ne crains? (pas|point)/,
+    /\bpaix\b/,
+    /consolation|consoler/,
+    /\bgrâce\b/,
+    /miséricorde/,
+    /dieu est (amour|avec)/,
+    /mon (enfant|ami|frère|fille|peuple)/,
+    /\brepos\b/,
+    /espérance|réconforte/,
+    /je suis avec vous/,
+    /ne vous inquiétez/,
+  ];
+  const EXPLICATIF = [
+    /c['’]est-?à-dire/,
+    /en d['’]autres termes/,
+    /autrement dit/,
+    /par exemple/,
+    /notamment/,
+    /en d['’]autres mots/,
+  ];
+  if (SOLENNEL.some(re => re.test(low))) return { ton: 'solennel', rate: 0.82, pitch: -0.06, vol: 1.0 };
+  if (RASSURANT.some(re => re.test(low))) return { ton: 'rassurant', rate: 0.92, pitch: 0.03, vol: 0.96 };
+  if (EXPLICATIF.some(re => re.test(low))) return { ton: 'explicatif', rate: 0.95, pitch: 0.0, vol: 1.0 };
+  return { ton: null, rate: 1, pitch: 0, vol: 1 };
+}
+
 function makeUtterance(text, lang) {
   // ── Normalisation spécifique par langue ──
   // Pour l'arabe : nettoyer le tashkeel / harakat qui embrouillent le TTS
   // Pour le français : la normalisation est déjà faite dans cleanMd() — pas de double appel
   let cleanText = text;
+  // NFC :某些文本源（corpus）使用 des accents décomposés (e + accent combinant,
+  // NFD). Plusieurs moteurs TTS les prononcent mal ou les sautent ; on recompose
+  // systématiquement en précomposé (é, È…) avant synthèse.
+  if (cleanText && cleanText.normalize) cleanText = cleanText.normalize('NFC');
   if (lang === 'arabe') {
-    cleanText = normalizeArabicSpeech(text);
+    cleanText = normalizeArabicSpeech(cleanText);
     console.log('[ARABE TTS] Texte brut:', text.substring(0, 120));
     console.log('[ARABE TTS] Après nettoyage:', cleanText.substring(0, 120));
   }
@@ -15063,6 +15123,10 @@ function makeUtterance(text, lang) {
   // en poids et en intelligibilité. _humanizeRate/Pitch y ajoute une variation
   // segment par segment, comme un orateur qui ne monocorde pas.
   const narration = ttsNarration();
+  // Ton théologique : un verset, une parole rassurante ou une explication ne se
+  // lisent pas de la même manière. On module débit/hauteur/volume selon des
+  // marqueurs détectés dans le texte français (voir ttsTonTheologique).
+  const tone = (l === 'francais') ? ttsTonTheologique(cleanText) : { ton: null, rate: 1, pitch: 0, vol: 1 };
   // En mode narrateur : on ralentit encore le débit (~12 %) et on abaisse la
   // hauteur (~5 %) — deux leviers qui, ensemble, font passer la voix du registre
   // « lecture TTS robotique » au registre « lecteur posé ». _humanizeRate/Pitch
@@ -15071,13 +15135,16 @@ function makeUtterance(text, lang) {
   const rates = { francais: 0.95, anglais: 0.95, espagnol: 0.94, allemand: 0.92, italien: 0.94, portugais: 0.94, grec: 0.90, hebreu: 0.90, arabe: 0.87 };
   let baseRate = rates[l] || 0.95;
   if (narration) baseRate *= NARR_RATE;
+  baseRate *= tone.rate;
   utt.rate = _humanizeRate(baseRate, cleanText.length);
   // Pitch neutre-léger : on reste proche de 1.0 (le robotisme vient surtout du
   // pitch trop haut). La variation est microscopique, juste pour rompre la monotonie.
   const pitches = { francais: 1.02, anglais: 1.02, espagnol: 1.02, allemand: 1.00, italien: 1.02, portugais: 1.02, grec: 1.00, hebreu: 1.00, arabe: 0.98 };
   let basePitch = pitches[l] || 1.02;
   if (narration) basePitch += NARR_PITCH;
+  basePitch += tone.pitch;
   utt.pitch = _humanizePitch(basePitch, cleanText.length);
+  utt.volume = tone.vol;
   utt.volume = 1;
   _segVarCounter++; // fait avancer la variation pour le segment suivant
   if (l === 'francais') {
@@ -15335,6 +15402,9 @@ function ttsCauseHttp(moteur, status, corps) {
 function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
   var c = ttsCfg();
   var moteur = moteurForce || c.moteur;
+  // NFC : recompose les accents décomposés (NFD) que certains moteurs distants
+  // prononcent mal (cf. makeUtterance). Appliqué avant envoi aux deux moteurs.
+  if (texte && texte.normalize) texte = texte.normalize('NFC');
   ttsStopAudio();
   var jeton = ++_ttsJeton;
   function fin(err, detail) {
@@ -15365,9 +15435,11 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
     };
   } else {
     var stb = String(c.supertonic.url || 'http://127.0.0.1:8091').replace(/\/+$/, '');
-    // Mode narrateur : on ralentit légèrement le service local (×0.92, plancher
-    // 0.8) pour une diction plus posée, sans toucher au choix de voix de l'utilisateur.
+    // Ton théologique + mode narrateur : on ralentit le service local selon le
+    // ton détecté (un verset solennel se lit plus lentement), plancher 0.8, sans
+    // toucher au choix de voix de l'utilisateur.
     var stSpeed = c.supertonic.vitesse || 1.05;
+    stSpeed = stSpeed * ttsTonTheologique(texte).rate;
     if (ttsNarration()) stSpeed = Math.max(0.8, stSpeed * 0.92);
     url = stb + '/tts?text=' + encodeURIComponent(texte) +
           '&lang=' + encodeURIComponent(ttsLangIso(lang)) +
