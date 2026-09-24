@@ -1,0 +1,55 @@
+v117 — stop asking for the API key at every launch: make the port stable
+
+Symptom reported by the user: every launch or update of THEOLOGICUS on Windows
+asked for the API key and the whole configuration again, before letting them
+into the interface.
+
+Root cause — the port, not the storage.
+
+An origin is scheme://host:port. Two different ports are two different origins,
+hence two distinct browser stores: localStorage AND IndexedDB, and cookies too.
+app.py called pick_port(), which did bind(("127.0.0.1", 0)) whenever 8765 was
+busy — and bind on port 0 returns a PSEUDO-RANDOM port. So the moment anything
+else held 8765, the app started on a fresh origin and the browser store looked
+empty. The durable files were never the problem: the log confirms
+GET /theologicus-keys 200 and GET /config 200 on every launch.
+
+Measured on the machine, no guessing involved:
+
+  PID 18096  python.exe serve.py            listening on 8765, 8766, 8767
+  PID 23248  C:\\Theologicus\\_inst_v102\\THEOLOGICUS.exe   listening on 61568
+
+The app was running on 127.0.0.1:61568 while its previous configuration lived
+under 127.0.0.1:8765. A random port is not reproducible, which is why the
+symptom looked intermittent and why "it asks every time" rather than "it always
+forgets".
+
+Fixes
+
+1. Deterministic port. PORT_SPAN 16 over 8765..8780; choisir_port() walks the
+   range and takes the first free port. No random fallback anywhere.
+2. Reuse a running instance. New /__theologicus_ping identity probe on the
+   server; app.py detects an already-listening THEOLOGICUS and reuses its port,
+   guaranteeing the same origin. Falls back to sniffing THEOLOGICUS.html so an
+   instance started by an older exe is still recognised.
+3. Port is now logged. Without it the symptom was undiagnosable — that was a
+   real part of why this took so long to explain.
+4. Build guard. copier() refuses to overwrite a target that is LARGER than the
+   source. Two consecutive builds on 2026-09-24 wrote a THEOLOGICUS.html 9 bytes
+   older than the source into dist/, which robocopy /E then pushed to
+   _inst_v102 — the app served a version predating the fix just written. A
+   shrink is always a bad overwrite, never compression.
+
+Note on the WebView2 profile: verified persistent. pywebview's init_storage()
+uses %APPDATA%/pywebview when private_mode=False and storage_path is unset, and
+app.py passes private_mode=False. So once the port is stable, the same store is
+reused — the port really was the whole story.
+
+Bench verify_port.py: 10/10 — probe accepts THEOLOGICUS and rejects a foreign
+server and a closed port; the running instance is found; three consecutive calls
+to choisir_port() return the SAME port; the fallback skips occupied ports and is
+itself deterministic; app.py no longer contains bind(("127.0.0.1", 0)).
+
+Verified on the real deployed binary: ports 8765-8767 held by a foreign
+process, THEOLOGICUS.exe took 8768 (one step along the range, not a random
+port), and curl /__theologicus_ping returned {"app":"theologicus"}.
