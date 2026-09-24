@@ -30,17 +30,67 @@ def app_dir() -> str:
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def pick_port(preferred: int) -> int:
-    """Port préféré, sinon un port libre au hasard."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        try:
-            s.bind(("127.0.0.1", preferred))
-            return preferred
-        except OSError:
-            pass
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+# v117 — POURQUOI CE BLOC EXISTE. L'origine d'une page est scheme://hote:port.
+# Deux ports différents = deux origines = deux stockages navigateur distincts
+# (localStorage, IndexedDB). L'ancien code faisait bind(("", 0)) : un port
+# PSEUDO-ALÉATOIRE à chaque lancement dès que 8765 était occupé. La config
+# (clé API, réglages, modèles, conversations) paraissait donc effacée à chaque
+# ouverture — exactement le symptôme « je dois tout reconfigurer ».
+# Désormais : port DÉTERMINISTE (8765, puis 8766, 8767...) et réutilisation
+# d'une instance déjà lancée. Le port est enfin stable d'un lancement à l'autre.
+PORT_SPAN = 16          # 8765 .. 8780
+PING_TIMEOUT = 0.4
+
+
+def port_range(preferred: int) -> list[int]:
+    """Plage de ports candidate, déterministe et stable dans le temps."""
+    return [preferred + i for i in range(PORT_SPAN)]
+
+
+def _est_notre_serveur(port: int) -> bool:
+    """Vrai si un serveur THEOLOGICUS écoute déjà sur ce port.
+
+    Deux tests : la sonde dédiée (exécutable récent), et à défaut le contenu de
+    THEOLOGICUS.html — un serveur étranger répond 404 ou sert autre chose. Le
+    second test couvre une instance lancée par une ancienne version du exe.
+    """
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/__theologicus_ping", timeout=PING_TIMEOUT
+        ) as r:
+            if r.status == 200 and b"theologicus" in r.read(64):
+                return True
+    except Exception:
+        pass
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/THEOLOGICUS.html", timeout=PING_TIMEOUT
+        ) as r:
+            if r.status == 200 and b"THEOLOGICUS" in r.read(4096):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def trouver_instance_existante(ports: list[int]):
+    """Port d'un serveur THEOLOGICUS déjà lancé, ou None."""
+    for p in ports:
+        if _est_notre_serveur(p):
+            return p
+    return None
+
+
+def choisir_port(ports: list[int]):
+    """Premier port libre de la plage — déterministe, jamais aléatoire."""
+    for p in ports:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    return None
 
 
 def wait_up(port: int, timeout: float = 5.0) -> bool:
@@ -116,19 +166,43 @@ def main() -> int:
         except Exception:
             pass
 
-    port = pick_port(proxy_server.PORT)
-    proxy_server.SERVE_DIR = base  # les fichiers statiques sont à côté de l'exe
-    handler = partial(proxy_server.CORSProxyHandler, directory=base)
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    httpd.daemon_threads = True
+    ports = port_range(proxy_server.PORT)
+    httpd = None
 
-    server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
-    server_thread.start()
+    # v117 — réutiliser l'instance déjà lancée GARANTIT la même origine, donc
+    # la même clé API et la même configuration. Deux fenêtres sur deux ports
+    # donnaient deux stockages distincts : c'était le bug.
+    port = trouver_instance_existante(ports)
+    if port is not None:
+        print(f"[OK] Instance THEOLOGICUS déjà en écoute sur le port {port} "
+              f"— réutilisée (même origine, même configuration).")
+        url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
+    else:
+        port = choisir_port(ports)
+        if port is None:
+            print(f"[X] Aucun port libre entre {ports[0]} et {ports[-1]}. "
+                  f"Fermez l'application ou libérez un port.", file=sys.stderr)
+            return 1
+        proxy_server.SERVE_DIR = base  # les fichiers statiques sont à côté de l'exe
+        handler = partial(proxy_server.CORSProxyHandler, directory=base)
+        httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        httpd.daemon_threads = True
 
-    url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
-    if not wait_up(port):
-        print("[X] Le serveur local n'a pas démarré.", file=sys.stderr)
-        return 1
+        server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+
+        url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
+        # v117 — tracer le port : sans lui, le symptôme était indiagnosticable.
+        print(f"[OK] Serveur local démarré sur le port {port} — origine {url}")
+        if port != ports[0]:
+            print(f"[!] Le port {ports[0]} était occupé : repli sur {port}. "
+                  f"Ce repli est déterministe, il sera le même au prochain "
+                  f"lancement — mais si l'occupant change, l'origine changera "
+                  f"et la configuration du navigateur (pas les clés, elles sont "
+                  f"hors installation) sera perdue.", file=sys.stderr)
+        if not wait_up(port):
+            print("[X] Le serveur local n'a pas démarré.", file=sys.stderr)
+            return 1
 
     if os.environ.get("THEOLOGICUS_NO_WINDOW"):
         print(f"[OK] Serveur prêt : {url}  (Ctrl+C pour arrêter)")
@@ -138,14 +212,16 @@ def main() -> int:
         except KeyboardInterrupt:
             pass
         finally:
-            httpd.shutdown()
+            if httpd is not None:
+                httpd.shutdown()
         return 0
 
     try:
         import webview  # pywebview
     except ImportError:
         print("[X] pywebview manquant : pip install pywebview", file=sys.stderr)
-        httpd.shutdown()
+        if httpd is not None:
+            httpd.shutdown()
         return 1
 
     # Icône : fichier à côté du script ; en mode exe, pywebview extrait
@@ -167,7 +243,9 @@ def main() -> int:
         private_mode=False,
         icon=icon_path if os.path.isfile(icon_path) else None,
     )
-    httpd.shutdown()
+    # v117 : ne rien arrêter si l'on a réutilisé une instance déjà lancée.
+    if httpd is not None:
+        httpd.shutdown()
     return 0
 
 

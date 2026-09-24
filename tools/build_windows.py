@@ -78,13 +78,32 @@ def retirer(path, raison):
 
 
 def copier(src, dst_dir, obligatoire=True):
-    """Copie un fichier ; ignore l'absence si non obligatoire."""
+    """Copie un fichier ; ignore l'absence si non obligatoire.
+
+    v117 — REFUS DE RECULER. Le 2026-09-24, deux builds consecutifs ont ecrit
+    dans dist/ un THEOLOGICUS.html VIEUX de 9 octets par rapport a la source,
+    puis robocopy /E l'a recopie sur _inst_v102. L'application servait donc une
+    version anterieure au correctif qu'on venait d'ecrire — exactement le piege
+    « un correctif non synchronise est invisible » de sync_html.py.
+    Ici, on compare les tailles quand la destination existe deja : si elle est
+    PLUS GROSSE, on refuse de l'ecraser et on s'arrete. Un HTML plus petit que
+    le precedent signale toujours un ecrasement fautif, jamais une compression.
+    """
     if not os.path.isfile(src):
         if obligatoire:
             log("[X] Fichier requis absent : %s" % src)
             sys.exit(1)
         return False
     os.makedirs(dst_dir, exist_ok=True)
+    dst = os.path.join(dst_dir, os.path.basename(src))
+    if os.path.isfile(dst):
+        n_src, n_dst = os.path.getsize(src), os.path.getsize(dst)
+        if n_dst > n_src:
+            log("[X] Refus d'ecraser %s : cible PLUS GROSSE (%d -> %d)."
+                % (dst, n_dst, n_src))
+            log("    La source est en retard sur la cible : lancez d'abord")
+            log("    `python tools/sync_html.py`, puis relancez le build.")
+            sys.exit(1)
     shutil.copy2(src, dst_dir)
     return True
 

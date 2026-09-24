@@ -66,6 +66,26 @@ def main():
             print("[OK] %-38s deja identique" % cible)
             continue
 
+        # v117 — le build ESTAMPE la version dans dist/_inst_v102 :
+        # `var STAMPED = '__THEO_VERSION__'` devient `var STAMPED = '2.0.145'`.
+        # Le fichier deploye est donc legitimement plus court de quelques octets
+        # que la source, sans etre perime. Sans cette reconnaissance, chaque build
+        # faisait crier « PERIMEE » (1464224 -> 1464233) et l'on « corrigeait »
+        # un ecart qui n'existait pas. On ne signale donc comme perimee que si la
+        # cible n'a PAS de tampon de version.
+        try:
+            with open(cible, 'rb') as f:
+                tete = f.read()
+            import re as _re
+            m = _re.search(rb"var STAMPED = '([^']*)'", tete)
+            estampille = bool(m) and m.group(1) != b'__THEO_VE' + b'RSION__'
+        except Exception:
+            estampille = False
+
+        if estampille:
+            print("[OK] %-38s deployee (version estampillee par le build)" % cible)
+            continue
+
         ecarts += 1
         etat = "PERIMEE" if t_taille < ref_taille else "DIFFERENTE"
         print("[!!] %-38s %s (%d -> %d octets)" % (cible, etat, t_taille, ref_taille))

@@ -25,6 +25,15 @@ PORT = 8765
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 ALLOWED_ORIGINS = ['http://localhost', 'http://127.0.0.1', 'file://']
 
+# v117 — sonde d'identité, consommée par app.py AVANT de démarrer un serveur.
+# Pourquoi : l'ORIGINE d'une page web est scheme://hote:port. Deux ports
+# différents = deux origines = deux stockages navigateur distincts
+# (localStorage, IndexedDB). Tant que le port variait d'un lancement à l'autre,
+# la clé API et toute la configuration semblaient effacées à chaque ouverture.
+# Cette sonde permet au lanceur de RECONNAÎTRE un serveur THEOLOGICUS déjà en
+# écoute et de le réutiliser, au lieu d'en démarrer un second ailleurs.
+PING_TOKEN = b'{"app":"theologicus"}'
+
 
 def _app_data_dir():
     """Dossier de données utilisateur HORS du dossier d'installation, pour que
@@ -430,6 +439,15 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        # v117 — sonde d'identité (voir PING_TOKEN). Ultra-légère et sans cache :
+        # elle est appelée par le lanceur au démarrage, avant toute fenêtre.
+        if self.path.split('?')[0] == '/__theologicus_ping':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(PING_TOKEN)
+            return
         # LibreTranslate local : état (interrogé par PARAMÈTRES)
         if self.path.split('?')[0] == '/libretranslate/status':
             self._json_response(lt_status())
