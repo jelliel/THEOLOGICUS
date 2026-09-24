@@ -1,0 +1,29 @@
+v115 — docs: app closing after a minute is the built-in auto-update, not a crash
+
+Reported as "je lance puis apres une minute ca ferme l'appli". It is not a
+crash, and the v115 config persistence is not the cause.
+
+Evidence: %TEMP%\THEOLOGICUS-Setup-x64.exe (46.5 MB) downloaded at 15:54;
+_inst_v102/unins/unins000.exe|.dat written at 15:54 (an Inno installer ran);
+a traceback in app.py:81 install_update; and THEOLOGICUS.log showing no fatal
+error, with /config answering 200 on GET and POST right up to the last line.
+
+Cause: the built-in auto-update (v74). DesktopApi.install_update downloads the
+installer, launches it, then destroys the window 2 seconds later so the
+installer can overwrite in-use files (app.py 91-101). Closing itself is the
+intended behaviour. Here it fired because the pushes had taken the repo to
+2.0.142 while the installed build was 2.0.140.
+
+Two consequences worth remembering:
+- every push triggers an auto-update on the user's machine, hence the app
+  closing on the next launch;
+- CI also produces the Windows installer, not only the APK — the job is named
+  "Build Android APK" but _inst_v102 moved to 2.0.141 after reinstalling.
+
+Also records a methodology rule: a verification bench must never write into a
+live config store. A POST /config against the installed exe overwrote the
+user's real config (ElevenLabs key + voice); it was restored verbatim because a
+preceding GET had captured it. Probe configuration read-only.
+
+Verified on the installed exe: GET /config 200, GET /theologicus-keys 200,
+THEOLOGICUS.html 200 — the v115 fix survives the reinstall.
