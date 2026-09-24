@@ -33,7 +33,8 @@ const moteursConst = /var TTS_MOTEURS = \{[^}]*\};/.exec(HTML);
 const SRC = [
   cleConst[0], moteursConst[0],
   extractFn('ttsCfg'), extractFn('ttsNarration'),
-  extractFn('ttsTonTheologique'), extractFn('ttsElAppliqueVitesse')
+  extractFn('ttsTonTheologique'), extractFn('ttsElAppliqueVitesse'),
+  extractFn('ttsElBaliseTon')
 ].join('\n');
 
 let ok = 0, ko = 0;
@@ -106,7 +107,41 @@ check('bloc ElevenLabs localisé', blocEl.length > 0, 'debut=' + debut + ' fin='
 // On cherche une CONSTRUCTION de balise, pas le mot dans un commentaire :
 // chercher « '<prosody » ou « "<prosody » (littéral de chaîne), pas « prosody > ».
 check('aucune balise <prosody> construite', !/['"]<prosody/.test(blocEl));
-check('le texte envoyé est bien le texte brut', /text:\s*texte\s*,/.test(blocEl));
+check('le texte envoyé est bien le texte préparé', /text:\s*_texteEl\s*,/.test(blocEl));
+
+// ── v116b : le ton sur eleven_v3 passe par une balise audio ──────────────────
+console.log('\n-- v116b : balises audio sur eleven_v3');
+const V3 = 'eleven_v3';
+const balise = (c, texte, modele) => c.ttsElBaliseTon(c.ttsTonTheologique(texte).ton, modele);
+
+check('solennel -> [slows down]', balise(c, SOLENNEL, V3) === '[slows down] ', balise(c, SOLENNEL, V3));
+check('rassurant -> [quietly]', balise(c, RASSURANT, V3) === '[quietly] ', balise(c, RASSURANT, V3));
+const EXPLICATIF = 'C\'est-à-dire, en d\'autres termes, la création.';
+check('explicatif -> [deliberate]', balise(c, EXPLICATIF, V3) === '[deliberate] ', balise(c, EXPLICATIF, V3));
+check('neutre -> aucune balise', balise(c, NEUTRE, V3) === '', JSON.stringify(balise(c, NEUTRE, V3)));
+
+console.log('\n-- les balises sont strictement réservées à v3');
+check('v2 n\'en reçoit aucune', balise(c, SOLENNEL, 'eleven_multilingual_v2') === '');
+check('flash n\'en reçoit aucune', balise(c, SOLENNEL, 'eleven_flash_v2_5') === '');
+
+console.log('\n-- [slowly]/[softly] proscrits : hors liste officielle, risque d\'être LUS');
+// Mesuré actifs (+16,5 % / +7 %) mais absents de la liste officielle v3 :
+// le supplément de durée venait du mot prononcé, pas d'un ralentissement.
+// On ne balaie que le CODE : le commentaire qui relate la mesure les nomme.
+const CODE = HTML
+  .replace(/\/\*[\s\S]*?\*\//g, '')            // commentaires de bloc
+  .replace(/(^|[^:'"\\])\/\/[^\n]*/g, '$1');   // commentaires de ligne (pas les URL)
+check('aucun [slowly] dans le code', !/\[slowly\]/.test(CODE));
+check('aucun [softly] dans le code', !/\[softly\]/.test(CODE));
+check('le filtre de commentaires a bien fonctionné', !CODE.includes('hors liste officielle'));
+
+console.log('\n-- la balise précède toujours du texte (règle officielle v3)');
+const TAGS = ['[slows down] ', '[quietly] ', '[deliberate] '];
+check('chaque balise se termine par une espace', TAGS.every(t => t.endsWith(' ')));
+const fBal = extractFn('ttsElBaliseTon');
+check('ttsElBaliseTon ne rend que des balises connues',
+  (fBal.match(/return\s*'\[[^\]]+\]\s*'/g) || []).length === 3,
+  (fBal.match(/return\s*'\[[^\]]+\]\s*'/g) || []).join(' | '));
 
 console.log('\n=== ' + ok + ' OK / ' + ko + ' échec(s) ===');
 process.exit(ko ? 1 : 0);

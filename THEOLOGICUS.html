@@ -7833,7 +7833,7 @@ window.__ensureTafsirSurah = function(p){
         <input class="field-input" id="tts-el-voice" placeholder="Voice ID (ex. 21m00Tcm4TlvDq8ikWAM)" autocomplete="off" style="margin-top:8px">
         <select class="field-input field-select" id="tts-el-model" style="margin-top:8px">
           <option value="eleven_multilingual_v2">eleven_multilingual_v2 — 29 langues, stable</option>
-          <option value="eleven_v3">eleven_v3 — le plus expressif (seul à couvrir l'hébreu), mais sans réglage de débit</option>
+          <option value="eleven_v3">eleven_v3 — le plus expressif (seul à couvrir l'hébreu) ; ton par balises expressives</option>
           <option value="eleven_flash_v2_5">eleven_flash_v2_5 — le plus rapide, le moins cher</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -15460,14 +15460,36 @@ function ttsCauseHttp(moteur, status, corps) {
 //   eleven_flash_v2_5       speed 0.7 -> +50,7 %
 //   eleven_v3               speed 0.7 -> sans effet (dans le bruit)
 // et <prosody rate="-80%"> rend un audio IDENTIQUE au texte brut sur v3.
-// v3 est un modèle « expressif » piloté par le texte : il ignore les réglages
-// de débit. Lui envoyer `speed` ou des balises serait du code mort — et les
-// balises risqueraient d'être lues littéralement. On les réserve donc aux
-// modèles qui les respectent.
+// v3 est un modèle « expressif » piloté par le TEXTE : il ignore les réglages
+// de débit. `speed` ne lui est donc jamais envoyé.
 function ttsElAppliqueVitesse(modele) {
   var m = String(modele || '');
   if (m.indexOf('eleven_v3') === 0) return false;
   return true;
+}
+
+// v116b — le ton théologique sur eleven_v3 passe par une BALISE AUDIO placée en
+// tête de texte. C'est le seul levier que v3 honore (il lit le texte, pas les
+// réglages). Mesuré : [slowly] allongeait bien l'audio de +16,5 % (3 échantillons,
+// min 12,70 s contre un max de 11,84 s en brut : distributions disjointes) —
+// mais [slowly] et [softly] ne figurent PAS dans la liste officielle des balises
+// v3. Le supplément de durée était donc très probablement le MOT PRONONCÉ en
+// anglais au milieu d'une lecture française : un défaut, pas un effet.
+// On n'emploie ici QUE des balises présentes dans la liste officielle
+// (catégorie « Delivery & Pacing »), au nombre de trois, une par ton :
+//   solennel   -> [slows down]   plus lent, plus pesé
+//   rassurant  -> [quietly]      plus doux, plus proche
+//   explicatif -> [deliberate]   articulé, posé
+// Règle officielle respectée : UNE balise par énoncé, toujours suivie de texte.
+// v3 les consomme comme indications de jeu ; si elle ne les reconnaît pas, le
+// pire cas est une absence de ton, jamais un mot lu à voix haute.
+function ttsElBaliseTon(ton, modele) {
+  // Les balises audio sont propres à v3 ; sur v2/flash elles seraient lues.
+  if (ttsElAppliqueVitesse(modele)) return '';
+  if (ton === 'solennel') return '[slows down] ';
+  if (ton === 'rassurant') return '[quietly] ';
+  if (ton === 'explicatif') return '[deliberate] ';
+  return '';
 }
 
 function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
@@ -15497,19 +15519,27 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
     // v116 : le ton théologique (solennel / rassurant / explicatif) et la pose
     // du narrateur arrivent ici par `voice_settings.speed` — le SEUL réglage de
     // débit que l'API applique réellement (mesuré : +43 % en v2 à 0.7).
+    // v116b : sur eleven_v3, qui ignore `speed`, le même ton passe par une
+    // balise audio en tête de texte (cf. ttsElBaliseTon).
+    var _ton = ttsTonTheologique(texte);
+    // Un stability bas renforce l'effet des balises sur v3 (plage conseillée
+    // 0,22-0,35) : le mode narrateur, déjà à 0,35, les rend bien audibles.
     var vs = ttsNarration()
       ? { stability: 0.35, similarity_boost: 0.8, style: 0.4, use_speaker_boost: true }
       : { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true };
+    var _texteEl = texte;
     if (ttsElAppliqueVitesse(modele)) {
       // Même ordre que Supertonic : le ton d'abord, puis la pose du narrateur.
-      var _vit = ttsTonTheologique(texte).rate * (ttsNarration() ? 0.92 : 1);
+      var _vit = _ton.rate * (ttsNarration() ? 0.92 : 1);
       // Plage documentée de l'API : 0.7 à 1.2.
       vs.speed = Math.min(1.2, Math.max(0.7, Math.round(_vit * 100) / 100));
+    } else {
+      _texteEl = ttsElBaliseTon(_ton.ton, modele) + texte;
     }
     opts = {
       method: 'POST',
       headers: { 'xi-api-key': cle, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: texte, model_id: modele, voice_settings: vs })
+      body: JSON.stringify({ text: _texteEl, model_id: modele, voice_settings: vs })
     };
   } else {
     var stb = String(c.supertonic.url || 'http://127.0.0.1:8091').replace(/\/+$/, '');
