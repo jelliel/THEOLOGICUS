@@ -63,3 +63,12 @@ tools/.summafr_cache/
 .workbuddy-ai/artifacts/_tts/*.wav
 .workbuddy-ai/artifacts/_tts/*.jpg
 .workbuddy-ai/artifacts/_tts/*.mp4
+
+# Cache audio du service Supertonic (residu local, pas un livrable)
+tools/.supertonic_cache/
+
+# Residus d'execution des bancs : profils Chrome jetables, journal du service,
+# images extraites des videos. Rien de tout cela n'est un livrable.
+.workbuddy-ai/artifacts/_tts/profil-*/
+.workbuddy-ai/artifacts/_tts/supertonic-service.log
+.workbuddy-ai/artifacts/_tts/frames/

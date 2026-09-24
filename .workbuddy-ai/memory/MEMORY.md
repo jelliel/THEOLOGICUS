@@ -90,8 +90,9 @@ Journaux `.workbuddy-ai/memory/AAAA-MM-JJ.md` ; bancs `.workbuddy-ai/artifacts/`
 `cleanMd` → `prosodyPreprocess` → `splitByLanguage` → `splitMixedSegments` →
 `chunkText(180)` → `makeUtterance` → file `speakNextSegment` (avance sur `onend`).
 `readLangMode` (`'fr'` par défaut = français forcé, sauf écritures non-latines).
-**Aucun TTS en ligne intégré** (0 occurrence d'ElevenLabs) : tout passe par le
-`speechSynthesis` du WebView. Diagnostic : skill `theologicus-tts-diagnostic`.
+**Trois moteurs depuis v109** — système / ElevenLabs / Supertonic — et **un seul
+point de sortie**, `ttsEmission()`. Doc : `.workbuddy-ai/artifacts/TTS_MOTEURS.md`.
+Diagnostic : skill `theologicus-tts-diagnostic`.
 
 - **`getVoiceForLang(lang)` doit rendre `null`, jamais la voix française, quand
   `lang` n'est pas le français** ; sinon `makeUtterance` testant `if (v)`, le repli
@@ -137,6 +138,27 @@ l'oreille** : avant comme après, le repli est la même voix anglaise.
 - v108 (`signalerVoixManquante()`, `_NOMS_LANGUE_TTS`, bandeau
   `#v108-voix-manquante`, clé `theo_voix_manquante_ignoree`) **nomme le problème au
   lieu de lire fautivement en silence**. Un silence fautif vaut moins qu'un aveu.
+
+### v109 — trois moteurs, un seul point de sortie
+
+Cause 2 ci-dessus **n'est pas réparable dans le code** : la machine n'a pas de voix
+française. v109 comble le trou par le choix du moteur, dans les Paramètres.
+
+- **Supertonic 3** (dépôt `supertone-oss-archive/supertonic`, **MIT**) : ONNX local,
+  **31 langues dont fr/el/ar, ni hébreu ni latin**, 10 styles `F1..F5`/`M1..M5`,
+  **CPU seul**. Modèle déjà en cache `~/.cache/supertonic3` (385 Mo). RTF mesuré
+  **0,29–0,33**, cache disque **8,7 ms**, sortie normalisée à −1 dBFS.
+  **Le dépôt ne fournit AUCUN serveur** : `tools/start_supertonic.py` est le nôtre
+  (stdlib + `wave`, pas de `soundfile`). Piège : `pret()` doit tenir un **`RLock`**,
+  un `Lock` simple s'auto-bloque (le préchauffage rentre dans `style()`).
+- **ElevenLabs** : `POST /text-to-speech/{voice_id}?output_format=mp3_44100_128`,
+  en-tête `xi-api-key`. `eleven_v3` est le seul modèle qui couvre l'hébreu.
+- **Clés API en `localStorage['theologicus-tts-moteurs']`, jamais embarquées** —
+  même règle que `__serverKeys`.
+- **Deux invariants, testés sur le fichier** : `speechSynthesis.speak(utt)` **2
+  sites** (sortie + bouton Tester), `cancel()` **1 site** (dans `ttsStop`). Un site
+  direct qui réapparaît ignore le moteur choisi. Banc
+  `_tts/bench_v109_moteurs.js` : **44 contrôles, 0 échec, deux passes de suite**.
 
 ## Build / signature — CLÉ CRITIQUE
 

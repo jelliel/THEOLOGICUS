@@ -7798,12 +7798,56 @@ window.__ensureTafsirSurah = function(p){
 
       <div class="section-title">🔊 LECTURE VOCALE (TTS)</div>
       <div class="field-group">
+        <label class="field-label">Moteur de lecture</label>
+        <select class="field-input field-select" id="tts-engine-select">
+          <option value="system">🖥 Voix du système — hors ligne, gratuit</option>
+          <option value="elevenlabs">☁ ElevenLabs — voix réalistes (cloud, clé requise)</option>
+          <option value="supertonic">🧠 Supertonic 3 — local, 31 langues, gratuit</option>
+        </select>
+        <div class="field-hint">« Voix du système » dépend des voix installées sur l'appareil : si une langue n'en a aucune, le moteur lit avec sa voix par défaut, donc une autre langue. ElevenLabs et Supertonic couvrent les langues que votre système ignore.</div>
+      </div>
+      <div class="field-group">
         <label class="field-label">Langue de lecture des réponses</label>
         <select class="field-input field-select" id="read-lang-select">
           <option value="fr">🇫🇷 Français (forcé — jamais d'accent étranger)</option>
           <option value="auto">🌐 Détection automatique (multi-langues : FR/AR/HÉ/GR…)</option>
         </select>
         <div class="field-hint">Si vous entendez un accent anglais sur du français, choisissez « Français (forcé) ». La voix française est réattribuée à chaque lecture.</div>
+      </div>
+
+      <div id="tts-el-block" class="field-group" style="display:none">
+        <label class="field-label">☁ ElevenLabs</label>
+        <input class="field-input" id="tts-el-key" type="password" placeholder="Clé API (xi-api-key)" autocomplete="off">
+        <input class="field-input" id="tts-el-voice" placeholder="Voice ID (ex. 21m00Tcm4TlvDq8ikWAM)" autocomplete="off" style="margin-top:8px">
+        <select class="field-input field-select" id="tts-el-model" style="margin-top:8px">
+          <option value="eleven_multilingual_v2">eleven_multilingual_v2 — 29 langues, stable</option>
+          <option value="eleven_v3">eleven_v3 — le plus expressif, seul à couvrir l'hébreu</option>
+          <option value="eleven_flash_v2_5">eleven_flash_v2_5 — le plus rapide, le moins cher</option>
+        </select>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn-ghost" id="tts-el-test" style="min-height:32px;font-size:11px">🔊 Tester</button>
+          <button class="btn-ghost" id="tts-el-voices" style="min-height:32px;font-size:11px">📋 Lister les voix du compte</button>
+        </div>
+        <div class="field-hint" id="tts-el-hint">La clé reste dans ce navigateur et n'est envoyée qu'à api.elevenlabs.io.</div>
+      </div>
+
+      <div id="tts-st-block" class="field-group" style="display:none">
+        <label class="field-label">🧠 Supertonic 3 (service local)</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="tts-st-dot" style="width:10px;height:10px;border-radius:50%;background:#666;flex:none"></span>
+          <span id="tts-st-state" style="font-size:12px;font-weight:700">Non vérifié</span>
+        </div>
+        <input class="field-input" id="tts-st-url" placeholder="http://127.0.0.1:8091" autocomplete="off" style="margin-top:8px">
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <select class="field-input field-select" id="tts-st-voice" style="flex:1;min-width:150px"></select>
+          <input class="field-input" id="tts-st-speed" style="width:90px" placeholder="1.05">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn-ghost" id="tts-st-check" style="min-height:32px;font-size:11px">🔌 Vérifier le service</button>
+          <button class="btn-ghost" id="tts-st-test" style="min-height:32px;font-size:11px">🔊 Tester</button>
+          <button class="btn-ghost" id="tts-st-cmd" style="min-height:32px;font-size:11px">▶ Commande à lancer</button>
+        </div>
+        <div class="field-hint" id="tts-st-hint">Supertonic 3 tourne en local : 31 langues dont le français, le grec et l'arabe. Le modèle déjà présent dans ~/.cache/supertonic3 est réutilisé, rien n'est retéléchargé.</div>
       </div>
 
       <div class="section-title">🌐 TRADUCTION LOCALE (LIBRETRANSLATE)</div>
@@ -10649,6 +10693,9 @@ function initSettingsModal() {
       toast(readLangMode === 'fr' ? "Lecture vocale : Français forcé" : "Lecture vocale : Détection auto", "success");
     };
   }
+
+  // ── v109 : moteur de lecture vocale (système / ElevenLabs / Supertonic) ──
+  if (typeof ttsCablerParametres === 'function') ttsCablerParametres();
 }
 
 const toast = (msg, type = "info") => {
@@ -12789,7 +12836,7 @@ window.generateTikTokVideo = async (concept, styleName, styles, onProgress, onSt
   const speakSegment = (text) => {
     if (!opts.tts || ttsBuffer || !window.speechSynthesis) return;
     try {
-      window.speechSynthesis.cancel();
+      ttsStop();
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'fr-FR'; u.rate = 1.15; u.volume = mix.voice ?? 1.0;
       const voices = window.speechSynthesis.getVoices();
@@ -12844,7 +12891,7 @@ window.generateTikTokVideo = async (concept, styleName, styles, onProgress, onSt
         clearInterval(chordTimer);
         if (pulseTimer) clearInterval(pulseTimer);
         try { audioCtx.close(); } catch (e) {}
-        if (opts.tts && window.speechSynthesis) window.speechSynthesis.cancel();
+        if (opts.tts && window.speechSynthesis) ttsStop();
 
         const webmBlob = new Blob(chunks, { type: 'video/webm' });
 
@@ -15070,9 +15117,350 @@ function stopKeepAlive() {
   if (_ttsKeepAlive) { clearInterval(_ttsKeepAlive); _ttsKeepAlive = null; }
 }
 
+/* ═══ v109 — MOTEURS DE LECTURE VOCALE ════════════════════════════════════
+   Trois moteurs, un seul point de sortie.
+
+   « system »     : speechSynthesis du WebView. Dépend des voix INSTALLÉES sur
+                    l'appareil ; si la langue n'en a aucune, le moteur applique
+                    sa voix par défaut — donc une autre langue (cause v108).
+   « elevenlabs » : cloud, clé xi-api-key, rend un MP3.
+   « supertonic » : service local (ONNX, 31 langues), rend un WAV.
+
+   Les quatre files de lecture (réponse, section, référence, conversation)
+   n'appellent plus speechSynthesis.speak() directement : elles passent par
+   ttsEmission(), qui décide. Arrêter la lecture passe par ttsStop(), qui coupe
+   À LA FOIS la synthèse locale et l'audio distant.
+
+   Jeton d'annulation : toute lecture nouvelle incrémente _ttsJeton, et une
+   réponse arrivée trop tard est ignorée au lieu d'être jouée — sinon deux voix
+   se superposent dès qu'on arrête puis relance.
+   ═══════════════════════════════════════════════════════════════════════ */
+var TTS_CFG_CLE = 'theologicus-tts-moteurs';
+var TTS_MOTEURS = { system: 'Voix du système', elevenlabs: 'ElevenLabs', supertonic: 'Supertonic 3' };
+var TTS_ST_VOIX = [
+  ['F1', 'F1 — voix féminine 1'], ['F2', 'F2 — voix féminine 2'], ['F3', 'F3 — voix féminine 3'],
+  ['F4', 'F4 — voix féminine 4'], ['F5', 'F5 — voix féminine 5'],
+  ['M1', 'M1 — voix masculine 1'], ['M2', 'M2 — voix masculine 2'], ['M3', 'M3 — voix masculine 3'],
+  ['M4', 'M4 — voix masculine 4'], ['M5', 'M5 — voix masculine 5']
+];
+var TTS_PHRASE_TEST = 'Très tôt, le Seigneur appela Abraham, et il partit sans savoir où il allait.';
+
+function ttsCfg() {
+  var d = {
+    moteur: 'system',
+    elevenlabs: { cle: '', voix: '21m00Tcm4TlvDq8ikWAM', modele: 'eleven_multilingual_v2', base: 'https://api.elevenlabs.io/v1' },
+    supertonic: { url: 'http://127.0.0.1:8091', voix: 'F1', vitesse: 1.05 }
+  };
+  var b = null;
+  try { b = JSON.parse(localStorage.getItem(TTS_CFG_CLE) || 'null'); } catch (e) { b = null; }
+  if (!b || typeof b !== 'object') return d;
+  if (b.moteur && TTS_MOTEURS[b.moteur]) d.moteur = b.moteur;
+  ['elevenlabs', 'supertonic'].forEach(function (k) {
+    if (!b[k] || typeof b[k] !== 'object') return;
+    for (var p in b[k]) { if (b[k][p] !== '' && b[k][p] !== null && b[k][p] !== undefined) d[k][p] = b[k][p]; }
+  });
+  return d;
+}
+
+function ttsCfgSet(patch) {
+  var c = ttsCfg();
+  if (patch && patch.moteur && TTS_MOTEURS[patch.moteur]) c.moteur = patch.moteur;
+  ['elevenlabs', 'supertonic'].forEach(function (k) {
+    if (!patch || !patch[k]) return;
+    for (var p in patch[k]) c[k][p] = patch[k][p];
+  });
+  try { localStorage.setItem(TTS_CFG_CLE, JSON.stringify(c)); } catch (e) {}
+  return c;
+}
+
+function ttsMoteur() { return ttsCfg().moteur || 'system'; }
+function ttsMoteurDistant(m) { var x = m || ttsMoteur(); return x === 'elevenlabs' || x === 'supertonic'; }
+
+// Langue de l'app -> code ISO attendu par les moteurs distants.
+// Le latin n'est volontairement PAS dans SCRIPT_RANGES : il est lu en français
+// (même alphabet, convention légitime), donc on demande 'fr' et non 'na'.
+function ttsLangIso(lang) {
+  if (!lang) return 'fr';
+  if (lang === 'latin') return 'fr';
+  var r = lang, p = null;
+  try { if (VOICE_FALLBACK[lang]) r = VOICE_FALLBACK[lang]; } catch (e) {}
+  try { p = _VOICE_LANG_MAP[r] || _VOICE_LANG_MAP[lang] || null; } catch (e) {}
+  // 'na' = « langue inconnue » chez Supertonic : il traite alors le texte sans
+  // hypothèse de langue, ce qui vaut mieux qu'un 'en' faux qui ferait prononcer
+  // du grec avec une bouche anglaise.
+  return p || 'na';
+}
+
+var _ttsAudio = null;
+var _ttsJeton = 0;
+var _ttsSignale = {};
+
+function ttsStopAudio() {
+  _ttsJeton++;
+  var a = _ttsAudio;
+  _ttsAudio = null;
+  if (!a) return;
+  try { a.pause(); } catch (e) {}
+  try { if (a.src && a.src.indexOf('blob:') === 0) URL.revokeObjectURL(a.src); } catch (e) {}
+}
+
+function ttsStop() {
+  ttsStopAudio();
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+}
+
+// Les files de lecture ne s'arrêtent que sur ces codes : une panne de moteur
+// doit stopper la file, pas la faire avancer en boucle sur 30 segments en
+// émettant 30 requêtes vouées à l'échec.
+function ttsErreurFatale(err) {
+  return err === 'canceled' || err === 'moteur-erreur' || err === 'moteur-indisponible' || err === 'interrupted';
+}
+
+function ttsSignaleUneFois(cle, message, type) {
+  if (_ttsSignale[cle]) return;
+  _ttsSignale[cle] = true;
+  if (typeof toast === 'function') toast(message, type || 'error');
+}
+
+function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
+  var c = ttsCfg();
+  var moteur = moteurForce || c.moteur;
+  ttsStopAudio();
+  var jeton = ++_ttsJeton;
+  function fin(err) {
+    if (jeton !== _ttsJeton) return;          // une lecture plus récente a pris la main
+    if (err) { if (onErr) onErr(err); } else if (onEnd) onEnd();
+  }
+  var url = null, opts = { method: 'GET' };
+  if (moteur === 'elevenlabs') {
+    var cle = String(c.elevenlabs.cle || '').trim();
+    if (!cle) {
+      console.warn('[TTS] ElevenLabs : aucune cle API.');
+      ttsSignaleUneFois('el-cle', 'ElevenLabs : renseignez la clé API dans les Paramètres.', 'error');
+      fin('moteur-indisponible'); return;
+    }
+    var voix = String(c.elevenlabs.voix || '').trim() || '21m00Tcm4TlvDq8ikWAM';
+    var base = String(c.elevenlabs.base || 'https://api.elevenlabs.io/v1').replace(/\/+$/, '');
+    url = base + '/text-to-speech/' + encodeURIComponent(voix) + '?output_format=mp3_44100_128';
+    opts = {
+      method: 'POST',
+      headers: { 'xi-api-key': cle, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: texte,
+        model_id: c.elevenlabs.modele || 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true }
+      })
+    };
+  } else {
+    var stb = String(c.supertonic.url || 'http://127.0.0.1:8091').replace(/\/+$/, '');
+    url = stb + '/tts?text=' + encodeURIComponent(texte) +
+          '&lang=' + encodeURIComponent(ttsLangIso(lang)) +
+          '&voice=' + encodeURIComponent(c.supertonic.voix || 'F1') +
+          '&speed=' + encodeURIComponent(String(c.supertonic.vitesse || 1.05));
+  }
+  fetch(url, opts).then(function (r) {
+    if (jeton !== _ttsJeton) return null;
+    if (!r.ok) {
+      return r.text().then(function (t) {
+        throw new Error('HTTP ' + r.status + (t ? ' — ' + t.substring(0, 180) : ''));
+      });
+    }
+    return r.blob();
+  }).then(function (blob) {
+    if (!blob || jeton !== _ttsJeton) return;
+    if (!blob.size) throw new Error('réponse audio vide');
+    var u = URL.createObjectURL(blob);
+    var a = new Audio(u);
+    _ttsAudio = a;
+    a.onended = function () {
+      if (_ttsAudio === a) _ttsAudio = null;
+      try { URL.revokeObjectURL(u); } catch (e) {}
+      fin(null);
+    };
+    a.onerror = function () {
+      if (_ttsAudio === a) _ttsAudio = null;
+      try { URL.revokeObjectURL(u); } catch (e) {}
+      fin('lecture-audio');
+    };
+    return a.play();
+  }).catch(function (e) {
+    if (jeton !== _ttsJeton) return;
+    var msg = (e && e.message) ? e.message : String(e);
+    console.warn('[TTS] ' + moteur + ' : ' + msg);
+    if (moteur === 'supertonic') {
+      ttsSignaleUneFois('st-echec', 'Supertonic injoignable (' + msg + '). Lancez tools/start_supertonic.py ou vérifiez l\'URL du service.', 'error');
+    } else {
+      ttsSignaleUneFois('el-echec', 'ElevenLabs : ' + msg, 'error');
+    }
+    fin('moteur-erreur');
+  });
+}
+
+// LE point de sortie unique des quatre files de lecture.
+// opts.rate / opts.pitch n'ont de sens que pour la synthèse locale (la
+// prosodie des moteurs distants se règle côté service).
+// Rend false quand rien n'a pu être émis (l'appelant passe au segment suivant).
+function ttsEmission(texte, lang, onEnd, onErr, opts) {
+  if (!texte) return false;
+  if (ttsMoteurDistant()) { ttsParleDistant(texte, lang, onEnd, onErr); return true; }
+  var utt = makeUtterance(texte, lang);
+  if (!utt) return false;
+  if (opts && opts.rate) utt.rate = opts.rate;
+  if (opts && opts.pitch) utt.pitch = opts.pitch;
+  console.log('[TTS] ' + utt.lang + ' ' + (utt.voice ? utt.voice.name : 'no-voice') + ' => ' + texte.substring(0, 60));
+  utt.onend = function () { if (onEnd) onEnd(); };
+  utt.onerror = function (e) { if (onErr) onErr(e && e.error ? e.error : 'unknown'); };
+  window.speechSynthesis.speak(utt);
+  return true;
+}
+
+function ttsTester(moteur) {
+  ttsStop();
+  var m = moteur || ttsMoteur();
+  console.log('[TTS] test du moteur « ' + m + ' »');
+  if (!ttsMoteurDistant(m)) {
+    if (!window.speechSynthesis) { if (typeof toast === 'function') toast('Aucune synthèse vocale dans ce navigateur.', 'error'); return; }
+    var utt = makeUtterance(TTS_PHRASE_TEST, 'francais');
+    if (!utt) {
+      var n = 0;
+      try { n = window.speechSynthesis.getVoices().length; } catch (e) {}
+      if (typeof toast === 'function') toast('Aucune voix pour le français sur cet appareil (' + n + ' voix installées au total).', 'error');
+      return;
+    }
+    console.log('[TTS] test local : voix = ' + (utt.voice ? utt.voice.name : 'voix par défaut du moteur'));
+    if (typeof toast === 'function') toast('Voix système : ' + (utt.voice ? utt.voice.name : 'voix par défaut du moteur'), 'success');
+    window.speechSynthesis.speak(utt);
+    return;
+  }
+  if (typeof toast === 'function') toast('Test de ' + (TTS_MOTEURS[m] || m) + '…', 'info');
+  ttsParleDistant(TTS_PHRASE_TEST, 'francais',
+    function () { if (typeof toast === 'function') toast((TTS_MOTEURS[m] || m) + ' : lecture réussie.', 'success'); },
+    function (err) { if (typeof toast === 'function') toast((TTS_MOTEURS[m] || m) + ' : échec (' + err + ').', 'error'); },
+    m);
+}
+
+function ttsSupertonicVerifier() {
+  var c = ttsCfg();
+  var base = String(c.supertonic.url || '').replace(/\/+$/, '');
+  var dot = document.getElementById('tts-st-dot');
+  var st = document.getElementById('tts-st-state');
+  function peindre(ok, txt, couleur) {
+    if (dot) { dot.style.background = couleur; dot.style.boxShadow = '0 0 8px ' + couleur; }
+    if (st) st.textContent = txt;
+  }
+  if (!base) { peindre(false, 'URL manquante', '#ff3355'); return; }
+  peindre(false, 'Vérification…', '#ffaa00');
+  fetch(base + '/health', { method: 'GET' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (j) {
+    var n = (j && j.voices) ? j.voices.length : 0;
+    peindre(true, 'En ligne — ' + ((j && j.model) || 'Supertonic') + ', ' + n + ' voix', '#00ff88');
+    if (typeof toast === 'function') toast('Supertonic en ligne (' + ((j && j.languages) ? j.languages.length + ' langues' : 'modèle chargé') + ').', 'success');
+  }).catch(function (e) {
+    peindre(false, 'Injoignable — ' + ((e && e.message) || e), '#ff3355');
+    if (typeof toast === 'function') toast('Service Supertonic injoignable : lancez tools/start_supertonic.py.', 'error');
+  });
+}
+
+function ttsElevenLabsVoix() {
+  var c = ttsCfg();
+  var cle = String(c.elevenlabs.cle || '').trim();
+  if (!cle) { if (typeof toast === 'function') toast('Renseignez d\'abord la clé API ElevenLabs.', 'error'); return; }
+  var base = String(c.elevenlabs.base || 'https://api.elevenlabs.io/v1').replace(/\/+$/, '');
+  if (typeof toast === 'function') toast('Interrogation du compte ElevenLabs…', 'info');
+  fetch(base + '/voices', { headers: { 'xi-api-key': cle } }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (j) {
+    var v = (j && j.voices) || [];
+    if (!v.length) { if (typeof toast === 'function') toast('Aucune voix sur ce compte.', 'error'); return; }
+    var lignes = v.slice(0, 40).map(function (x) {
+      var lab = (x.labels && (x.labels.accent || x.labels.description)) || '';
+      return x.voice_id + '  —  ' + x.name + (lab ? ' (' + lab + ')' : '');
+    });
+    console.log('[TTS] Voix ElevenLabs du compte :\n' + lignes.join('\n'));
+    if (typeof toast === 'function') toast(v.length + ' voix trouvées — la liste complète est dans la console.', 'success');
+    var h = document.getElementById('tts-el-hint');
+    if (h) {
+      h.textContent = 'Voix du compte : ' + v.slice(0, 3).map(function (x) {
+        return x.name + ' (' + x.voice_id + ')';
+      }).join(' · ') + (v.length > 3 ? ' …' : '');
+    }
+  }).catch(function (e) {
+    if (typeof toast === 'function') toast('ElevenLabs : ' + ((e && e.message) || e), 'error');
+  });
+}
+
+function ttsCablerParametres() {
+  var sel = document.getElementById('tts-engine-select');
+  if (!sel) return;
+  var blkEl = document.getElementById('tts-el-block');
+  var blkSt = document.getElementById('tts-st-block');
+  var elKey = document.getElementById('tts-el-key');
+  var elVoice = document.getElementById('tts-el-voice');
+  var elModel = document.getElementById('tts-el-model');
+  var stUrl = document.getElementById('tts-st-url');
+  var stVoice = document.getElementById('tts-st-voice');
+  var stSpeed = document.getElementById('tts-st-speed');
+
+  if (stVoice && !stVoice.options.length) {
+    TTS_ST_VOIX.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p[0]; o.textContent = p[1];
+      stVoice.appendChild(o);
+    });
+  }
+
+  function recharger() {
+    var c = ttsCfg();
+    sel.value = c.moteur;
+    if (blkEl) blkEl.style.display = (c.moteur === 'elevenlabs') ? '' : 'none';
+    if (blkSt) blkSt.style.display = (c.moteur === 'supertonic') ? '' : 'none';
+    if (elKey) elKey.value = c.elevenlabs.cle || '';
+    if (elVoice) elVoice.value = c.elevenlabs.voix || '';
+    if (elModel) elModel.value = c.elevenlabs.modele || 'eleven_multilingual_v2';
+    if (stUrl) stUrl.value = c.supertonic.url || '';
+    if (stVoice) stVoice.value = c.supertonic.voix || 'F1';
+    if (stSpeed) stSpeed.value = String(c.supertonic.vitesse || 1.05);
+  }
+
+  sel.onchange = function () {
+    ttsStop();
+    ttsCfgSet({ moteur: sel.value });
+    recharger();
+    var m = ttsMoteur();
+    if (m === 'supertonic') ttsSupertonicVerifier();
+    if (typeof toast === 'function') toast('Moteur de lecture : ' + (TTS_MOTEURS[m] || m), 'success');
+  };
+  if (elKey) elKey.onchange = function () { ttsCfgSet({ elevenlabs: { cle: elKey.value.trim() } }); };
+  if (elVoice) elVoice.onchange = function () { ttsCfgSet({ elevenlabs: { voix: elVoice.value.trim() } }); };
+  if (elModel) elModel.onchange = function () { ttsCfgSet({ elevenlabs: { modele: elModel.value } }); };
+  if (stUrl) stUrl.onchange = function () { ttsCfgSet({ supertonic: { url: stUrl.value.trim() } }); ttsSupertonicVerifier(); };
+  if (stVoice) stVoice.onchange = function () { ttsCfgSet({ supertonic: { voix: stVoice.value } }); };
+  if (stSpeed) stSpeed.onchange = function () {
+    var v = parseFloat(stSpeed.value);
+    if (!(v >= 0.5 && v <= 2)) { v = 1.05; stSpeed.value = '1.05'; }
+    ttsCfgSet({ supertonic: { vitesse: v } });
+  };
+  var b;
+  b = document.getElementById('tts-el-test'); if (b) b.onclick = function () { ttsTester('elevenlabs'); };
+  b = document.getElementById('tts-el-voices'); if (b) b.onclick = ttsElevenLabsVoix;
+  b = document.getElementById('tts-st-check'); if (b) b.onclick = ttsSupertonicVerifier;
+  b = document.getElementById('tts-st-test'); if (b) b.onclick = function () { ttsTester('supertonic'); };
+  b = document.getElementById('tts-st-cmd'); if (b) b.onclick = function () {
+    var cmd = 'python tools/start_supertonic.py';
+    console.log('[TTS] ' + cmd);
+    if (typeof toast === 'function') toast('À lancer sur ce PC : ' + cmd, 'info');
+    try { if (navigator.clipboard) navigator.clipboard.writeText(cmd); } catch (e) {}
+  };
+  recharger();
+}
+
 function speakText(text) {
-  if (!ttsEnabled || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
+  if (!ttsEnabled) return;
+  if (!ttsMoteurDistant() && !window.speechSynthesis) return;
+  ttsStop();
   const raw = cleanMd(text);
   if (!raw) return;
   const clean = prosodyPreprocess(raw);
@@ -15102,20 +15490,17 @@ function speakText(text) {
       return;
     }
     const seg = segments[idx];
-    const utt = makeUtterance(seg.text, seg.lang);
-    if (!utt) {
+    const ok = ttsEmission(seg.text, seg.lang,
+      () => { idx++; speakNextSegment(); },
+      (err) => {
+        if (ttsErreurFatale(err)) { isSpeaking = false; stopKeepAlive(); updateTtsBtn(); return; }
+        console.warn('[TTS] ERREUR seg ' + idx + ' [' + seg.lang + '] ' + err + ' => ' + seg.text.substring(0, 60));
+        idx++; speakNextSegment();
+      });
+    if (!ok) {
       console.log('[TTS] SKIP seg', idx + '/' + segments.length, '[' + seg.lang + ']', '— aucune voix disponible');
       idx++; speakNextSegment(); return;
     }
-    console.log('[TTS] Seg ' + idx + '/' + segments.length + ' [' + seg.lang + '] ' + utt.lang + ' ' + (utt.voice ? utt.voice.name : 'no-voice') + ' => ' + seg.text.substring(0, 60));
-    utt.onend = () => { idx++; speakNextSegment(); };
-    utt.onerror = (e) => {
-      const err = e && e.error ? e.error : 'unknown';
-      if (err === 'canceled') { isSpeaking = false; stopKeepAlive(); updateTtsBtn(); return; }
-      console.warn('[TTS] ERREUR seg ' + idx + ' [' + seg.lang + '] ' + err + ' => ' + seg.text.substring(0, 60));
-      idx++; speakNextSegment();
-    };
-    window.speechSynthesis.speak(utt);
   }
   speakNextSegment();
 }
@@ -15123,9 +15508,9 @@ function speakText(text) {
 // ── Lecture d'une section ──
 let _activePlayBtn = null;
 function speakSection(btn) {
-  if (_activePlayBtn === btn) { window.speechSynthesis.cancel(); btn.style.background = ''; _activePlayBtn = null; return; }
+  if (_activePlayBtn === btn) { ttsStop(); btn.style.background = ''; _activePlayBtn = null; return; }
   if (readingAll) stopConversation();
-  window.speechSynthesis.cancel();
+  ttsStop();
   document.querySelectorAll('.msg-section-play, .msg-play-btn').forEach(b => b.style.background = '');
   const container = btn.closest('.message-content');
   if (!container) return;
@@ -15168,43 +15553,44 @@ function speakSection(btn) {
       return;
     }
     const seg = segments[segIdx];
-    const utt = makeUtterance(seg.text, seg.lang);
-    if (!utt) {
+    const ok = ttsEmission(seg.text, seg.lang,
+      () => { segIdx++; speakSeg(); },
+      (err) => {
+        if (ttsErreurFatale(err)) { btn.style.background = ''; _activePlayBtn = null; isSpeaking = false; stopKeepAlive(); updateTtsBtn(); return; }
+        console.warn('[SECTION] ERREUR seg', segIdx, '[' + seg.lang + ']', err, '=>', seg.text.substring(0, 60));
+        segIdx++; speakSeg();
+      });
+    if (!ok) {
       // Voix non disponible pour ce segment (ex. arabe sans voix installée) → ignorer
       console.log('[SECTION] SKIP seg', segIdx + '/' + segments.length, '[' + seg.lang + ']', '— aucune voix disponible');
       segIdx++; speakSeg(); return;
     }
-    console.log('[SECTION] Speaking', segIdx + '/' + segments.length, '[' + seg.lang + ']', utt.lang, (utt.voice ? utt.voice.name : 'no-voice'), '=>', seg.text.substring(0, 60));
-    utt.onend = () => { segIdx++; speakSeg(); };
-    utt.onerror = (e) => {
-      const err = e && e.error ? e.error : 'unknown';
-      if (err === 'canceled') { btn.style.background = ''; _activePlayBtn = null; isSpeaking = false; stopKeepAlive(); updateTtsBtn(); return; }
-      console.warn('[SECTION] ERREUR seg', segIdx, '[' + seg.lang + ']', err, '=>', seg.text.substring(0, 60));
-      segIdx++; speakSeg();
-    };
-    window.speechSynthesis.speak(utt);
   }
   speakSeg();
 }
 
 // ── Lecture d'une référence biblique ──
 function speakBibleRef(ref) {
-  if (!window.speechSynthesis) return;
+  if (!ttsMoteurDistant() && !window.speechSynthesis) return;
   if (readingAll) stopConversation();
-  window.speechSynthesis.cancel();
+  ttsStop();
   const clean = speakBibleRefs(ref);
-  const utt = makeUtterance(clean, 'francais');
-  utt.rate = _humanizeRate(0.94, clean.length);
-  utt.pitch = _humanizePitch(1.02, clean.length);
   isSpeaking = true;
   updateTtsBtn();
-  utt.onend = () => { isSpeaking = false; updateTtsBtn(); };
-  utt.onerror = () => { isSpeaking = false; updateTtsBtn(); };
-  window.speechSynthesis.speak(utt);
+  const ok = ttsEmission(clean, 'francais',
+    () => { isSpeaking = false; updateTtsBtn(); },
+    () => { isSpeaking = false; updateTtsBtn(); },
+    { rate: _humanizeRate(0.94, clean.length), pitch: _humanizePitch(1.02, clean.length) });
+  if (!ok) {
+    isSpeaking = false;
+    updateTtsBtn();
+    console.warn('[TTS] référence : aucune voix disponible => ' + clean.substring(0, 60));
+    if (typeof toast === 'function') toast("Aucune voix disponible pour cette référence.", "error");
+  }
 }
 
 function stopSpeech() {
-  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  ttsStop();
   isSpeaking = false;
   readingAll = false;
   stopKeepAlive();
@@ -15305,18 +15691,17 @@ function speakConversation(startIdx) {
     function speakSeg() {
       if (segIdx >= segments.length) { i++; speakNext(); return; }
       const seg = segments[segIdx];
-      const utt = makeUtterance(seg.text, seg.lang);
-      if (!utt) { segIdx++; speakSeg(); return; }
-      utt.onend = () => { segIdx++; speakSeg(); };
-      utt.onerror = (e) => {
-        if (e && e.error === 'canceled') { readingAll = false; isSpeaking = false; stopKeepAlive(); updateTtsAllBtn(); updateTtsBtn(); return; }
-        segIdx++; speakSeg(); // voix manquante pour ce segment → continuer
-      };
-      window.speechSynthesis.speak(utt);
+      const ok = ttsEmission(seg.text, seg.lang,
+        () => { segIdx++; speakSeg(); },
+        (err) => {
+          if (ttsErreurFatale(err)) { readingAll = false; isSpeaking = false; stopKeepAlive(); updateTtsAllBtn(); updateTtsBtn(); return; }
+          segIdx++; speakSeg(); // voix manquante pour ce segment → continuer
+        });
+      if (!ok) { segIdx++; speakSeg(); return; }
     }
     speakSeg();
   }
-  window.speechSynthesis.cancel();
+  ttsStop();
   speakNext();
 }
 
@@ -15338,7 +15723,7 @@ function speakFromMsg(ts) {
 function stopConversation() {
   readingAll = false;
   isSpeaking = false;
-  window.speechSynthesis.cancel();
+  ttsStop();
   stopKeepAlive();
   updateTtsAllBtn();
   updateTtsBtn();
