@@ -10740,6 +10740,10 @@ function initSettingsModal() {
   }
 
   // ── v109 : moteur de lecture vocale (système / ElevenLabs / Supertonic) ──
+  // Restaure d'abord la config depuis le disque (async) : elle est la source de
+  // vérité si localStorage a été effacé par la réinstallation du exe. L'UI est
+  // re-synchronisée dès que la réponse arrive (voir _ttsUIRecharger).
+  if (typeof ttsRestaurerConfigDisque === 'function') ttsRestaurerConfigDisque();
   if (typeof ttsCablerParametres === 'function') ttsCablerParametres();
 }
 
@@ -15320,8 +15324,59 @@ function ttsCfgSet(patch) {
     for (var p in patch[k]) c[k][p] = patch[k][p];
   });
   try { localStorage.setItem(TTS_CFG_CLE, JSON.stringify(c)); } catch (e) {}
+  // Écriture miroir sur disque (hors dossier d'install) : la config survit
+  // aux mises à jour du exe/HTML. Correctif du « tout reconfigurer après MAJ ».
+  ttsEcrireConfigDisque(c);
   return c;
 }
+
+// Sauvegarde la config TTS sur disque via le proxy (/config). En cas d'échec
+// (app servie sans le proxy, ex. mobile/standalone), on retombe sur localStorage.
+function ttsEcrireConfigDisque(cfg) {
+  try {
+    var data = JSON.stringify(cfg || ttsCfg());
+    fetch('/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data })
+      .catch(function () {});
+  } catch (e) {}
+}
+
+// Au démarrage : restaure la config depuis le disque (source de vérité, car
+// localStorage peut avoir été effacé par la réinstallation du exe). Le disque
+// prime sur localStorage ; si aucune config disque mais une config locale
+// existe, on la sauvegarde sur disque pour ne plus jamais la perdre.
+function ttsRestaurerConfigDisque() {
+  try {
+    fetch('/config', { method: 'GET', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' })
+      .then(function (r) { return (r && r.ok) ? r.json() : null; })
+      .then(function (disk) {
+        if (!disk || typeof disk !== 'object') { ttsSauvegarderConfigLocaleSiVide(); return; }
+        var c = ttsCfg();
+        if (disk.moteur && TTS_MOTEURS[disk.moteur]) c.moteur = disk.moteur;
+        if (typeof disk.narration === 'boolean') c.narration = disk.narration;
+        ['elevenlabs', 'supertonic'].forEach(function (k) {
+          if (disk[k] && typeof disk[k] === 'object') {
+            for (var p in disk[k]) c[k][p] = disk[k][p];
+          }
+        });
+        try { localStorage.setItem(TTS_CFG_CLE, JSON.stringify(c)); } catch (e) {}
+        if (typeof _ttsUIRecharger === 'function') _ttsUIRecharger();
+      })
+      .catch(function () { ttsSauvegarderConfigLocaleSiVide(); });
+  } catch (e) {}
+}
+
+function ttsSauvegarderConfigLocaleSiVide() {
+  try {
+    var local = localStorage.getItem(TTS_CFG_CLE);
+    if (local) ttsEcrireConfigDisque(ttsCfg());
+  } catch (e) {}
+}
+
+// Pointeur posé par ttsCablerParametres() sur sa fonction de rechargement d'UI :
+// la restauration disque étant asynchrone, elle rafraîchit les champs PARAMÈTRES
+// une fois la config réellement restaurée (sinon l'UI afficherait les valeurs
+// par défaut pendant la fraction de seconde du fetch).
+var _ttsUIRecharger = null;
 
 function ttsMoteur() { return ttsCfg().moteur || 'system'; }
 function ttsMoteurDistant(m) { var x = m || ttsMoteur(); return x === 'elevenlabs' || x === 'supertonic'; }
@@ -15744,6 +15799,7 @@ function ttsCablerParametres() {
     if (stAuto) stAuto.checked = c.supertonic.auto !== false;
     if (narrChk) narrChk.checked = ttsNarration();
   }
+  _ttsUIRecharger = recharger; // pour la restauration disque (asynchrone)
 
   sel.onchange = function () {
     ttsStop();

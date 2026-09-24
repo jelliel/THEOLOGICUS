@@ -1,0 +1,41 @@
+v115 — persist TTS config outside install dir (never reconfigure after update)
+
+Root cause, measured not assumed: the TTS config (engine, voice, API key,
+narration) lived only in localStorage, and the API key file lived in the install
+directory. Both are wiped on update — localStorage with the WebView profile, and
+theologicus_keys.json by the build itself (build_windows.py writes an empty
+{"mistral":""} into dist, then robocopy copies it over _inst_v102). After this
+build the install dir key was empty while the real key survived only in the
+source directory. That is exactly the "I had to reconfigure everything" report.
+
+Fix — store config where deployment never looks:
+
+proxy_server.py (compiled into the exe, so a new build is required):
+- _app_data_dir() -> %LOCALAPPDATA%/THEOLOGICUS/ (fallback ~/THEOLOGICUS).
+  Never touched by robocopy to _inst_v102 nor by the Inno reinstall.
+- New /config GET+POST route with _save_config(): JSON validation, 16 KB guard,
+  atomic write via os.replace.
+- /theologicus-keys and _save_keys moved to the same directory, with a one-shot
+  migration from SERVE_DIR that recovers a key already entered.
+
+THEOLOGICUS.html:
+- ttsCfgSet() mirrors the config to disk (POST /config) on every change.
+- ttsRestaurerConfigDisque() runs on DOMContentLoaded: disk wins over
+  localStorage (it is the truth when localStorage was cleared), refills
+  localStorage, then re-syncs the settings UI through _ttsUIRecharger once the
+  async fetch resolves.
+- ttsSauvegarderConfigLocaleSiVide() backs up a local-only config to disk.
+- Silent fallback to localStorage when /config is unavailable (mobile, or the
+  page served without the proxy): no crash, local config still works.
+
+Verified by execution, not by reading:
+- verify_config.js 15/15 — real functions extracted from the HTML with a mocked
+  fetch: write-through, restore after localStorage is wiped (voice, key, engine,
+  narration), local-to-disk migration, and no-proxy fallback.
+- verify_config_route.py 9/9 — real proxy handler on a free port: GET/POST
+  round trip, file written to
+  C:\Users\toshr\AppData\Local\THEOLOGICUS\theologicus_config.json (outside
+  _inst_v102 and dist), 16 KB guard enforced, keys outside install dir.
+- check_syntax.js green (59 inline blocks). Rebuilt exe deployed to _inst_v102
+  with matching md5, so the /config route is live. The real Mistral key was
+  copied into the durable directory so it is not lost.

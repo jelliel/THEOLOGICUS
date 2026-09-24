@@ -25,6 +25,27 @@ PORT = 8765
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 ALLOWED_ORIGINS = ['http://localhost', 'http://127.0.0.1', 'file://']
 
+
+def _app_data_dir():
+    """Dossier de données utilisateur HORS du dossier d'installation, pour que
+    la configuration (clés API, voix, moteur, narration, ton) SURVIVE aux mises
+    à jour du HTML et du exe.
+
+    Avant ce correctif, la config TTS ne vivait que dans localStorage (lié au
+    profil WebView, effacé à chaque réinstallation du exe) et la clé API dans
+    le dossier d'installation (écrasé par le déploiement) → l'utilisateur
+    devait tout reconfigurer après chaque MAJ. On stocke désormais ces fichiers
+    dans %LOCALAPPDATA%/THEOLOGICUS/ (ou ~/THEOLOGICUS/ en repli), emplacement
+    jamais touché par la copie de l'exe vers _inst_v102 ni par la réinstallation.
+    """
+    base = os.environ.get('LOCALAPPDATA') or os.path.expanduser('~')
+    d = os.path.join(base, 'THEOLOGICUS')
+    try:
+        os.makedirs(d, exist_ok=True)
+    except Exception:
+        pass
+    return d
+
 # ════════════════════════════════════════════════════════════════════
 # LibreTranslate local — démarré/arrêté depuis PARAMÈTRES dans l'app.
 # Le bouton 🌐 de la bulle Add-to-chat (et l'APK sur le même Wi-Fi)
@@ -417,11 +438,39 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.split('?')[0] == '/supertonic/status':
             self._json_response(st_status())
             return
-        # Config des clés API (fichier séparé, jamais embarqué dans le HTML)
+        # Config des clés API (fichier séparé, jamais embarqué dans le HTML).
+        # Stocké HORS du dossier d'installation (%LOCALAPPDATA%/THEOLOGICUS)
+        # pour survivre aux mises à jour du exe/HTML — avant, la clé était
+        # perdue à chaque réinstallation et l'utilisateur devait tout reconfigurer.
         if self.path.split('?')[0] == '/theologicus-keys':
-            keys_path = os.path.join(SERVE_DIR, 'theologicus_keys.json')
+            keys_path = os.path.join(_app_data_dir(), 'theologicus_keys.json')
+            # Migration one-shot : si absent en données-utilisateur mais présent
+            # dans l'ancien emplacement (dossier d'install), on le copie pour ne
+            # rien perdre (sauvegarde aussi la clé API déjà saisie par l'utilisateur).
+            if not os.path.isfile(keys_path):
+                old = os.path.join(SERVE_DIR, 'theologicus_keys.json')
+                if os.path.isfile(old):
+                    try:
+                        shutil.copy2(old, keys_path)
+                    except Exception:
+                        pass
             try:
                 with open(keys_path, 'rb') as f:
+                    body = f.read()
+            except Exception:
+                body = b'{}'
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        # Config TTS complète (moteur, voix, clé API, narration, ton...) — même
+        # emplacement hors-install que les clés, pour ne JAMAIS la perdre en MAJ.
+        if self.path.split('?')[0] == '/config':
+            cfg_path = os.path.join(_app_data_dir(), 'theologicus_config.json')
+            try:
+                with open(cfg_path, 'rb') as f:
                     body = f.read()
             except Exception:
                 body = b'{}'
@@ -474,6 +523,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.split('?')[0] == '/theologicus-keys':
             self._save_keys()
+        elif self.path.split('?')[0] == '/config':
+            self._save_config()
         elif self.path.split('?')[0] == '/save-data':
             self._save_data()
         elif self.path.split('?')[0] == '/libretranslate/start':
@@ -566,18 +617,50 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 pass
 
     def _save_keys(self):
-        """Enregistre theologicus_keys.json (clés API séparées du HTML)."""
+        """Enregistre theologicus_keys.json (clés API séparées du HTML).
+        Emplacement : %LOCALAPPDATA%/THEOLOGICUS (hors dossier d'install)."""
         try:
             length = int(self.headers.get('Content-Length', 0))
             if length <= 0 or length > 16384:
                 raise ValueError('taille invalide')
             body = self.rfile.read(length)
             json.loads(body.decode('utf-8'))  # validation JSON
-            keys_path = os.path.join(SERVE_DIR, 'theologicus_keys.json')
+            keys_path = os.path.join(_app_data_dir(), 'theologicus_keys.json')
             tmp_path = keys_path + '.tmp'
             with open(tmp_path, 'wb') as f:
                 f.write(body)
             os.replace(tmp_path, keys_path)  # ecriture atomique
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+        except Exception as e:
+            try:
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'erreur: {e}'.encode())
+            except Exception:
+                pass
+
+    def _save_config(self):
+        """Enregistre theologicus_config.json : config TTS complète (moteur,
+        voix, clé API ElevenLabs, narration, ton, réglages Supertonic...).
+        Emplacement hors dossier d'installation → SURVIT aux mises à jour du
+        exe et du HTML. C'est le correctif du « j'ai dû tout reconfigurer après
+        la MAJ » : la config n'est plus seulement dans localStorage (profil
+        WebView effacé à la réinstallation)."""
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > 16384:
+                raise ValueError('taille invalide')
+            body = self.rfile.read(length)
+            json.loads(body.decode('utf-8'))  # validation JSON
+            cfg_path = os.path.join(_app_data_dir(), 'theologicus_config.json')
+            tmp_path = cfg_path + '.tmp'
+            with open(tmp_path, 'wb') as f:
+                f.write(body)
+            os.replace(tmp_path, cfg_path)  # ecriture atomique
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
