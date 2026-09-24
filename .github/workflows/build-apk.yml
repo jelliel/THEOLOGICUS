@@ -9,6 +9,14 @@ name: Build Android APK
 #
 # Sans ces secrets, seule la variante debug est produite.
 
+# Le filtre ci-dessous est un filtre d'ALLUMAGE, pas une liste d'exclusion :
+# tout fichier absent de la liste ne declenche RIEN. C'est ainsi qu'on obtient un
+# depot en 2.0.148 alors que la derniere release annonce encore 2.0.146 — deux
+# commits qui ne touchaient que la memoire du projet n'ont produit aucun run,
+# donc aucune release, donc l'application continuait de croire a 2.0.146.
+# Consequence : un ecart silencieux entre le depot et ce que voit l'utilisateur.
+# Le champ mis a jour le 2026-09-24 est donc DECLARE A LA FIN, pour qu'ajouter
+# un fichier de l'application se voie du premier coup d'oeil.
 on:
   workflow_dispatch:
   push:
@@ -30,6 +38,11 @@ on:
       - 'package-lock.json'
       - 'capacitor.config.json'
       - '.github/workflows/build-apk.yml'
+      # --- ajoutez ici tout nouveau fichier dont depend l'application ---
+      # La documentation, les journaux de memoire (.workbuddy-ai/**) et les
+      # bancs restent volontairement DEHORS : un commit de notes ne doit pas
+      # publier une version. Mais alors c'est le VERSION ci-dessus qui doit
+      # bouger, sinon le depot et la release divergent en silence.
 
 permissions:
   contents: write
