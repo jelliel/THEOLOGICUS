@@ -149,6 +149,7 @@ serait lu sans hypothèse de langue.
 | Symptôme | Cause | Remède |
 |---|---|---|
 | « Supertonic injoignable » | service non lancé | `python tools/start_supertonic.py` |
+| Pastille rouge « Injoignable — HTTP 502 » | le service n'écoute pas. **Un port fermé renvoie 502 ici, pas une erreur de connexion** — donc 502 veut bien dire « rien ne tourne », pas « mauvais port » | lancer le service, puis **Vérifier le service** |
 | « numpy est requis » | le service tourne avec un Python où numpy manque | le message donne maintenant **l'interpréteur exact** ; lancer `"<ce python>" -m pip install numpy onnxruntime` |
 | « ElevenLabs : renseignez la clé » | clé vide | Paramètres → bloc ElevenLabs |
 | Le français reste anglais | moteur = « voix du système » sans voix fr | passer à Supertonic ou ElevenLabs, ou installer le pack fr-FR |

@@ -84,7 +84,16 @@ const demarrerService = () => new Promise((res, rej) => {
   // banc a echoue deux fois la-dessus, avec pour seul symptome « numpy est
   // requis » alors que numpy etait bien installe).
   const sonder = () => http.get({ host: '127.0.0.1', port: SPORT, path: '/health', timeout: 2000 }, r => {
-    let d = ''; r.on('data', c => d += c); r.on('end', () => { try { serviceExterne = true; res(JSON.parse(d)); } catch (e) { rej(e); } });
+    let d = ''; r.on('data', c => d += c);
+    r.on('end', () => {
+      // Il faut un 200 ET un corps analysable pour conclure « service deja la ».
+      // Mesure : sur ce poste, un port FERME ne produit pas d'erreur de
+      // connexion — un relais local repond 502 (verifie sur 8099, 8123 et 9999,
+      // tous 502, alors qu'un vrai service sur 3900 repond 200). Se fier a
+      // « le port repond » est donc un faux positif : c'est le CORPS qui tranche.
+      if (r.statusCode !== 200) return lancer();
+      try { serviceExterne = true; res(JSON.parse(d)); } catch (e) { lancer(); }
+    });
   }).on('error', () => lancer());
   const lancer = () => {
     const journal = path.join(ROOT, '.workbuddy-ai', 'artifacts', '_tts', 'supertonic-service.log');
