@@ -1,0 +1,36 @@
+v116 — apply the theological tone to ElevenLabs via voice_settings.speed, not SSML
+
+The user asked whether SSML for ElevenLabs v3 is included. It is not, and
+measuring first showed it must not be added as such.
+
+State before: eleven_v3 was selectable (and configured), but the request sent
+plain {text, model_id, voice_settings}. ttsTonTheologique() was never called
+for ElevenLabs at all — only for Supertonic and the system engine — so with
+ElevenLabs selected there was no theological tone whatsoever.
+
+Measured live on the real account before wiring anything (155 chars, averaged
+over 2 samples):
+
+  eleven_multilingual_v2  speed 0.7 -> +43.0% duration, speed 1.2 -> -19.1%
+  eleven_flash_v2_5       speed 0.7 -> +50.7%
+  eleven_v3               speed 0.7 -> no effect
+
+and <prosody rate="-80%"> on v3 returns audio identical to plain text. So v3
+ignores both SSML prosody and voice_settings.speed: it is an expressive model
+driven by text alone. Sending either would be dead code, with the additional
+risk that literal tags get read aloud.
+
+Therefore voice_settings.speed now carries the theological tone and the
+narrator pace (ttsTonTheologique().rate * 0.92, clamped to the documented
+0.7-1.2 range) for every model except eleven_v3, guarded by
+ttsElAppliqueVitesse(). The v3 option in the UI now states it has no rate
+control.
+
+Methodology note: ElevenLabs generation is non-deterministic — the same plain
+text produced 63991 then 70261 bytes (~15%). A single sample proves nothing;
+this bench averages and uses extreme values to dominate the noise.
+
+verify_el_speed.js 16/16 (real functions extracted from the HTML): v3 never
+receives speed, v2 and flash do, a solemn verse is slower than neutral text,
+values stay in range, and no SSML tag is constructed. check_syntax.js green
+(59 blocks). HTML-only change, no rebuild needed.

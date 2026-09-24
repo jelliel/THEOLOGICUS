@@ -128,6 +128,18 @@ Doc `artifacts/TTS_MOTEURS.md` ; diagnostic et pièges détaillés : skill
   l'exe** → toute route nouvelle exige un **nouvel exe** ; `ready` exige
   `loaded:true` (**`ready` != `running`**) ; le champ `script` est un **booléen**.
   **Un message d'erreur qui ne dit pas la cause est un défaut.**
+- **v116 — ElevenLabs : le débit se règle par `voice_settings.speed`, et PAS
+  par du SSML.** Mesuré sur le compte réel (155 caractères, 2 échantillons) :
+  `eleven_multilingual_v2` speed 0.7 → **+43 %** de durée, 1.2 → −19 % ;
+  `eleven_flash_v2_5` speed 0.7 → **+51 %** ; **`eleven_v3` : aucun effet**.
+  Et `<prosody rate="-80%">` rend sur v3 un audio **identique** au texte brut.
+  **v3 est un modèle expressif qui ignore tout réglage de débit** (SSML compris).
+  Ne jamais envoyer `speed` ni des balises à v3 : ce serait du code mort, avec
+  le risque que les balises soient lues littéralement. Garde
+  `ttsElAppliqueVitesse(modele)` (faux pour `eleven_v3*`). Plage API : 0.7–1.2.
+  **Piège de mesure : la génération ElevenLabs est NON déterministe** (le même
+  texte a donné 63991 puis 70261 octets, ~±15 %) → un seul échantillon ne prouve
+  rien ; moyenne sur 2-3 appels et valeurs extrêmes pour dominer le bruit.
 
 ## Build / signature — CLÉ CRITIQUE
 

@@ -7833,7 +7833,7 @@ window.__ensureTafsirSurah = function(p){
         <input class="field-input" id="tts-el-voice" placeholder="Voice ID (ex. 21m00Tcm4TlvDq8ikWAM)" autocomplete="off" style="margin-top:8px">
         <select class="field-input field-select" id="tts-el-model" style="margin-top:8px">
           <option value="eleven_multilingual_v2">eleven_multilingual_v2 — 29 langues, stable</option>
-          <option value="eleven_v3">eleven_v3 — le plus expressif, seul à couvrir l'hébreu</option>
+          <option value="eleven_v3">eleven_v3 — le plus expressif (seul à couvrir l'hébreu), mais sans réglage de débit</option>
           <option value="eleven_flash_v2_5">eleven_flash_v2_5 — le plus rapide, le moins cher</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
@@ -15454,6 +15454,22 @@ function ttsCauseHttp(moteur, status, corps) {
   return cause + (api ? ' — ' + api : '');
 }
 
+// v116 — eleven_v3 n'applique NI le SSML <prosody> NI voice_settings.speed.
+// Mesuré sur le compte de l'utilisateur (155 caractères, 2 échantillons) :
+//   eleven_multilingual_v2  speed 0.7 -> +43,0 % de durée, speed 1.2 -> -19,1 %
+//   eleven_flash_v2_5       speed 0.7 -> +50,7 %
+//   eleven_v3               speed 0.7 -> sans effet (dans le bruit)
+// et <prosody rate="-80%"> rend un audio IDENTIQUE au texte brut sur v3.
+// v3 est un modèle « expressif » piloté par le texte : il ignore les réglages
+// de débit. Lui envoyer `speed` ou des balises serait du code mort — et les
+// balises risqueraient d'être lues littéralement. On les réserve donc aux
+// modèles qui les respectent.
+function ttsElAppliqueVitesse(modele) {
+  var m = String(modele || '');
+  if (m.indexOf('eleven_v3') === 0) return false;
+  return true;
+}
+
 function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
   var c = ttsCfg();
   var moteur = moteurForce || c.moteur;
@@ -15477,16 +15493,23 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
     var voix = String(c.elevenlabs.voix || '').trim() || '21m00Tcm4TlvDq8ikWAM';
     var base = String(c.elevenlabs.base || 'https://api.elevenlabs.io/v1').replace(/\/+$/, '');
     url = base + '/text-to-speech/' + encodeURIComponent(voix) + '?output_format=mp3_44100_128';
+    var modele = c.elevenlabs.modele || 'eleven_multilingual_v2';
+    // v116 : le ton théologique (solennel / rassurant / explicatif) et la pose
+    // du narrateur arrivent ici par `voice_settings.speed` — le SEUL réglage de
+    // débit que l'API applique réellement (mesuré : +43 % en v2 à 0.7).
+    var vs = ttsNarration()
+      ? { stability: 0.35, similarity_boost: 0.8, style: 0.4, use_speaker_boost: true }
+      : { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true };
+    if (ttsElAppliqueVitesse(modele)) {
+      // Même ordre que Supertonic : le ton d'abord, puis la pose du narrateur.
+      var _vit = ttsTonTheologique(texte).rate * (ttsNarration() ? 0.92 : 1);
+      // Plage documentée de l'API : 0.7 à 1.2.
+      vs.speed = Math.min(1.2, Math.max(0.7, Math.round(_vit * 100) / 100));
+    }
     opts = {
       method: 'POST',
       headers: { 'xi-api-key': cle, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text: texte,
-        model_id: c.elevenlabs.modele || 'eleven_multilingual_v2',
-        voice_settings: ttsNarration()
-          ? { stability: 0.35, similarity_boost: 0.8, style: 0.4, use_speaker_boost: true }
-          : { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true }
-      })
+      body: JSON.stringify({ text: texte, model_id: modele, voice_settings: vs })
     };
   } else {
     var stb = String(c.supertonic.url || 'http://127.0.0.1:8091').replace(/\/+$/, '');
