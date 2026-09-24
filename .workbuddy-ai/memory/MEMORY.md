@@ -169,11 +169,16 @@ SHA-256 `93d8324058f1ecd1d252d97b976854ffaf2a976605b9658983d17db6d70f5e67`.
 
 `jelliel/THEOLOGICUS`, `main`. **Commit + push à CHAQUE correctif** (message en
 anglais, `git commit -F`). Version = `git rev-list --count HEAD` (2.0.N), **lue dans
-l'API, jamais annoncée d'avance**. Le workflow filtre sur `paths:` — après un push,
-prouver qu'un run CI existe par l'API Actions (`head_sha`). **Jamais `git stash`**
+l'API, jamais annoncée d'avance**. **Jamais `git stash`**
 (a déjà détruit `.git/refs` et le `.pack`). Tout ce qui doit rester hors du dépôt
 s'écrit dans `.gitignore` ; contrôle : `git ls-files | git check-ignore --stdin`
 → **vide**. Détail : skill `theologicus-apk-build`.
+
+- **Piège `paths:`** : c'est une liste d'ALLUMAGE, pas d'exclusion. Un commit hors
+  liste (ex. `.workbuddy-ai/**`) ne déclenche **rien** → le dépôt avance (148) sans
+  qu'aucune release ne soit publiée (l'app restait sur 146). **Après un push,
+  prouver la RELEASE par `/releases/latest` → `tag_name`, pas seulement le run CI.**
+  L'app lit `tag_name` de `/releases/latest` (`THEOLOGICUS.html` ~29220).
 
 ## Décisions produit arrêtées
 
