@@ -7817,7 +7817,11 @@ window.__ensureTafsirSurah = function(p){
 
       <div id="tts-el-block" class="field-group" style="display:none">
         <label class="field-label">☁ ElevenLabs</label>
-        <input class="field-input" id="tts-el-key" type="password" placeholder="Clé API (xi-api-key)" autocomplete="off">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="tts-el-dot" style="width:10px;height:10px;border-radius:50%;background:#666;flex:none"></span>
+          <span id="tts-el-state" style="font-size:12px;font-weight:700">Clé non vérifiée</span>
+        </div>
+        <input class="field-input" id="tts-el-key" type="password" placeholder="Clé API (xi-api-key)" autocomplete="off" style="margin-top:8px">
         <input class="field-input" id="tts-el-voice" placeholder="Voice ID (ex. 21m00Tcm4TlvDq8ikWAM)" autocomplete="off" style="margin-top:8px">
         <select class="field-input field-select" id="tts-el-model" style="margin-top:8px">
           <option value="eleven_multilingual_v2">eleven_multilingual_v2 — 29 langues, stable</option>
@@ -7825,6 +7829,7 @@ window.__ensureTafsirSurah = function(p){
           <option value="eleven_flash_v2_5">eleven_flash_v2_5 — le plus rapide, le moins cher</option>
         </select>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn-ghost" id="tts-el-check" style="min-height:32px;font-size:11px">🔑 Vérifier la clé</button>
           <button class="btn-ghost" id="tts-el-test" style="min-height:32px;font-size:11px">🔊 Tester</button>
           <button class="btn-ghost" id="tts-el-voices" style="min-height:32px;font-size:11px">📋 Lister les voix du compte</button>
         </div>
@@ -7844,10 +7849,17 @@ window.__ensureTafsirSurah = function(p){
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <button class="btn-ghost" id="tts-st-check" style="min-height:32px;font-size:11px">🔌 Vérifier le service</button>
+          <button class="btn-ghost" id="tts-st-start" style="min-height:32px;font-size:11px">▶ Démarrer le service</button>
           <button class="btn-ghost" id="tts-st-test" style="min-height:32px;font-size:11px">🔊 Tester</button>
           <button class="btn-ghost" id="tts-st-cmd" style="min-height:32px;font-size:11px">▶ Commande à lancer</button>
+          <button class="btn-ghost" id="tts-st-log" style="min-height:32px;font-size:11px;display:none">📄 Voir le journal</button>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;cursor:pointer">
+          <input type="checkbox" id="tts-st-auto" style="width:auto;margin:0">
+          <span>Démarrer le service automatiquement au lancement de THEOLOGICUS</span>
+        </label>
         <div class="field-hint" id="tts-st-hint">Supertonic 3 tourne en local : 31 langues dont le français, le grec et l'arabe. Le modèle déjà présent dans ~/.cache/supertonic3 est réutilisé, rien n'est retéléchargé.</div>
+        <pre id="tts-st-journal" style="display:none;margin-top:8px;max-height:180px;overflow:auto;font-size:10px;line-height:1.35;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px;white-space:pre-wrap"></pre>
       </div>
 
       <div class="section-title">🌐 TRADUCTION LOCALE (LIBRETRANSLATE)</div>
@@ -15149,7 +15161,7 @@ function ttsCfg() {
   var d = {
     moteur: 'system',
     elevenlabs: { cle: '', voix: '21m00Tcm4TlvDq8ikWAM', modele: 'eleven_multilingual_v2', base: 'https://api.elevenlabs.io/v1' },
-    supertonic: { url: 'http://127.0.0.1:8091', voix: 'F1', vitesse: 1.05 }
+    supertonic: { url: 'http://127.0.0.1:8091', voix: 'F1', vitesse: 1.05, auto: true }
   };
   var b = null;
   try { b = JSON.parse(localStorage.getItem(TTS_CFG_CLE) || 'null'); } catch (e) { b = null; }
@@ -15222,14 +15234,41 @@ function ttsSignaleUneFois(cle, message, type) {
   if (typeof toast === 'function') toast(message, type || 'error');
 }
 
+// Traduit une panne HTTP en cause lisible. Sans cela, l'app ne savait dire que
+// « échec (moteur-erreur) » : l'utilisateur voyait qu'il échouait, jamais
+// pourquoi. Or « clé refusée » et « Voice ID inconnu » n'appellent pas du tout
+// le même geste.
+function ttsCauseHttp(moteur, status, corps) {
+  var api = '';
+  try {
+    var j = JSON.parse(corps);
+    api = (j && j.detail && (j.detail.message || j.detail.status)) || (j && j.message) || '';
+  } catch (e) {}
+  var cause;
+  if (moteur === 'elevenlabs') {
+    if (status === 401) cause = 'clé API refusée (401)';
+    else if (status === 402) cause = 'quota épuisé (402)';
+    else if (status === 403) cause = 'voix non autorisée pour ce compte (403)';
+    else if (status === 404) cause = 'Voice ID inconnu (404)';
+    else if (status === 422) cause = 'paramètres refusés (422) — essayez un autre modèle';
+    else if (status === 429) cause = 'trop de requêtes (429)';
+    else cause = 'HTTP ' + status;
+  } else {
+    if (status === 404) cause = 'URL de service incorrecte : /tts absent (404)';
+    else if (status === 502 || status === 503) cause = 'service arrêté ou modèle en cours de chargement (' + status + ')';
+    else cause = 'HTTP ' + status;
+  }
+  return cause + (api ? ' — ' + api : '');
+}
+
 function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
   var c = ttsCfg();
   var moteur = moteurForce || c.moteur;
   ttsStopAudio();
   var jeton = ++_ttsJeton;
-  function fin(err) {
+  function fin(err, detail) {
     if (jeton !== _ttsJeton) return;          // une lecture plus récente a pris la main
-    if (err) { if (onErr) onErr(err); } else if (onEnd) onEnd();
+    if (err) { if (onErr) onErr(err, detail || ''); } else if (onEnd) onEnd();
   }
   var url = null, opts = { method: 'GET' };
   if (moteur === 'elevenlabs') {
@@ -15262,7 +15301,9 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
     if (jeton !== _ttsJeton) return null;
     if (!r.ok) {
       return r.text().then(function (t) {
-        throw new Error('HTTP ' + r.status + (t ? ' — ' + t.substring(0, 180) : ''));
+        var e = new Error(ttsCauseHttp(moteur, r.status, t));
+        e.ttsCode = 'moteur-erreur';
+        throw e;
       });
     }
     return r.blob();
@@ -15280,19 +15321,26 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
     a.onerror = function () {
       if (_ttsAudio === a) _ttsAudio = null;
       try { URL.revokeObjectURL(u); } catch (e) {}
-      fin('lecture-audio');
+      fin('lecture-audio', 'l\'appareil a refusé de lire le son reçu');
     };
     return a.play();
   }).catch(function (e) {
     if (jeton !== _ttsJeton) return;
     var msg = (e && e.message) ? e.message : String(e);
+    // Pas de e.ttsCode : la requête n'a jamais abouti (réseau, CORS, service
+    // éteint). On le dit, au lieu de laisser un « Failed to fetch » brut.
+    if (!e || !e.ttsCode) {
+      msg = (moteur === 'elevenlabs')
+        ? 'aucune réponse de api.elevenlabs.io — ' + msg
+        : 'service local injoignable — ' + msg;
+    }
     console.warn('[TTS] ' + moteur + ' : ' + msg);
     if (moteur === 'supertonic') {
-      ttsSignaleUneFois('st-echec', 'Supertonic injoignable (' + msg + '). Lancez tools/start_supertonic.py ou vérifiez l\'URL du service.', 'error');
+      ttsSignaleUneFois('st-echec', 'Supertonic : ' + msg + '. Vérifiez que le service tourne (Paramètres → Démarrer le service).', 'error');
     } else {
       ttsSignaleUneFois('el-echec', 'ElevenLabs : ' + msg, 'error');
     }
-    fin('moteur-erreur');
+    fin('moteur-erreur', msg);
   });
 }
 
@@ -15332,11 +15380,108 @@ function ttsTester(moteur) {
     window.speechSynthesis.speak(utt);
     return;
   }
+  // ElevenLabs : on vérifie la clé AVANT de synthétiser. Une clé refusée et un
+  // Voice ID inconnu produisent le même « échec » côté synthèse ; les séparer
+  // évite un aller-retour de diagnostic pour rien.
+  if (m === 'elevenlabs') {
+    var c = ttsCfg();
+    if (!String(c.elevenlabs.cle || '').trim()) {
+      if (typeof toast === 'function') toast('ElevenLabs : renseignez la clé API dans les Paramètres.', 'error');
+      return;
+    }
+    if (typeof toast === 'function') toast('Vérification de la clé…', 'info');
+    ttsElevenLabsVerifier().then(function (bon) { if (bon) ttsTestSynthese(m); });
+    return;
+  }
+  ttsTestSynthese(m);
+}
+
+function ttsTestSynthese(m) {
   if (typeof toast === 'function') toast('Test de ' + (TTS_MOTEURS[m] || m) + '…', 'info');
   ttsParleDistant(TTS_PHRASE_TEST, 'francais',
     function () { if (typeof toast === 'function') toast((TTS_MOTEURS[m] || m) + ' : lecture réussie.', 'success'); },
-    function (err) { if (typeof toast === 'function') toast((TTS_MOTEURS[m] || m) + ' : échec (' + err + ').', 'error'); },
+    // Le détail est affiché tel quel : c'est lui qui dit quoi faire.
+    function (err, detail) { if (typeof toast === 'function') toast((TTS_MOTEURS[m] || m) + ' : échec — ' + (detail || err), 'error'); },
     m);
+}
+
+// Vérifie la clé sans synthétiser : GET /user répond 401 sur une clé invalide
+// (mesuré) et 200 sur une clé valide. Rend une promesse de booléen.
+function ttsElevenLabsVerifier() {
+  var c = ttsCfg();
+  var cle = String(c.elevenlabs.cle || '').trim();
+  var base = String(c.elevenlabs.base || 'https://api.elevenlabs.io/v1').replace(/\/+$/, '');
+  var dot = document.getElementById('tts-el-dot');
+  var st = document.getElementById('tts-el-state');
+  function peindre(ok, txt, couleur) {
+    if (dot) { dot.style.background = couleur; dot.style.boxShadow = '0 0 8px ' + couleur; }
+    if (st) st.textContent = txt;
+  }
+  if (!cle) {
+    peindre(false, 'Clé manquante', '#ff3355');
+    if (typeof toast === 'function') toast('Renseignez d\'abord la clé API ElevenLabs.', 'error');
+    return Promise.resolve(false);
+  }
+  peindre(false, 'Vérification…', '#ffaa00');
+  return fetch(base + '/user', { headers: { 'xi-api-key': cle } })
+    .then(function (r) { return r.text().then(function (t) { return { statut: r.status, corps: t }; }); })
+    .then(function (rep) {
+      if (rep.statut === 200) {
+        var j = null; try { j = JSON.parse(rep.corps); } catch (e) {}
+        var ab = (j && j.subscription) || {};
+        // Les noms de champs du quota ne sont affichés que s'ils sont là : on
+        // n'invente pas une information qu'on n'a pas lue.
+        var quota = (typeof ab.character_limit === 'number')
+          ? ' — ' + (ab.character_count || 0) + ' / ' + ab.character_limit + ' caractères'
+          : '';
+        peindre(true, 'Clé acceptée' + quota, '#00ff88');
+        if (typeof toast === 'function') toast('Clé ElevenLabs acceptée' + quota + '.', 'success');
+        return true;
+      }
+      var cause = ttsCauseHttp('elevenlabs', rep.statut, rep.corps);
+      peindre(false, 'Refusée — ' + cause, '#ff3355');
+      if (typeof toast === 'function') toast('ElevenLabs : ' + cause, 'error');
+      return false;
+    })
+    .catch(function (e) {
+      var msg = (e && e.message) ? e.message : String(e);
+      peindre(false, 'Injoignable — ' + msg, '#ff3355');
+      if (typeof toast === 'function') toast('ElevenLabs injoignable (réseau ?) — ' + msg, 'error');
+      return false;
+    });
+}
+
+// État du service tel que le voit le serveur local de l'application (Windows).
+// Rend null sur l'APK et dans un navigateur, où cette route n'existe pas.
+function ttsSupertonicEtat() {
+  return fetch('/supertonic/status', { method: 'GET' })
+    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .catch(function () { return null; });
+}
+
+// Pilote le service local : 'start' ou 'stop'. Windows uniquement.
+function ttsSupertonicService(action) {
+  var act = (action === 'stop') ? 'stop' : 'start';
+  var st = document.getElementById('tts-st-state');
+  if (st) st.textContent = (act === 'start') ? 'Démarrage… (chargement du modèle)' : 'Arrêt…';
+  return fetch('/supertonic/' + act, { method: 'POST' })
+    .then(function (r) { return r.json(); })
+    .then(function (rep) {
+      if (!rep.ok) {
+        var msg = rep.last_error || ('échec (' + (rep.reason || '?') + ')');
+        if (rep.reason === 'no-deps') msg += ' — installez-les : python -m pip install numpy onnxruntime';
+        if (rep.reason === 'no-script') msg += ' — le dossier tools/ n\'est pas à côté de l\'application.';
+        if (typeof toast === 'function') toast('Supertonic : ' + msg, 'error');
+      } else if (typeof toast === 'function') {
+        toast(rep.already ? 'Supertonic tourne déjà.' : 'Supertonic : démarrage lancé, le modèle se charge.', 'success');
+      }
+      ttsSupertonicVerifier();
+      return rep;
+    })
+    .catch(function () {
+      if (typeof toast === 'function') toast('Le pilotage du service n\'est disponible que dans l\'application Windows.', 'error');
+      return null;
+    });
 }
 
 function ttsSupertonicVerifier() {
@@ -15344,22 +15489,41 @@ function ttsSupertonicVerifier() {
   var base = String(c.supertonic.url || '').replace(/\/+$/, '');
   var dot = document.getElementById('tts-st-dot');
   var st = document.getElementById('tts-st-state');
+  var logBtn = document.getElementById('tts-st-log');
   function peindre(ok, txt, couleur) {
     if (dot) { dot.style.background = couleur; dot.style.boxShadow = '0 0 8px ' + couleur; }
     if (st) st.textContent = txt;
+    if (logBtn) logBtn.style.display = ok ? 'none' : '';
   }
   if (!base) { peindre(false, 'URL manquante', '#ff3355'); return; }
   peindre(false, 'Vérification…', '#ffaa00');
-  fetch(base + '/health', { method: 'GET' }).then(function (r) {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }).then(function (j) {
-    var n = (j && j.voices) ? j.voices.length : 0;
-    peindre(true, 'En ligne — ' + ((j && j.model) || 'Supertonic') + ', ' + n + ' voix', '#00ff88');
-    if (typeof toast === 'function') toast('Supertonic en ligne (' + ((j && j.languages) ? j.languages.length + ' langues' : 'modèle chargé') + ').', 'success');
-  }).catch(function (e) {
-    peindre(false, 'Injoignable — ' + ((e && e.message) || e), '#ff3355');
-    if (typeof toast === 'function') toast('Service Supertonic injoignable : lancez tools/start_supertonic.py.', 'error');
+  // 1) L'application sait piloter le service : elle en connaît l'état exact,
+  //    y compris « le Python du PC n'a pas numpy » — une cause qu'une simple
+  //    requête sur /health ne peut pas distinguer d'un service éteint.
+  ttsSupertonicEtat().then(function (etat) {
+    if (etat) {
+      if (etat.ready) {
+        peindre(true, 'En ligne — ' + (etat.model || 'Supertonic') + (etat.voices ? ', ' + etat.voices + ' voix' : ''), '#00ff88');
+        return;
+      }
+      if (etat.running) { peindre(false, 'Démarrage… le modèle se charge', '#ffaa00'); return; }
+      if (!etat.script) { peindre(false, 'Service absent (dossier tools)', '#ff3355'); return; }
+      if (!etat.deps) { peindre(false, 'Python sans numpy / onnxruntime', '#ff3355'); return; }
+    }
+    // 2) Vérification directe de l'URL : c'est la seule voie sur l'APK, où le
+    //    service tourne sur le PC et répond sur le réseau local.
+    return fetch(base + '/health', { method: 'GET' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (j) {
+      var n = (j && j.voices) ? j.voices.length : 0;
+      peindre(true, 'En ligne — ' + ((j && j.model) || 'Supertonic') + ', ' + n + ' voix', '#00ff88');
+      if (typeof toast === 'function') toast('Supertonic en ligne (' + ((j && j.languages) ? j.languages.length + ' langues' : 'modèle chargé') + ').', 'success');
+    }).catch(function (e) {
+      var msg = (e && e.message) ? e.message : String(e);
+      peindre(false, 'Injoignable — ' + msg, '#ff3355');
+      if (typeof toast === 'function') toast('Service Supertonic injoignable : ' + msg, 'error');
+    });
   });
 }
 
@@ -15403,6 +15567,10 @@ function ttsCablerParametres() {
   var stUrl = document.getElementById('tts-st-url');
   var stVoice = document.getElementById('tts-st-voice');
   var stSpeed = document.getElementById('tts-st-speed');
+  var stAuto = document.getElementById('tts-st-auto');
+  var stStart = document.getElementById('tts-st-start');
+  var stLogBtn = document.getElementById('tts-st-log');
+  var stJournal = document.getElementById('tts-st-journal');
 
   if (stVoice && !stVoice.options.length) {
     TTS_ST_VOIX.forEach(function (p) {
@@ -15423,6 +15591,7 @@ function ttsCablerParametres() {
     if (stUrl) stUrl.value = c.supertonic.url || '';
     if (stVoice) stVoice.value = c.supertonic.voix || 'F1';
     if (stSpeed) stSpeed.value = String(c.supertonic.vitesse || 1.05);
+    if (stAuto) stAuto.checked = c.supertonic.auto !== false;
   }
 
   sel.onchange = function () {
@@ -15445,9 +15614,30 @@ function ttsCablerParametres() {
   };
   var b;
   b = document.getElementById('tts-el-test'); if (b) b.onclick = function () { ttsTester('elevenlabs'); };
+  b = document.getElementById('tts-el-check'); if (b) b.onclick = function () { ttsElevenLabsVerifier(); };
   b = document.getElementById('tts-el-voices'); if (b) b.onclick = ttsElevenLabsVoix;
   b = document.getElementById('tts-st-check'); if (b) b.onclick = ttsSupertonicVerifier;
   b = document.getElementById('tts-st-test'); if (b) b.onclick = function () { ttsTester('supertonic'); };
+  // Bouton unique démarrer/arrêter : l'état est relu à chaque clic, pas mémorisé
+  // — le service peut avoir été arrêté depuis l'extérieur (Ctrl+C, veille).
+  if (stStart) stStart.onclick = function () {
+    ttsSupertonicEtat().then(function (etat) {
+      ttsSupertonicService(etat && etat.running && !etat.external ? 'stop' : 'start');
+    });
+  };
+  if (stAuto) stAuto.onchange = function () {
+    ttsCfgSet({ supertonic: { auto: !!stAuto.checked } });
+    if (typeof toast === 'function') toast(stAuto.checked ? 'Le service Supertonic sera démarré au lancement.' : 'Démarrage automatique désactivé.', 'info');
+  };
+  if (stLogBtn) stLogBtn.onclick = function () {
+    if (!stJournal) return;
+    fetch('/supertonic/log', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (j) {
+      stJournal.textContent = (j && j.tail) ? j.tail : '(journal vide)';
+      stJournal.style.display = '';
+    }).catch(function () {
+      if (typeof toast === 'function') toast('Journal indisponible hors de l\'application Windows.', 'error');
+    });
+  };
   b = document.getElementById('tts-st-cmd'); if (b) b.onclick = function () {
     var cmd = 'python tools/start_supertonic.py';
     console.log('[TTS] ' + cmd);
@@ -15455,6 +15645,24 @@ function ttsCablerParametres() {
     try { if (navigator.clipboard) navigator.clipboard.writeText(cmd); } catch (e) {}
   };
   recharger();
+  ttsSupertonicDemarrageAuto();
+}
+
+// Démarrage automatique demandé par l'utilisateur : le service part avec
+// l'application, sans qu'il ait à ouvrir un terminal. Silencieux si la route
+// n'existe pas (APK, navigateur) ou si l'option est décochée.
+function ttsSupertonicDemarrageAuto() {
+  if (ttsCfg().supertonic.auto === false) return;
+  ttsSupertonicEtat().then(function (etat) {
+    if (!etat) return;                       // pas de pilotage ici : on ne dit rien
+    if (etat.ready || etat.running) return;  // déjà en ligne
+    if (!etat.script || !etat.deps) {        // inutile d'insister : on explique
+      ttsSupertonicVerifier();
+      return;
+    }
+    console.log('[TTS] démarrage automatique du service Supertonic');
+    ttsSupertonicService('start');
+  });
 }
 
 function speakText(text) {

@@ -60,6 +60,15 @@ if not exist "dist\THEOLOGICUS\libs\fonts" mkdir "dist\THEOLOGICUS\libs\fonts"
 copy /y libs\fonts\*.css dist\THEOLOGICUS\libs\fonts\ >nul
 copy /y libs\fonts\*.woff2 dist\THEOLOGICUS\libs\fonts\ >nul
 
+rem v110 : service Supertonic local, que PARAMETRES peut demarrer tout seul.
+rem Le depot amont n'en fournit aucun : c'est notre script + le helper MIT.
+rem Sans ces deux fichiers, « Demarrer le service » repond « service absent ».
+if not exist "dist\THEOLOGICUS\tools" mkdir "dist\THEOLOGICUS\tools"
+copy /y tools\start_supertonic.py dist\THEOLOGICUS\tools\ >nul || goto :err
+if not exist "dist\THEOLOGICUS\tools\supertonic" mkdir "dist\THEOLOGICUS\tools\supertonic"
+copy /y tools\supertonic\helper.py dist\THEOLOGICUS\tools\supertonic\ >nul || goto :err
+copy /y tools\supertonic\LICENSE dist\THEOLOGICUS\tools\supertonic\ >nul || goto :err
+
 rem Cle API : l'installeur est toujours distribue SANS cle.
 rem Le fichier dist\THEOLOGICUS\theologicus_keys.json est remis a vide
 rem a chaque build — les destinataires collent leur propre cle dans l'app.

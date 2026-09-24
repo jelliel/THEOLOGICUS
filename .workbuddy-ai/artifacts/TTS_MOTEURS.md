@@ -114,6 +114,21 @@ fallait monter le volume à chaque bascule.
   `supertone-oss-archive/supertonic`, licence MIT.
 - `.workbuddy-ai/artifacts/_tts/bench_v109_moteurs.js` : banc de vérification.
 
+### v110 — après le premier essai réel de l'utilisateur
+
+Deux retours, deux correctifs.
+
+1. **« ElevenLabs : échec (moteur-erreur) » ne disait rien.** Le message réel
+   était avalé : `onErr` ne recevait qu'un code. `ttsCauseHttp()` traduit
+   maintenant le statut HTTP en cause, et reprend le `detail.message` de l'API ;
+   `onErr(code, detail)` transmet les deux. S'ajoutent le bouton **🔑 Vérifier la
+   clé** (`GET /v1/user`, qui répond 401 sur une clé invalide — mesuré) et une
+   pastille d'état. Le bouton **Tester** vérifie la clé **avant** de synthétiser,
+   parce qu'une clé refusée et un Voice ID inconnu produisaient le même « échec ».
+2. **Le service devait démarrer avec l'application.** Voir la section
+   « Démarrage automatique » ci-dessus : routes dans `proxy_server.py`, case
+   cochée par défaut, `tools/` livré par l'installeur.
+
 ### Deux invariants à ne pas casser
 
 1. **`window.speechSynthesis.speak(utt)` ne doit apparaître que 2 fois** (le
@@ -144,12 +159,76 @@ Le latin est un cas piège vérifié nommément : `latin` n'est pas dans
 `SCRIPT_RANGES`, il doit donc partir en **`fr`** et non en `na` — sans quoi il
 serait lu sans hypothèse de langue.
 
+## Démarrage automatique du service (Windows)
+
+Le service est piloté depuis PARAMÈTRES, comme LibreTranslate avant lui :
+`proxy_server.py` expose `/supertonic/status`, `/supertonic/start`,
+`/supertonic/stop` et `/supertonic/log`, et l'app les appelle en same-origin.
+
+- **Case « Démarrer le service automatiquement au lancement »**, cochée par
+  défaut. Au démarrage, l'app interroge l'état puis lance le service s'il ne
+  tourne pas. Elle ne le lance pas si le script ou les dépendances manquent :
+  elle affiche la cause à la place, plutôt que d'échouer en silence.
+- **L'interpréteur est choisi en le testant** (`import numpy, onnxruntime`), pas
+  en le supposant : `sys.executable`, puis `py -3`, `python`, `python3`. Sur un
+  PC où seul un Python sans ces paquets existe, le message le dit et donne la
+  commande exacte.
+- `build_installer.bat` livre `tools/start_supertonic.py` et
+  `tools/supertonic/` dans le dossier d'installation — sans eux le bouton
+  répondrait « service absent ».
+- Le journal est lisible depuis l'app (bouton **📄 Voir le journal**, alimenté
+  par `logs/supertonic.log`).
+
+## Android — trois voies, par ordre de simplicité
+
+**1. La voix du système suffit, et c'est déjà le cas.** Contrairement à ce PC,
+Android **a** une voix française : le WebView n'expose pas `speechSynthesis`,
+mais le shim de l'app (v53) le reconstruit au-dessus du plugin natif
+`SpeechBridge`, donc du moteur TTS du téléphone. `getVoices()` y rend une voix
+synthétique `fr-FR`, ce qui suffit à `makeUtterance`. **Rien à installer côté
+app** ; il faut seulement que les données vocales françaises soient présentes :
+*Paramètres Android → Système → Langues et saisie → Sortie de synthèse vocale →
+Google → installer les données vocales (français)*.
+
+**2. ElevenLabs fonctionne tel quel.** C'est un service cloud : la clé saisie
+sur le téléphone suffit, aucune dépendance locale, il faut simplement une
+connexion Internet.
+
+**3. Supertonic depuis le téléphone : viser le PC, pas le téléphone.**
+Le service tourne sur le PC et **écoute déjà sur `0.0.0.0`** ; il affiche à son
+démarrage les adresses joignables depuis un autre appareil :
+
+```
+[OK] a l'ecoute sur http://127.0.0.1:8091
+       depuis un autre appareil : http://192.168.100.71:8091
+```
+
+Sur le téléphone, remplacer l'URL du bloc Supertonic par cette adresse LAN
+(`http://192.168.100.71:8091`), PC et téléphone sur le même Wi-Fi. Rien d'autre
+à faire : le manifeste Android autorise déjà le HTTP en clair
+(`android:usesCleartextTraffic="true"`, justifié à l'époque par LibreTranslate)
+et `capacitor.config.json` active `allowMixedContent`. **Le piège est l'URL par
+défaut** : `http://127.0.0.1:8091` désigne le téléphone lui-même, donc échoue —
+il faut l'IP du PC.
+
+**Ce qui n'est pas réaliste : embarquer Supertonic dans l'APK.** Le dépôt fournit
+bien un helper navigateur (`web/helper.js`, ONNX Runtime Web, WebGPU avec repli
+WebAssembly), mais il faut lui servir le modèle : **385 Mo** à côté de l'APK, et
+WebGPU n'est pas garanti dans un WebView Android. À garder pour plus tard.
+
 ## En cas de problème
 
 | Symptôme | Cause | Remède |
 |---|---|---|
-| « Supertonic injoignable » | service non lancé | `python tools/start_supertonic.py` |
+| « Supertonic injoignable » | service non lancé | Paramètres → **▶ Démarrer le service**, ou laisser la case de démarrage automatique cochée |
+| « Python sans numpy / onnxruntime » | l'interpréteur trouvé n'a pas les paquets | `python -m pip install numpy onnxruntime` avec le Python annoncé par l'app |
+| « Service absent (dossier tools) » | installation ancienne, sans `tools/` | réinstaller la version courante de l'installeur |
+| « ElevenLabs : échec — clé API refusée (401) » | clé invalide, révoquée, ou espace en trop | bouton **🔑 Vérifier la clé** ; recollez la clé sans espace |
+| « ElevenLabs : échec — Voice ID inconnu (404) » | Voice ID absent de ce compte | **📋 Lister les voix du compte** et coller un `voice_id` de la liste |
+| « ElevenLabs : échec — quota épuisé (402) » | crédit du compte épuisé | voir la console ElevenLabs |
+| « ElevenLabs : aucune réponse de api.elevenlabs.io » | pas de réseau, ou requête bloquée | vérifier la connexion |
 | Pastille rouge « Injoignable — HTTP 502 » | le service n'écoute pas. **Un port fermé renvoie 502 ici, pas une erreur de connexion** — donc 502 veut bien dire « rien ne tourne », pas « mauvais port » | lancer le service, puis **Vérifier le service** |
+| Sur téléphone : rien ne sort avec Supertonic | URL restée sur `127.0.0.1` | mettre l'**IP du PC** (`http://192.168.100.71:8091`), même Wi-Fi |
 | « numpy est requis » | le service tourne avec un Python où numpy manque | le message donne maintenant **l'interpréteur exact** ; lancer `"<ce python>" -m pip install numpy onnxruntime` |
 | « ElevenLabs : renseignez la clé » | clé vide | Paramètres → bloc ElevenLabs |
 | Le français reste anglais | moteur = « voix du système » sans voix fr | passer à Supertonic ou ElevenLabs, ou installer le pack fr-FR |

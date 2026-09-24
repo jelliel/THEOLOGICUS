@@ -315,6 +315,48 @@ setTimeout(() => { console.log('\nGARDE-FOU : banc interrompu apres 200 s'); pro
     const fAttendu = { canceled: true, interrupted: true, 'moteur-erreur': true, 'moteur-indisponible': true, unknown: false, 'not-allowed': false, 'synthesis-failed': false };
     fatals.forEach(function (p) { ok('ttsErreurFatale(' + p[0] + ') = ' + fAttendu[p[0]], p[1] === fAttendu[p[0]], p[1]); });
 
+    /* ── 3b. Le diagnostic : une panne doit dire POURQUOI ──────────────────
+       v109 se contentait de « échec (moteur-erreur) » : l'utilisateur voyait
+       qu'il échouait, jamais pourquoi, et une clé refusée ressemblait à un
+       Voice ID inconnu. Ces contrôles portent sur la traduction du code HTTP
+       en cause lisible, puis sur un vrai appel à l'API avec une clé fausse. */
+    console.log('\n--- 3b. Une panne dit sa cause, pas juste « échec » ---');
+    ok('ttsCauseHttp existe', await ev('typeof ttsCauseHttp') === 'function');
+    const causes = await ev(JSON.stringify([
+      ['elevenlabs', 401, '{"detail":{"message":"Invalid API key"}}'],
+      ['elevenlabs', 404, ''],
+      ['elevenlabs', 429, ''],
+      ['supertonic', 404, ''],
+      ['supertonic', 502, '']
+    ]) + '.map(function(t){ return ttsCauseHttp(t[0], t[1], t[2]); })');
+    ok('401 ElevenLabs nomme la cle', /clé API refusée/.test(causes[0]), causes[0]);
+    ok('le message de l API est repris', /Invalid API key/.test(causes[0]), causes[0]);
+    ok('404 ElevenLabs nomme le Voice ID', /Voice ID inconnu/.test(causes[1]), causes[1]);
+    ok('429 ElevenLabs nomme la limite', /trop de requêtes/.test(causes[2]), causes[2]);
+    ok('404 Supertonic nomme l URL', /URL de service incorrecte/.test(causes[3]), causes[3]);
+    ok('502 Supertonic nomme le service arrete', /service arrêté/.test(causes[4]), causes[4]);
+
+    // Vrai appel réseau : une clé volontairement fausse doit produire un détail
+    // qui dit « clé API refusée (401) », pas un code opaque.
+    console.log('   ... appel reel a api.elevenlabs.io avec une cle fausse');
+    const diag = await ev(`new Promise(function(res){
+      ttsCfgSet({moteur:'elevenlabs', elevenlabs:{cle:'sk_cle_volontairement_fausse_000', voix:'21m00Tcm4TlvDq8ikWAM'}});
+      ttsParleDistant('Bonjour', 'francais',
+        function(){ res({etat:'fin'}); },
+        function(err, detail){ res({etat:'erreur', err:err, detail:detail}); },
+        'elevenlabs');
+      setTimeout(function(){ res({etat:'timeout'}); }, 30000);
+    })`, true);
+    ok('la cle fausse echoue', diag.etat === 'erreur', diag.etat);
+    ok('le code reste fatal (la file s arretera)', diag.err === 'moteur-erreur', diag.err);
+    ok('le detail nomme la cle refusee', /clé API refusée \(401\)/.test(diag.detail || ''), diag.detail);
+    const verifCle = await ev(`new Promise(function(res){
+      ttsElevenLabsVerifier().then(function(bon){ res({bon:bon, etat:(document.getElementById('tts-el-state')||{}).textContent}); });
+      setTimeout(function(){ res({bon:'timeout'}); }, 30000);
+    })`, true);
+    ok('ttsElevenLabsVerifier rend false sur une cle fausse', verifCle.bon === false, verifCle);
+    ok('la pastille ElevenLabs annonce le refus', /Refusée/.test(verifCle.etat || ''), verifCle.etat);
+
     console.log('\n--- Parametres : les controles existent et sont cables ---');
     ok('selecteur de moteur present', await ev("!!document.getElementById('tts-engine-select')"));
     ok('bloc ElevenLabs present', await ev("!!document.getElementById('tts-el-block')"));
@@ -322,6 +364,17 @@ setTimeout(() => { console.log('\nGARDE-FOU : banc interrompu apres 200 s'); pro
     ok('champ cle ElevenLabs', await ev("!!document.getElementById('tts-el-key')"));
     ok('champ Voice ID', await ev("!!document.getElementById('tts-el-voice')"));
     ok('champ URL Supertonic', await ev("!!document.getElementById('tts-st-url')"));
+    // v110 : les controles ajoutes apres le retour de l'utilisateur
+    // (« ElevenLabs : échec (moteur-erreur) » sans plus d'explication, et
+    // « je veux que le serveur demarre avec l'application »).
+    ok('bouton Verifier la cle ElevenLabs', await ev("!!document.getElementById('tts-el-check')"));
+    ok('pastille d etat ElevenLabs', await ev("!!document.getElementById('tts-el-dot')"));
+    ok('bouton Demarrer le service', await ev("!!document.getElementById('tts-st-start')"));
+    ok('case Demarrer au lancement', await ev("!!document.getElementById('tts-st-auto')"));
+    ok('bouton Voir le journal', await ev("!!document.getElementById('tts-st-log')"));
+    ok('demarrage automatique actif par defaut', await ev("ttsCfg().supertonic.auto !== false"));
+    ok('ttsSupertonicService existe', await ev('typeof ttsSupertonicService') === 'function');
+    ok('ttsSupertonicDemarrageAuto existe', await ev('typeof ttsSupertonicDemarrageAuto') === 'function');
     ok('10 styles de voix Supertonic', await ev("document.getElementById('tts-st-voice').options.length") === 10);
     // On rapporte la valeur OBSERVEE : un simple faux ne dit pas si le selecteur
     // est vide, mal rempli, ou rempli avec autre chose.

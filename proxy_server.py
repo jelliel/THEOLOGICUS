@@ -198,6 +198,176 @@ def lt_install():
     threading.Thread(target=_run, daemon=True).start()
     return {"ok": True, **lt_status()}
 
+
+# ════════════════════════════════════════════════════════════════════
+# Supertonic 3 local — même schéma que LibreTranslate ci-dessus.
+# L'app (PARAMÈTRES) demande le démarrage ; le service écoute sur
+# 0.0.0.0 pour rester joignable depuis l'APK sur le même Wi-Fi.
+#
+# Deux différences avec LibreTranslate, toutes deux mesurées :
+#   1. Supertonic n'est pas un paquet pip : c'est NOTRE script
+#      tools/start_supertonic.py, qui a besoin de numpy ET onnxruntime.
+#      L'interpréteur est donc choisi en le TESTANT, pas en le supposant.
+#   2. Un port fermé renvoie ici un HTTP 502 d'un relais local, pas une
+#      erreur de connexion : « le port répond » ne prouve rien, c'est le
+#      code HTTP qui tranche. urlopen lève sur 502, ce qui suffit.
+# ════════════════════════════════════════════════════════════════════
+ST_PORT = 8091
+_st = {"proc": None, "external": False, "last_error": "", "python": None, "deps": None}
+
+
+def _st_log_file():
+    log_dir = os.path.join(SERVE_DIR, "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        return open(os.path.join(log_dir, "supertonic.log"), "ab")
+    except Exception:
+        return subprocess.DEVNULL
+
+
+def _st_script():
+    """Chemin de notre service. En mode exe il est livré dans tools/ à côté
+    de l'exécutable (voir build_installer.bat)."""
+    return os.path.join(SERVE_DIR, "tools", "start_supertonic.py")
+
+
+def _st_candidats():
+    """Interpréteurs à essayer, dans l'ordre. En exe gelé sys.executable
+    n'est PAS un python : on cherche donc sur la machine."""
+    import shutil
+    out = []
+    if not getattr(sys, "frozen", False):
+        out.append([sys.executable])
+    if shutil.which("py"):
+        out.append(["py", "-3"])
+    if shutil.which("python"):
+        out.append(["python"])
+    if shutil.which("python3"):
+        out.append(["python3"])
+    return out
+
+
+def _st_python_cmd():
+    """Premier interpréteur qui sait importer numpy ET onnxruntime.
+    Résultat mémorisé : le test coûte ~1 s (chargement d'onnxruntime)."""
+    if _st["python"] is not None:
+        return _st["python"] or None
+    for cand in _st_candidats():
+        try:
+            r = subprocess.run(cand + ["-c", "import numpy, onnxruntime"],
+                               capture_output=True, timeout=60)
+            if r.returncode == 0:
+                _st["python"] = cand
+                _st["deps"] = True
+                return cand
+        except Exception:
+            continue
+    _st["python"] = []
+    _st["deps"] = False
+    return None
+
+
+def _st_health(timeout=0.8):
+    """Corps de /health, ou None. Un relais local répond 502 quand rien
+    n'écoute — urlopen lève alors, donc le code HTTP tranche vraiment."""
+    try:
+        import urllib.request
+        with urllib.request.urlopen(f"http://127.0.0.1:{ST_PORT}/health", timeout=timeout) as r:
+            if r.status != 200:
+                return None
+            j = json.loads(r.read().decode("utf-8"))
+            return j if isinstance(j, dict) else None
+    except Exception:
+        return None
+
+
+def _st_http_reachable(timeout=0.8):
+    return _st_health(timeout) is not None
+
+
+def st_status():
+    proc = _st.get("proc")
+    running = proc is not None and proc.poll() is None
+    # Le service peut etre monte avant que le modele ONNX soit charge : on
+    # distingue donc « joignable » de « pret a synthetiser ». Annoncer
+    # « en ligne » sur un simple port ouvert ferait echouer la premiere lecture.
+    sante = _st_health(1.2)
+    if not running and sante is not None:
+        running = True
+        _st["external"] = True
+    py = _st_python_cmd()
+    return {
+        "running": running,
+        "ready": bool(sante and sante.get("loaded") is True),
+        "external": _st.get("external", False),
+        "deps": bool(_st.get("deps")),
+        "python": " ".join(py) if py else "",
+        "script": os.path.isfile(_st_script()),
+        "model": (sante or {}).get("model", ""),
+        "voices": len((sante or {}).get("voices", []) or []),
+        "port": ST_PORT,
+        "url": f"http://127.0.0.1:{ST_PORT}",
+        "last_error": _st.get("last_error", ""),
+    }
+
+
+def st_start():
+    if _st_http_reachable(0.8):
+        _st["external"] = True
+        return {"ok": True, "already": True, **st_status()}
+    if _st.get("proc") is not None and _st["proc"].poll() is None:
+        return {"ok": True, "already": True, **st_status()}
+    _st["last_error"] = ""
+    script = _st_script()
+    if not os.path.isfile(script):
+        _st["last_error"] = ("Service introuvable : %s. Il est livré avec "
+                             "l'application (dossier tools)." % script)
+        return {"ok": False, "reason": "no-script", **st_status()}
+    py = _st_python_cmd()
+    if not py:
+        # Message volontairement complet : c'est LE point de blocage réel.
+        _st["last_error"] = ("Aucun Python avec numpy et onnxruntime n'a été "
+                             "trouvé sur ce PC. Installez-les, puis relancez : "
+                             "python -m pip install numpy onnxruntime")
+        return {"ok": False, "reason": "no-deps", **st_status()}
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    try:
+        logf = _st_log_file()
+        logf.write(b"\n=== demarrage supertonic ===\n")
+        proc = subprocess.Popen(
+            py + [script, "--host", "0.0.0.0", "--port", str(ST_PORT)],
+            stdout=logf, stderr=subprocess.STDOUT,
+            creationflags=flags, cwd=SERVE_DIR)
+        _st["proc"] = proc
+        _st["external"] = False
+        import atexit
+        atexit.register(_st_kill)
+        return {"ok": True, **st_status()}
+    except Exception as e:
+        _st["last_error"] = str(e)
+        return {"ok": False, "reason": "spawn-failed", **st_status()}
+
+
+def _st_kill():
+    proc = _st.get("proc")
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                proc.kill()
+        except Exception:
+            pass
+    _st["proc"] = None
+
+
+def st_stop():
+    _st["external"] = False
+    _st_kill()
+    return {"ok": True, **st_status()}
+
+
 class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -217,6 +387,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # LibreTranslate local : état (interrogé par PARAMÈTRES)
         if self.path.split('?')[0] == '/libretranslate/status':
             self._json_response(lt_status())
+            return
+        # Supertonic local : état (interrogé par PARAMÈTRES)
+        if self.path.split('?')[0] == '/supertonic/status':
+            self._json_response(st_status())
             return
         # Config des clés API (fichier séparé, jamais embarqué dans le HTML)
         if self.path.split('?')[0] == '/theologicus-keys':
@@ -285,6 +459,22 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response(lt_install())
         elif self.path.split('?')[0] == '/libretranslate/log':
             log_path = os.path.join(SERVE_DIR, 'logs', 'libretranslate.log')
+            tail = ''
+            try:
+                with open(log_path, 'rb') as f:
+                    f.seek(0, os.SEEK_END)
+                    size = f.tell()
+                    f.seek(max(0, size - 8192))
+                    tail = f.read().decode('utf-8', errors='replace')
+            except Exception:
+                pass
+            self._json_response({"tail": tail})
+        elif self.path.split('?')[0] == '/supertonic/start':
+            self._json_response(st_start())
+        elif self.path.split('?')[0] == '/supertonic/stop':
+            self._json_response(st_stop())
+        elif self.path.split('?')[0] == '/supertonic/log':
+            log_path = os.path.join(SERVE_DIR, 'logs', 'supertonic.log')
             tail = ''
             try:
                 with open(log_path, 'rb') as f:
