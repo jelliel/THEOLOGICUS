@@ -4,6 +4,12 @@ setlocal EnableExtensions
 title THEOLOGICUS - Build complet (exe + installeur + signature)
 cd /d "%~dp0"
 
+rem Pause conditionnelle : une execution automatisee (script, CI, outil tiers)
+rem n'a personne pour appuyer sur une touche. Definir THEOLOGICUS_NO_PAUSE=1
+rem pour que le script rende la main tout seul.
+set "PAUSE_CMD=pause"
+if defined THEOLOGICUS_NO_PAUSE set "PAUSE_CMD=rem pause desactivee (THEOLOGICUS_NO_PAUSE)"
+
 set "SIGNTOOL=C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe"
 set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 set "PFX=THEOLOGICUS_signing.pfx"
@@ -21,7 +27,7 @@ if not defined VER (
   echo [X] Version introuvable : la commande git rev-list a echoue.
   echo     Lance le build depuis une copie de travail git valide, ou passe la
   echo     version a la main :  set VER=2.0.NN  ^&^& build_installer.bat
-  pause
+  %PAUSE_CMD%
   exit /b 1
 )
 echo Version : %VER%
@@ -112,10 +118,10 @@ echo    dist\THEOLOGICUS-Setup-x64.exe
 echo    output\THEOLOGICUS.exe + output\THEOLOGICUS-Setup-x64.exe
 
 echo ============================================
-pause
+%PAUSE_CMD%
 goto :eof
 
 :err
 echo.
 echo [X] Echec du build.
-pause
+%PAUSE_CMD%
