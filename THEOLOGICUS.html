@@ -10732,7 +10732,7 @@ function initSettingsModal() {
       try { localStorage.setItem('theologicus-read-lang', readLangMode); } catch(e) {}
       // Recharge immédiatement la meilleure voix FR pour éviter tout décalage
       if (readLangMode === 'fr') {
-        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration }) : null;
+        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration: ttsNarration() }) : null;
         if (v) _bestFrVoice = v;
       }
       toast(readLangMode === 'fr' ? "Lecture vocale : Français forcé" : "Lecture vocale : Détection auto", "success");
@@ -14983,7 +14983,7 @@ function _humanizePitch(basePitch, segLen) {
 // ── v108 — LE CAS « AUCUNE VOIX POUR CETTE LANGUE », ENFIN SIGNALÉ ──
 // Mesuré sur un poste Windows SANS pack de langue français :
 //   detectScriptLang('Très tôt…')  -> 'francais'        (détection correcte)
-//   getVoiceForLang('francais', { narration })    -> null              (aucune voix)
+//   getVoiceForLang('francais', { narration: ttsNarration() })    -> null              (aucune voix)
 //   énoncé émis                    -> voice=null, lang='fr-FR'
 //   voix réellement appliquée      -> Microsoft George (en-GB), la voix PAR DÉFAUT
 // Le moteur n'applique donc PAS « la voix la plus proche du tag », contrairement
@@ -15087,7 +15087,7 @@ function makeUtterance(text, lang) {
     // _validFrVoice() vérifie que la voix en cache existe encore (Chrome/Edge peuvent
     // invalider les objets voix en cours de session → accent anglais aléatoire).
     // Prioriser fr-FR sur fr-BE
-    const fr = _validFrVoice() || getVoiceForLang('francais', { narration });
+    const fr = _validFrVoice() || getVoiceForLang('francais', { narration: ttsNarration() });
     if (fr) {
       _bestFrVoice = fr;
       utt.voice = fr;
@@ -15102,7 +15102,7 @@ function makeUtterance(text, lang) {
     }
   } else if (l === 'arabe') {
     // ── Voix arabe : recherche approfondie avec fallback ──
-    let ar = getVoiceForLang('arabe', { narration });
+    let ar = getVoiceForLang('arabe', { narration: ttsNarration() });
     if (!ar) {
       // Fallback 1 : chercher par tag de langue direct (ar-SA, ar-EG, etc.)
       ar = refreshVoices().find(v => _normVoiceLang(v.lang).startsWith('ar'));
@@ -15125,12 +15125,12 @@ function makeUtterance(text, lang) {
     }
   } else if (l === 'anglais') {
     // Voix anglaise pour les références et noms d'auteurs
-    const en = getVoiceForLang('anglais', { narration });
+    const en = getVoiceForLang('anglais', { narration: ttsNarration() });
     if (en) { utt.voice = en; utt.lang = en.lang || 'en-US'; }
     else { utt.lang = 'en-US'; }
   } else if (l === 'grec' || l === 'hebreu') {
     // ── Voix grecque / hébraïque : recherche avec fallback ──
-    let v = getVoiceForLang(l, { narration });
+    let v = getVoiceForLang(l, { narration: ttsNarration() });
     const prefix = l === 'grec' ? 'el' : 'he';
     if (!v) {
       // Fallback 1 : chercher par tag de langue direct (inclut l'alias « iw » pour l'hébreu)
@@ -15166,13 +15166,13 @@ function makeUtterance(text, lang) {
       console.warn('[' + l.toUpperCase() + ' TTS] Repli phonétique FR :', cleanText.substring(0, 40), '→', phon.substring(0, 60));
       utt.text = phon;
       utt.lang = 'fr-FR';
-      const fr = _validFrVoice() || getVoiceForLang('francais', { narration });
+      const fr = _validFrVoice() || getVoiceForLang('francais', { narration: ttsNarration() });
       if (fr) utt.voice = fr;
       utt.rate = _humanizeRate(0.90, phon.length); // un peu plus lent pour l'intelligibilité des mots étrangers
       utt.pitch = _humanizePitch(1.00, phon.length);
     }
   } else {
-    const v = getVoiceForLang(l, { narration });
+    const v = getVoiceForLang(l, { narration: ttsNarration() });
     if (v) { utt.voice = v; utt.lang = v.lang || utt.lang; }
   }
   return utt;
@@ -15964,7 +15964,7 @@ window.addEventListener('DOMContentLoaded', () => {
       _bestFrVoice = voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /online.*natural|natural.*online/i.test(v.name))
         || voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /neural|natural/i.test(v.name))
         || voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /online|google/i.test(v.name))
-        || getVoiceForLang('francais', { narration });
+        || getVoiceForLang('francais', { narration: ttsNarration() });
     };
     preloadFrVoice();
     window.speechSynthesis.onvoiceschanged = preloadFrVoice;
@@ -19728,7 +19728,7 @@ if (document.readyState === 'loading') {
       try { localStorage.setItem('theologicus-read-lang', readLangMode); } catch(e) {}
       const m = $id('read-lang-select'); if (m) m.value = readLangMode;
       if (readLangMode === 'fr') {
-        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration }) : null;
+        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration: ttsNarration() }) : null;
         if (v) _bestFrVoice = v;
       }
       if (typeof toast === 'function') toast(readLangMode === 'fr' ? 'Lecture vocale : Français forcé' : 'Lecture vocale : Détection auto', 'success');
