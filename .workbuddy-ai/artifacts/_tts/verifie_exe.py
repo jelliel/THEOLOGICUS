@@ -18,7 +18,11 @@ Deux pieges mesures le 2026-09-24, tous deux evites ici :
    sondage doivent donc tenir dans UN SEUL processus — c'est tout l'objet de
    ce script.
 
-Usage : py -3.12 .workbuddy-ai/artifacts/_tts/verifie_exe.py
+Usage : py -3.12 .workbuddy-ai/artifacts/_tts/verifie_exe.py [chemin/exe]
+
+Sans argument, verifie le build (dist/THEOLOGICUS). Passer le chemin de
+l'installation reelle permet de prouver ce que l'utilisateur lance vraiment —
+c'est le seul controle qui compte pour une livraison.
 """
 import json
 import os
@@ -30,7 +34,7 @@ import urllib.error
 import urllib.request
 
 ROOT = r"C:\Theologicus"
-EXE = os.path.join(ROOT, "dist", "THEOLOGICUS", "THEOLOGICUS.exe")
+EXE_DEFAUT = os.path.join(ROOT, "dist", "THEOLOGICUS", "THEOLOGICUS.exe")
 PORT = 8902
 
 echecs = []
@@ -69,8 +73,11 @@ def sonde(chemin, methode="GET", port=PORT, timeout=15):
         return None, "%s: %s" % (type(e).__name__, e)
 
 
-def main():
-    print("Banc — routes du service local dans l'exe construit")
+def main(argv):
+    global EXE
+    if argv:
+        EXE = os.path.abspath(argv[0])
+    print("Banc — routes du service local dans l'exe")
     print("exe : %s" % EXE)
     print("")
 
@@ -182,4 +189,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

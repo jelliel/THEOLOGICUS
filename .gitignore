@@ -72,3 +72,5 @@ tools/.supertonic_cache/
 .workbuddy-ai/artifacts/_tts/profil-*/
 .workbuddy-ai/artifacts/_tts/supertonic-service.log
 .workbuddy-ai/artifacts/_tts/frames/
+_inst_*
+_bak_*/
