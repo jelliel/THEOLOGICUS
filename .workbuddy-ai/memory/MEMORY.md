@@ -38,6 +38,14 @@ plage **8765–8780**, premier port libre, **réutilisation d'une instance déj�
 lancée** (sonde `/__theologicus_ping`, repli sur le contenu de `THEOLOGICUS.html`).
 Le port est **journalisé au démarrage**. Banc `_v117/verify_port.py` (10/10).
 
+- **Qui squattait 8765** : le projet « Théo », `C:\Users\toshr\Desktop\AI\
+  Theologicus AI` (projet SÉPARÉ, hors git), avait HTTP **8765** / TCP **8766** /
+  WS **8767** codés en dur. Collision frontale. Déplacé le 2026-09-24 vers
+  **8770 / 8771 / 8772** (`serve.py`, `theo/events.py`, `ui/js/bridge.js` + docs).
+  **Ne jamais réutiliser 8765-8780 pour un autre projet de cette machine.**
+  Un port « au hasard » n'est pas anodin quand un autre programme en dépend :
+  ce n'est pas le serveur qui casse, c'est le stockage navigateur de l'autre.
+
 - `_app_data_dir()` (`proxy_server.py`). Ni `robocopy` vers `_inst_v102` ni la
   réinstallation Inno ne le touchent.
 - Routes **`/config`** (config TTS : moteur, voix, clé, narration, ton) et
