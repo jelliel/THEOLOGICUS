@@ -8270,7 +8270,16 @@ const PROVIDERS = [
   { id:"gemini",    label:"Gemini",     format:"chat-completions",   base:"https://generativelanguage.googleapis.com/v1beta", models:["gemini-1.5-pro","gemini-1.5-flash","gemini-2.0-flash-exp"] },
   { id:"deepseek",  label:"DeepSeek",   format:"chat-completions",   base:"https://api.deepseek.com/v1",         models:["deepseek-chat","deepseek-reasoner"] },
   { id:"minimax",   label:"MiniMax",    format:"chat-completions",   base:"https://api.minimax.chat/v1",         models:["abab6.5-chat","abab5.5-chat"] },
-  { id:"openrouter",label:"OpenRouter", format:"chat-completions",   base:"https://openrouter.ai/api/v1",        models:["anthropic/claude-3.5-sonnet","google/gemini-1.5-pro","openai/gpt-4o","meta-llama/llama-3.1-70b-instruct"] }
+  { id:"openrouter",label:"OpenRouter", format:"chat-completions",   base:"https://openrouter.ai/api/v1",        models:["anthropic/claude-3.5-sonnet","google/gemini-1.5-pro","openai/gpt-4o","meta-llama/llama-3.1-70b-instruct"] },
+  // v118 — Agnes AI (agnes-ai.com). Passerelle OpenAI-compatible : même format
+  // que Mistral, donc `chat-completions` et aucune adaptation du code d'appel.
+  // Base URL vérifiée dans la doc officielle (README AgnesAI-Labs) :
+  //   https://apihub.agnes-ai.com/v1   —   Authorization: Bearer <clé>
+  // `agnes-2.5-flash` : 512K de contexte, 65.5K de sortie, vision, tool calling.
+  // `agnes-2.0-flash` : 256K de contexte, 64K de sortie, vision, tool calling.
+  // `agnes-2.1-flash` = le nom de la famille IMAGE (elle ne répond pas sur
+  // /chat/completions) : ne pas l'ajouter ici, elle serait proposée à tort.
+  { id:"agnes",     label:"Agnes AI",   format:"chat-completions",   base:"https://apihub.agnes-ai.com/v1",      models:["agnes-2.5-flash","agnes-2.0-flash"] }
 ];
 const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map(p => [p.id, p]));
 
@@ -9941,22 +9950,126 @@ function refreshModelSelect() {
   const msel = $("#model-select-mob");
   if (sel) {
     sel.innerHTML = '';
-    MODELS.forEach(m => {
-      const o = document.createElement("option");
-      o.value = m.id; o.textContent = m.name;
-      o.title = `${m.desc} • ${m.tokens.toLocaleString()} max tokens${m.vision?' • 👁 Vision':''}${m.audio?' • 🎵 Audio':''}`;
-      sel.appendChild(o);
+    // v118 — listes GROUPÉES PAR FOURNISSEUR (<optgroup>). Sans regroupement, la
+    // liste mêlait les modèles Mistral aux modèles des autres fournisseurs sans
+    // qu'on voie d'où venait chacun. Le titre de l'optgroup le dit, et
+    // « (clé manquante) » signale tout de suite pourquoi un modèle répondrait
+    // 401 — ce qui évite de chercher la panne du mauvais côté.
+    const t = _tousModelesSelectionnables();
+    const groupes = [];
+    t.forEach(m => {
+      let g = groupes.find(x => x.nom === m.groupe);
+      if (!g) { g = { nom: m.groupe, items: [] }; groupes.push(g); }
+      g.items.push(m);
     });
-    (state.customModels || []).forEach(m => {
-      const o = document.createElement("option");
-      o.value = m.uid; o.textContent = '🔧 ' + m.name;
-      o.title = `${m.model} • ${m.baseUrl}${m.vision?' • 👁 Vision':''}${m.audio?' • 🎵 Audio':''}`;
-      sel.appendChild(o);
+    const groupCss = '#model-select optgroup,#model-select-mob optgroup{font-weight:700;color:var(--cyan);background:var(--bg-dark)}' +
+                     '#model-select optgroup option,#model-select-mob optgroup option{font-weight:400;color:var(--text);background:var(--bg)}';
+    if (!document.getElementById('model-group-style')) {
+      const st = document.createElement('style'); st.id = 'model-group-style'; st.textContent = groupCss;
+      document.head.appendChild(st);
+    }
+    // Les fournisseurs du registre sans clé enregistrée sont marqués, mais
+    // RESTENT sélectionnables : on peut vouloir choisir le modèle avant de
+    // saisir la clé, et le message d'erreur guide alors vers les Paramètres.
+    const fournisseursSansCle = [];
+    groupes.forEach(g => {
+      const og = document.createElement('optgroup');
+      const pid = g.items.length ? String(g.items[0].value).split(':')[0] : '';
+      const estFournisseur = g.nom !== 'Mistral' && PROVIDER_BY_ID[pid];
+      const sansCle = estFournisseur && !cleanApiKey(state.keys[pid] || '');
+      if (sansCle) fournisseursSansCle.push(g.nom);
+      og.label = g.nom + (sansCle ? ' — clé manquante' : '');
+      g.items.forEach(m => {
+        const o = document.createElement("option");
+        o.value = m.value; o.textContent = m.label;
+        o.title = m.label + (sansCle ? ' • clé ' + g.nom + ' non renseignée' : '');
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
     });
+    // Modèles personnalisés, regroupés sous leur propre titre.
+    if ((state.customModels || []).length) {
+      const og = document.createElement('optgroup');
+      og.label = 'Mes modèles';
+      (state.customModels || []).forEach(m => {
+        const o = document.createElement("option");
+        o.value = m.uid; o.textContent = '🔧 ' + m.name;
+        o.title = `${m.model} • ${m.baseUrl}${m.vision?' • 👁 Vision':''}${m.audio?' • 🎵 Audio':''}`;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    }
+    // Modèle enregistré absent de la liste (fournisseur retiré, identifiant
+    // renommé) : on l'ajoute pour que le <select> ne retombe pas silencieusement
+    // sur la première option — ce qui changerait de modèle sans le dire.
+    if (state.model && !t.some(m => m.value === state.model) &&
+        !(state.customModels || []).some(m => m.uid === state.model)) {
+      const og = document.createElement('optgroup');
+      og.label = 'Modèle enregistré';
+      const o = document.createElement('option');
+      o.value = state.model; o.textContent = state.model + ' (indisponible dans la liste)';
+      og.appendChild(o); sel.appendChild(og);
+    }
     sel.value = state.model;
+    sel.title = fournisseursSansCle.length
+      ? 'Clé manquante : ' + fournisseursSansCle.join(', ') + ' — Paramètres ⚙ > Clés API'
+      : '';
   }
   if (msel) { msel.innerHTML = sel ? sel.innerHTML : ''; msel.value = state.model; }
 }
+// v118 — un identifiant de modèle peut désigner un FOURNISSEUR : « agnes:agnes-2.5-flash »
+// ou « openai:gpt-4o ». La forme préfixée est préférée au modèle personnalisé
+// parce que la clé est lue dans le registre des fournisseurs (`key_openai`…),
+// qui est persisté — un modèle personnalisé, lui, fige sa clé à sa création et
+// la garde périmée quand la clé change. Le libellé affiché reste « OpenAI · GPT-4o ».
+function _providerModelId(activeId) {
+  const s = String(activeId || '');
+  const i = s.indexOf(':');
+  if (i <= 0) return null;
+  const p = PROVIDER_BY_ID[s.slice(0, i)];
+  if (!p) return null;
+  const model = s.slice(i + 1).trim();
+  // « agnes: » (modele vide) ne doit pas produire un appel sans nom de modele :
+  // le serveur repondrait 400 « model required » et l'erreur serait opaque.
+  if (!model) return null;
+  return { prov: p, model: model };
+}
+
+function _providerModelsOf(p) {
+  return (p && p.models) ? p.models.filter(m => /^(?!agnes-image|agnes-video)/.test(String(m))) : [];
+}
+
+// v118 — le modèle actif a-t-il une clé exploitable ? Pour un modèle préfixé
+// (« agnes:agnes-2.5-flash ») la réponse dépend du FOURNISSEUR, pas du champ
+// `state.apiKey` qui ne décrit que la clé Mistral. Sans ce test, choisir Agnes
+// avec la seule clé Agnes renseignée se heurtait à « Configurez votre clé API
+// d'abord » — un message faux, puisque la clé utile était bien là.
+function _clePourModele(activeId) {
+  const pm = _providerModelId(activeId);
+  if (pm) {
+    if (pm.prov.id === 'mistral') return cleanApiKey(state.keys.mistral || state.apiKey || '');
+    return cleanApiKey(state.keys[pm.prov.id] || '');
+  }
+  const cm = (state.customModels || []).find(m => m.uid === activeId);
+  if (cm) return cleanApiKey(cm.apiKey || '');
+  return cleanApiKey(state.apiKey || '');
+}
+
+// Modèles atteignables : les MODELS historiques (Mistral, identifiants nus) et
+// les modèles de chaque fournisseur du registre, sous forme préfixée.
+function _tousModelesSelectionnables() {
+  const out = [];
+  MODELS.forEach(m => out.push({ value: m.id, label: m.name, groupe: 'Mistral' }));
+  Object.keys(PROVIDER_BY_ID).forEach(id => {
+    if (id === 'mistral') return;            // déjà couvert par MODELS, plus riche
+    const p = PROVIDER_BY_ID[id];
+    _providerModelsOf(p).forEach(mid => {
+      out.push({ value: id + ':' + mid, label: p.label + ' · ' + mid, groupe: p.label });
+    });
+  });
+  return out;
+}
+
 function resolveModelConfig(activeId) {
   const cm = (state.customModels || []).find(m => m.uid === activeId);
   if (cm && cm.baseUrl) {
@@ -9967,6 +10080,22 @@ function resolveModelConfig(activeId) {
     else if (fmt === 'responses') endpoint = base + '/responses';
     else endpoint = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
     return { model: cm.model, endpoint, apiKey: cm.apiKey, format: fmt };
+  }
+  // v118 — fournisseur du registre : « agnes:agnes-2.5-flash ». La clé vient de
+  // `state.keys[<fournisseur>]` (donc de `key_<fournisseur>`, cookie + disque),
+  // et on ne retombe sur la clé Mistral que si ce fournisseur n'en a aucune —
+  // sinon Agnes ou OpenAI partirait avec la clé Mistral et répondrait 401.
+  const pm = _providerModelId(activeId);
+  if (pm && pm.prov.base) {
+    let base = String(pm.prov.base).trim().replace(/\/+$/, '');
+    const fmt = pm.prov.format || 'chat-completions';
+    let endpoint;
+    if (fmt === 'anthropic') endpoint = base + '/v1/messages';
+    else if (fmt === 'responses') endpoint = base + '/responses';
+    else endpoint = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
+    const cle = cleanApiKey(state.keys[pm.prov.id] || '') ||
+                (pm.prov.id === 'mistral' ? cleanApiKey(state.apiKey) : '');
+    return { model: pm.model, endpoint, apiKey: cle, format: fmt, providerId: pm.prov.id };
   }
   return { model: activeId, endpoint: 'https://api.mistral.ai/v1/chat/completions', apiKey: cleanApiKey(state.apiKey), format: 'chat-completions' };
 }
@@ -10389,6 +10518,13 @@ async function throwApiError(res, model) {
   err.status = status;
   err.apiMessage = serverMsg ? String(serverMsg).slice(0, 400) : '';
   err.model = model || '';
+  // v118 — mémorise le fournisseur pour que le message d'erreur le nomme.
+  // Un 401 sur « agnes:agnes-2.5-flash » doit dire Agnes, pas laisser croire
+  // que la clé Mistral est en cause.
+  try {
+    const pm = _providerModelId(model);
+    if (pm) { err.providerId = pm.prov.id; err.providerLabel = pm.prov.label; }
+  } catch(e) {}
   throw err;
 }
 
@@ -10397,9 +10533,17 @@ function formatApiErrorShort(e) {
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
-  if (label) return base + ' — ' + label;
+  // v118 — nomme le fournisseur concerné quand le modèle est préfixé.
+  const f = (e && e.providerLabel) ? ' [' + e.providerLabel + ']' : '';
+  if (label) {
+    // Sur 401/403 la clé est en cause : redirige vers le bon écran de réglage.
+    if ((status === 401 || status === 403) && e && e.providerLabel) {
+      return base + f + ' — ' + label + ' (réglage : Paramètres ⚙ > Clés API > ' + e.providerLabel + ')';
+    }
+    return base + f + ' — ' + label;
+  }
   const raw = (e && (e.apiMessage || e.message) || '').trim();
-  return raw ? base + ' : ' + raw.slice(0, 80) : base;
+  return raw ? base + f + ' : ' + raw.slice(0, 80) : base + f;
 }
 
 // Version complète (message dans la conversation)
@@ -11522,10 +11666,14 @@ window.TT_ENGINE = {
     };
   },
 
-  // Si une clé LLM (Mistral) est configurée, l'IA affine le choix du son
+  // Si une clé LLM est configurée, l'IA affine le choix du son
   // (justification + vérification qu'il correspond bien au contenu).
+  // v118 — suit le modèle ACTIF : auparavant figé sur api.mistral.ai, ce
+  // raffinement échouait silencieusement (retour au choix de base) dès que
+  // l'utilisateur travaillait avec un autre fournisseur, par ex. Agnes.
   async refineMusicWithLLM(concept, baseMusic) {
-    if (!state.apiKey) return null;
+    const _cfg = resolveModelConfig(state.model);
+    if (!_cfg.apiKey) return null;
     const mood = concept.music_mood || this.detectMood(concept.source_text || concept.hook || '');
     // Utilise la même sélection que recommendAudio si fournie (cohérence + pas de double rotation)
     const base = baseMusic || this.searchTrendingMusic(mood, concept.content_type);
@@ -11542,8 +11690,8 @@ Réponds UNIQUEMENT avec un JSON valide, sans markdown :
 {"sound_name": "nom exact du son", "artist": "artiste", "justification": "une phrase expliquant pourquoi ce son est viral pour ce contenu", "trend": "★ ou ☆"}`;
       const res = await fetch(apiEndpoint('https://api.mistral.ai/v1/chat/completions'), {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${state.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'mistral-large-latest', messages: [{ role: 'user', content: prompt }], temperature: 0.4, max_tokens: 250, response_format: { type: 'json_object' } })
+        headers: { 'Authorization': `Bearer ${_cfg.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: _cfg.model, messages: [{ role: 'user', content: prompt }], temperature: 0.4, max_tokens: 250, response_format: { type: 'json_object' } })
       });
       if (!res.ok) return base;
       const data = await res.json();
@@ -17753,7 +17901,9 @@ async function sendMessage(overrideText) {
   if (_acBtn) { _acBtn.classList.remove('active'); _acBtn.style.background=''; _acBtn.style.color=''; }
   const txt = overrideText || document.getElementById('user-input').value.trim();
   if (!txt && !state.attachedFile) return;
-  if (!state.apiKey) {
+  // v118 — le contrôle porte sur la clé du FOURNISSEUR du modèle actif, pas sur
+  // la seule clé Mistral. « agnes:agnes-2.5-flash » + clé Agnes = on envoie.
+  if (!_clePourModele(state.model)) {
     toast("Configurez votre clé API d'abord", "error");
     openApiKeyModal();
     return;
@@ -19482,13 +19632,10 @@ function bindEvents() {
     // Mobile model select
     const mModSel = $("#model-select-mob");
     if (mModSel) {
-      // Populate
-      MODELS.forEach(m => {
-        const opt = document.createElement("option");
-        opt.value = m.id;
-        opt.textContent = m.name;
-        mModSel.appendChild(opt);
-      });
+      // v118 — la liste mobile se construisait sur `MODELS` seul : quel que soit
+      // le fournisseur ajouté (Agnes, OpenAI…), le menu burger ne proposait que
+      // Mistral. On réutilise la liste groupée du bureau, seule source de vérité.
+      refreshModelSelect();
       mModSel.value = state.model;
       mModSel.onchange = e => {
         state.model = e.target.value;
