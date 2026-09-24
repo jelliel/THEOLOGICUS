@@ -7815,6 +7815,14 @@ window.__ensureTafsirSurah = function(p){
         <div class="field-hint">Si vous entendez un accent anglais sur du français, choisissez « Français (forcé) ». La voix française est réattribuée à chaque lecture.</div>
       </div>
 
+      <div class="field-group">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="tts-narration" style="width:auto;margin:0">
+          <span>🎙 Mode narrateur (voix chaleureuses, débit posé)</span>
+        </label>
+        <div class="field-hint">Ralentit le débit, abaisse légèrement la hauteur et privilégie une voix de narration plutôt que robotique. S'applique aux trois moteurs (système, ElevenLabs, Supertonic).</div>
+      </div>
+
       <div id="tts-el-block" class="field-group" style="display:none">
         <label class="field-label">☁ ElevenLabs</label>
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -10724,7 +10732,7 @@ function initSettingsModal() {
       try { localStorage.setItem('theologicus-read-lang', readLangMode); } catch(e) {}
       // Recharge immédiatement la meilleure voix FR pour éviter tout décalage
       if (readLangMode === 'fr') {
-        const v = window.speechSynthesis ? getVoiceForLang('francais') : null;
+        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration }) : null;
         if (v) _bestFrVoice = v;
       }
       toast(readLangMode === 'fr' ? "Lecture vocale : Français forcé" : "Lecture vocale : Détection auto", "success");
@@ -14681,11 +14689,36 @@ if (window.speechSynthesis) {
   });
 }
 
-function getVoiceForLang(lang) {
+// Voix privilégiée en mode narrateur : masculine / grave (Hubert, Alain…),
+// moins « robotique » qu'une voix aiguë, conforme à l'usage francophone du
+// livre audio. Ne s'applique qu'au français, et seulement AU SEIN d'un palier
+// de qualité déjà retenu (voir getVoiceForLang).
+var _NARRATION_MALE = /(\b(hubert|alain|homme|male|hugo|guillaume|paul|antoine|louis|charles|jacques|jean|pierre|denis|luc|marc|philippe|françois|thomas|georges|bernard|henri|rémi|romain|olivier)\b)/i;
+// Mode narrateur : activé par défaut (souhait utilisateur = lecture « comme un
+// narrateur », non robotique). Un réglage dans les Paramètres peut le désactiver.
+function ttsNarration() { return ttsCfg().narration !== false; }
+
+function getVoiceForLang(lang, opts) {
+  opts = opts || {};
   const voices = refreshVoices();
   if (!voices || !voices.length) return null;
   const resolved = VOICE_FALLBACK[lang] || lang;
   const prefix = _VOICE_LANG_MAP[resolved] || _VOICE_LANG_MAP[lang];
+  // En mode narrateur, on tranche AU SEIN d'un palier de qualité en faveur d'une
+  // voix masculine / grave (Hubert, Alain…) : moins « robotique » qu'une voix
+  // aiguë, et conforme à l'usage francophone du livre audio. On ne change ni le
+  // palier de qualité ni la langue — seulement le choix entre deux voix du même
+  // palier. La préférence ne s'applique qu'au français (prefix === 'fr') : pour
+  // les autres langues on garde la voix naturelle disponible, homme ou femme.
+  // Si l'appelant ne précise pas (ex. bouton « Tester », repli phonétique), on
+  // suit le réglage global (activé par défaut) : toute sélection de voix de
+  // lecture doit sonner « narrateur », pas robotique.
+  const narration = (opts.narration !== undefined) ? !!opts.narration : ttsNarration();
+  const chercher = (pred) => {
+    if (!narration || prefix !== 'fr') return voices.find(pred);
+    const m = voices.find(v => pred(v) && _NARRATION_MALE.test(v.name));
+    return m || voices.find(pred);
+  };
   // Recherche par paliers de qualité : les voix neurales (« Online (Natural) » d'Edge,
   // « Natural », Google) sonnent bien plus humaines que les vieilles voix SAPI robotiques.
   const QUALITY_TIERS = [
@@ -14696,10 +14729,10 @@ function getVoiceForLang(lang) {
   ];
   if (prefix) {
     for (const tier of QUALITY_TIERS) {
-      const v = voices.find(v => _langMatches(v, prefix) && tier.test(v.name));
+      const v = chercher(v => _langMatches(v, prefix) && tier.test(v.name));
       if (v) return v;
     }
-    const v = voices.find(v => _langMatches(v, prefix));
+    const v = chercher(v => _langMatches(v, prefix));
     if (v) return v;
     // v106 — LE DEFAUT DE PRONONCIATION ETAIT ICI.
     // Quand on demandait une langue PRECISE et qu'aucune voix ne correspondait
@@ -14718,17 +14751,17 @@ function getVoiceForLang(lang) {
   }
   // Repli français renforcé : prioriser fr-FR sur fr-BE/fr-CA
   for (const tier of QUALITY_TIERS) {
-    const v = voices.find(v => _normVoiceLang(v.lang).startsWith('fr-FR') && tier.test(v.name));
+    const v = chercher(v => _normVoiceLang(v.lang).startsWith('fr-FR') && tier.test(v.name));
     if (v) return v;
   }
-  let v = voices.find(v => _normVoiceLang(v.lang).startsWith('fr-FR'));
+  let v = chercher(v => _normVoiceLang(v.lang).startsWith('fr-FR'));
   if (v) return v;
   // Fallback sur autre français si fr-FR n'existe pas
   for (const tier of QUALITY_TIERS) {
-    const v2 = voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && tier.test(v.name));
+    const v2 = chercher(v => _normVoiceLang(v.lang).startsWith('fr') && tier.test(v.name));
     if (v2) return v2;
   }
-  v = voices.find(v => _normVoiceLang(v.lang).startsWith('fr'));
+  v = chercher(v => _normVoiceLang(v.lang).startsWith('fr'));
   if (v) return v;
   v = voices.find(v => /french|fran[çc]ais/i.test(v.name));
   if (v) return v;
@@ -14950,7 +14983,7 @@ function _humanizePitch(basePitch, segLen) {
 // ── v108 — LE CAS « AUCUNE VOIX POUR CETTE LANGUE », ENFIN SIGNALÉ ──
 // Mesuré sur un poste Windows SANS pack de langue français :
 //   detectScriptLang('Très tôt…')  -> 'francais'        (détection correcte)
-//   getVoiceForLang('francais')    -> null              (aucune voix)
+//   getVoiceForLang('francais', { narration })    -> null              (aucune voix)
 //   énoncé émis                    -> voice=null, lang='fr-FR'
 //   voix réellement appliquée      -> Microsoft George (en-GB), la voix PAR DÉFAUT
 // Le moteur n'applique donc PAS « la voix la plus proche du tag », contrairement
@@ -15029,12 +15062,22 @@ function makeUtterance(text, lang) {
   // Valeurs de base légèrement plus lentes qu'un TTS robotique (1.0) pour gagner
   // en poids et en intelligibilité. _humanizeRate/Pitch y ajoute une variation
   // segment par segment, comme un orateur qui ne monocorde pas.
+  const narration = ttsNarration();
+  // En mode narrateur : on ralentit encore le débit (~12 %) et on abaisse la
+  // hauteur (~5 %) — deux leviers qui, ensemble, font passer la voix du registre
+  // « lecture TTS robotique » au registre « lecteur posé ». _humanizeRate/Pitch
+  // ajoutent ensuite leur variation segment par segment par-dessus ces bases.
+  const NARR_RATE = 0.88, NARR_PITCH = -0.05;
   const rates = { francais: 0.95, anglais: 0.95, espagnol: 0.94, allemand: 0.92, italien: 0.94, portugais: 0.94, grec: 0.90, hebreu: 0.90, arabe: 0.87 };
-  utt.rate = _humanizeRate(rates[l] || 0.95, cleanText.length);
+  let baseRate = rates[l] || 0.95;
+  if (narration) baseRate *= NARR_RATE;
+  utt.rate = _humanizeRate(baseRate, cleanText.length);
   // Pitch neutre-léger : on reste proche de 1.0 (le robotisme vient surtout du
   // pitch trop haut). La variation est microscopique, juste pour rompre la monotonie.
   const pitches = { francais: 1.02, anglais: 1.02, espagnol: 1.02, allemand: 1.00, italien: 1.02, portugais: 1.02, grec: 1.00, hebreu: 1.00, arabe: 0.98 };
-  utt.pitch = _humanizePitch(pitches[l] || 1.02, cleanText.length);
+  let basePitch = pitches[l] || 1.02;
+  if (narration) basePitch += NARR_PITCH;
+  utt.pitch = _humanizePitch(basePitch, cleanText.length);
   utt.volume = 1;
   _segVarCounter++; // fait avancer la variation pour le segment suivant
   if (l === 'francais') {
@@ -15044,7 +15087,7 @@ function makeUtterance(text, lang) {
     // _validFrVoice() vérifie que la voix en cache existe encore (Chrome/Edge peuvent
     // invalider les objets voix en cours de session → accent anglais aléatoire).
     // Prioriser fr-FR sur fr-BE
-    const fr = _validFrVoice() || getVoiceForLang('francais');
+    const fr = _validFrVoice() || getVoiceForLang('francais', { narration });
     if (fr) {
       _bestFrVoice = fr;
       utt.voice = fr;
@@ -15059,7 +15102,7 @@ function makeUtterance(text, lang) {
     }
   } else if (l === 'arabe') {
     // ── Voix arabe : recherche approfondie avec fallback ──
-    let ar = getVoiceForLang('arabe');
+    let ar = getVoiceForLang('arabe', { narration });
     if (!ar) {
       // Fallback 1 : chercher par tag de langue direct (ar-SA, ar-EG, etc.)
       ar = refreshVoices().find(v => _normVoiceLang(v.lang).startsWith('ar'));
@@ -15082,12 +15125,12 @@ function makeUtterance(text, lang) {
     }
   } else if (l === 'anglais') {
     // Voix anglaise pour les références et noms d'auteurs
-    const en = getVoiceForLang('anglais');
+    const en = getVoiceForLang('anglais', { narration });
     if (en) { utt.voice = en; utt.lang = en.lang || 'en-US'; }
     else { utt.lang = 'en-US'; }
   } else if (l === 'grec' || l === 'hebreu') {
     // ── Voix grecque / hébraïque : recherche avec fallback ──
-    let v = getVoiceForLang(l);
+    let v = getVoiceForLang(l, { narration });
     const prefix = l === 'grec' ? 'el' : 'he';
     if (!v) {
       // Fallback 1 : chercher par tag de langue direct (inclut l'alias « iw » pour l'hébreu)
@@ -15123,13 +15166,13 @@ function makeUtterance(text, lang) {
       console.warn('[' + l.toUpperCase() + ' TTS] Repli phonétique FR :', cleanText.substring(0, 40), '→', phon.substring(0, 60));
       utt.text = phon;
       utt.lang = 'fr-FR';
-      const fr = _validFrVoice() || getVoiceForLang('francais');
+      const fr = _validFrVoice() || getVoiceForLang('francais', { narration });
       if (fr) utt.voice = fr;
       utt.rate = _humanizeRate(0.90, phon.length); // un peu plus lent pour l'intelligibilité des mots étrangers
       utt.pitch = _humanizePitch(1.00, phon.length);
     }
   } else {
-    const v = getVoiceForLang(l);
+    const v = getVoiceForLang(l, { narration });
     if (v) { utt.voice = v; utt.lang = v.lang || utt.lang; }
   }
   return utt;
@@ -15185,6 +15228,7 @@ var TTS_PHRASE_TEST = 'Très tôt, le Seigneur appela Abraham, et il partit sans
 function ttsCfg() {
   var d = {
     moteur: 'system',
+    narration: true,
     elevenlabs: { cle: '', voix: '21m00Tcm4TlvDq8ikWAM', modele: 'eleven_multilingual_v2', base: 'https://api.elevenlabs.io/v1' },
     supertonic: { url: 'http://127.0.0.1:8091', voix: 'F1', vitesse: 1.05, auto: true }
   };
@@ -15192,6 +15236,7 @@ function ttsCfg() {
   try { b = JSON.parse(localStorage.getItem(TTS_CFG_CLE) || 'null'); } catch (e) { b = null; }
   if (!b || typeof b !== 'object') return d;
   if (b.moteur && TTS_MOTEURS[b.moteur]) d.moteur = b.moteur;
+  d.narration = (b.narration === false) ? false : true; // activé par défaut
   ['elevenlabs', 'supertonic'].forEach(function (k) {
     if (!b[k] || typeof b[k] !== 'object') return;
     for (var p in b[k]) { if (b[k][p] !== '' && b[k][p] !== null && b[k][p] !== undefined) d[k][p] = b[k][p]; }
@@ -15202,6 +15247,7 @@ function ttsCfg() {
 function ttsCfgSet(patch) {
   var c = ttsCfg();
   if (patch && patch.moteur && TTS_MOTEURS[patch.moteur]) c.moteur = patch.moteur;
+  if (patch && typeof patch.narration === 'boolean') c.narration = patch.narration;
   ['elevenlabs', 'supertonic'].forEach(function (k) {
     if (!patch || !patch[k]) return;
     for (var p in patch[k]) c[k][p] = patch[k][p];
@@ -15312,15 +15358,21 @@ function ttsParleDistant(texte, lang, onEnd, onErr, moteurForce) {
       body: JSON.stringify({
         text: texte,
         model_id: c.elevenlabs.modele || 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true }
+        voice_settings: ttsNarration()
+          ? { stability: 0.35, similarity_boost: 0.8, style: 0.4, use_speaker_boost: true }
+          : { stability: 0.5, similarity_boost: 0.75, style: 0.0, use_speaker_boost: true }
       })
     };
   } else {
     var stb = String(c.supertonic.url || 'http://127.0.0.1:8091').replace(/\/+$/, '');
+    // Mode narrateur : on ralentit légèrement le service local (×0.92, plancher
+    // 0.8) pour une diction plus posée, sans toucher au choix de voix de l'utilisateur.
+    var stSpeed = c.supertonic.vitesse || 1.05;
+    if (ttsNarration()) stSpeed = Math.max(0.8, stSpeed * 0.92);
     url = stb + '/tts?text=' + encodeURIComponent(texte) +
           '&lang=' + encodeURIComponent(ttsLangIso(lang)) +
           '&voice=' + encodeURIComponent(c.supertonic.voix || 'F1') +
-          '&speed=' + encodeURIComponent(String(c.supertonic.vitesse || 1.05));
+          '&speed=' + encodeURIComponent(String(stSpeed));
   }
   fetch(url, opts).then(function (r) {
     if (jeton !== _ttsJeton) return null;
@@ -15593,6 +15645,7 @@ function ttsCablerParametres() {
   var stVoice = document.getElementById('tts-st-voice');
   var stSpeed = document.getElementById('tts-st-speed');
   var stAuto = document.getElementById('tts-st-auto');
+  var narrChk = document.getElementById('tts-narration');
   var stStart = document.getElementById('tts-st-start');
   var stLogBtn = document.getElementById('tts-st-log');
   var stJournal = document.getElementById('tts-st-journal');
@@ -15617,6 +15670,7 @@ function ttsCablerParametres() {
     if (stVoice) stVoice.value = c.supertonic.voix || 'F1';
     if (stSpeed) stSpeed.value = String(c.supertonic.vitesse || 1.05);
     if (stAuto) stAuto.checked = c.supertonic.auto !== false;
+    if (narrChk) narrChk.checked = ttsNarration();
   }
 
   sel.onchange = function () {
@@ -15653,6 +15707,10 @@ function ttsCablerParametres() {
   if (stAuto) stAuto.onchange = function () {
     ttsCfgSet({ supertonic: { auto: !!stAuto.checked } });
     if (typeof toast === 'function') toast(stAuto.checked ? 'Le service Supertonic sera démarré au lancement.' : 'Démarrage automatique désactivé.', 'info');
+  };
+  if (narrChk) narrChk.onchange = function () {
+    ttsCfgSet({ narration: !!narrChk.checked });
+    if (typeof toast === 'function') toast(narrChk.checked ? 'Mode narrateur activé : lecture plus posée et chaleureuse.' : 'Mode narrateur désactivé.', 'info');
   };
   if (stLogBtn) stLogBtn.onclick = function () {
     if (!stJournal) return;
@@ -15906,7 +15964,7 @@ window.addEventListener('DOMContentLoaded', () => {
       _bestFrVoice = voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /online.*natural|natural.*online/i.test(v.name))
         || voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /neural|natural/i.test(v.name))
         || voices.find(v => _normVoiceLang(v.lang).startsWith('fr') && /online|google/i.test(v.name))
-        || getVoiceForLang('francais');
+        || getVoiceForLang('francais', { narration });
     };
     preloadFrVoice();
     window.speechSynthesis.onvoiceschanged = preloadFrVoice;
@@ -19670,7 +19728,7 @@ if (document.readyState === 'loading') {
       try { localStorage.setItem('theologicus-read-lang', readLangMode); } catch(e) {}
       const m = $id('read-lang-select'); if (m) m.value = readLangMode;
       if (readLangMode === 'fr') {
-        const v = window.speechSynthesis ? getVoiceForLang('francais') : null;
+        const v = window.speechSynthesis ? getVoiceForLang('francais', { narration }) : null;
         if (v) _bestFrVoice = v;
       }
       if (typeof toast === 'function') toast(readLangMode === 'fr' ? 'Lecture vocale : Français forcé' : 'Lecture vocale : Détection auto', 'success');
