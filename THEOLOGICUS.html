@@ -15671,6 +15671,12 @@ function ttsCablerParametres() {
   };
   recharger();
   ttsSupertonicDemarrageAuto();
+  // Watchdog 30 s : récupère les crashes silencieux du sous-processus. Un
+  // seul intervalle pour toute la session (le panneau Paramètres peut être
+  // ouvert / fermé ; le garde évite d'en empiler).
+  if (!window._ttsStWatchdog) {
+    window._ttsStWatchdog = setInterval(ttsSupertonicWatchdog, 30000);
+  }
 }
 
 // Démarrage automatique demandé par l'utilisateur : le service part avec
@@ -15686,6 +15692,26 @@ function ttsSupertonicDemarrageAuto() {
       return;
     }
     console.log('[TTS] démarrage automatique du service Supertonic');
+    ttsSupertonicService('start');
+  });
+}
+
+// Watchdog : si le sous-processus Supertonic meurt en cours de session et que
+// le démarrage auto est actif, on le relance sans obliger l'utilisateur à
+// fermer puis rouvrir l'application. start_supertonic.py peut se terminer
+// silencieusement (segfault onnxruntime, OOM) ; sans ce filet, l'utilisateur
+// voit « service injoignable » jusqu'au prochain lancement de l'app. Mesure
+// sur _inst_v102 : relances à 9 s d'intervalle, sans traceback dans
+// logs/supertonic.log (segfault). Idempotent : no-op si le service tourne
+// déjà, si une instance externe l'a remplacé, ou si script/deps manquent.
+function ttsSupertonicWatchdog() {
+  if (ttsCfg().supertonic.auto === false) return;
+  ttsSupertonicEtat().then(function (etat) {
+    if (!etat) return;                       // pas de route (apk, navigateur)
+    if (etat.ready || etat.running) return;  // déjà en ligne
+    if (!etat.script || !etat.deps) return;  // pas la peine d'insister
+    if (etat.external) return;               // géré hors app, on n'y touche pas
+    console.log('[TTS] watchdog Supertonic : service absent, redémarrage…');
     ttsSupertonicService('start');
   });
 }

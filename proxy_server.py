@@ -45,16 +45,44 @@ def _lt_log_file():
 
 
 def _lt_python_cmd():
-    """Interpréteur Python externe utilisable pour lancer libretranslate.
-    En exe gelé (PyInstaller) sys.executable n'est PAS un python : il faut
-    en trouver un sur la machine (py -3, python, python3)."""
+    """Premier interpréteur capable de LANCER libretranslate
+    (``py -m libretranslate.main``). Résultat mémorisé : le test coûte
+    ~1 s. En exe gelé (PyInstaller) sys.executable n'est PAS un python :
+    on cherche donc sur la machine.
+
+    On ne se contente PAS du premier ``py``/``python`` trouvé (ce serait
+    Python 3.14 ici) : on PROUVE que ``import libretranslate.main``
+    réussit sur chaque candidat, et on garde le premier qui passe.
+    Miroté sur ``_st_python_cmd()`` (Supertonic).
+
+    Cause racine du bug « Démarrer » LibreTranslate : le paquet
+    ``libretranslate`` n'a PAS de ``__main__.py``, donc
+    ``py -m libretranslate`` échoue avec
+    « No module named libretranslate.__main__ ; 'libretranslate' is a
+    package and cannot be directly executed ». Il faut viser le module
+    ``libretranslate.main``. Vu dans logs/libretranslate.log."""
+    if _lt.get("python") is not None:
+        return _lt["python"] or None
     import shutil
+    cands = []
+    if not getattr(sys, "frozen", False):
+        cands.append([sys.executable])
     if shutil.which("py"):
-        return ["py", "-3"]
+        cands.append(["py", "-3"])
     if shutil.which("python"):
-        return ["python"]
+        cands.append(["python"])
     if shutil.which("python3"):
-        return ["python3"]
+        cands.append(["python3"])
+    for cand in cands:
+        try:
+            r = subprocess.run(cand + ["-c", "import libretranslate.main"],
+                               capture_output=True, timeout=30)
+            if r.returncode == 0:
+                _lt["python"] = cand
+                return cand
+        except Exception:
+            continue
+    _lt["python"] = []
     return None
 
 
@@ -69,19 +97,15 @@ def _lt_http_reachable(timeout=0.6):
 
 
 def _lt_installed():
-    """libretranslate est-il importable par l'interpréteur externe ?
-    Résultat mis en cache (réévalué après une installation)."""
+    """libretranslate est-il lançable par l'interpréteur externe ?
+    Délégué à ``_lt_python_cmd()`` qui PROUVE déjà
+    ``import libretranslate.main``. Résultat mis en cache (réévalué
+    après une installation via lt_install())."""
     v = _lt.get("installed")
     if v is None:
-        py = _lt_python_cmd()
-        if not py:
-            v = False
-        else:
-            try:
-                v = subprocess.run(py + ["-c", "import libretranslate"],
-                                   capture_output=True, timeout=30).returncode == 0
-            except Exception:
-                v = False
+        # _lt_python_cmd() ne renvoie un cmd QUE si 'import
+        # libretranslate.main' a réussi -> donc installé.
+        v = bool(_lt_python_cmd())
         _lt["installed"] = v
     return v
 
@@ -121,7 +145,7 @@ def lt_start():
         _lt["last_error"] = "Python introuvable sur ce PC (py/python requis pour héberger le serveur)"
         return {"ok": False, "reason": "no-python", **lt_status()}
     try:
-        chk = subprocess.run(py + ["-c", "import libretranslate"],
+        chk = subprocess.run(py + ["-c", "import libretranslate.main"],
                              capture_output=True, timeout=30)
         if chk.returncode != 0:
             return {"ok": False, "reason": "not-installed", **lt_status()}
@@ -134,7 +158,7 @@ def lt_start():
     try:
         logf = _lt_log_file()
         proc = subprocess.Popen(
-            py + ["-m", "libretranslate", "--host", "0.0.0.0", "--port", str(LT_PORT)],
+            py + ["-m", "libretranslate.main", "--host", "0.0.0.0", "--port", str(LT_PORT)],
             stdout=logf, stderr=subprocess.STDOUT,
             creationflags=flags, cwd=SERVE_DIR)
         _lt["proc"] = proc
@@ -193,6 +217,7 @@ def lt_install():
         finally:
             _lt["installing"] = False
             _lt["installed"] = None      # re-évaluer au prochain status
+            _lt["python"] = None         # re-sonder l'interpréteur aussi
 
     import threading
     threading.Thread(target=_run, daemon=True).start()
