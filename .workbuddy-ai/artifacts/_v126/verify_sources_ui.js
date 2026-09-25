@@ -298,6 +298,38 @@ async function assurerRelais() {
     menu.valeur === "pexels" || menu.valeur === "pixabay" || menu.valeur === "coverr",
     menu.valeur);
 
+  // LE POINT QUI RENDAIT LA FONCTION INUTILISABLE : les deux menus partagent
+  // la clé `video_source`. S'ils ne proposent pas la MÊME liste, une source
+  // réglée ici est introuvable au moment de générer, et la valeur retombe sur
+  // Pexels SANS RIEN DIRE — on croit générer chez Metaso, on génère ailleurs.
+  const menuGen = await page.evaluate(() => {
+    const s = document.getElementById("studio-source");
+    if (!s) return null;
+    return {
+      total: s.options.length,
+      ids: Array.from(s.options).map(o => o.value),
+    };
+  });
+  ok("le menu de GÉNÉRATION existe", !!menuGen);
+  ok("le menu de GÉNÉRATION propose les 11 sources (pas seulement 3)",
+    menuGen && menuGen.total === 11, menuGen ? menuGen.total : "(absent)");
+  ok("les deux menus proposent exactement la même liste",
+    menuGen && menuGen.ids.join(",") === menu.groupes.flatMap(g => g.ids).join(","),
+    menuGen ? menuGen.ids.join(",") : "(absent)");
+  // Une valeur enregistrée doit pouvoir « se poser » : si l'option n'existe
+  // pas, l'affectation échoue en silence.
+  const pose = await page.evaluate(() => {
+    const s = document.getElementById("studio-source");
+    s.value = "metaso_minimax";
+    return s.value;
+  });
+  ok("une source IA peut être sélectionnée au moment de générer",
+    pose === "metaso_minimax", pose);
+  // On remet par `evaluate` et non par `selectOption` : le panneau
+  // « Génération » est masqué (on est sur l'onglet « Sources »), et un
+  // élément masqué n'est pas sélectionnable par Playwright.
+  await page.evaluate(() => { document.getElementById("studio-source").value = "pexels"; });
+
   // La note doit prévenir quand la source choisie facture.
   await page.selectOption("#stu-mat-source", "metaso_minimax");
   const note = await page.evaluate(() => {

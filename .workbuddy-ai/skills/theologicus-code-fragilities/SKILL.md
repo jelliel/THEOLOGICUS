@@ -790,3 +790,19 @@ un générateur facturé n'avait **aucun avertissement** — précisément le mo
 il compte. Une note qui décrit un **choix** doit être branchée sur l'événement
 `change`, avec un garde d'attache unique (`dataset.noteLiee`), pas recalculée au
 seul chargement.
+
+### Deux menus qui partagent une clé doivent partager une liste (v126)
+
+`#stu-mat-source` (réglages) et `#studio-source` (génération) écrivent la même
+clé `video_source`. Le premier a été étendu à 11 sources ; le second est resté
+à 3 (`pexels`, `pixabay`, `local`) parce qu'il est écrit **en dur dans le HTML**
+et n'est rempli par personne. Conséquence : 8 sources configurables mais
+**jamais utilisables**, et surtout une valeur enregistrée (`metaso_minimax`)
+qui, ne trouvant aucune option, fait retomber le `<select>` sur la première —
+**Pexels, sans rien dire**. On croit générer chez le fournisseur choisi.
+
+Deux éléments qui écrivent la même clé doivent être **remplis par le même
+appel**, jamais l'un dynamiquement et l'autre en dur. Le banc doit comparer les
+**deux listes** (`menuGen.ids.join() === menuIds.join()`), pas seulement
+vérifier que le premier est complet. Et « la valeur se pose-t-elle ? » se
+mesure : affecter une valeur et relire `select.value`.

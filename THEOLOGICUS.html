@@ -21856,6 +21856,12 @@ function bindEvents() {
     studioRefreshStatus(true).then(st => {
       if (st && st.running) {
         studioChargerListes().then(() => studioLoadConfig());
+        // Le catalogue des sources remplit AUSSI le menu de génération. On le
+        // charge ici, et pas seulement à l'ouverture de l'onglet « Réglages » :
+        // `#studio-source` est le champ qui décide réellement de la source au
+        // moment de lancer une vidéo, et il doit avoir ses options AVANT que
+        // `studioLoadConfig` n'y pose la valeur enregistrée.
+        studioChargerSources().then(() => studioLoadConfig());
       }
     });
   }
@@ -22441,8 +22447,7 @@ function bindEvents() {
   // les regroupe : banques gratuites d'un cote, generation payante de l'autre.
   // Un seul menu ou les deux se melangent ferait choisir un service facture en
   // croyant choisir un stock d'images.
-  function studioRemplirSources(sources, groupes) {
-    const s = _STU("stu-mat-source");
+  function studioRemplirMenu(s, sources, groupes) {
     if (!s || !sources || !sources.length) return 0;
     const choix = s.value;
     const parGroupe = {};
@@ -22462,6 +22467,13 @@ function bindEvents() {
       s.appendChild(og);
     });
     if (choix && sources.some(x => x.id === choix)) s.value = choix;
+    return sources.length;
+  }
+
+  function studioRemplirSources(sources, groupes) {
+    const s = _STU("stu-mat-source");
+    if (!s || !sources || !sources.length) return 0;
+    studioRemplirMenu(s, sources, groupes);
     _stuSourcesListe = sources || [];
     // La note doit suivre le CHOIX DE L'UTILISATEUR, pas seulement le
     // remplissage : ecrite une seule fois, elle restait muette quand il
@@ -22472,6 +22484,15 @@ function bindEvents() {
       s.dataset.noteLiee = "1";
     }
     studioNoterSource();
+
+    // LE MEME CATALOGUE pour le menu de GENERATION (#studio-source). Ils
+    // partagent la cle `video_source` : s'ils ne proposaient pas la meme
+    // liste, une source choisie dans les reglages serait introuvable au
+    // moment de generer — et la valeur retomberait sur Pexels SANS RIEN
+    // DIRE. C'est ce qui rendait les six fournisseurs IA inutilisables
+    // alors qu'on pouvait deja saisir leur cle.
+    const g = _STU("studio-source");
+    if (g && g !== s) studioRemplirMenu(g, sources, groupes);
     return sources.length;
   }
 

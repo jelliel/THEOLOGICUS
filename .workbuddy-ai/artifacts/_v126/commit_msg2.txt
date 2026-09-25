@@ -1,0 +1,23 @@
+Share the source catalogue between settings and generation menus
+
+The generation form's "Video Source" menu was written in the markup with
+three hardcoded options (pexels, pixabay, local) while the settings menu
+is filled from the service with eleven. Both write the same key,
+video_source, so eight sources -- Coverr and the six AI providers -- were
+configurable but never selectable at the point where a video is actually
+launched.
+
+Worse, the failure was silent: a saved video_source of metaso_minimax
+matches no option, so the select falls back to its first entry. The user
+would save an AI provider, launch a video, and quietly get Pexels.
+
+studioRemplirMenu() is now shared by both selects, so a single call fills
+both from the same catalogue. studioChargerSources() is called from
+studioOpen() rather than only when the settings tab is opened, followed by
+studioLoadConfig(), so the saved value lands after the options exist.
+
+Bench gains four assertions: eleven options in the generation menu, the
+two menus exposing exactly the same list, and an AI source actually
+selectable. 113/113, no regression (v125 56/56, v124 18/18 + 35/35,
+v123 78/78, v122 71/71, v120 57/57 + 14/14, v126 py 137/137,
+v125 py 35/35).
