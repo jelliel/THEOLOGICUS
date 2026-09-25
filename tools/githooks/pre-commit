@@ -66,12 +66,20 @@ fi
 # Un motif peut aussi apparaitre dans un banc, un commentaire ou une
 # documentation : le but est de surprendre une CLE, pas une chaine citant une
 # cle. On exige donc, par defaut, une chaine longue et continue.
+#
+# ET PAS UNE SUITE DE CARACTERES IDENTIQUES. Mesure : le texte d'aide
+# « ex. sk-xxxxxxxxxxxxxxxxxxxxxxxx » (24 « x ») declenchait le refus d'un
+# commit parfaitement propre. Un garde qui crie au loup sur une phrase d'aide
+# se fait desactiver, et on perd TOUS ses controles. Une vraie cle est
+# aleatoire : elle ne contient pas 12 fois le meme caractere d'affilee. On
+# ajoute donc un filtre de DIVERSITE apres la longueur.
 SECRETS="$(git diff --cached --name-only --diff-filter=ACM \
   | grep -vE '\.(png|jpg|jpeg|gif|webp|ico|wav|mp3|mp4|apk|aab|jks|keystore|p12|pfx|so|dll|exe|md|txt)$' \
   | grep -vE '^(tools/githooks/|\.workbuddy-ai/skills/|tools/check_)' \
   | while IFS= read -r f; do
       [ -f "$f" ] && git show ":$f" 2>/dev/null | grep -nE \
         'BEGIN [A-Z ]*PRIVATE KEY|sk-[A-Za-z0-9]{24,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|-----BEGIN CERTIFICATE' \
+        | grep -vE '(.)\1{11,}' \
         | sed "s|^|$f:|"
     done)"
 

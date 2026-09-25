@@ -653,6 +653,17 @@ _MPT_CFG_WHITELIST = {
     "upload_post_youtube_privacy_status": "str",
     "upload_post_youtube_made_for_kids": "bool",
     "upload_post_max_pending_tasks": "int",
+    # --- Audio (« Audio Settings ») ---
+    # `voice_mode` et `tts_server` ne sont PAS des champs de VideoParams : ce
+    # sont des etats de config.ui, et c'est MPT lui-meme qui les lit a la
+    # generation. Les omettre de cette liste ne cassait rien visiblement —
+    # `data-cle="tts_server"` etait simplement ignore en silence a
+    # l'enregistrement, et le moteur choisi revenait a sa valeur par defaut.
+    "voice_mode": "str",
+    "tts_server": "str",
+    "voice_name": "str",
+    "voice_volume": "float",
+    "voice_rate": "float",
     # --- Interface (« Interface Settings ») ---
     "hide_config": "bool",
 }
@@ -696,6 +707,15 @@ def _toml_valeur(valeur, type_attendu):
             return str(int(valeur))
         except Exception:
             return "0"
+    # `float` : sans cette branche, la valeur tombait dans la branche chaine et
+    # `voice_volume = "1.0"` etait ecrit AVEC des guillemets. MPT attend un
+    # nombre et refuse une chaine — le reglage le plus anodin (le volume) aurait
+    # fait echouer la generation entiere, avec un message parlant de type.
+    if type_attendu == "float":
+        try:
+            return repr(float(valeur))
+        except Exception:
+            return "1.0"
     if type_attendu == "list":
         if isinstance(valeur, str):
             # Le formulaire envoie une chaine « a, b, c » : on la decoupe, on
@@ -1181,14 +1201,25 @@ def mpt_fonts():
     return {"ok": True, "fonts": polices, "count": len(polices)}
 
 
-def mpt_voices():
+def mpt_voices(moteur=None):
     """Catalogue des voix, lu depuis le fichier de donnees de MPT.
 
     `data/azure_voices.json` est la source de verite du service. On reproduit
     la meme mise en forme que `get_all_azure_voices` (`<Nom>-<Genre>`) : c'est
     exactement ce que MPT attend dans `voice_name`. Si le fichier manque, on
     rend une liste VIDE et `ok:false` — surtout pas une liste inventee, qui
-    ferait echouer la synthese avec une voix inexistante."""
+    ferait echouer la synthese avec une voix inexistante.
+
+    `moteur` filtre la liste comme le fait MPT lui-meme (webui/Main.py) :
+    Azure V1 EXCLUT les voix dont le nom contient « V2 », V2 ne garde QUE
+    celles-la. Servir la liste complete pour V1 ferait choisir une voix que
+    V1 ne sait pas lire — la synthese echouerait a la fin de la production.
+
+    Les moteurs autres qu'Azure ne sont PAS listes ici : leurs voix viennent
+    d'un service distant ou d'une configuration locale que MPT interroge
+    lui-meme, et nous n'avons aucun moyen de les enumerer sans lui. On le dit
+    (`externe: true`) plutot que de rendre la liste Azure, qui serait fausse.
+    """
     if not _mpt_dir():
         return {"ok": False, "reason": "no-dir", "voices": []}
     rel = os.path.join("app", "services", "data", "azure_voices.json")
@@ -1210,8 +1241,176 @@ def mpt_voices():
             continue
         if nom and genre:
             voix.append("%s-%s" % (nom, genre))
+    # Azure seul a un catalogue enumerable ici. Les autres moteurs sont
+    # signales comme externes AVANT le filtrage : melanger les deux ferait
+    # croire a un catalogue complet.
+    if moteur and moteur not in ("azure-tts-v1", "azure-tts-v2"):
+        return {"ok": True, "voices": [], "count": 0, "moteur": moteur,
+                "externe": True,
+                "note": "Ce moteur est interroge par MoneyPrinterTurbo lui-meme ; "
+                        "sa liste de voix n'est pas enumerable depuis ici."}
+    if moteur == "azure-tts-v2":
+        voix = [v for v in voix if "V2" in v]
+    elif moteur == "azure-tts-v1":
+        voix = [v for v in voix if "V2" not in v]
     voix.sort()
-    return {"ok": True, "voices": voix, "count": len(voix)}
+    return {"ok": True, "voices": voix, "count": len(voix), "moteur": moteur or ""}
+
+
+# ── Moteurs de synthese vocale proposes par MPT ─────────────────────────────
+# Recopie EXACTE de la liste de `webui/Main.py` (`tts_servers`). On ne
+# l'invente pas : c'est le contrat entre l'interface et le service. Un moteur
+# absent d'ici serait inchoisissable ; un moteur ajoute la-bas doit etre
+# ajoute ici, sinon le choix reste fige sur Azure sans que rien ne le signale.
+_MPT_TTS_SERVEURS = (
+    ("azure-tts-v1", "Azure TTS V1 (Edge TTS)", True),
+    ("azure-tts-v2", "Azure TTS V2", True),
+    ("siliconflow", "SiliconFlow TTS", False),
+    ("gemini-tts", "Google Gemini TTS", False),
+    ("mimo-tts", "Xiaomi MiMo TTS", False),
+    ("minimax-tts", "MiniMax TTS", False),
+    ("elevenlabs", "ElevenLabs TTS", False),
+    ("chatterbox", "Chatterbox TTS", False),
+    ("kokoro", "Kokoro TTS", False),
+    ("fish_audio", "Fish Audio TTS", False),
+    ("voxcpm", "VoxCPM TTS", False),
+)
+# Modes de narration de MPT (`webui/Main.py` : VOICE_MODE_*).
+_MPT_VOICE_MODES = (
+    ("tts", "Auto — synthese vocale"),
+    ("upload", "Audio fourni (upload)"),
+    ("none", "Aucune — video muette"),
+)
+
+
+def mpt_tts_moteurs():
+    """Liste des moteurs TTS, leur libelle et s'ils sont enumerables ici."""
+    moteurs = [{"id": i, "label": lib, "azure": az}
+               for i, lib, az in _MPT_TTS_SERVEURS]
+    return {
+        "ok": bool(_mpt_dir()),
+        "reason": "" if _mpt_dir() else "no-dir",
+        "engines": moteurs,
+        "count": len(moteurs),
+        "modes": [{"id": i, "label": lib} for i, lib in _MPT_VOICE_MODES],
+        "default": "azure-tts-v1",
+    }
+
+
+# Phrase d'ecoute. Recopiee VERBATIM de la traduction francaise livree avec le
+# service (`webui/i18n/fr.json`, cle « Voice Example ») : l'utilisateur entend
+# exactement ce qu'il a entendu dans MoneyPrinterTurbo, donc une difference de
+# rendu ne peut pas venir du texte. Coder une phrase a nous rendrait toute
+# comparaison impossible — et ferait accuser le mauvais coupable.
+_MPT_PHRASE_ECOUTE = "Ceci est un exemple de texte pour tester la synthèse vocale"
+
+
+def mpt_voice_preview(texte, voix=None, moteur=None, volume=None, vitesse=None):
+    """Fait SYNTHETISER un court texte par MPT et rend le task_id a suivre.
+
+    On passe par `POST /api/v1/audio`, qui appelle `create_task(..., stop_at=
+    "audio")` : le service produit l'audio puis s'arrete AVANT la video. C'est
+    la route la plus legere qui donne un son REELLEMENT produit par le service
+    avec les reglages du moment — un apercu fabrique ailleurs ne prouverait
+    rien sur ce que donnera la production.
+
+    `tts_server` n'est PAS un champ de `AudioRequest` : le service lit le sien
+    dans config.toml. On enregistre donc d'abord le moteur choisi, sinon
+    l'ecoute porterait sur un moteur et la production sur un autre.
+    """
+    texte = (texte or "").strip()
+    if not texte:
+        # Le service refuse un `video_script` vide (Pydantic). Le dire ici
+        # evite un aller-retour et un message d'erreur moins clair.
+        return {"ok": False, "reason": "no-text"}
+    if not mpt_status()["running"]:
+        return {"ok": False, "reason": "not-running"}
+
+    # On grave le moteur AVANT de synthetiser : c'est la seule facon d'etre sur
+    # que l'apercu corresponde au reglage affiche. Sans cela, /api/v1/audio
+    # utiliserait le moteur de config.toml et l'utilisateur ecouterait une voix
+    # qu'il n'a pas choisie.
+    if moteur:
+        mpt_ecrire_reglages({"tts_server": moteur, "voice_mode": "tts"})
+
+    corps = {"video_script": texte}
+    if voix:
+        corps["voice_name"] = voix
+    if volume is not None:
+        try:
+            corps["voice_volume"] = float(volume)
+        except Exception:
+            pass
+    if vitesse is not None:
+        try:
+            corps["voice_rate"] = float(vitesse)
+        except Exception:
+            pass
+
+    ok, data = mpt_requete("POST", "/api/v1/audio", corps, timeout=60)
+    if not ok:
+        return {"ok": False, "reason": "service", "error": data}
+    # La reponse est `{status, message, data:{task_id, request_id, params}}`.
+    tid = ""
+    if isinstance(data, dict):
+        tid = ((data.get("data") or {}).get("task_id")
+               or data.get("task_id") or "")
+    if not tid:
+        return {"ok": False, "reason": "no-task", "error": data}
+    return {"ok": True, "task_id": tid, "texte": texte}
+
+
+def mpt_voice_preview_resultat(task_id):
+    """Etat d'une synthese d'ecoute, et URL locale du MP3 quand elle est prete.
+
+    On ne renvoie PAS le chemin disque brut : l'interface doit pouvoir lire le
+    son dans un lecteur. Le relais sert donc le fichier lui-meme (voir
+    `mpt_voice_audio`), avec le bon type MIME — la route `/api/v1/download/`
+    du service annonce `video/mp3` et force un telechargement, ce qui ne se
+    lit pas dans un lecteur audio."""
+    if not task_id or not re.fullmatch(r'[A-Za-z0-9_\-]{1,64}', task_id):
+        return {"ok": False, "reason": "bad-id"}
+    ok, data = mpt_requete("GET", "/api/v1/tasks/%s" % task_id, timeout=30)
+    if not ok:
+        return {"ok": False, "reason": "service", "error": data}
+    t = (data or {}).get("data") or data or {}
+    etat = t.get("state")
+    # Etats du service : -1 echec, 1 complet, 4 en cours (const.py). On ne
+    # devine pas : `audio_file` present est la preuve que le son existe.
+    audio = t.get("audio_file") or ""
+    if audio:
+        return {"ok": True, "etat": etat, "pret": True,
+                "url": "/mpt/voice/audio?task_id=" + task_id,
+                "progress": t.get("progress")}
+    if etat == -1:
+        return {"ok": True, "etat": etat, "pret": False, "echec": True,
+                "error": t.get("message") or "synthese interrompue"}
+    return {"ok": True, "etat": etat, "pret": False, "progress": t.get("progress")}
+
+
+def mpt_voice_audio(task_id):
+    """Chemin disque du MP3 d'une tache, ou None. Borne au dossier de taches.
+
+    `task_id` est deja valide par un motif strict, mais on revalide en chemin
+    reel : c'est la seule barriere entre une URL et une lecture arbitraire."""
+    if not task_id or not re.fullmatch(r'[A-Za-z0-9_\-]{1,64}', task_id):
+        return None
+    for base in _mpt_racines():
+        d = os.path.join(base, "storage", "tasks", task_id)
+        if not os.path.isdir(d):
+            continue
+        # Le motif ci-dessus interdit deja `/`, `\` et `..` : aucune remontee
+        # n'est possible. On verifie quand meme le chemin REEL, car un lien
+        # symbolique peut faire sortir du dossier sans que le nom y paraisse.
+        racine = os.path.realpath(d)
+        for nom in ("audio.mp3", "audio.wav", "audio.m4a", "audio.aac"):
+            f = os.path.join(d, nom)
+            if not os.path.isfile(f):
+                continue
+            reel = os.path.realpath(f)
+            if reel == racine or reel.startswith(racine + os.sep):
+                return f
+    return None
 
 
 def mpt_lancer():
@@ -1289,8 +1488,54 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # Catalogue des voix et des musiques : on ne code RIEN en dur, c'est
         # le service qui est la source de verite (mise a jour, nouvelle voix,
         # fichier ajoute dans resource/songs). Le modal se remplit a l'ouverture.
+        # `?moteur=` filtre la liste comme MPT le fait lui-meme : Azure V1 ne
+        # voit pas les voix V2, et reciproquement. Sans ce filtre, l'interface
+        # proposerait une voix que le moteur choisi ne sait pas lire.
         if self.path.split('?')[0] == '/mpt/voices':
-            self._json_response(mpt_voices())
+            params = parse_qs(urlparse(self.path).query)
+            self._json_response(mpt_voices(params.get('moteur', [None])[0]))
+            return
+        # Moteurs TTS proposes par MPT, recopies de son WebUI.
+        if self.path.split('?')[0] == '/mpt/tts/engines':
+            self._json_response(mpt_tts_moteurs())
+            return
+        # Suivi d'une synthese d'ecoute (« Voice Sample » / « Full Preview »).
+        # La synthese est asynchrone cote service : on interroge jusqu'a ce que
+        # `audio_file` existe, jamais en supposant un delai.
+        if self.path.split('?')[0] == '/mpt/voice/preview':
+            params = parse_qs(urlparse(self.path).query)
+            self._json_response(mpt_voice_preview_resultat(params.get('task_id', [''])[0]))
+            return
+        # Le son de l'apercu, servi par NOUS : la route de telechargement du
+        # service annonce `video/mp3` et pose un `Content-Disposition:
+        # attachment` — le navigateur le telecharge au lieu de le lire dans le
+        # lecteur audio de l'interface.
+        if self.path.split('?')[0] == '/mpt/voice/audio':
+            params = parse_qs(urlparse(self.path).query)
+            f = mpt_voice_audio(params.get('task_id', [''])[0])
+            if not f:
+                self.send_error(404)
+                return
+            try:
+                with open(f, 'rb') as fh:
+                    body = fh.read()
+            except Exception:
+                self.send_error(404)
+                return
+            self.send_response(200)
+            ext = os.path.splitext(f)[1].lower()
+            self.send_header('Content-Type', {
+                '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+                '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+            }.get(ext, 'application/octet-stream'))
+            self.send_header('Content-Length', str(len(body)))
+            # `inline` et non `attachment` : c'est un apercu a ecouter ici.
+            self.send_header('Content-Disposition', 'inline; filename="apercu-voix' + ext + '"')
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except Exception:
+                pass
             return
         if self.path.split('?')[0] == '/mpt/fonts':
             self._json_response(mpt_fonts())
@@ -1494,6 +1739,17 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # ── MoneyPrinterTurbo (STUDIO VIDEO) ──────────────────────────
         elif self.path.split('?')[0] == '/mpt/start':
             self._json_response(mpt_lancer())
+        elif self.path.split('?')[0] == '/mpt/voice/preview':
+            # Corps : {texte, voix?, moteur?, volume?, vitesse?}. Le texte est
+            # borne : une « Full Preview » du script entier reste raisonnable,
+            # mais on ne laisse pas un corps arbitraire partir vers le service.
+            corps = self._lire_corps_json() or {}
+            texte = corps.get('texte') or ''
+            if len(texte) > 8000:
+                texte = texte[:8000]
+            self._json_response(mpt_voice_preview(
+                texte, corps.get('voix'), corps.get('moteur'),
+                corps.get('volume'), corps.get('vitesse')))
         elif self.path.split('?')[0] == '/mpt/submit':
             # Relais de création de tâche. Le corps du modal est transmis
             # TEL QUEL à /api/v1/videos : c'est MPT (Pydantic) qui valide,

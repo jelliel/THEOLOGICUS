@@ -264,8 +264,21 @@ const CONTRAT = [
   // Les anciens noms FAUX ne doivent plus apparaître : MPT les ignore ou les
   // refuse, et le symptôme serait « la musique ne joue pas » / « le texte est
   // noir » — un défaut qu'on imputerait au service.
-  check('la charge utile ne porte plus "bgm_type"',
-    !('bgm_type' in payload), JSON.stringify(payload.bgm_type));
+  //
+  // v125 — `bgm_type` a été RETIRÉ à tort ici. Le corriger en le supprimant
+  // laissait `bgm_name`, qui n'est PAS un champ de VideoParams : Pydantic
+  // l'ignore en silence et la vidéo sortait sans musique. Le contrat réel est
+  // un COUPLE : `bgm_type` ∈ {"", "random", "preset", …} ET `bgm_file` (le nom,
+  // uniquement quand le type vaut « preset »). On vérifie donc le couple, pas
+  // l'absence d'un des deux.
+  check('la charge utile ne porte plus "bgm_name" (champ inexistant)',
+    !('bgm_name' in payload), JSON.stringify(payload.bgm_name));
+  check('la charge utile porte "bgm_type" avec une valeur du service',
+    ['', 'random', 'preset', 'custom', 'sonilo', 'elevenlabs'].indexOf(payload.bgm_type) >= 0,
+    JSON.stringify(payload.bgm_type));
+  check('un `bgm_file` n\'est envoyé QUE pour un type « preset »',
+    payload.bgm_type === 'preset' ? typeof payload.bgm_file === 'string' : !payload.bgm_file,
+    JSON.stringify(payload.bgm_file));
   check('la charge utile ne porte plus "text_color"',
     !('text_color' in payload), JSON.stringify(payload.text_color));
   check('la charge utile porte bien "text_fore_color"',

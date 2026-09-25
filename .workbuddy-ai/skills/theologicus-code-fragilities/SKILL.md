@@ -690,3 +690,53 @@ sont `/api/v1/musics` et `/api/v1/video_materials` : **il n'existe NI
 du relais sont des lectures **locales**, pas des relais. Une assertion écrite
 d'après l'intuition échouait ici alors que l'application était juste : **lire le
 routeur**, ne pas déduire l'existence d'une route du nom de la ressource.
+
+### La forme de la réponse n'est pas celle qu'on suppose (v125)
+
+`GET /api/v1/musics` rend `{status, message, data:{files:[{name,size,file}]}}`.
+Le client lisait `j.musics || j.data.musics` : **aucune des deux clés n'existe**,
+donc la liste restait à ses deux entrées écrites en dur. Le défaut était
+**silencieux** — pas d'erreur, juste 29 musiques inaccessibles. Règle : quand on
+consomme la réponse d'un tiers, **lire la forme réelle** (ici `j.data.files`), et
+accepter plusieurs formes plutôt que d'en supposer une.
+
+### Un nom de champ inventé est ignoré SANS erreur
+
+Pydantic **ignore** un champ inconnu au lieu de le refuser. Envoyer `bgm_name`
+(qui n'existe pas dans `VideoParams`) ne produisait donc **aucune erreur** : la
+vidéo sortait juste sans musique. Le contrat réel est un **couple** :
+
+| Besoin | `bgm_type` | `bgm_file` |
+|---|---|---|
+| Pas de musique | `""` (chaîne vide, PAS `"none"`) | `""` |
+| Aléatoire | `"random"` | `""` |
+| Une musique précise | `"preset"` | `<nom du fichier>` |
+
+Un **nom de fichier mis dans `bgm_type` est ignoré** (`get_bgm_file()` ne
+reconnaît que `random`, `preset` et les fournisseurs externes) : la vidéo
+sortirait sans musique, sans message. Corollaire du piège v122 : la bonne
+question n'est pas « ce nom est-il accepté ? » mais **« ce nom est-il LU ? »**.
+
+### Une assertion périmée peut encoder un ancien défaut
+
+Le banc `_v120` affirmait `!('bgm_type' in payload)` — vrai du temps où le code
+envoyait `bgm_name` (champ inexistant) *à la place* de `bgm_type`. Corriger le
+code en **supprimant** `bgm_type` donnait un banc vert sur un code faux. Quand on
+corrige un contrat, **relire les assertions qui le décrivent** : une assertion
+peut décrire le bug et non l'attendu. Voir la skill `stale-test-triage`.
+
+### Un float écrit comme une chaîne casse au premier usage
+
+`_toml_valeur()` n'avait pas de branche `float` : `voice_volume` tombait dans la
+branche chaîne et `voice_volume = "1.0"` était écrit **avec guillemets**. MPT
+attend un nombre. Un type ajouté à une liste blanche doit avoir **sa branche de
+sérialisation**, sinon la valeur part dans le mauvais type.
+
+### La fenêtre d'attente doit être une CONDITION, pas un délai
+
+Deux fois dans cette session un délai fixe a produit un faux échec : la liste des
+musiques lue avant que la requête n'ait répondu, et le moteur enregistré écrasé
+par la liste du service arrivée plus tard. Les bancs doivent attendre une
+**condition** (`waitForFunction(() => …)`, ou une boucle sur l'état observé) et
+non un délai (`waitForTimeout(n)`) : un délai fixe « marche ici » et casse
+ailleurs **sans qu'aucun code n'ait bougé**.

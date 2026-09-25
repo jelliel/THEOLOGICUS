@@ -7810,35 +7810,65 @@ window.__ensureTafsirSurah = function(p){
         </div>
 
         <div class="section-title">🔊 AUDIO</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-          <div class="field-group">
-            <label class="field-label">🎙 Mode de narration</label>
-            <select class="field-input" id="studio-vomode">
-              <option value="auto">Auto — synthèse vocale</option>
-              <option value="none">Aucune — vidéo muette</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label class="field-label">🔊 Voix <span class="studio-help" title="Liste lue depuis le service. Les voix françaises sont groupées en haut.">?</span></label>
-            <select class="field-input" id="studio-voice"><option value="">— charger —</option></select>
-          </div>
-          <div class="field-group">
-            <label class="field-label">🎵 Musique de fond</label>
-            <select class="field-input" id="studio-bgm-name"><option value="random">Aléatoire</option></select>
-          </div>
-          <div class="field-group">
-            <label class="field-label">🎚 Volume de la musique : <span id="studio-bgmvol-val" class="studio-val">20 %</span></label>
-            <input type="range" class="studio-range" id="studio-bgmvol" min="0" max="1" step="0.05" value="0.2">
-          </div>
+        <!-- Vocabulaire aligne sur MoneyPrinterTurbo (« Voiceover ») : c'est le
+             service qui valide, donc un libelle different oblige a traduire
+             mentalement a chaque reglage. Les CLES, elles, ne changent pas
+             (voice_mode, voice_volume, voice_rate) : renommer un libelle ne
+             doit jamais toucher au contrat envoye. -->
+        <div class="field-group">
+          <label class="field-label">🎙 Voiceover Mode</label>
+          <select class="field-input" id="studio-vomode">
+            <option value="auto">Auto — synthèse vocale</option>
+            <option value="upload">Upload — audio fourni</option>
+            <option value="none">None — vidéo muette</option>
+          </select>
+        </div>
+        <div class="field-group" id="studio-grp-upload" hidden>
+          <label class="field-label">📁 Fichier audio <span class="studio-help" title="Chemin d'un fichier audio DÉJÀ présent sur le disque, dans le dossier de MoneyPrinterTurbo (par exemple storage/custom_audio/mon.mp3). La synthèse vocale est alors ignorée : c'est votre enregistrement qui sert de piste.">?</span></label>
+          <input type="text" class="field-input" id="studio-audio-file" placeholder="storage/custom_audio/mon.mp3">
+          <p class="stu-help">MoneyPrinterTurbo ignore la synthèse vocale et lit ce fichier. Il doit se trouver dans son dossier d'installation.</p>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field-group">
-            <label class="field-label">🎚 Volume de la voix : <span id="studio-volume-val" class="studio-val">100 %</span></label>
+            <label class="field-label">🎛 Voiceover Service <span class="studio-help" title="Liste recopiée de MoneyPrinterTurbo. Les moteurs autres qu'Azure interrogent un service distant : leurs voix ne sont pas énumérables depuis ici.">?</span></label>
+            <select class="field-input" id="studio-tts" data-cle="tts_server">
+              <option value="azure-tts-v1">Azure TTS V1 (Edge TTS)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔊 Voice <span class="studio-help" title="Liste lue depuis le service, filtrée selon le moteur choisi. Les voix françaises sont groupées en haut.">?</span></label>
+            <select class="field-input" id="studio-voice"><option value="">— charger —</option></select>
+          </div>
+        </div>
+        <p class="stu-help" id="studio-voice-note" hidden></p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎚 Voiceover Volume : <span id="studio-volume-val" class="studio-val">100 %</span></label>
             <input type="range" class="studio-range" id="studio-volume" min="0.1" max="2" step="0.05" value="1">
           </div>
           <div class="field-group">
-            <label class="field-label">⚡ Vitesse de la voix : <span id="studio-rate-val" class="studio-val">1,00×</span></label>
+            <label class="field-label">⚡ Voiceover Speed : <span id="studio-rate-val" class="studio-val">1,00×</span></label>
             <input type="range" class="studio-range" id="studio-rate" min="0.5" max="2" step="0.05" value="1">
+          </div>
+        </div>
+        <!-- Ecoute : les deux boutons de MPT. « Voice Sample » lit une phrase
+             courte et FIXE (donc rapide et sans surprise) ; « Full Preview »
+             lit le script en cours, qui peut etre long — c'est a l'utilisateur
+             de savoir ce qu'il demande. -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:2px 0 6px">
+          <button type="button" class="btn-ghost" id="studio-voice-sample">🔊 Voice Sample</button>
+          <button type="button" class="btn-ghost" id="studio-voice-full">📄 Full Preview</button>
+          <audio id="studio-voice-audio" controls style="display:none;height:32px;flex:1;min-width:220px"></audio>
+        </div>
+        <p class="stu-help" id="studio-voice-ecoute" hidden></p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎵 Background Music Source</label>
+            <select class="field-input" id="studio-bgm-name"><option value="random">Random — aléatoire</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Background Music Volume : <span id="studio-bgmvol-val" class="studio-val">20 %</span></label>
+            <input type="range" class="studio-range" id="studio-bgmvol" min="0" max="1" step="0.05" value="0.2">
           </div>
         </div>
 
@@ -20981,8 +21011,32 @@ function bindEvents() {
     if (terms) p.video_terms = terms;
     const voice = _sv("studio-voice").trim();
     if (voice) p.voice_name = voice;
+    // Musique de fond. `bgm_name` N'EXISTE PAS dans VideoParams : les deux
+    // champs du service sont `bgm_type` et `bgm_file`. Envoyer `bgm_name`
+    // n'echouait pas — Pydantic l'ignore — et la video sortait sans musique
+    // sans le moindre message. Et « pas de musique » est une chaine VIDE, pas
+    // « none » : le service teste `if not bgm_type`, donc « none » serait lu
+    // comme un type inconnu, c'est-a-dire encore une chaine vide au bout du
+    // compte, mais par accident.
     const bgm = _sv("studio-bgm-name").trim();
-    if (bgm) p.bgm_name = bgm; else p.bgm_type = "none";
+    if (!bgm) {
+      p.bgm_type = "";
+      p.bgm_file = "";
+    } else if (bgm === "random") {
+      p.bgm_type = "random";
+      p.bgm_file = "";
+    } else if (bgm.indexOf("preset:") === 0) {
+      const fichier = bgm.slice(7);
+      // Un « preset: » sans nom ne doit pas partir : le service resoudrait un
+      // fichier vide et rendrait une chaine vide — donc pas de musique.
+      if (fichier) { p.bgm_type = "preset"; p.bgm_file = fichier; }
+      else { p.bgm_type = ""; p.bgm_file = ""; }
+    } else {
+      // Valeur inconnue (config enregistree par une version anterieure) : on
+      // ne devine pas. On retombe sur l'alea, qui est le defaut du service.
+      p.bgm_type = "random";
+      p.bgm_file = "";
+    }
     const sp = _sv("studio-script-prompt").trim();
     if (sp) p.video_script_prompt = sp;
     const sysp = _sv("studio-sys-prompt").trim();
@@ -20993,10 +21047,33 @@ function bindEvents() {
     const bgc = _sv("studio-bgcolor").trim();
     p.text_background_color = (_sc("studio-bg-enabled") && bgc) ? bgc : false;
 
-    // Le mode de narration n'est pas un champ de VideoParams : c'est notre
-    // façon de dire « vidéo muette ». On le traduit en absence de voix, ce
-    // que le service comprend déjà.
-    if (_sv("studio-vomode") === "none") { delete p.voice_name; p.voice_volume = 0; }
+    // ── Audio : le MODE decide de ce qui part ────────────────────────────
+    // Trois modes, ceux de MPT (`voice_mode` : tts | upload | none). Ce ne
+    // sont pas des champs de VideoParams mais des etats exclusifs : envoyer
+    // une voix ET un fichier audio ferait dependre le resultat de l'ordre
+    // d'examen interne du service, ce qui n'est pas un contrat.
+    const mode = _sv("studio-vomode") || "auto";
+    // `voice_mode` est un reglage de config.ui chez MPT (tts | upload | none).
+    // On l'envoie pour qu'il soit PERSISTE avec le reste du formulaire : sans
+    // lui, recharger l'appli remettrait « Auto » alors que l'utilisateur avait
+    // choisi « Upload », et la production repartirait en synthese vocale.
+    p.voice_mode = (mode === "auto") ? "tts" : mode;
+    if (mode === "none") {
+      // Video muette : on retire la voix, le service comprend deja.
+      delete p.voice_name;
+      p.voice_volume = 0;
+    } else if (mode === "upload") {
+      // Audio fourni : MPT utilise `custom_audio_file` et IGNORE la synthese.
+      // On envoie donc le fichier SANS voix — laisser `voice_name` ferait
+      // croire que les deux comptent.
+      const f = _sv("studio-audio-file").trim();
+      if (f) p.custom_audio_file = f;
+      delete p.voice_name;
+    } else {
+      // Auto : le moteur et la voix.
+      const moteur = _sv("studio-tts").trim();
+      if (moteur) p.tts_server = moteur;
+    }
 
     return p;
   }
@@ -21025,6 +21102,7 @@ function bindEvents() {
      "studio-source", "studio-aspect", "studio-concat", "studio-transition", "studio-fit",
      "studio-count", "studio-clip", "studio-threads", "studio-speed",
      "studio-vomode", "studio-voice", "studio-bgm-name", "studio-bgmvol",
+     "studio-tts", "studio-audio-file",
      "studio-volume", "studio-rate", "studio-font", "studio-subpos", "studio-subdisplay",
      "studio-subanim", "studio-custompos", "studio-fontsize", "studio-strokewidth",
      "studio-color-pick", "studio-color", "studio-stroke-pick", "studio-stroke",
@@ -21067,8 +21145,22 @@ function bindEvents() {
       set("studio-rate", c.voice_rate);
       set("studio-volume", c.voice_volume);
       set("studio-bgmvol", c.bgm_volume);
-      set("studio-bgm-name", c.bgm_name);
+      // Retour de `{bgm_type, bgm_file}` vers la valeur du selecteur. Sans
+      // cette traduction, la config enregistree n'aurait aucune chance de
+      // s'appliquer : le selecteur ne connait que « random » et « preset:<nom> ».
+      if (c.bgm_type === "preset" && c.bgm_file) set("studio-bgm-name", "preset:" + c.bgm_file);
+      else if (c.bgm_type === "random" || c.bgm_type === undefined) set("studio-bgm-name", "random");
       set("studio-voice", c.voice_name);
+      // Moteur et mode : MPT les nomme `tts_server` et `voice_mode`, mais notre
+      // selecteur de mode utilise `auto` la ou MPT dit `tts`. On traduit donc
+      // dans les deux sens, sans quoi recharger le formulaire remettrait
+      // toujours le mode sur « None » (la valeur inconnue ne s'applique pas).
+      set("studio-tts", c.tts_server);
+      set("studio-audio-file", c.custom_audio_file);
+      if (c.voice_mode) {
+        const m = (c.voice_mode === "tts" || c.voice_mode === "auto") ? "auto" : c.voice_mode;
+        set("studio-vomode", m);
+      }
       set("studio-subpos", c.subtitle_position);
       set("studio-subdisplay", c.subtitle_display_mode);
       set("studio-subanim", c.subtitle_animation);
@@ -21113,17 +21205,79 @@ function bindEvents() {
     return entrees.length;
   }
 
-  async function studioPopulateVoices() {
+  // ── Voix, moteur, mode : trois reglages lies ─────────────────────────
+  // Le moteur (tts_server) DETERMINE la liste des voix : Azure V1 ne voit pas
+  // les voix V2 et reciproquement (c'est MPT qui filtre, on ne le devine pas).
+  // Servir la liste complete ferait choisir une voix que le moteur ne sait pas
+  // lire, et la synthese echouerait a la FIN de la production.
+  const STUDIO_MOTEURS = {};   // id -> {label, azure}
+
+  // La note sous le selecteur de voix : elle doit dire POURQUOI la liste est
+  // vide, sinon l'utilisateur croit a une panne. Un moteur non-Azure n'a pas
+  // de catalogue enumérable ici, ce n'est pas la meme chose que « aucune voix ».
+  function studioNoteVoix(texte) {
+    const n = _STU("studio-voice-note");
+    if (!n) return;
+    if (!texte) { n.hidden = true; n.textContent = ""; return; }
+    n.hidden = false;
+    n.textContent = texte;
+  }
+
+  async function studioChargerMoteurs() {
     try {
-      const r = await fetch("/mpt/voices", { cache: "no-store" });
+      const r = await fetch("/mpt/tts/engines", { cache: "no-store" });
+      const j = await r.json();
+      const moteurs = (j && j.engines) || [];
+      const s = _STU("studio-tts");
+      if (!s || !moteurs.length) return 0;
+      const garde = s.value;
+      s.innerHTML = "";
+      moteurs.forEach(m => {
+        STUDIO_MOTEURS[m.id] = m;
+        const o = document.createElement("option");
+        o.value = m.id;
+        o.textContent = m.label || m.id;
+        s.appendChild(o);
+      });
+      // On ne force PAS le defaut si l'utilisateur avait choisi : sa config
+      // enregistree prime. Sinon on prend le defaut annonce par le service.
+      s.value = (garde && STUDIO_MOTEURS[garde]) ? garde : ((j && j.default) || moteurs[0].id);
+      return moteurs.length;
+    } catch (e) {
+      studioLog("Moteurs TTS indisponibles : " + e);
+      return 0;
+    }
+  }
+
+  async function studioPopulateVoices(moteur) {
+    const m = moteur || (_STU("studio-tts") ? _STU("studio-tts").value : "") || "";
+    try {
+      const url = "/mpt/voices" + (m ? ("?moteur=" + encodeURIComponent(m)) : "");
+      const r = await fetch(url, { cache: "no-store" });
       const j = await r.json();
       const liste = (j && j.voices) || [];
-      if (!liste.length) return 0;
+      const s = $("#studio-voice");
+      if (j && j.externe) {
+        // Ce n'est PAS « pas de voix » : le service distant les detient. Le
+        // dire evite de faire croire a une panne, et evite de laisser une
+        // liste Azure perimee dans le selecteur.
+        if (s) s.innerHTML = '<option value="">— fourni par le service —</option>';
+        const lib = (STUDIO_MOTEURS[m] && STUDIO_MOTEURS[m].label) || m;
+        studioNoteVoix("« " + lib + " » interroge un service distant : sa liste de "
+          + "voix est gérée par MoneyPrinterTurbo. Saisissez la voix attendue ou "
+          + "laissez vide pour utiliser celle de sa configuration.");
+        return 0;
+      }
+      if (!liste.length) {
+        studioNoteVoix("Aucune voix trouvée pour ce moteur. Vérifiez que le "
+          + "service est démarré, ou changez de moteur.");
+        return 0;
+      }
+      studioNoteVoix("");
       // Le français d'abord : c'est la langue de cette application. Un
       // sélecteur de 331 voix ouvert sur l'afrikaans n'aide personne.
       const fr = liste.filter(v => /^fr-/i.test(v));
       const autres = liste.filter(v => !/^fr-/i.test(v));
-      const s = $("#studio-voice");
       if (s) {
         const choix = s.value;
         s.innerHTML = "";
@@ -21135,10 +21289,163 @@ function bindEvents() {
         };
         groupe("Français (" + fr.length + ")", fr);
         groupe("Autres langues (" + autres.length + ")", autres);
-        if (choix) s.value = choix;
+        // On garde le choix precedent SEULEMENT s'il existe encore dans la
+        // nouvelle liste : apres un changement de moteur, l'ancienne voix
+        // n'est plus valide et la conserver enverrait une voix inconnue.
+        if (choix && liste.indexOf(choix) >= 0) s.value = choix;
       }
       return liste.length;
     } catch (e) { studioLog("Voix indisponibles : " + e); return 0; }
+  }
+
+  // Un seul endroit decide ce qui est ACTIF selon le mode de narration.
+  // Sans cela, un champ desactive visuellement mais toujours lu par le
+  // formulaire enverrait un reglage que l'utilisateur croit inactif.
+  function studioAppliquerMode() {
+    const mode = _STU("studio-vomode") ? _STU("studio-vomode").value : "auto";
+    const grpUpload = _STU("studio-grp-upload");
+    if (grpUpload) grpUpload.hidden = (mode !== "upload");
+    const inactif = (mode !== "auto");
+    ["studio-tts", "studio-voice", "studio-voice-sample", "studio-voice-full"]
+      .forEach(id => { const e = _STU(id); if (e) e.disabled = inactif; });
+    if (!inactif) {
+      // En mode auto, la note appartient a la LISTE de voix (moteur distant,
+      // liste vide…). La laisser telle quelle apres un retour depuis Upload
+      // afficherait « la synthese est ignoree » sur un mode qui l'utilise.
+      // On ne l'efface pas nous-memes : c'est `studioPopulateVoices` qui sait
+      // si la liste courante merite un avertissement. On lui rend la main.
+      if (_STU("studio-voice-note") && /Mode (Upload|None)/.test(_STU("studio-voice-note").textContent || "")) {
+        studioNoteVoix("");
+      }
+      // Le lecteur d'apercu suit le mode : un son reste affiche apres un
+      // passage en « Upload » laisserait croire qu'il sera utilise.
+      const a = _STU("studio-voice-audio");
+      if (a) { a.pause(); a.removeAttribute("src"); a.style.display = "none"; a.hidden = true; }
+      _studioEcouteDire("");
+      return;
+    }
+    if (mode === "upload") {
+      studioNoteVoix("Mode Upload : la synthèse vocale est ignorée, c'est votre fichier audio qui sert de piste.");
+    } else {
+      studioNoteVoix("Mode None : aucune narration ne sera produite.");
+    }
+  }
+
+  // ── Ecoute de la voix : les deux boutons de MPT ──────────────────────
+  // « Voice Sample » lit une phrase COURTE et fixe ; « Full Preview » lit le
+  // script en cours, qui peut etre long. Deux boutons et non une case a
+  // cocher : la duree de l'attente n'est pas la meme, et c'est a
+  // l'utilisateur de savoir ce qu'il demande.
+  //
+  // La phrase d'ecoute est celle du SERVICE (sa traduction francaise), pas une
+  // phrase a nous : entendre exactement le meme texte que dans
+  // MoneyPrinterTurbo rend toute difference de rendu imputable au moteur, et
+  // non au texte.
+  const STUDIO_PHRASE_ECOUTE = "Ceci est un exemple de texte pour tester la synthèse vocale";
+  let _studioEcouteEnCours = false;
+
+  function _studioEcouteDire(texte) {
+    const n = _STU("studio-voice-ecoute");
+    if (!n) return;
+    if (!texte) { n.hidden = true; n.textContent = ""; return; }
+    n.hidden = false;
+    n.textContent = texte;
+  }
+
+  function _studioEcouteBoutons(actif) {
+    ["studio-voice-sample", "studio-voice-full"].forEach(id => {
+      const b = _STU(id);
+      if (!b) return;
+      b.disabled = !actif;
+      b.style.opacity = actif ? "" : "0.5";
+    });
+  }
+
+  async function studioEcouteVoix(complet) {
+    // Un seul apercu a la fois : deux clics rapides lanceraient deux syntheses
+    // et la seconde ecraserait le lecteur de la premiere, sans qu'on sache
+    // laquelle on entend.
+    if (_studioEcouteEnCours) { _studioEcouteDire("Une écoute est déjà en cours…"); return; }
+    const mode = _sv("studio-vomode") || "auto";
+    if (mode !== "auto") {
+      _studioEcouteDire(mode === "upload"
+        ? "Mode Upload : la synthèse vocale est ignorée, il n'y a pas de voix à écouter."
+        : "Mode None : aucune narration ne sera produite, il n'y a pas de voix à écouter.");
+      return;
+    }
+    const texte = complet ? (_sv("studio-script") || "").trim() : STUDIO_PHRASE_ECOUTE;
+    if (!texte) {
+      _studioEcouteDire(complet
+        ? "Aucun script à lire : remplissez « Script » (ou utilisez Voice Sample)."
+        : "Texte d'écoute indisponible.");
+      return;
+    }
+    _studioEcouteEnCours = true;
+    _studioEcouteBoutons(false);
+    _studioEcouteDire((complet ? "Préparation de l'écoute du script…" : "Préparation de l'échantillon…")
+      + " (" + texte.length + " caractère" + (texte.length > 1 ? "s" : "") + ")");
+    try {
+      const corps = {
+        texte: texte,
+        voix: _sv("studio-voice") || "",
+        moteur: _sv("studio-tts") || "",
+        volume: _sv("studio-volume") || "",
+        vitesse: _sv("studio-rate") || "",
+      };
+      const r = await fetch("/mpt/voice/preview", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corps),
+      });
+      const j = await r.json();
+      if (!j || !j.ok) {
+        _studioEcouteDire("Écoute impossible : " + _studioEcouteRaison(j));
+        return;
+      }
+      // La synthese est ASYNCHRONE cote service. On interroge jusqu'a ce que
+      // le fichier existe — borner le nombre d'essais est le seul moyen de ne
+      // pas laisser un message d'attente eternel si le service meurt en route.
+      const audio = _STU("studio-voice-audio");
+      let pret = false;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(res => setTimeout(res, 700));
+        const p = await fetch("/mpt/voice/preview?task_id=" + encodeURIComponent(j.task_id), { cache: "no-store" });
+        const e = await p.json();
+        if (!e || !e.ok) { _studioEcouteDire("Écoute interrompue : " + _studioEcouteRaison(e)); return; }
+        if (e.echec) { _studioEcouteDire("La synthèse a échoué : " + (e.error || "raison non communiquée par le service.")); return; }
+        if (e.pret) {
+          if (audio) {
+            // Le cache-buster n'est pas cosmetique : sans lui, deux apercus du
+            // meme moteur rendraient la MEME url et le navigateur rejouerait
+            // l'ancien son en croyant que rien n'a change.
+            audio.src = e.url + "&t=" + Date.now();
+            audio.style.display = "";
+            audio.hidden = false;
+            try { audio.load(); await audio.play(); } catch (err) { /* lecture refusee : le bouton reste */ }
+          }
+          pret = true;
+          _studioEcouteDire("Voix : « " + (_sv("studio-voice") || "(celle du service)") + " » — "
+            + (_sv("studio-tts") || "") + ". Utilisez le lecteur pour réécouter.");
+          break;
+        }
+      }
+      if (!pret) _studioEcouteDire("Le service n'a pas produit l'audio à temps. Vérifiez qu'il est toujours démarré.");
+    } catch (e) {
+      _studioEcouteDire("Écoute impossible : " + e);
+    } finally {
+      _studioEcouteEnCours = false;
+      _studioEcouteBoutons(true);
+    }
+  }
+
+  // Les raisons du relais, dites en clair. Un « not-running » brut laisserait
+  // croire a un bug de l'interface alors que le service est simplement arrete.
+  function _studioEcouteRaison(j) {
+    const r = (j && j.reason) || "";
+    if (r === "not-running") return "le service MoneyPrinterTurbo n'est pas démarré.";
+    if (r === "no-text") return "aucun texte à lire.";
+    if (r === "no-task") return "le service n'a pas rendu d'identifiant de tâche.";
+    if (r === "service") return ((j && j.error) ? String(j.error) : "le service a refusé la demande.");
+    return ((j && (j.error || j.reason)) ? String(j.error || j.reason) : "erreur inconnue.");
   }
 
   async function studioPopulateFonts() {
@@ -21163,20 +21470,44 @@ function bindEvents() {
     try {
       const r = await fetch("/mpt/musics", { cache: "no-store" });
       const j = await r.json();
-      const liste = (j && (j.musics || (j.data && j.data.musics))) || [];
+      // La reponse du service est `{status, message, data:{files:[{name,
+      // size,file}]}}`. Lire `j.musics` ne tombait sur RIEN : la liste restait
+      // a ses deux entrees ecrites en dur (Aleatoire / Aucune) et l'utilisateur
+      // n'avait acces a aucune des musiques pourtant presentes sur le disque.
+      // On accepte les deux formes pour ne pas casser si une version du
+      // service change de forme, et on ne code AUCUN nom de fichier en dur.
+      const brut = (j && (j.musics || (j.data && (j.data.musics || j.data.files)))) || [];
+      const liste = brut.map(m => (typeof m === "string") ? m : (m && (m.file || m.name))).filter(Boolean);
       const s = $("#studio-bgm-name"); if (!s) return 0;
       const choix = s.value;
       s.innerHTML = "";
-      const o0 = document.createElement("option"); o0.value = "random"; o0.textContent = "Aléatoire"; s.appendChild(o0);
-      const o1 = document.createElement("option"); o1.value = ""; o1.textContent = "Aucune"; s.appendChild(o1);
-      liste.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = m; s.appendChild(o); });
-      if (choix) s.value = choix;
+      const o0 = document.createElement("option"); o0.value = "random"; o0.textContent = "Random — aléatoire"; s.appendChild(o0);
+      const o1 = document.createElement("option"); o1.value = ""; o1.textContent = "None — sans musique"; s.appendChild(o1);
+      // Une musique PRECISE ne se demande PAS avec `bgm_type` : le service
+      // n'y reconnait que « random » et les fournisseurs externes, et rend une
+      // chaine vide — donc AUCUNE musique — pour tout le reste. Le fichier se
+      // demande avec `bgm_type = "preset"` ET `bgm_file = <nom>`. C'est le
+      // contrat de son WebUI, et un nom de fichier mis dans `bgm_type` serait
+      // ignore en silence : la video sortirait sans musique, sans erreur.
+      liste.forEach(m => { const o = document.createElement("option"); o.value = "preset:" + m; o.textContent = m; s.appendChild(o); });
+      // On ne restaure le choix que s'il existe encore : apres un ajout ou une
+      // suppression de fichier, remettre une valeur absente laisserait le
+      // selecteur affiche sur une entree qui n'existe plus.
+      if (choix && (choix === "random" || liste.some(m => "preset:" + m === choix))) s.value = choix;
       return liste.length;
     } catch (e) { studioLog("Musiques indisponibles : " + e); return 0; }
   }
 
   async function studioChargerListes() {
-    const [nv, nf, nb] = await Promise.all([studioPopulateVoices(), studioPopulateFonts(), studioPopulateBgms()]);
+    // L'ORDRE compte : la liste des voix depend du moteur. Charger les voix
+    // en premier les remplirait avec le catalogue complet (331 entrees), puis
+    // le moteur arriverait et la liste resterait fausse — un selecteur qui
+    // propose des voix V2 alors que V1 est choisi.
+    await studioChargerMoteurs();
+    const [nv, nf, nb] = await Promise.all([
+      studioPopulateVoices(), studioPopulateFonts(), studioPopulateBgms(),
+    ]);
+    studioAppliquerMode();
     if (!nv) studioLog("Aucune voix reçue du service — saisie libre impossible sur ce champ.");
     return { voix: nv, polices: nf, musiques: nb };
   }
@@ -21398,10 +21729,20 @@ function bindEvents() {
     // `true` = si le service est installé mais arrêté, l'app le RELANCE.
     // C'était le défaut signalé : un bandeau rouge à chaque ouverture, alors
     // que le seul remède était toujours le même clic.
-    studioRefreshStatus(true).then(st => {
-      if (st && st.running) studioChargerListes();
-    });
+    //
+    // ORDRE, ET SA RAISON : `studioChargerListes` REMPLIT `#studio-tts` et
+    // `#studio-voice` depuis le service ; `studioLoadConfig` les remplit
+    // depuis les réglages enregistrés. Le dernier arrivé gagne. On applique
+    // donc la config TOUT DE SUITE (pour que le formulaire soit utilisable
+    // sans attendre le réseau), PUIS une seconde fois après les listes — car
+    // avant qu'elles arrivent, le sélecteur de moteur n'a pas encore ses
+    // options et la valeur enregistrée n'a nulle part où se poser.
     studioLoadConfig();
+    studioRefreshStatus(true).then(st => {
+      if (st && st.running) {
+        studioChargerListes().then(() => studioLoadConfig());
+      }
+    });
   }
 
   if ($("#open-studio-modal")) $("#open-studio-modal").onclick = studioOpen;
@@ -21414,6 +21755,28 @@ function bindEvents() {
   if ($("#studio-gen-terms")) $("#studio-gen-terms").onclick = () => studioGenerer("terms", "studio-gen-terms", "Recherche des mots-clés");
   if ($("#studio-cancel")) $("#studio-cancel").onclick = () => { studioStopPolling(); studioShow("studio-form"); };
   if ($("#studio-again")) $("#studio-again").onclick = () => { studioShow("studio-form"); studioRefreshStatus(); };
+
+  // ── Audio : moteur, mode, écoute ─────────────────────────────────────
+  // Le moteur CHANGE la liste des voix : on recharge a chaque bascule. Sans
+  // cela, choisir « Azure TTS V2 » laisserait les 322 voix V1 affichees, et la
+  // premiere selectionnee ferait echouer la synthese.
+  const _ttsSel = $("#studio-tts");
+  if (_ttsSel) _ttsSel.onchange = () => {
+    studioPopulateVoices(_ttsSel.value).then(n => {
+      // `studioPopulateVoices` reconstruit le selecteur de voix : si le mode
+      // est « auto », la note et l'etat actif doivent etre reevalues — sinon
+      // une note « aucune voix trouvee » resterait affichee alors que la
+      // nouvelle liste est pleine.
+      studioAppliquerMode();
+      studioLog("Moteur « " + _ttsSel.value + " » : " + n + " voix disponible(s).");
+    });
+  };
+
+  const _vomodeSel = $("#studio-vomode");
+  if (_vomodeSel) _vomodeSel.onchange = studioAppliquerMode;
+
+  if ($("#studio-voice-sample")) $("#studio-voice-sample").onclick = () => studioEcouteVoix(false);
+  if ($("#studio-voice-full")) $("#studio-voice-full").onclick = () => studioEcouteVoix(true);
 
   // Curseurs, couleurs et valeurs par défaut : câblés une seule fois, ici,
   // une fois le DOM complet.
