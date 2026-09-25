@@ -655,6 +655,19 @@ Related DOM traps on the same WebView:
   content, and `~/.workbuddy-ai/keys/` must stay out of the repo. Check the
   **staged** diff (`git diff --cached`), not the working tree: reviewing what
   will actually be published is the point.
+- **A versioned pre-commit hook now enforces the above.** Install it on any
+  fresh clone with **`python tools/install_hooks.py`**: `core.hooksPath` is
+  **local to each clone** and does not travel with the repository, so a hook
+  nobody installs is a wish, not a control. It checks the skill mirror, secrets
+  in the staged content, keystore files by name, tracked-but-ignored files,
+  skills swallowed by a `.gitignore` pattern, and the inline JS syntax when
+  `THEOLOGICUS.html` is staged. Override with `--no-verify` only to say why.
+- **A secret scanner written as source always matches its own patterns.**
+  Measured on the first run of `tools/githooks/pre-commit`: it refused the
+  commit because its own regexes were in the staged file. Two consequences to
+  design for from the start — exclude the scanner itself (and docs that *quote*
+  a pattern rather than store a key, e.g. `.md`/`.txt`), and keep the patterns
+  narrow enough that they match a **key**, not any string mentioning one.
 - Version = `git rev-list --count HEAD` (2.0.N). **Never announce a number before
   reading it from the API.**
 - Drive C: is full (99 %). CDP bench Chrome profiles live in `%TEMP%\theo-*` —

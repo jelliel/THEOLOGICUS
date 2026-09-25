@@ -18,17 +18,24 @@ premier incident de machine, et ne serait ni sauvegardé ni partageable.
 **La source de vérité reste `~/.workbuddy-ai/skills/`** — c'est de là que
 l'agent charge un skill. Ces copies sont un **miroir de sauvegarde**.
 
-Après avoir modifié un skill, recopier la version à jour :
+**Le contrôle est AUTOMATIQUE depuis le 2026-09-25** : `tools/githooks/pre-commit`
+vérifie le miroir à chaque `git commit` et **refuse** en cas de divergence. Il
+n'y a donc rien à penser à faire. Pour l'installer sur un clone neuf (ou une
+autre machine) :
 
 ```bash
-cd /c/Theologicus
-cp -r ~/.workbuddy-ai/skills/theologicus-*/ .workbuddy-ai/skills/
-git add .workbuddy-ai/skills/ && git commit -m "docs(skills): sync ..."
+python tools/install_hooks.py     # pose core.hooksPath, local à chaque clone
+```
+
+Pour synchroniser à la main, ou pour contrôler sans committer :
+
+```bash
+python tools/sync_skills.py             # copie et nomme les fichiers divergents
+python tools/sync_skills.py --verifier  # ne copie rien, sort en 1 si écart
 ```
 
 Un miroir qui diverge est pire que pas de miroir : il fait croire à une
-sauvegarde alors qu'il sert une version périmée. **Synchroniser dans le même
-geste que la modification.**
+sauvegarde alors qu'il sert une version périmée.
 
 ## Ce qui n'est PAS versionné, volontairement
 

@@ -15,6 +15,15 @@ signature `~/.workbuddy-ai/keys/` reste **hors dépôt** — les skills n'en cit
 que le **chemin**. `.gitignore` exempte `!.workbuddy-ai/skills/**` pour que les
 motifs `*secret*`/`_*.js` ne l'avalent pas en silence.
 
+**Le contrôle du miroir est AUTOMATIQUE** — `tools/githooks/pre-commit`
+(versionné) l'exige à **chaque `git commit`** et refuse en cas de divergence.
+Il vérifie aussi : secrets dans le contenu **indexé**, fichiers de clé par
+**nom**, aucun fichier **suivi** ignoré, aucun fichier de skill avalé par un
+motif, et la syntaxe JS du HTML **si** celui-ci est dans le commit.
+Sur un clone neuf : **`python tools/install_hooks.py`** (`core.hooksPath` est
+**local** à chaque clone, il ne voyage pas avec le dépôt). Contournement :
+`--no-verify`, en l'expliquant dans le message.
+
 ## Règles qui coûtent cher si violées
 
 - **`python tools/sync_html.py` après CHAQUE correctif** (4 copies). Non synchronisé
