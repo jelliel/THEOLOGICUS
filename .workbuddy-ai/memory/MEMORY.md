@@ -29,6 +29,11 @@ Journaux datés : `.workbuddy-ai/memory/AAAA-MM-JJ.md`. Bancs : `.workbuddy-ai/a
   stockages navigateur distincts**. Un port instable fait croire que la clé API et
   la config sont effacées. **Ne jamais réutiliser 8765-8780 pour un autre projet
   de cette machine** (le projet Théo, séparé, est en 8770-8772).
+- **Mais résoudre le port sans le sonder : `bind` d'abord, sonde seulement si
+  occupé** (`resoudre_port()`, v119). Sonder un port **libre** coûte le timeout
+  entier (~0,4 s) ; 16 ports × 2 requêtes = **10,7 s de démarrage** — la
+  régression v117, corrigée en v119. Mesure : `bind` = 0 ms, sonde sur port
+  occupé = ~20 ms.
 
 ## Application
 
