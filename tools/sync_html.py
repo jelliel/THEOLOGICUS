@@ -99,8 +99,15 @@ def main():
                 continue
             print("[!!] %-38s deployee mais PLUS ANCIENNE que la source" % cible)
             print("     -> le correctif n'est pas dans l'installation : on recopie")
-            # On retombe dans la copie ci-dessous (le tampon sera re-estampille
-            # par le prochain build ; ici la copie est de toute facon en avance).
+            # On retombe dans la copie ci-dessous. La copie ecrase un fichier
+            # ESTAMPILLE par un fichier NON estampille : c'est normal (on remet
+            # la source en place, le prochain build re-estampille) mais ce n'est
+            # PAS neutre — `dist` perd alors son numero de version, et
+            # `version.txt` continue d'annoncer une version que le HTML ne porte
+            # plus. On le dit, pour que personne ne cherche midi a quatorze
+            # heures devant un « STAMPED = '__THEO_VERSION__' » inattendu.
+            print("     (le tampon de version du HTML est ecrase : le prochain")
+            print("      build le remettra — ce n'est pas un defaut)")
             estampille = False
 
         if not estampille:
