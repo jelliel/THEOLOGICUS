@@ -1,0 +1,25 @@
+Confirm the spend before launching a paid video generation
+
+The six AI providers bill per second of produced video, and the amount is
+only known afterwards, on the provider's invoice. Nothing stopped a
+long generation from being launched by a single click.
+
+studioLaunch() now halts before sending when the selected source is in
+the "ia" group -- the group is read from the service catalogue, so a
+provider added upstream is covered without touching this code. The
+confirmation shows the provider, and the volume to be billed as
+videos x clips x seconds-per-clip = billed seconds.
+
+No price is displayed: neither the app nor the service knows the
+provider's rate at send time, so any figure would be invented. The
+calculation is shown instead, so it can be checked, and the text says the
+exact amount is only known afterwards.
+
+The confirmation appears only for paid sources. Asking for it on Pexels
+too would turn it into a reflex, and a confirmation read by reflex
+protects nothing on the day it matters.
+
+The bench intercepts /mpt/submit and /mpt/poll before clicking launch:
+without that, every run would start a real generation and be billed for
+it, and a test that costs money ends up removed. 121/121, no regression
+(v123 78/78, v122 71/71, v125 56/56, v120 57/57 + 14/14, v124 18/18).

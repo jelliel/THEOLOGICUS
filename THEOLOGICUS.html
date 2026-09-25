@@ -8016,6 +8016,34 @@ window.__ensureTafsirSurah = function(p){
         </div>
       </div>
 
+      <!-- ═══════════ CONFIRMATION DE DÉPENSE ═══════════════════════════
+           Les générateurs par IA FACTURENT à la seconde produite, et le
+           montant n'est connu qu'après coup, sur la facture du fournisseur.
+           Un simple bandeau ne suffit pas : il est lu une fois puis oublié.
+           On arrête donc le lancement et on montre CE QUI VA ÊTRE PAYÉ,
+           chiffré à partir des réglages réels du formulaire.
+
+           `hidden` et non un style en ligne : un `display:none` en ligne
+           gagnerait contre la feuille et ne se rallumerait plus (leçon v122).
+           Aucun champ n'a de `data-cle` : cette zone ne doit RIEN enregistrer,
+           sinon elle passerait dans la charge utile des réglages. -->
+      <div id="studio-depense" hidden>
+        <div class="section-title">💳 CONFIRMATION DE DÉPENSE</div>
+        <div class="info-block" style="border-left-color:var(--warning);margin-bottom:14px">
+          <strong>▸ Cette source facture chaque seconde produite</strong>
+          <div id="studio-depense-resume" style="margin-top:10px;font-family:var(--font-mono);font-size:12px;line-height:1.7"></div>
+          <div style="margin-top:10px;font-size:12px;line-height:1.6">
+            Le montant exact dépend du tarif du fournisseur au moment de l'envoi ;
+            il n'est connu qu'après coup. Pour une vidéo sans frais, choisissez
+            une banque de vidéos dans « Vidéo Source ».
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn-ghost" id="studio-depense-non">✕ ANNULER</button>
+          <button class="btn-primary" id="studio-depense-oui">💳 J'ACCEPTE — LANCER</button>
+        </div>
+      </div>
+
       <!-- PROGRESSION -->
       <div id="studio-progress" style="display:none">
         <div class="section-title">PRODUCTION EN COURS</div>
@@ -21691,6 +21719,74 @@ function bindEvents() {
     if (etape === "studio-form") { const p = $("#studio-progress"); if (p) p.style.display = "none"; }
   }
 
+  // Un générateur par IA facture à la seconde produite, et le montant réel
+  // n'apparaît que sur la facture du fournisseur — ni l'app ni le service ne
+  // le connaissent à l'avance. On ne peut donc pas afficher un prix, mais on
+  // peut afficher ce qui VA être produit, chiffré à partir des réglages
+  // réels : c'est la seule chose qui permette d'estimer la dépense.
+  function studioSourcePayante() {
+    const s = _STU("studio-source");
+    if (!s) return null;
+    const cur = _stuSourcesListe.filter(x => x.id === s.value)[0];
+    // Le groupe vient du SERVICE, pas d'une liste recopiée ici : un
+    // fournisseur facturé ajouté en amont sera reconnu sans retoucher ce code.
+    return (cur && cur.groupe === "ia") ? cur : null;
+  }
+
+  function studioDepenseEstimee() {
+    const videos = _sn("studio-count") || 1;
+    const paragraphes = _sn("studio-paragraphs") || 1;
+    const plan = _sn("studio-clip") || 3;
+    return { videos, paragraphes, plan, secondes: videos * paragraphes * plan };
+  }
+
+  function studioConfirmerDepense(src) {
+    return new Promise(resolve => {
+      const zone = _STU("studio-depense");
+      const resume = _STU("studio-depense-resume");
+      const oui = _STU("studio-depense-oui");
+      const non = _STU("studio-depense-non");
+      // Sans la zone (HTML absent ou modifié), on NE BLOQUE PAS : mieux vaut
+      // laisser lancer que figer le studio sur une erreur d'affichage.
+      if (!zone || !oui || !non) { resolve(true); return; }
+      const e = studioDepenseEstimee();
+      if (resume) {
+        resume.innerHTML = "";
+        const lignes = [
+          "Fournisseur : " + (src.label || src.id),
+          "Vidéo(s) à produire : " + e.videos,
+          "Plans par vidéo : " + e.paragraphes + " — durée d'un plan : " + e.plan + " s",
+          // Le calcul est MONTRÉ, pas seulement son résultat : un total sans
+          // formule ne permet pas de vérifier, et on ne peut pas afficher un
+          // prix qu'aucun des deux services ne connaît à l'avance.
+          "Secondes facturées : " + e.videos + " × " + e.paragraphes + " × " + e.plan
+            + " = " + e.secondes + " s (soit "
+            + (e.secondes / 60).toFixed(1).replace(".", ",") + " min)",
+        ];
+        lignes.forEach(t => {
+          const d = document.createElement("div");
+          d.textContent = "▸ " + t;
+          resume.appendChild(d);
+        });
+      }
+      if (oui) oui.textContent = "💳 J'ACCEPTE — " + e.secondes + " s FACTURÉES";
+      // On montre la confirmation COMME une étape : `studioShow` éteint les
+      // trois vues (formulaire, progression, résultat) ; sans cela le
+      // formulaire resterait derrière et le bouton ANNULER serait ambigu.
+      studioShow("studio-depense");
+      zone.hidden = false;
+      const finir = (valeur) => {
+        oui.onclick = null;
+        non.onclick = null;
+        zone.hidden = true;
+        studioShow("studio-form");
+        resolve(valeur);
+      };
+      oui.onclick = () => finir(true);
+      non.onclick = () => finir(false);
+    });
+  }
+
   async function studioLaunch() {
     const sujet = $("#studio-subject") ? $("#studio-subject").value.trim() : "";
     if (!sujet) { studioLog("Le sujet est obligatoire."); alert("Indiquez un sujet pour la vidéo."); return; }
@@ -21702,6 +21798,20 @@ function bindEvents() {
       const st2 = await studioRefreshStatus(true);
       if (!st2 || !st2.running) return;
       studioChargerListes();
+    }
+
+    // Arrêt AVANT l'envoi quand la source facture. Placé ici et pas plus haut :
+    // inutile de demander confirmation si le service est absent ou le sujet
+    // vide, ce qui évite un aller-retour décourageant.
+    const payante = studioSourcePayante();
+    if (payante) {
+      const daccord = await studioConfirmerDepense(payante);
+      if (!daccord) {
+        studioLog("Lancement annulé : source payante « " + (payante.label || payante.id)
+          + " » non confirmée.");
+        return;
+      }
+      studioLog("Dépense acceptée pour « " + (payante.label || payante.id) + " ».");
     }
 
     studioShow("studio-progress");

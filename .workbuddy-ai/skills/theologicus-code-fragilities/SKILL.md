@@ -806,3 +806,35 @@ appel**, jamais l'un dynamiquement et l'autre en dur. Le banc doit comparer les
 **deux listes** (`menuGen.ids.join() === menuIds.join()`), pas seulement
 vérifier que le premier est complet. Et « la valeur se pose-t-elle ? » se
 mesure : affecter une valeur et relire `select.value`.
+
+### Un banc qui déclenche l'action réelle peut coûter de l'argent (v126)
+
+Le banc de la confirmation de dépense clique sur « GÉNÉRER LA VIDÉO ». Sans
+précaution, **chaque exécution lancerait une génération facturée** pour de bon
+chez le fournisseur. On coupe le réseau avant de cliquer :
+
+```js
+await page.route("**/mpt/submit*", r => r.fulfill({ status: 200,
+  contentType: "application/json",
+  body: JSON.stringify({ ok: true, data: { task_id: "banc-fausse-tache" } }) }));
+```
+
+Règle générale : un banc qui exerce un bouton **irréversible ou payant** doit
+intercepter l'appel sortant. Un test qui coûte de l'argent finit par être
+retiré — donc par ne plus rien protéger.
+
+### Un prix inconnu ne s'affiche pas : on montre le calcul
+
+Ni l'app ni le service ne connaissent le tarif du fournisseur au moment de
+l'envoi. Afficher un montant serait **inventer**. On affiche donc les
+**grandeurs** (vidéos × plans × durée) et la **formule**, que l'utilisateur
+peut vérifier, et on dit que le montant exact n'est connu qu'après coup.
+Un total sans formule ne se vérifie pas et inspire une confiance qu'on n'a pas.
+
+### Demander confirmation seulement quand il y a quelque chose à perdre
+
+La confirmation de dépense ne s'affiche **que** si la source est dans le groupe
+`ia`. La réclamer aussi pour Pexels la rendrait routine, et une confirmation
+lus par réflexe ne protège plus rien le jour où elle compte. Le banc vérifie
+les **deux** sens : elle apparaît pour une source payante, elle n'apparaît
+**pas** pour une gratuite.

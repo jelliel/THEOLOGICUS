@@ -379,8 +379,78 @@ async function assurerRelais() {
   const nbCles = Object.keys(collecte).length;
   ok("tous les réglages sont collectés (pas seulement une partie)", nbCles >= 15, nbCles);
 
-  // ── 6. Aucune erreur JavaScript ─────────────────────────────────────
-  section("6. Propreté");
+  // ── 6. La dépense est confirmée avant l'envoi ───────────────────────
+  section("6. Confirmation de dépense (source payante)");
+  // On intercepte l'envoi : ce banc ne doit JAMAIS déclencher une vraie
+  // génération, qui serait facturée pour de bon. Sans cette coupure, le test
+  // coûterait de l'argent à chaque exécution.
+  await page.route("**/mpt/submit*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ok: true, data: { task_id: "banc-v126-fausse-tache" } }),
+  }));
+  await page.route("**/mpt/poll*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ok: true, data: { state: 1, progress: 0, videos: [] } }),
+  }));
+
+  await page.click('#studio-tabs .settings-tab[data-onglet="generation"]');
+  await page.waitForTimeout(400);
+  await page.fill("#studio-subject", "sujet de banc");
+  await page.selectOption("#studio-source", "metaso_minimax");
+
+  await page.click("#studio-launch");
+  // Condition, pas délai : la confirmation n'apparaît qu'après le contrôle du
+  // service, qui est un aller-retour réseau.
+  let confirmation = true;
+  try {
+    await page.waitForFunction(
+      () => { const z = document.getElementById("studio-depense"); return z && !z.hidden; },
+      { timeout: 20000 });
+  } catch (e) { confirmation = false; }
+  ok("une source payante arrête le lancement et demande confirmation", confirmation);
+
+  const depense = await page.evaluate(() => {
+    const z = document.getElementById("studio-depense");
+    return {
+      visible: z ? !z.hidden : false,
+      resume: (document.getElementById("studio-depense-resume") || {}).textContent || "",
+      bouton: (document.getElementById("studio-depense-oui") || {}).textContent || "",
+    };
+  });
+  ok("la confirmation nomme le fournisseur",
+    /Metaso/i.test(depense.resume), depense.resume.slice(0, 80));
+  ok("la confirmation chiffre les secondes qui seront facturées",
+    /Secondes facturées\s*:\s*\d+/.test(depense.resume), depense.resume.slice(0, 140));
+  // Le calcul doit être VISIBLE : un total sans formule ne se vérifie pas, et
+  // l'app ne peut pas afficher un prix qu'aucun des deux services ne connaît.
+  ok("le calcul est montré, pas seulement son résultat",
+    /\d+\s*×\s*\d+\s*×\s*\d+\s*=\s*\d+/.test(depense.resume), depense.resume.slice(0, 140));
+  ok("le bouton d'acceptation porte le volume facturé",
+    /\d+\s*s\s*FACTURÉES/.test(depense.bouton), depense.bouton);
+
+  // ANNULER doit rendre la main, sans rien envoyer.
+  await page.click("#studio-depense-non");
+  const apresAnnulation = await page.evaluate(() => {
+    const z = document.getElementById("studio-depense");
+    const f = document.getElementById("studio-form");
+    return { depenseCachee: z ? z.hidden : true, formulaireVisible: f ? f.style.display !== "none" : false };
+  });
+  ok("ANNULER referme la confirmation", apresAnnulation.depenseCachee);
+  ok("ANNULER rend le formulaire", apresAnnulation.formulaireVisible);
+
+  // Une source GRATUITE ne doit rien demander : confirmer là où il n'y a rien
+  // à payer rendrait la confirmation moins lue le jour où elle compte.
+  await page.selectOption("#studio-source", "pexels");
+  await page.click("#studio-launch");
+  await page.waitForTimeout(2500);
+  const gratuit = await page.evaluate(() => {
+    const z = document.getElementById("studio-depense");
+    return { visible: z ? !z.hidden : false };
+  });
+  ok("une source gratuite ne demande AUCUNE confirmation", !gratuit.visible);
+
+  // ── 7. Aucune erreur JavaScript ─────────────────────────────────────
+  section("7. Propreté");
   ok("aucune erreur JavaScript", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
 
   await browser.close();
