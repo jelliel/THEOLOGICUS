@@ -61,6 +61,33 @@ clés dans `state.keys[<id>]`. L'UI des réglages est **pilotée par les donnée
 - Banc `_v118/verify_agnes.js` 29/29. **Piège de banc** : un faux DOM qui stocke
   `innerHTML` sans le **parser** fait échouer un test alors que le code est correct.
 
+## Services voisins (jamais embarqués)
+
+Motif unique, réutilisé trois fois : **le service tourne à côté, THEOLOGICUS s'y
+connecte par `proxy_server.py`**. `Supertonic` (8091), `LibreTranslate`,
+**`MoneyPrinterTurbo` = STUDIO VIDÉO (v120)**.
+
+- **Toujours passer par le relais, jamais appeler le service en direct** : la page
+  est servie en `127.0.0.1:8765`, donc tout autre port est **cross-origin**.
+- **Sonder en LECTURE SEULE et prouver l'IDENTITÉ, pas la présence.** « Le port
+  répond » ne prouve rien (MPT : `GET /ping` doit rendre `pong`).
+- **`http_proxy` est défini dans l'environnement et urllib l'honore AUSSI pour
+  `127.0.0.1`** → le proxy rend **502 Bad Gateway**, ce qui *ressemble* à « le
+  service a répondu 502 » alors qu'il n'a **rien reçu**. Utiliser
+  `build_opener(ProxyHandler({}))` ; l'**absence** de `ProxyHandler` dans
+  `opener.handlers` est la preuve. Piège coûteux : il a produit un **faux
+  diagnostic** (« service absent » alors qu'il tournait).
+- **FastAPI `-> str` rend `"pong"` AVEC guillemets** : accepter les deux formes.
+- **Sonder aussi la plage du WebUI** (MPT : 8080 API **et** 8501-8509, le
+  Streamlit de `start.bat`), **journaliser le port retenu**, et **vider le cache
+  si le port meurt** (sinon l'UI promet un studio qui échoue à chaque envoi).
+- **Formulaires de service : `%LOCALAPPDATA%/THEOLOGICUS/`**, comme les clés et la
+  config TTS (`theologicus_studio.json`). Jamais dans le dossier d'installation.
+- **Banc : s'isoler du vrai service.** Si MPT tourne sur la machine, 8080 répond
+  pour de bon et toutes les assertions « service absent » échouent **à tort** →
+  travailler sur des **ports privés au banc**, et **arrêter le faux service** avant
+  de tester les refus de démarrage.
+
 ## TTS — invariant unique
 
 Chaîne `cleanMd` → … → `chunkText(180)` → file `speakNextSegment`, **sortie unique
