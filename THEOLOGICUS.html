@@ -19675,7 +19675,7 @@ function bindEvents() {
   }
 
   function studioLog(msg) {
-    const box = $("studio-log"), body = $("studio-log-body");
+    const box = $("#studio-log"), body = $("#studio-log-body");
     if (!box || !body) return;
     box.style.display = "block";
     const h = new Date().toLocaleTimeString();
@@ -19684,7 +19684,7 @@ function bindEvents() {
   }
 
   async function studioRefreshStatus() {
-    const box = $("studio-status"), form = $("studio-form");
+    const box = $("#studio-status"), form = $("#studio-form");
     if (!box) return null;
     box.innerHTML = '<strong>⏳ Détection du service…</strong>';
     const st = await studioStatus();
@@ -19702,8 +19702,8 @@ function bindEvents() {
           <button class="btn-ghost" id="studio-redetect">↻ RE-DÉTECTER</button>
           <button class="btn-ghost" id="studio-start">▶ LANCER LE SERVICE</button>
         </div>`;
-      if ($("studio-redetect")) $("studio-redetect").onclick = studioRefreshStatus;
-      if ($("studio-start")) $("studio-start").onclick = studioStartService;
+      if ($("#studio-redetect")) $("#studio-redetect").onclick = studioRefreshStatus;
+      if ($("#studio-start")) $("#studio-start").onclick = studioStartService;
     }
     return st;
   }
@@ -19741,7 +19741,7 @@ function bindEvents() {
       voice_rate: n("studio-rate") || 1.0,
       voice_volume: n("studio-volume") || 1.0,
       bgm_type: v("studio-bgm"),
-      subtitle_enabled: $("studio-subtitles") ? $("studio-subtitles").checked : true,
+      subtitle_enabled: $("#studio-subtitles") ? $("#studio-subtitles").checked : true,
       subtitle_position: v("studio-subpos"),
       font_size: n("studio-fontsize") || 60,
       text_fore_color: v("studio-color"),
@@ -19765,7 +19765,7 @@ function bindEvents() {
       });
       const j = await r.json();
       studioLog(j.ok ? "Réglages enregistrés." : "Échec de l'enregistrement.");
-      const b = $("studio-save");
+      const b = $("#studio-save");
       if (b && j.ok) { const t = b.textContent; b.textContent = "✓ ENREGISTRÉ"; setTimeout(() => b.textContent = t, 1500); }
     } catch (e) { studioLog("Enregistrement impossible : " + e); }
   }
@@ -19792,7 +19792,7 @@ function bindEvents() {
       set("studio-fontsize", c.font_size);
       set("studio-color", c.text_fore_color);
       set("studio-stroke", c.stroke_color);
-      if ($("studio-subtitles") && c.subtitle_enabled !== undefined) $("studio-subtitles").checked = !!c.subtitle_enabled;
+      if ($("#studio-subtitles") && c.subtitle_enabled !== undefined) $("#studio-subtitles").checked = !!c.subtitle_enabled;
     } catch (e) { /* pas de config enregistrée : valeurs par défaut du HTML */ }
   }
 
@@ -19801,19 +19801,19 @@ function bindEvents() {
       const el = $(id); if (!el) return;
       el.style.display = (id === etape) ? "block" : "none";
     });
-    if (etape === "studio-form") { const p = $("studio-progress"); if (p) p.style.display = "none"; }
+    if (etape === "studio-form") { const p = $("#studio-progress"); if (p) p.style.display = "none"; }
   }
 
   async function studioLaunch() {
-    const sujet = $("studio-subject") ? $("studio-subject").value.trim() : "";
+    const sujet = $("#studio-subject") ? $("#studio-subject").value.trim() : "";
     if (!sujet) { studioLog("Le sujet est obligatoire."); alert("Indiquez un sujet pour la vidéo."); return; }
     const st = await studioStatus();
     if (!st.running) { studioRefreshStatus(); return; }
 
     studioShow("studio-progress");
     _studio.duree = 0;
-    $("studio-progress-label").textContent = "Envoi de la demande…";
-    $("studio-progress-bar").style.width = "5%";
+    $("#studio-progress-label").textContent = "Envoi de la demande…";
+    $("#studio-progress-bar").style.width = "5%";
     studioLog("Sujet : " + sujet);
     studioLog("Envoi à /mpt/submit…");
 
@@ -19826,18 +19826,18 @@ function bindEvents() {
       j = await r.json();
     } catch (e) {
       studioLog("Échec de l'envoi : " + e);
-      $("studio-progress-label").textContent = "Échec de l'envoi.";
+      $("#studio-progress-label").textContent = "Échec de l'envoi.";
       return;
     }
     if (!j || !j.data || !j.data.task_id) {
       studioLog("Réponse inattendue : " + JSON.stringify(j).slice(0, 400));
-      $("studio-progress-label").textContent = "Le service a refusé la demande — voir le journal ci-dessous.";
+      $("#studio-progress-label").textContent = "Le service a refusé la demande — voir le journal ci-dessous.";
       return;
     }
     _studio.taskId = j.data.task_id;
     studioLog("Tâche créée : " + _studio.taskId);
-    $("studio-progress-label").textContent = "Tâche acceptée. Production en cours…";
-    $("studio-progress-bar").style.width = "10%";
+    $("#studio-progress-label").textContent = "Tâche acceptée. Production en cours…";
+    $("#studio-progress-bar").style.width = "10%";
     studioPoll();
   }
 
@@ -19853,7 +19853,7 @@ function bindEvents() {
       // 30 min on cesse de sonder et on laisse l'utilisateur consulter MPT.
       if (_studio.duree > 1800) {
         studioStopPolling();
-        $("studio-progress-label").textContent = "Délai dépassé (30 min). Le service poursuit peut-être — consultez son interface.";
+        $("#studio-progress-label").textContent = "Délai dépassé (30 min). Le service poursuit peut-être — consultez son interface.";
         return;
       }
       let j;
@@ -19869,10 +19869,10 @@ function bindEvents() {
       if (!d) return;
       const etat = d.state;
       const pct = d.progress || 0;
-      $("studio-progress-bar").style.width = Math.max(10, pct) + "%";
+      $("#studio-progress-bar").style.width = Math.max(10, pct) + "%";
 
       if (etat === 1 || etat === "1") {
-        $("studio-progress-label").textContent = `Production en cours… ${pct}% (${_studio.duree}s)`;
+        $("#studio-progress-label").textContent = `Production en cours… ${pct}% (${_studio.duree}s)`;
       } else if (etat === -1 || etat === "-1") {
         studioStopPolling();
         // Le service nomme l'étape fautive (script | audio | subtitle |
@@ -19881,9 +19881,9 @@ function bindEvents() {
         // l'interface de MPT pour comprendre, alors que la cause est ici.
         const etape = d.failed_stage ? ` (étape : ${d.failed_stage})` : "";
         const cause = d.error || "raison non fournie";
-        $("studio-progress-label").textContent = "Échec de la production" + etape + ".";
+        $("#studio-progress-label").textContent = "Échec de la production" + etape + ".";
         studioLog("ÉCHEC" + etape + " : " + cause);
-        const hint = $("studio-progress-hint");
+        const hint = $("#studio-progress-hint");
         if (hint) {
           hint.innerHTML = "<strong style='color:var(--danger)'>Cause :</strong> " + cause +
             "<br>Une clé LLM est requise pour écrire le script (et une clé de rushes pour les images). " +
@@ -19893,8 +19893,8 @@ function bindEvents() {
         // La vidéo est prête. On ne rafraîchit PAS tout de suite : MPT
         // termine l'écriture du fichier juste après avoir marqué l'état.
         studioStopPolling();
-        $("studio-progress-label").textContent = "Vidéo prête !";
-        $("studio-progress-bar").style.width = "100%";
+        $("#studio-progress-label").textContent = "Vidéo prête !";
+        $("#studio-progress-bar").style.width = "100%";
         studioLog("Production terminée.");
         setTimeout(studioShowResult, 900);
       }
@@ -19919,16 +19919,16 @@ function bindEvents() {
       const m = String(uri).match(/\/tasks\/(.+)$/);
       const rel = m ? m[1] : String(uri).split("/").pop();
       const src = "/mpt/download/" + rel;
-      const v = $("studio-video");
+      const v = $("#studio-video");
       if (v) { v.src = src; v.load(); }
-      const a = $("studio-download");
+      const a = $("#studio-download");
       if (a) { a.href = src; a.setAttribute("download", rel.split("/").pop() || "video.mp4"); }
       studioLog("Vidéo : " + src);
     }).catch(e => studioLog("Récupération du résultat impossible : " + e));
   }
 
   function studioOpen() {
-    const m = $("studio-modal");
+    const m = $("#studio-modal");
     if (m) m.classList.add("active");
     studioLoadConfig();
     studioRefreshStatus();
