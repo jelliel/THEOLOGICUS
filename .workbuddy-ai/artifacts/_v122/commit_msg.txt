@@ -1,0 +1,33 @@
+feat(settings): five-tab PARAMETRES modal with a working AI Model tab
+
+The PARAMETRES modal showed every block stacked in a single column. It now
+opens on a tab bar with five panels: AI Model, Providers, Voice reading,
+Backup and Cache.
+
+The new "AI Model" panel is the MoneyPrinterTurbo "LLM Settings" tab
+reproduced in-app and made functional:
+
+  - provider selector filled from PROVIDERS, with a live description of the
+    selected provider (endpoint, key, format);
+  - service zone selector for providers that expose more than one endpoint
+    (Kimi API Platform);
+  - API key (password field), Base URL, Model name with a datalist of the
+    provider's models;
+  - "Test connection" button that performs a real request through
+    resolveModelConfig() -- the app's own call path (endpoint, key, format)
+    -- and reports the HTTP status, the error body and the elapsed time;
+  - "Reset" and "Apply and activate" buttons writing back to state.model,
+    the settings store, both model selectors and the on-disk config.
+
+Caching is done with the `hidden` attribute rather than an inline
+display:none, so JS can actually re-show a panel; a leftover inline style
+silently won every time. The selected tab is persisted in localStorage and
+exposed as window.__settingsOuvrirOnglet() so menu actions can jump straight
+to a tab ('param-models' now opens Providers).
+
+Two functions with two responsibilities were split apart: settingsModelSync()
+(state -> UI) and _setLlmDecrireFournisseur() (UI -> description). Calling
+the former from the provider onchange reverted the user's own selection.
+
+Checks: verify_settings.js 71/71, verify_studio.js 14/14,
+verify_studio_v121.js 55/55. sync_html.py: 3 copies updated.

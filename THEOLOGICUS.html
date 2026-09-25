@@ -3832,6 +3832,60 @@ details.studio-adv > summary::before { content: "▸ "; }
 details.studio-adv[open] > summary::before { content: "▾ "; }
 details.studio-adv[open] > summary { margin-bottom: 10px; }
 
+/* ═══ PARAMÈTRES — BARRE D'ONGLETS ═══
+   Le modal PARAMÈTRES portait un défilement unique de plusieurs écrans. On y
+   découpe maintenant cinq ensembles, comme le dialogue de réglages de
+   MoneyPrinterTurbo. Le trait actif est porté par une CLASSE (`.active`), pas
+   par un style en ligne : c'est ce que le banc peut vérifier après le geste,
+   et cela évite qu'un `display` en ligne gagne contre la feuille.
+   Le panneau, lui, se cache par l'attribut `hidden` (voir plus bas) : la
+   spécificité de `[hidden]` est faible, d'où la règle explicite. */
+.settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--grid, rgba(255,255,255,0.08));
+  background: rgba(0,0,0,0.18);
+}
+.settings-tab {
+  position: relative;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 11px 12px 9px;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+.settings-tab:hover { color: var(--text-bright); }
+.settings-tab.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+  text-shadow: 0 0 12px var(--cyan-dim);
+}
+.settings-tab:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: -2px;
+}
+.settings-panneau[hidden] { display: none; }
+.settings-panneau {
+  animation: settingsFondu 0.18s ease-out;
+}
+@keyframes settingsFondu {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-panneau { animation: none; }
+}
+
 .info-block {
   background: var(--hull);
   border: var(--border);
@@ -8199,17 +8253,93 @@ window.__ensureTafsirSurah = function(p){
       <div class="modal-title">⚙ PARAMÈTRES</div>
       <button class="modal-close" id="close-settings-modal">✕</button>
     </div>
+
+    <!-- ═══ BARRE D'ONGLETS ═══
+         Reprend la disposition de l'interface MoneyPrinterTurbo : une ligne
+         d'onglets qui découpe des réglages nombreux en ensembles lisibles.
+         Sans elle, le modal devient un défilement unique où l'on ne retrouve
+         rien. Chaque onglet est un bouton : le clavier les atteint, et l'état
+         actif est porté par une classe (donc testable après le geste). -->
+    <div class="settings-tabs" role="tablist" id="settings-tabs">
+      <button class="settings-tab active" role="tab" data-onglet="model" id="settings-tab-model">🧠 Modèle IA</button>
+      <button class="settings-tab" role="tab" data-onglet="providers" id="settings-tab-providers">🔑 Fournisseurs</button>
+      <button class="settings-tab" role="tab" data-onglet="tts" id="settings-tab-tts">🔊 Lecture vocale</button>
+      <button class="settings-tab" role="tab" data-onglet="keys" id="settings-tab-keys">💾 Sauvegarde</button>
+      <button class="settings-tab" role="tab" data-onglet="cache" id="settings-tab-cache">🧹 Cache</button>
+    </div>
     <div class="modal-body">
 
-      <div class="info-block">
-        <strong>▸ Modèles personnalisés</strong><br>
-        Ajoutez vos propres modèles (OpenAI, Mistral, Ollama, vLLM, endpoints compatibles…) avec leur Base URL et leur clé API. Stocké 100% localement, jamais envoyé à un tiers.
+      <!-- ═══ ONGLET 1 — MODÈLE IA ═══
+           Équivalent de « LLM Settings » de MoneyPrinterTurbo : choisir le
+           fournisseur, sa zone de service, la clé, l'URL de base et le nom du
+           modèle, puis VÉRIFIER la connexion avant de s'en servir. Le bouton
+           de vérification est le cœur de l'onglet : sans lui, une clé fausse
+           ne se découvre qu'au premier envoi, avec un message qui accuse le
+           réseau. -->
+      <div class="settings-panneau" id="settings-panneau-model" data-panneau="model">
+
+        <div class="field-group">
+          <label class="field-label">🧠 Fournisseur du modèle <span class="studio-help" title="Le service utilisé pour écrire les réponses. « Mistral » est le fournisseur historique ; tous les autres passent par la même passerelle.">?</span></label>
+          <select class="field-input field-select" id="set-llm-provider"></select>
+          <div class="field-hint" id="set-llm-provider-hint">▸ Le modèle actif et la clé utilisée en découlent.</div>
+        </div>
+
+        <div class="field-group" id="set-llm-endpoint-bloc">
+          <label class="field-label">🌍 Zone de service <span class="studio-help" title="Certains fournisseurs exposent deux points d'entrée régionaux, avec des URL et des tarifs différents. La zone choisie détermine l'URL de base proposée.">?</span></label>
+          <select class="field-input field-select" id="set-llm-endpoint"></select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔑 Clé API</label>
+          <input type="password" class="field-input" id="set-llm-key" placeholder="Collez la clé du fournisseur…" autocomplete="off">
+          <div class="field-hint" id="set-llm-key-hint">Stockée localement, jamais envoyée ailleurs qu'au fournisseur lui-même.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🌐 URL de base <span class="studio-help" title="Laissez telle quelle, sauf si vous passez par un relais ou un serveur local. Le champ vide applique la valeur par défaut du fournisseur.">?</span></label>
+          <input type="text" class="field-input" id="set-llm-base" placeholder="(valeur du fournisseur)">
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔤 Nom du modèle <span class="studio-help" title="L'identifiant exact attendu par le fournisseur. Le champ vide applique le modèle par défaut.">?</span></label>
+          <input type="text" class="field-input" id="set-llm-model" placeholder="(modèle du fournisseur)" list="set-llm-model-list">
+          <datalist id="set-llm-model-list"></datalist>
+          <div class="field-hint" id="set-llm-model-hint"></div>
+        </div>
+
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn-ghost" id="set-llm-reset">↻ Valeurs du fournisseur</button>
+          <button class="btn-ghost" id="set-llm-test">🛰 Tester la connexion</button>
+          <button class="btn-primary" id="set-llm-apply">💾 Appliquer et activer</button>
+        </div>
+
+        <div id="set-llm-verdict" class="info-block" style="display:none"></div>
+
+        <div class="info-block" style="border-left-color:var(--neon);margin-top:16px">
+          <strong id="set-llm-aide-titre">▸ À propos de ce fournisseur</strong>
+          <div id="set-llm-aide" style="margin-top:6px"></div>
+        </div>
       </div>
 
-      <div class="section-title">🔑 FOURNISSEURS (CLÉS API)</div>
-      <div id="providers-list"></div>
+      <!-- ═══ ONGLET 2 — FOURNISSEURS ═══ -->
+      <div class="settings-panneau" id="settings-panneau-providers" data-panneau="providers" hidden>
 
-      <div class="section-title">🔊 LECTURE VOCALE (TTS)</div>
+        <div class="info-block">
+          <strong>▸ Modèles personnalisés</strong><br>
+          Ajoutez vos propres modèles (OpenAI, Mistral, Ollama, vLLM, endpoints compatibles…) avec leur Base URL et leur clé API. Stocké 100% localement, jamais envoyé à un tiers.
+        </div>
+
+        <div class="section-title">🔑 FOURNISSEURS (CLÉS API)</div>
+        <div id="providers-list"></div>
+
+        <div class="section-title">🧩 MODÈLES PERSONNALISÉS</div>
+        <div id="settings-tab-providers-custom"></div>
+      </div>
+
+      <!-- ═══ ONGLET 3 — LECTURE VOCALE ═══ -->
+      <div class="settings-panneau" id="settings-panneau-tts" data-panneau="tts" hidden>
+      <div id="settings-tab-tts-corps">
+        <div class="section-title">🔊 LECTURE VOCALE (TTS)</div>
       <div class="field-group">
         <label class="field-label">Moteur de lecture</label>
         <select class="field-input field-select" id="tts-engine-select">
@@ -8281,39 +8411,14 @@ window.__ensureTafsirSurah = function(p){
         </label>
         <div class="field-hint" id="tts-st-hint">Supertonic 3 tourne en local : 31 langues dont le français, le grec et l'arabe. Le modèle déjà présent dans ~/.cache/supertonic3 est réutilisé, rien n'est retéléchargé.</div>
         <pre id="tts-st-journal" style="display:none;margin-top:8px;max-height:180px;overflow:auto;font-size:10px;line-height:1.35;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:8px;white-space:pre-wrap"></pre>
-      </div>
+      </div><!-- /#tts-st-block -->
+      </div><!-- /#settings-tab-tts-corps -->
+      </div><!-- /#settings-panneau-tts -->
 
-      <div class="section-title">🌐 TRADUCTION LOCALE (LIBRETRANSLATE)</div>
-      <div class="field-group" id="lt-ctrl">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span id="lt-dot" style="width:10px;height:10px;border-radius:50%;background:#666;flex:none;box-shadow:0 0 8px rgba(0,0,0,.4);"></span>
-          <span id="lt-state" style="font-size:12px;font-weight:700;">Vérification…</span>
-          <span style="flex:1;"></span>
-          <button class="btn-primary" id="lt-toggle" style="min-width:130px;min-height:34px;font-size:12px;">…</button>
-        </div>
-        <div id="lt-sub" class="field-hint" style="margin-top:6px;">Le serveur de traduction tourne sur ce PC et reste joignable par l'APK sur le Wi-Fi (bouton 🌐 de la bulle).</div>
-        <div id="lt-err" style="display:none;margin-top:6px;font-size:11px;color:#ff8a8a;"></div>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-          <button class="btn-ghost" id="lt-install-btn" style="display:none;min-height:30px;font-size:11px;">⬇️ Installer LibreTranslate</button>
-          <button class="btn-ghost" id="lt-log-btn" style="display:none;min-height:30px;font-size:11px;">📄 Voir le journal</button>
-        </div>
-      </div>
-
-      <div class="section-title">🔐 ACCÈS AU LANCEMENT</div>
-      <div class="field-group">
-        <div id="remember-state" class="field-hint">…</div>
-        <button class="btn-ghost" id="forget-remember-btn"
-                style="min-height:30px;font-size:11px;margin-top:8px;">
-          🔓 Oublier l'accès mémorisé
-        </button>
-        <div class="field-hint" style="margin-top:6px;">
-          « Se souvenir de moi » coché à la connexion admin ouvre l'app
-          directement pendant 7 jours. Ce bouton rétablit immédiatement le
-          verrouillage (quiz + mot de passe) au prochain lancement.
-        </div>
-      </div>
-
-      <div class="section-title">🔎 VÉRIFICATION DES RÉFÉRENCES (2.0)</div>
+      <!-- ═══ ONGLET 4 — SAUVEGARDE ═══ -->
+      <div class="settings-panneau" id="settings-panneau-keys" data-panneau="keys" hidden>
+      <div id="settings-tab-keys-corps">
+        <div class="section-title">🔎 VÉRIFICATION DES RÉFÉRENCES (2.0)</div>
       <div class="field-group">
         <label class="field-label">Mode de vérification des citations</label>
         <select class="field-input field-select" id="verify-mode-select">
@@ -8400,9 +8505,50 @@ window.__ensureTafsirSurah = function(p){
       <div class="btn-row" style="border-top:none;margin-top:0;padding-top:0">
         <button class="btn-ghost" id="close-settings-modal-2">Fermer</button>
       </div>
-    </div>
-  </div>
-</div>
+
+      <!-- Accès au lancement : ce bloc vivait hors de tout panneau (donc
+           toujours monté mais jamais rattaché) depuis le découpage. Il relève
+           de la Sauvegarde — c'est un réglage d'accès persistant, au même titre
+           que les clés et les profils. -->
+      <div class="section-title">🔐 ACCÈS AU LANCEMENT</div>
+      <div class="field-group">
+        <div id="remember-state" class="field-hint">…</div>
+        <button class="btn-ghost" id="forget-remember-btn"
+                style="min-height:30px;font-size:11px;margin-top:8px;">
+          🔓 Oublier l'accès mémorisé
+        </button>
+        <div class="field-hint" style="margin-top:6px;">
+          « Se souvenir de moi » coché à la connexion admin ouvre l'app
+          directement pendant 7 jours. Ce bouton rétablit immédiatement le
+          verrouillage (quiz + mot de passe) au prochain lancement.
+        </div>
+      </div>
+      </div><!-- /#settings-tab-keys-corps -->
+      </div><!-- /#settings-panneau-keys -->
+
+      <!-- ═══ ONGLET 5 — CACHE ═══ -->
+      <div class="settings-panneau" id="settings-panneau-cache" data-panneau="cache" hidden>
+      <div id="settings-tab-cache-corps">
+        <div class="section-title">🌐 TRADUCTION LOCALE (LIBRETRANSLATE)</div>
+      <div class="field-group" id="lt-ctrl">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span id="lt-dot" style="width:10px;height:10px;border-radius:50%;background:#666;flex:none;box-shadow:0 0 8px rgba(0,0,0,.4);"></span>
+          <span id="lt-state" style="font-size:12px;font-weight:700;">Vérification…</span>
+          <span style="flex:1;"></span>
+          <button class="btn-primary" id="lt-toggle" style="min-width:130px;min-height:34px;font-size:12px;">…</button>
+        </div>
+        <div id="lt-sub" class="field-hint" style="margin-top:6px;">Le serveur de traduction tourne sur ce PC et reste joignable par l'APK sur le Wi-Fi (bouton 🌐 de la bulle).</div>
+        <div id="lt-err" style="display:none;margin-top:6px;font-size:11px;color:#ff8a8a;"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+          <button class="btn-ghost" id="lt-install-btn" style="display:none;min-height:30px;font-size:11px;">⬇️ Installer LibreTranslate</button>
+          <button class="btn-ghost" id="lt-log-btn" style="display:none;min-height:30px;font-size:11px;">📄 Voir le journal</button>
+        </div>
+      </div>
+      </div><!-- /#settings-tab-cache-corps -->
+      </div><!-- /#settings-panneau-cache -->
+    </div><!-- /.modal-body -->
+  </div><!-- /.modal-box -->
+</div><!-- /#settings-modal -->
 
 <div id="toast-container"></div>
 
@@ -11145,7 +11291,17 @@ function initSettingsModal() {
   }
   const modal = $("#settings-modal");
   if (!modal) return;
-  const open = () => { renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); syncVerifyModeSelect(); if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active"); };
+  const open = () => {
+    renderProvidersList(); renderCustomModelsList(); syncReadLangSelect(); syncVerifyModeSelect();
+    if (typeof settingsModelSync === 'function') settingsModelSync();
+    // Rouvre sur le dernier onglet consulté : un utilisateur qui vient régler
+    // sa clé API n'a pas à la rechercher à chaque ouverture.
+    try {
+      const dernier = localStorage.getItem('theologicus-settings-onglet');
+      if (typeof settingsOuvrirOnglet === 'function') settingsOuvrirOnglet(dernier || 'model');
+    } catch(e) { if (typeof settingsOuvrirOnglet === 'function') settingsOuvrirOnglet('model'); }
+    if (window.__ltRefresh) window.__ltRefresh(); modal.classList.add("active");
+  };
   const close = () => modal.classList.remove("active");
   const openBtn = $("#open-settings-modal");
   if (openBtn) openBtn.onclick = open;
@@ -11275,6 +11431,339 @@ function initSettingsModal() {
         </div>
       </div>`;
     }).join('');
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     ONGLETS DU MODAL PARAMÈTRES
+     ───────────────────────────────────────────────────────────────────────
+     Le modal portait un défilement unique de plusieurs écrans ; il est
+     maintenant découpé en cinq ensembles. Le mécanisme est volontairement
+     minimal : une classe `active` sur le bouton, l'attribut `hidden` sur le
+     panneau. Rien de plus, parce que deux pièges ont été mesurés ici :
+
+       1. Un `style="display:none"` EN LIGNE l'emporte sur la feuille : si le
+          panneau était caché en ligne, aucun `classList` ne le rallumerait.
+          On passe donc par `hidden`, que la feuille traite (`[hidden]
+          {display:none}`) et qu'un simple `el.hidden = false` suffit à lever.
+       2. Le panneau doit rester dans la portée de `document.getElementById` :
+          `#settings-tab-tts-corps` et ses frères sont des ENFANTS du panneau,
+          pas des frères. Un déplacement de bloc sans déplacement de balise
+          fermante casse la hiérarchie en silence (le HTML reste « valide »
+          pour le navigateur, qui referme à sa façon, et le panneau se vide).
+
+     La sélection de l'onglet est PERSISTÉE (localStorage) : on rouvre le modal
+     là où on l'a laissé. `settingsOuvrirOnglet` est exposé sur `window` parce
+     que des appelants historiques (menu mobile, palette de commandes, ancien
+     bouton « Clés API ») doivent pouvoir ouvrir le modal DIRECTEMENT sur le bon
+     onglet — sinon le correctif clavier retomberait sur « Modèle IA » et
+     l'utilisateur chercherait la clé API à l'aveugle. */
+  const SETTINGS_ONGLETS = ['model', 'providers', 'tts', 'keys', 'cache'];
+  function settingsOuvrirOnglet(nom) {
+    if (SETTINGS_ONGLETS.indexOf(nom) < 0) nom = 'model';
+    document.querySelectorAll('#settings-tabs .settings-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.onglet === nom);
+      b.setAttribute('aria-selected', b.dataset.onglet === nom ? 'true' : 'false');
+    });
+    document.querySelectorAll('#settings-modal .settings-panneau').forEach(pa => {
+      pa.hidden = (pa.dataset.panneau !== nom);
+    });
+    try { localStorage.setItem('theologicus-settings-onglet', nom); } catch(e) {}
+    window.__settingsOnglet = nom;
+  }
+  window.__settingsOuvrirOnglet = settingsOuvrirOnglet;
+  document.querySelectorAll('#settings-tabs .settings-tab').forEach(b => {
+    b.onclick = () => settingsOuvrirOnglet(b.dataset.onglet);
+  });
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     ONGLET « MODÈLE IA » — équivalent du « LLM Settings » de MoneyPrinterTurbo
+     ───────────────────────────────────────────────────────────────────────
+     Trois choses ici, et l'ordre compte :
+       1. remplir le sélecteur de fournisseur (registre `PROVIDERS`) ;
+       2. refléter le modèle ACTIF dans les champs ;
+       3. TESTER réellement la connexion.
+     Le test est le cœur : sans lui, une clé fausse (ou une URL de base erronée)
+     ne se découvre qu'au premier envoi, et le message d'erreur accuse alors le
+     réseau ou le corpus — on cherche la panne du mauvais côté pendant une
+     heure. On envoie donc une requête minimale (« Reply with exactly: OK ») et
+     on rapporte le code HTTP, le corps de la réponse ou le temps de réponse.
+
+     Pourquoi ne PAS passer par MoneyPrinterTurbo : la passerelle MPT ne
+     connaît que les 28 fournisseurs de SON registre, et son `test_connection`
+     lit la clé dans SON `config.toml`. Or THEOLOGICUS a sa propre table de
+     clés (`state.keys`, persistée en cookie + disque) et ses propres modèles
+     personnalisés. Tester via MPT validerait une configuration que
+     l'application n'utilise pas — un test juste mais inutile. On teste donc
+     avec `resolveModelConfig()`, c'est-à-dire EXACTEMENT le chemin d'appel de
+     l'application. Ce que le test valide est donc ce qui sera utilisé. */
+  const _set = id => document.getElementById(id);
+
+  function _setLlmProvidersRemplir() {
+    const sel = _set('set-llm-provider');
+    if (!sel) return;
+    const groupes = [
+      { nom: 'Fournisseurs THEOLOGICUS', items: PROVIDERS.map(p => ({ id: p.id, label: p.label })) }
+    ];
+    // Les modèles personnalisés ne sont pas des fournisseurs au sens du
+    // registre : on les expose tout de même ici, sous leur propre titre, parce
+    // que l'onglet doit permettre de revenir sur « Mes modèles » sans changer
+    // d'onglet (le catalogue complet reste dans « Fournisseurs »).
+    sel.innerHTML = '';
+    groupes.forEach(g => {
+      const og = document.createElement('optgroup');
+      og.label = g.nom;
+      g.items.forEach(it => {
+        const o = document.createElement('option');
+        o.value = it.id; o.textContent = it.label;
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    });
+  }
+
+  function _setLlmFournisseurActif() {
+    const pm = _providerModelId(state.model);
+    if (pm) return pm.prov.id;
+    const cm = (state.customModels || []).find(m => m.uid === state.model);
+    if (cm) return null;
+    return (PROVIDER_BY_ID.mistral ? 'mistral' : (PROVIDERS[0] && PROVIDERS[0].id));
+  }
+
+  function _setLlmModeleDe(fid) {
+    const pm = _providerModelId(state.model);
+    if (pm && pm.prov.id === fid) return pm.model;
+    if (pm) return '';
+    const cm = (state.customModels || []).find(m => m.uid === state.model);
+    if (cm && fid === null) return cm.model;
+    return '';
+  }
+
+  /* Reflète l'état de l'application dans les champs de l'onglet. Appelée à
+     l'ouverture du modal ET après « Appliquer et activer » — jamais pendant la
+     frappe, sinon on écraserait la saisie en cours. Ne PAS l'appeler depuis le
+     gestionnaire `change` du sélecteur : elle relirait `state.model` et
+     remettrait le sélecteur sur le fournisseur actif, annulant le choix. */
+  function settingsModelSync() {
+    const selProv = _set('set-llm-provider');
+    if (!selProv) return;
+    const fid = _setLlmFournisseurActif();
+    if (fid) selProv.value = fid;
+    const p = PROVIDER_BY_ID[fid] || null;
+
+    // La description du fournisseur (zone de service, suggestions, aide) est
+    // produite par un seul endroit : `_setLlmDecrireFournisseur`. Deux copies
+    // divergeraient à la première évolution du registre.
+    _setLlmDecrireFournisseur(fid);
+
+    const key = _set('set-llm-key');
+    if (key) key.value = fid ? (state.keys[fid] || (fid === 'mistral' ? state.apiKey : '') || '') : '';
+
+    const base = _set('set-llm-base');
+    if (base) base.value = (p && p.base) ? p.base : '';
+
+    const mod = _set('set-llm-model');
+    if (mod) {
+      mod.value = _setLlmModeleDe(fid);
+      mod.setAttribute('list', 'set-llm-model-list');
+    }
+
+    const hintKey = _set('set-llm-key-hint');
+    if (hintKey) {
+      const aCle = !!(key && key.value);
+      hintKey.textContent = aCle
+        ? '▸ Clé présente (' + key.value.length + ' caractères). Stockée localement, jamais envoyée ailleurs qu\u2019au fournisseur lui-même.'
+        : '▸ Aucune clé pour ce fournisseur. Le test de connexion échouera tant qu\u2019elle manque.';
+      hintKey.style.color = aCle ? '' : 'var(--warning, #ffb020)';
+    }
+    _setLlmVerdict(null);
+  }
+
+  /* Bandeau de verdict : masqué tant qu'aucun test n'a tourné. Trois couleurs
+     seulement (succès / échec / en cours) — un dégradé de nuances ferait croire
+     à des états intermédiaires qui n'existent pas. */
+  function _setLlmVerdict(etat, texte) {
+    const v = _set('set-llm-verdict');
+    if (!v) return;
+    if (!etat) { v.style.display = 'none'; v.innerHTML = ''; return; }
+    const coul = etat === 'ok' ? 'var(--neon)' : etat === 'encours' ? 'var(--cyan)' : 'var(--danger)';
+    const ico = etat === 'ok' ? '\u2714' : etat === 'encours' ? '\u25CC' : '\u2715';
+    v.style.display = '';
+    v.style.borderLeftColor = coul;
+    v.innerHTML = '<strong style="color:' + coul + '">' + ico + '</strong> ' + texte;
+  }
+
+  /* Décrit le fournisseur SÉLECTIONNÉ dans l'interface, sans jamais relire
+     `state.model`. C'est ce qu'il faut appeler après un clic dans le sélecteur :
+     `settingsModelSync()` part de l'état de l'APPLICATION et REMETTRAIT le
+     sélecteur sur le fournisseur actif — donc annulerait le choix en cours.
+     Deux fonctions, deux responsabilités :
+       - `settingsModelSync()`        : état de l'app  -> interface (ouverture) ;
+       - `_setLlmDecrireFournisseur()`: choix de l'UI  -> description (interaction). */
+  function _setLlmDecrireFournisseur(fid) {
+    const p = PROVIDER_BY_ID[fid] || null;
+    const blocEp = _set('set-llm-endpoint-bloc');
+    const selEp = _set('set-llm-endpoint');
+    const eps = (p && Array.isArray(p.endpoints)) ? p.endpoints : null;
+    if (blocEp && selEp) {
+      if (eps && eps.length) {
+        selEp.innerHTML = eps.map(e =>
+          '<option value="' + escapeHtml(e.id) + '">' + escapeHtml(e.label || e.id) + '</option>').join('');
+        blocEp.hidden = false;
+      } else {
+        selEp.innerHTML = '<option value="default">Par défaut du fournisseur</option>';
+        blocEp.hidden = true;
+      }
+    }
+    const dl = _set('set-llm-model-list');
+    if (dl) {
+      dl.innerHTML = '';
+      const noms = [];
+      if (p) _providerModelsOf(p).forEach(m => noms.push(p.id === 'mistral' ? m : p.id + ':' + m));
+      if (fid === 'mistral') MODELS.forEach(m => { if (noms.indexOf(m.id) < 0) noms.push(m.id); });
+      noms.forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+    }
+    const hintProv = _set('set-llm-provider-hint');
+    if (hintProv) {
+      hintProv.textContent = p
+        ? '▸ ' + p.label + ' — format ' + (p.format || 'chat-completions') + (p.base ? ' · ' + p.base : '')
+        : '▸ Modèle personnalisé : sa Base URL et sa clé propres s\u2019appliquent.';
+    }
+    const hintMod = _set('set-llm-model-hint');
+    if (hintMod) hintMod.textContent = '▸ ' + ((p && _providerModelsOf(p).length) || 0) + ' modèle(s) suggéré(s) pour ce fournisseur.';
+    _setLlmAide(fid, p);
+  }
+
+  function _setLlmAide(fid, p) {
+    const aideT = _set('set-llm-aide-titre');
+    const aide = _set('set-llm-aide');
+    if (!aide) return;
+    if (fid === 'mistral') {
+      if (aideT) aideT.textContent = '\u25B8 Mistral — fournisseur historique';
+      aide.innerHTML = 'C\u2019est le seul fournisseur dont les identifiants de modèle sont NUS (' +
+        '<code style="font-family:var(--font-mono);font-size:10px;color:var(--cyan)">mistral-large-latest</code>). ' +
+        'Pour tous les autres, l\u2019identifiant porte un préfixe, par exemple ' +
+        '<code style="font-family:var(--font-mono);font-size:10px;color:var(--cyan)">deepseek:deepseek-chat</code> — ' +
+        'c\u2019est ce préfixe qui indique à THEOLOGICUS quelle clé utiliser.';
+    } else if (p) {
+      if (aideT) aideT.textContent = '\u25B8 ' + p.label;
+      const lien = p.web ? (' <a href="' + escapeHtml(p.web) + '" target="_blank" rel="noopener" style="color:var(--cyan)">Obtenir une clé \u2192</a>') : '';
+      aide.innerHTML = 'Identifiants préfixés : <code style="font-family:var(--font-mono);font-size:10px;color:var(--cyan)">' +
+        escapeHtml(p.id) + ':&lt;modèle&gt;</code>. La clé lue est celle de <strong>' + escapeHtml(p.id) +
+        '</strong> uniquement — une clé d\u2019un autre fournisseur ne sera jamais envoyée ici.' + lien;
+    } else {
+      if (aideT) aideT.textContent = '\u25B8 Modèle personnalisé';
+      aide.textContent = 'Ce modèle porte sa propre Base URL, sa propre clé et son format d\u2019API. ' +
+        'Modifiez-les dans l\u2019onglet « Fournisseurs », section « Modèles personnalisés ».';
+    }
+  }
+
+  if (_set('set-llm-provider')) {
+    _setLlmProvidersRemplir();
+    _set('set-llm-provider').onchange = () => {
+      const fid = _set('set-llm-provider').value;
+      const p = PROVIDER_BY_ID[fid];
+      if (_set('set-llm-key')) _set('set-llm-key').value = state.keys[fid] || (fid === 'mistral' ? state.apiKey : '') || '';
+      if (_set('set-llm-base')) _set('set-llm-base').value = (p && p.base) || '';
+      // Le nom du modèle est VIDÉ : garder celui du fournisseur précédent
+      // ferait envoyer « gpt-4o-mini » à DeepSeek. C'est un cas où vider est
+      // la seule valeur honnête — l'indice de champ dit quoi mettre.
+      if (_set('set-llm-model')) _set('set-llm-model').value = '';
+      _setLlmDecrireFournisseur(fid);
+      _setLlmVerdict(null);
+    };
+
+    // « Valeurs du fournisseur » : on rétablit la Base URL ET la liste de
+    // modèles du registre, sans toucher à la clé (on ne peut pas la retrouver).
+    _set('set-llm-reset').onclick = () => {
+      const p = PROVIDER_BY_ID[_set('set-llm-provider').value];
+      if (!p) return;
+      if (_set('set-llm-base')) _set('set-llm-base').value = p.base || '';
+      if (_set('set-llm-model')) _set('set-llm-model').value = (_providerModelsOf(p)[0] || '');
+      settingsModelSync();
+      toast('Valeurs de ' + p.label + ' rétablies', 'success');
+    };
+
+    _set('set-llm-apply').onclick = async () => {
+      const fid = _set('set-llm-provider').value;
+      const p = PROVIDER_BY_ID[fid];
+      const cle = (_set('set-llm-key').value || '').trim();
+      const mod = (_set('set-llm-model').value || '').trim();
+      if (cle) { saveProviderKey(fid, cleanApiKey(cle)); }
+      if (!mod) { toast('Indiquez le nom du modèle à activer', 'error'); return; }
+      const cible = (fid === 'mistral') ? mod : (fid + ':' + mod);
+      state.model = cible;
+      await db.put('settings', { id: 'model', value: state.model }).catch(() => {});
+      if (typeof refreshModelSelect === 'function') refreshModelSelect();
+      const ms = document.getElementById('model-select'); if (ms) ms.value = state.model;
+      const msb = document.getElementById('model-select-mob'); if (msb) msb.value = state.model;
+      await saveAppConfig();
+      settingsModelSync();
+      toast('Modèle actif : ' + cible, 'success');
+    };
+
+    /* Le test de connexion. On appelle `resolveModelConfig(state.model)` APRÈS
+       avoir éventuellement enregistré la clé, donc le test porte sur la
+       configuration qui vient d'être posée. Timeout de 20 s : un fournisseur
+       injoignable pend au-delà (l'API renvoie vite ; c'est le DNS d'un hôte
+       mort qui traîne), et un test qui pend n'informe de rien. */
+    _set('set-llm-test').onclick = async () => {
+      const fid = _set('set-llm-provider').value;
+      const cle = (_set('set-llm-key').value || '').trim();
+      const mod = (_set('set-llm-model').value || '').trim();
+      const btn = _set('set-llm-test');
+      if (cle) { saveProviderKey(fid, cleanApiKey(cle)); }
+      const cible = mod ? ((fid === 'mistral') ? mod : (fid + ':' + mod)) : state.model;
+      const cfg = resolveModelConfig(cible);
+      if (!cfg.apiKey) {
+        _setLlmVerdict('echec', 'Aucune clé pour ce fournisseur — le test ne peut pas aboutir.');
+        return;
+      }
+      const txt0 = btn.textContent;
+      btn.disabled = true; btn.textContent = '\u25CC Test en cours\u2026';
+      _setLlmVerdict('encours', 'Requête envoyée à <code>' + escapeHtml(cfg.endpoint) + '</code>\u2026');
+      const t0 = Date.now();
+      let ctrl = null, tid = setTimeout(() => { if (ctrl) ctrl.abort(); }, 20000);
+      try {
+        ctrl = new AbortController();
+        const corps = (cfg.format === 'anthropic')
+          ? { model: cfg.model, max_tokens: 16, messages: [{ role: 'user', content: 'Reply with exactly: OK' }] }
+          : { model: cfg.model, max_tokens: 16, messages: [{ role: 'user', content: 'Reply with exactly: OK' }] };
+        const entetes = { 'Content-Type': 'application/json' };
+        if (cfg.format === 'anthropic') { entetes['x-api-key'] = cfg.apiKey; entetes['anthropic-version'] = '2023-06-01'; entetes['anthropic-dangerous-direct-browser-access'] = 'true'; }
+        else entetes['Authorization'] = 'Bearer ' + cfg.apiKey;
+        const r = await fetch(cfg.endpoint, { method: 'POST', headers: entetes, body: JSON.stringify(corps), signal: ctrl.signal });
+        clearTimeout(tid); tid = null;
+        const ms = Date.now() - t0;
+        const txt = await r.text();
+        if (!r.ok) {
+          let det = txt.slice(0, 300);
+          try { const j = JSON.parse(txt); det = (j.error && (j.error.message || j.error.type)) || j.message || det; } catch(e) {}
+          _setLlmVerdict('echec', 'HTTP ' + r.status + ' après ' + ms + ' ms — <code>' + escapeHtml(String(det)) + '</code>');
+        } else {
+          let contenu = '';
+          try {
+            const j = JSON.parse(txt);
+            contenu = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) ||
+                      (j.content && j.content[0] && j.content[0].text) ||
+                      (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0].text) || '';
+          } catch(e) {}
+          _setLlmVerdict('ok', 'Connexion établie en <strong>' + ms + ' ms</strong> — modèle <code>' + escapeHtml(cfg.model) + '</code> répond' + (contenu ? ' : « ' + escapeHtml(String(contenu).trim().slice(0, 60)) + ' »' : '.'));
+        }
+      } catch (e) {
+        if (tid) { clearTimeout(tid); tid = null; }
+        const ms = Date.now() - t0;
+        const msg = (e && e.name === 'AbortError')
+          ? 'Aucune réponse après 20 s — hôte injoignable ou réseau filtré.'
+          : ('Échec après ' + ms + ' ms — ' + escapeHtml(String((e && e.message) || e)) +
+             '. Une requête du navigateur vers un autre domaine est souvent bloquée par CORS : ' +
+             'ce n\u2019est pas forcément la clé qui est en cause.');
+        _setLlmVerdict('echec', msg);
+      } finally {
+        btn.disabled = false; btn.textContent = txt0;
+      }
+    };
+
+    settingsModelSync();
   }
 
   // ── Lecture vocale : option de langue (français forcé / auto) ──
@@ -21049,7 +21538,13 @@ if (document.readyState === 'loading') {
     'chat-archives': () => setView('archives'),
     'chat-new':      () => { if (typeof newChat === 'function') newChat(); else clickIf('new-chat'); },
     'param-themes':  () => setView('themes'),
-    'param-models':  () => clickIf('open-settings-modal'),
+    // Ce raccourci s'appelait « Modèles custom » et menait au modal PARAMÈTRES
+    // entier. Depuis que celui-ci est découpé en onglets, il doit ouvrir
+    // DIRECTEMENT l'onglet des fournisseurs — sinon le clic retombe sur
+    // « Modèle IA » et l'utilisateur qui cherchait ses modèles personnalisés ne
+    // les voit pas. On ouvre donc l'onglet APRÈS le clic (le modal doit être
+    // monté pour que l'onglet existe).
+    'param-models':  () => { clickIf('open-settings-modal'); setTimeout(() => { if (window.__settingsOuvrirOnglet) window.__settingsOuvrirOnglet('providers'); }, 0); },
     'data-stats':    () => clickIf('open-data-modal'),
     'data-clear':    () => { clickIf('open-data-modal'); setTimeout(() => focusIf('btn-clear-all'), 160); },
     'agent-edit':    () => clickIf('open-agent-modal'),
