@@ -1,0 +1,24 @@
+docs(skills): version the four THEOLOGICUS skills and add a sync tool
+
+The skills that carry this project's procedural knowledge (build and signing,
+z-index stacking, TTS diagnosis, code traps) lived only in
+~/.workbuddy-ai/skills/, which is NOT a git repository. Nothing was backed up
+and nothing was shareable: one machine incident would have lost all of it.
+
+- .workbuddy-ai/skills/: mirror of the four active skills, plus a README that
+  states the direction of the copy (user -> repo; the user directory remains
+  the source of truth, because that is where the agent loads a skill from).
+- tools/sync_skills.py: keeps the mirror honest. A mirror that drifts is worse
+  than no mirror at all, since it looks like a backup while serving a stale
+  version. `--verifier` copies nothing and exits 1 on any difference, so it can
+  gate a check; the default mode copies and names the differing files.
+- .gitignore: explicit exemptions for .workbuddy-ai/skills/**. The signing-key
+  patterns (*secret*, *.key, *credential*) and the scratch patterns (_*.js,
+  _*.py) exist for good reasons, but they sit in the same file as this new
+  directory. Without an exemption, a future file such as `garde_secret.md`
+  would be swallowed silently.
+
+Deliberately NOT versioned: ~/.workbuddy-ai/keys/ (the release signing key).
+The skills reference only its path, never its contents. Checked before
+committing: no private key block, no password value, no long opaque token in
+the staged diff.

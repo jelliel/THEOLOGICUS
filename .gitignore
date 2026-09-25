@@ -36,6 +36,7 @@ output/
 # utilisateurs installeraient. Un fichier nomme "mistral api key.txt" y dormait
 # aussi. Aucun motif ne les couvrait (verifie le 2026-09-22) : seul `git add -A`
 # les separait du depot public.
+# Secret : la cle de signature des Releases. Ne jamais l'ajouter.
 *.pfx
 *.p12
 *.jks
@@ -46,6 +47,14 @@ output/
 *mistral*key*
 *secret*
 *credential*
+
+# Les skills versionnes ne doivent JAMAIS tomber sous les motifs ci-dessus.
+# `theologicus-apk-build` cite le CHEMIN de la cle de signature (jamais son
+# contenu) : le motif `*secret*` ne le vise pas aujourd'hui, mais un futur
+# fichier nomme par exemple `garde_secret.md` serait avale en silence. Une
+# sauvegarde qui disparait sans bruit est pire que pas de sauvegarde.
+!.workbuddy-ai/skills/
+!.workbuddy-ai/skills/**
 
 # Caches HTTP des generateurs de corpus (jamais versionner)
 tools/.summa_cache/
