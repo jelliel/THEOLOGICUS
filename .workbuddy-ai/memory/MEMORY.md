@@ -4,6 +4,7 @@
 `theologicus-tts-diagnostic`, `theologicus-code-fragilities` ; journaux
 `.workbuddy-ai/memory/AAAA-MM-JJ.md` ; bancs `.workbuddy-ai/artifacts/`.
 **Version = `git rev-list --count HEAD` → `2.0.<n>`.**
+**Ne pas reconstruire ici ce qui est dans un skill — y renvoyer.**
 
 ## Règles qui coûtent cher si violées
 
@@ -66,6 +67,22 @@ Registre lu dans `app/models/llm_provider.py` (28 fournisseurs) **avec suivi de
 profondeur**. `mpt_cache_nettoyer()` **refuse sans `confirme=True`**.
 **Un fournisseur sans zone n'a d'adresse NULLE PART** : ne pas en inventer.
 
+## MPT — cycle de vie du service (v124)
+
+**Le bandeau « Service non détecté » est VRAI :** MPT est un **voisin séparé**,
+rien ne le relance. Mesuré : `lib/python/python.exe MoneyPrinterTurbo/main.py`
+démarre en **2 s** sur **8080**, `/ping` → `pong`, 29 musiques.
+- **Prouver l'identité, pas la présence** : `_mpt_probe` n'accepte que
+  `pong`/`"pong"`. **`_boucle_locale()` est indispensable** — sans elle
+  `http_proxy` (ici `127.0.0.1:53051`) rend un **502 qui ressemble à une réponse
+  du service**. Vérifié : l'ouvreur n'a **aucun `ProxyHandler`**.
+- `mpt_status()` doit exposer **l'état d'installation** (`installe`/`api_bat`)
+  pour séparer « installé mais arrêté » de « dossier introuvable ».
+- `mpt_lancer()` rend `lance:true` **AVANT** que MPT ne réponde → l'UI doit
+  sonder jusqu'à la **condition**, jamais conclure au retour de la route.
+- **Le portatif IMBRIQUE son app** : `api.bat` est à la racine, l'app dans
+  `MoneyPrinterTurbo/`. Un mauvais niveau = liste **vide sans erreur**.
+
 ## Fournisseurs LLM (v118)
 
 `PROVIDERS` + `PROVIDER_BY_ID` ; formats `chat-completions`|`anthropic`|
@@ -78,17 +95,10 @@ correcte**. **Agnes AI** : `agnes-image-*`/`agnes-video-*` **muets** sur
 ## Services voisins (jamais embarqués)
 
 `Supertonic` (8091), `LibreTranslate`, **`MoneyPrinterTurbo` (8080) = STUDIO VIDÉO**.
-
-- **Toujours passer par le relais** : page en `127.0.0.1:8765`, tout autre port est
-  **cross-origin**.
-- **`http_proxy` est honoré AUSSI pour `127.0.0.1`** → **502** qui *ressemble* à une
-  réponse du service alors qu'il n'a **rien reçu**. `_boucle_locale()` sur **CHAQUE**
-  appel, pas seulement la sonde.
-- **Sonder en LECTURE SEULE ; prouver l'IDENTITÉ, pas la présence** (`/ping` →
-  `pong`). **Une install portative IMBRIQUE son app** : mauvais niveau = liste
-  **vide sans erreur**. **Banc : s'isoler du vrai service.**
-- **Parité MPT** : suivre EXACTEMENT `VideoParams` ; chaînes vides **omises** ;
-  listes **lues depuis le service**.
+Toujours passer par le relais : la page est en `127.0.0.1:8765`, tout autre port
+est **cross-origin**. **Banc : s'isoler du vrai service.** **Parité MPT** : suivre
+EXACTEMENT `VideoParams` ; chaînes vides **omises** ; listes **lues depuis le
+service**.
 
 ## TTS / produit
 
@@ -98,10 +108,11 @@ correcte**. **Agnes AI** : `agnes-image-*`/`agnes-video-*` **muets** sur
 **Aucune citation de verset** dans ☷ RÉFÉRENCES (nombres = dates). **Zéro littéral
 numérique dans un contenu non modal** ; une seule échelle z-index nommée.
 
-## Bancs — tous verts (v123)
+## Bancs
 
-`_v123/verify_studio_settings` 78/78 · `_v122/verify_settings` 71/71 ·
-`_v120/verify_studio_v121` 55/55 · `_v120/verify_studio` 14/14.
-**Un délai fixe mesure un état transitoire** → attendre la **CONDITION**
-(`waitForFunction`), jamais `waitForTimeout` devant du réseau. **Une assertion
-peut affirmer le faux** : vérifier ce que l'outil stocke réellement.
+`_v124/verify_service_lifecycle` · `_v123/verify_studio_settings` 78/78 ·
+`_v122/verify_settings` 71/71 · `_v120/verify_studio_v121` 55/55 ·
+`_v120/verify_studio` 14/14. **Un délai fixe mesure un état transitoire** →
+attendre la **CONDITION** (`waitForFunction`), jamais `waitForTimeout` devant du
+réseau. **Une assertion peut affirmer le faux** : vérifier ce que l'outil stocke
+réellement.

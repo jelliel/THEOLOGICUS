@@ -495,13 +495,42 @@ def _mpt_dir():
     return cand if os.path.isdir(cand) else None
 
 
+def _mpt_installation():
+    """Où en est l'INSTALLATION, indépendamment de l'état du service.
+
+    Motif : « non détecté » recouvrait deux situations opposées — « installé
+    mais arrêté » (un clic suffit) et « dossier introuvable » (aucun clic ne
+    peut aboutir). Un message unique pour les deux envoyait l'utilisateur
+    chercher une panne là où il n'y avait qu'un service à démarrer.
+
+    On ne renseigne QUE ce qu'on a vérifié sur le disque : `api_bat` est le
+    script que `mpt_lancer()` exécutera réellement, pas une supposition.
+    """
+    dossier = _mpt_dir()
+    if not dossier:
+        return {"installe": False, "dossier": None, "api_bat": False,
+                "peut_lancer": False, "raison": "no-dir"}
+    bat = os.path.join(dossier, "api.bat")
+    if not os.path.isfile(bat):
+        return {"installe": True, "dossier": dossier, "api_bat": False,
+                "peut_lancer": False, "raison": "no-bat"}
+    return {"installe": True, "dossier": dossier, "api_bat": True,
+            "peut_lancer": True, "raison": ""}
+
+
 def mpt_status():
     """Etat du service. Ne conserve un port QUE s'il repond encore : un
     service arrete entre-temps doit redevenir 'non detecte', sinon l'UI
-    afficherait un Studio pret a l'emploi qui echoue a chaque envoi."""
+    afficherait un Studio pret a l'emploi qui echoue a chaque envoi.
+
+    Les cles `installe`/`api_bat`/`peut_lancer`/`dossier` sont TOUJOURS
+    presentes, y compris service en marche : l'UI peut ainsi distinguer
+    « arrêté » de « absent » sans second appel.
+    """
+    inst = _mpt_installation()
     if _mpt["port"] is not None and _mpt_probe(_mpt["port"]):
         return {"running": True, "port": _mpt["port"],
-                "dir": _mpt_dir(), "last_error": ""}
+                "dir": _mpt_dir(), **inst, "last_error": ""}
     _mpt["port"] = None
     # Decouverte : on sonde la plage jusqu'au PREMIER service qui se nomme.
     for port in MPT_PORTS:
@@ -509,8 +538,8 @@ def mpt_status():
             _mpt["port"] = port
             print("[MPT] service detecte sur le port %d" % port, flush=True)
             return {"running": True, "port": port,
-                    "dir": _mpt_dir(), "last_error": ""}
-    return {"running": False, "port": None, "dir": _mpt_dir(),
+                    "dir": _mpt_dir(), **inst, "last_error": ""}
+    return {"running": False, "port": None, "dir": _mpt_dir(), **inst,
             "last_error": _mpt["last_error"]}
 
 
@@ -1188,7 +1217,13 @@ def mpt_voices():
 def mpt_lancer():
     """Tente de demarrer le portatif MPT (api.bat) si l'utilisateur l'a
     installe. On ne l'EMBARQUE jamais : on se contente de lancer le script
-    deja present sur le disque, comme le fait le raccourci Bureau."""
+    deja present sur le disque, comme le fait le raccourci Bureau.
+
+    ATTENTION : `lance: True` signifie « le script est parti », PAS « le
+    service repond ». MPT ouvre son port au bout de ~2 s (mesure faite sur
+    cette machine). L'appelant doit sonder jusqu'a la CONDITION, jamais
+    conclure au retour de cette fonction.
+    """
     if mpt_status()["running"]:
         return {"ok": True, "deja": True, **mpt_status()}
     dossier = _mpt_dir()

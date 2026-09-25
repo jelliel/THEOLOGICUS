@@ -20723,47 +20723,141 @@ function bindEvents() {
     body.scrollTop = body.scrollHeight;
   }
 
-  async function studioRefreshStatus() {
-    const box = $("#studio-status"), form = $("#studio-form");
-    if (!box) return null;
-    box.innerHTML = '<strong>⏳ Détection du service…</strong>';
-    const st = await studioStatus();
-    if (st.running) {
-      box.style.borderLeftColor = "var(--neon)";
-      box.innerHTML = `<strong>✓ Service détecté</strong><br>MoneyPrinterTurbo écoute sur le port <code>${st.port}</code>.`;
-      if (form) form.style.display = "block";
-    } else {
-      box.style.borderLeftColor = "var(--danger)";
-      const dossier = st.dir ? "Le dossier est bien installé." : "Dossier non trouvé sur le Bureau.";
-      box.innerHTML = `<strong>✕ Service non détecté</strong><br>
-        MoneyPrinterTurbo ne répond sur aucun port sondé. Lancez <code>api.bat</code> dans son dossier, puis cliquez « Re-détecter ».
-        ${dossier ? "<br><span style='font-size:11px;color:var(--text-dim)'>" + dossier + "</span>" : ""}
-        <div style="margin-top:10px;display:flex;gap:8px">
-          <button class="btn-ghost" id="studio-redetect">↻ RE-DÉTECTER</button>
-          <button class="btn-ghost" id="studio-start">▶ LANCER LE SERVICE</button>
-        </div>`;
-      if ($("#studio-redetect")) $("#studio-redetect").onclick = studioRefreshStatus;
-      if ($("#studio-start")) $("#studio-start").onclick = studioStartService;
+  // ── Service voisin : on ne le confond plus avec une panne ─────────────
+  // Mesuré : MPT démarre en ~2 s sur le port 8080, puis /ping répond « pong ».
+  // `mpt_lancer()` rend `lance:true` AVANT que le port ne réponde : juger sur
+  // le retour de la route ferait afficher « détecté » pour un service absent.
+  // On sonde donc jusqu'à la CONDITION, jamais un délai fixe.
+  const _STUDIO_ATTENTE_MS = 20000;   // borne haute du démarrage observé
+  const _STUDIO_PAS_MS = 1200;
+
+  // Sonde /mpt/status jusqu'à ce que `running` devienne vrai, ou expiration.
+  // Rend le DERNIER état vu, jamais une supposition : si le service n'arrive
+  // pas, l'appelant doit pouvoir le dire honnêtement.
+  async function studioAttendreService(maxMs) {
+    const limite = Date.now() + (maxMs || _STUDIO_ATTENTE_MS);
+    let st = await studioStatus();
+    while (!st.running && Date.now() < limite) {
+      await new Promise(r => setTimeout(r, _STUDIO_PAS_MS));
+      st = await studioStatus();
     }
     return st;
   }
 
+  // Le bandeau d'état. Paramètres :
+  //   opts.service  = état déjà obtenu (évite une seconde sonde) ;
+  //   opts.demarrage = true pendant une tentative, pour ne pas crier « panne ».
+  function studioAfficherEtat(st, opts) {
+    const box = $("#studio-status"), form = $("#studio-form");
+    if (!box) return st;
+    opts = opts || {};
+    // `installe`/`api_bat` viennent de mpt_status() ; on tolère leur absence
+    // (relais ancien) en retombant sur l'ancien comportement, plus prudent.
+    const installe = (st.installe === undefined) ? !!st.dir : !!st.installe;
+    const peutLancer = (st.peut_lancer === undefined) ? installe : !!st.peut_lancer;
+
+    if (st.running) {
+      box.style.borderLeftColor = "var(--neon)";
+      box.innerHTML = `<strong>✓ Service détecté</strong><br>MoneyPrinterTurbo écoute sur le port <code>${st.port}</code>.`;
+      if (form) form.style.display = "block";
+      return st;
+    }
+    if (opts.demarrage) {
+      box.style.borderLeftColor = "var(--warning)";
+      box.innerHTML = `<strong>⏳ Démarrage du service…</strong><br>
+        MoneyPrinterTurbo est installé mais arrêté. Lancement de <code>api.bat</code>,
+        puis attente de sa réponse (quelques secondes).`;
+      if (form) form.style.display = "none";
+      return st;
+    }
+
+    box.style.borderLeftColor = "var(--danger)";
+    if (!installe) {
+      // Aucun clic ne peut aboutir : ne pas proposer un bouton qui échouera.
+      box.innerHTML = `<strong>✕ Service introuvable</strong><br>
+        Le dossier de MoneyPrinterTurbo n'a pas été trouvé sur le Bureau.
+        Installez la version portative, ou indiquez son emplacement dans la
+        variable d'environnement <code>MPT_DIR</code>.
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn-ghost" id="studio-redetect">↻ RE-DÉTECTER</button>
+        </div>`;
+      if ($("#studio-redetect")) $("#studio-redetect").onclick = () => studioRefreshStatus();
+      if (form) form.style.display = "none";
+      return st;
+    }
+    const motif = (st.raison === "no-bat")
+      ? "Le dossier est là, mais <code>api.bat</code> n'y a pas été trouvé."
+      : (st.demarrage_echoue
+          ? "Le lancement a été demandé mais le service ne répond toujours pas."
+          : "Il est installé mais arrêté.");
+    const r = st.raison_service;
+    const detail = (r === "no-dir") ? "Dossier introuvable."
+      : (r === "no-bat") ? "api.bat introuvable."
+      : (r === "not-windows") ? "Lancement impossible hors Windows."
+      : (r === "spawn-failed") ? "Le système a refusé de lancer le script."
+      : "";
+    box.innerHTML = `<strong>✕ Service arrêté</strong><br>
+      ${motif}${detail ? " <span style='color:var(--danger)'>" + detail + "</span>" : ""}
+      <div style="margin-top:10px;display:flex;gap:8px">
+        ${peutLancer ? '<button class="btn-ghost" id="studio-start">▶ LANCER LE SERVICE</button>' : ""}
+        <button class="btn-ghost" id="studio-redetect">↻ RE-DÉTECTER</button>
+      </div>`;
+    if ($("#studio-redetect")) $("#studio-redetect").onclick = () => studioRefreshStatus();
+    if ($("#studio-start")) $("#studio-start").onclick = studioStartService;
+    if (form) form.style.display = "none";
+    return st;
+  }
+
+  // Ouverture du Studio : si le service est installé mais arrêté, on le
+  // relance TOUT SEUL. C'est la demande explicite : le bandeau rouge à chaque
+  // ouverture n'apportait rien, l'utilisateur ne pouvait qu'écrire le même clic.
+  // Si le dossier manque, on n'essaie rien et on l'explique.
+  async function studioRefreshStatus(relancer) {
+    const box = $("#studio-status"), form = $("#studio-form");
+    if (!box) return null;
+    box.innerHTML = '<strong>⏳ Détection du service…</strong>';
+    let st = await studioStatus();
+    if (st.running) return studioAfficherEtat(st);
+
+    const installe = (st.installe === undefined) ? !!st.dir : !!st.installe;
+    const peutLancer = (st.peut_lancer === undefined) ? installe : !!st.peut_lancer;
+    if (!relancer || !peutLancer) return studioAfficherEtat(st);
+
+    // Une seule tentative à la fois : `studioOpen()` et un clic manuel peuvent
+    // se chevaucher, et deux `api.bat` concurrents se disputeraient le port.
+    if (studioRefreshStatus._enCours) return st;
+    studioRefreshStatus._enCours = true;
+    try {
+      studioAfficherEtat(st, { demarrage: true });
+      let j = null;
+      try {
+        const r = await fetch("/mpt/start", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+        });
+        j = await r.json();
+      } catch (e) { j = { ok: false, reason: "reseau", error: String(e) }; }
+      studioLog("Démarrage automatique : " + JSON.stringify(j));
+      st = await studioAttendreService(_STUDIO_ATTENTE_MS);
+      if (!st.running && j && j.reason && !j.deja) st.raison_service = j.reason;
+      if (!st.running) st.demarrage_echoue = true;
+      return studioAfficherEtat(st);
+    } finally {
+      studioRefreshStatus._enCours = false;
+    }
+  }
+
   async function studioStartService() {
     studioLog("Demande de démarrage du service…");
-    const r = await fetch("/mpt/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const j = await r.json();
-    studioLog("Réponse démarrage : " + JSON.stringify(j));
-    // Le service met plusieurs secondes à ouvrir son port : on re-sonde
-    // quelques fois plutôt que de conclure une seule fois, trop tôt.
-    let essais = 0;
-    const t = setInterval(async () => {
-      essais++;
-      const st = await studioStatus();
-      if (st.running || essais >= 10) {
-        clearInterval(t);
-        studioRefreshStatus();
-      }
-    }, 1500);
+    // Le bouton réutilise le MÊME chemin que l'ouverture automatique : une
+    // seule implémentation, donc un seul comportement à vérifier. Si une
+    // tentative est déjà en cours, l'appel est simplement absorbé.
+    const st = await studioRefreshStatus(true);
+    if (st && st.running) {
+      studioLog("Service détecté sur le port " + st.port + ".");
+      studioChargerListes();
+    } else {
+      studioLog("Le service n'a pas répondu dans le délai imparti.");
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -21155,7 +21249,14 @@ function bindEvents() {
     const sujet = $("#studio-subject") ? $("#studio-subject").value.trim() : "";
     if (!sujet) { studioLog("Le sujet est obligatoire."); alert("Indiquez un sujet pour la vidéo."); return; }
     const st = await studioStatus();
-    if (!st.running) { studioRefreshStatus(); return; }
+    if (!st.running) {
+      // Le service s'est arrêté entre l'ouverture et l'envoi : on retente une
+      // fois le démarrage plutôt que de renvoyer l'utilisateur au bandeau.
+      studioLog("Service absent à l'envoi : tentative de démarrage…");
+      const st2 = await studioRefreshStatus(true);
+      if (!st2 || !st2.running) return;
+      studioChargerListes();
+    }
 
     studioShow("studio-progress");
     _studio.duree = 0;
@@ -21294,9 +21395,13 @@ function bindEvents() {
     // Les listes (voix, polices, musiques) viennent du SERVICE : elles ne
     // sont ni embarquées ni codées en dur. On les charge à l'ouverture, pas
     // au chargement de la page — le service peut être lancé après.
-    studioChargerListes();
+    // `true` = si le service est installé mais arrêté, l'app le RELANCE.
+    // C'était le défaut signalé : un bandeau rouge à chaque ouverture, alors
+    // que le seul remède était toujours le même clic.
+    studioRefreshStatus(true).then(st => {
+      if (st && st.running) studioChargerListes();
+    });
     studioLoadConfig();
-    studioRefreshStatus();
   }
 
   if ($("#open-studio-modal")) $("#open-studio-modal").onclick = studioOpen;

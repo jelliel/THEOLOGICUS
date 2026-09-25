@@ -1,0 +1,51 @@
+fix(studio): auto-start MoneyPrinterTurbo and stop alarming on a healthy setup
+
+The red banner "Service non detecte" appeared on every opening of the STUDIO
+VIDEO modal. Investigation showed the banner was telling the truth: MPT really
+was stopped. The service is a separate neighbour that nothing restarted, and
+the user's only possible action was always the same click.
+
+Measured on this machine: MoneyPrinterTurbo starts in ~2 s and binds 8080
+(/ping -> "pong", 29 BGM files). The detection code was never at fault. What
+was wrong was the design: a single message covered two opposite situations.
+
+proxy_server.py
+- New _mpt_installation(): reports installe / api_bat / peut_lancer / raison by
+  checking the disk, so the UI can tell "installed but stopped" apart from
+  "folder not found". A missing folder cannot be fixed by any button, so we no
+  longer offer one.
+- mpt_status() now carries those keys on every return, including while running.
+- mpt_lancer() documented: lance:true means the script was spawned, NOT that
+  the service answers. Callers must poll for the condition.
+
+THEOLOGICUS.html
+- studioAfficherEtat(): splits the banner into three honest states -- detected,
+  starting, and stopped/folder-missing. The "LATER" button only appears when a
+  launch can actually succeed.
+- studioRefreshStatus(relancer): when the service is installed but stopped, the
+  app now starts it itself and polls up to 20 s (startup through api.bat takes
+  ~13.7 s: cmd /c -> python -> imports). A re-entry guard prevents two
+  concurrent api.bat from fighting over the port.
+- studioOpen() passes relancer=true, and only loads the service lists once the
+  service answers.
+- studioStartService() reuses the same path, so there is one behaviour to
+  verify instead of two.
+- studioLaunch() retries the start once if the service died between opening and
+  submitting.
+
+Benches (all in .workbuddy-ai/artifacts/_v124/)
+- verify_service_lifecycle.py 35/35: install state, launch idempotence, relayed
+  calls, and proof that _boucle_locale() carries no ProxyHandler (http_proxy is
+  honoured even for 127.0.0.1 and returns a 502 that looks like a service reply).
+- verify_studio_autostart.js 18/18: starts from a genuinely stopped service and
+  proves the app brings it back, then that the BGM list fills. Also proves no
+  relaunch when the service is already up, and no pointless button when the
+  folder is absent.
+- run_bench.py: runs the whole chain in one invocation, because a neighbour
+  service does not survive the invocation boundary.
+
+Two of my own assertions were false and are corrected here: MPT exposes only
+ping/video/llm (app/router.py) -- there is no /api/v1/voices or /api/v1/fonts,
+so /mpt/voices and /mpt/fonts are local reads, not relays.
+
+Non-regression: 78/78 (_v123), 71/71 (_v122), 55/55 and 14/14 (_v120).
