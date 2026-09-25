@@ -1,0 +1,243 @@
+      <!-- FORMULAIRE — reproduit les quatre panneaux de MoneyPrinterTurbo :
+           Video Script Settings, Video Settings, Audio Settings,
+           Subtitle Settings. Les listes (voix, polices, musiques) sont
+           REMPLIES par le service à l'ouverture : rien n'est codé en dur. -->
+      <div id="studio-form" style="display:none">
+
+        <div class="section-title">📝 SUJET ET SCRIPT</div>
+        <div class="field-group">
+          <label class="field-label">🎯 Sujet de la vidéo * <span class="studio-help" title="En une phrase. Le script et les mots-clés seront générés à partir de ce sujet.">?</span></label>
+          <textarea class="field-input" id="studio-subject" rows="3" placeholder="Ex. La Transfiguration du Christ"></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">🌐 Langue du script</label>
+          <select class="field-input" id="studio-lang-sel">
+            <option value="">Détection automatique</option>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="de">Deutsch</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="ar">العربية</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">📝 Script (vidéo = généré automatiquement)</label>
+          <textarea class="field-input" id="studio-script" rows="4" placeholder="Laissez vide pour que le service écrive le script."></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">🔑 Mots-clés vidéo (anglais, optionnel) <span class="studio-help" title="Mots-clés de recherche de séquences. En anglais, c'est ce que comprennent Pexels et Pixabay. Vide = déduits du script.">?</span></label>
+          <input type="text" class="field-input" id="studio-terms" placeholder="Ex. transfiguration, mountain, light, cloud">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">📄 Nombre de paragraphes</label>
+            <input type="number" class="field-input" id="studio-paragraphs" value="1" min="1" max="10">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎯 Accorder les séquences au script</label>
+            <select class="field-input" id="studio-match">
+              <option value="false">Non — ordre libre</option>
+              <option value="true">Oui — suivre le script</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">✍️ Consigne de rédaction (optionnel) <span class="studio-help" title="Instruction donnée au modèle pour ce script précis. Ex. « ton contemplatif, phrases courtes, citer l'Écriture ».">?</span></label>
+          <textarea class="field-input" id="studio-script-prompt" rows="2" placeholder="Ex. Ton contemplatif, phrases courtes, une citation biblique."></textarea>
+        </div>
+        <details class="studio-adv">
+          <summary>⚙ Options de script avancées</summary>
+          <div class="field-group" style="margin-top:10px">
+            <label class="field-label">🧠 Invite système personnalisée <span class="studio-help" title="Remplace entièrement l'invite système du modèle. Réservé aux usages experts.">?</span></label>
+            <textarea class="field-input" id="studio-sys-prompt" rows="3" placeholder="Laissez vide pour l'invite par défaut du service."></textarea>
+          </div>
+        </details>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn-ghost" id="studio-gen-script">✨ GÉNÉRER LE SCRIPT AVEC L'IA</button>
+          <button class="btn-ghost" id="studio-gen-terms">🔑 GÉNÉRER LES MOTS-CLÉS</button>
+        </div>
+
+        <div class="section-title">🎞 VIDÉO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎬 Source des séquences <span class="studio-help" title="Pexels et Pixabay sont des banques de vidéos gratuites. « Fichiers locaux » utilise ce que vous avez déposé dans le dossier de matériaux.">?</span></label>
+            <select class="field-input" id="studio-source">
+              <option value="pexels">Pexels</option>
+              <option value="pixabay">Pixabay</option>
+              <option value="local">Fichiers locaux</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">📐 Format</label>
+            <select class="field-input" id="studio-aspect">
+              <option value="9:16">Portrait 9:16 (Shorts / TikTok / Reels)</option>
+              <option value="16:9">Paysage 16:9 (YouTube)</option>
+              <option value="1:1">Carré 1:1 (Instagram)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔀 Enchaînement des séquences</label>
+            <select class="field-input" id="studio-concat">
+              <option value="random">Aléatoire (recommandé)</option>
+              <option value="sequential">Séquentiel</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎞 Transition</label>
+            <select class="field-input" id="studio-transition">
+              <option value="">Aucune</option>
+              <option value="Shuffle">Mélange</option>
+              <option value="FadeIn">Fondu entrant</option>
+              <option value="FadeOut">Fondu sortant</option>
+              <option value="SlideIn">Glissement entrant</option>
+              <option value="SlideOut">Glissement sortant</option>
+              <option value="ZoomIn">Zoom avant</option>
+              <option value="ZoomOut">Zoom arrière</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🖼 Remplissage du cadre <span class="studio-help" title="« Remplir » recadre la séquence pour occuper tout l'écran ; « Contenir » la garde entière, avec des bandes si le format diffère.">?</span></label>
+            <select class="field-input" id="studio-fit">
+              <option value="cover">Remplir (recadre)</option>
+              <option value="contain">Contenir (bandes)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎞 Vidéos par lancement</label>
+            <input type="number" class="field-input" id="studio-count" value="1" min="1" max="5">
+          </div>
+          <div class="field-group">
+            <label class="field-label">⏱ Durée d'une séquence (s)</label>
+            <input type="number" class="field-input" id="studio-clip" value="3" min="1" max="30">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🧵 Fils d'encodage <span class="studio-help" title="Nombre de cœurs utilisés pour l'encodage. Plus haut = plus rapide, mais plus gourmand.">?</span></label>
+            <input type="number" class="field-input" id="studio-threads" value="2" min="1" max="16">
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">⚡ Vitesse des séquences : <span id="studio-speed-val" class="studio-val">1,00×</span></label>
+          <input type="range" class="studio-range" id="studio-speed" min="0.5" max="2" step="0.05" value="1">
+        </div>
+
+        <div class="section-title">🔊 AUDIO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎙 Mode de narration</label>
+            <select class="field-input" id="studio-vomode">
+              <option value="auto">Auto — synthèse vocale</option>
+              <option value="none">Aucune — vidéo muette</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔊 Voix <span class="studio-help" title="Liste lue depuis le service. Les voix françaises sont groupées en haut.">?</span></label>
+            <select class="field-input" id="studio-voice"><option value="">— charger —</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎵 Musique de fond</label>
+            <select class="field-input" id="studio-bgm-name"><option value="random">Aléatoire</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Volume de la musique : <span id="studio-bgmvol-val" class="studio-val">20 %</span></label>
+            <input type="range" class="studio-range" id="studio-bgmvol" min="0" max="1" step="0.05" value="0.2">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎚 Volume de la voix : <span id="studio-volume-val" class="studio-val">100 %</span></label>
+            <input type="range" class="studio-range" id="studio-volume" min="0.1" max="2" step="0.05" value="1">
+          </div>
+          <div class="field-group">
+            <label class="field-label">⚡ Vitesse de la voix : <span id="studio-rate-val" class="studio-val">1,00×</span></label>
+            <input type="range" class="studio-range" id="studio-rate" min="0.5" max="2" step="0.05" value="1">
+          </div>
+        </div>
+
+        <div class="section-title">💬 SOUS-TITRES</div>
+        <div class="field-group">
+          <label class="field-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="studio-subtitles" checked style="width:auto">
+            Activer les sous-titres incrustés
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🔤 Police</label>
+            <select class="field-input" id="studio-font"><option value="">— charger —</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">📍 Position</label>
+            <select class="field-input" id="studio-subpos">
+              <option value="bottom">Bas (recommandé)</option>
+              <option value="top">Haut</option>
+              <option value="center">Centre</option>
+              <option value="two_thirds_bottom">Deux tiers bas</option>
+              <option value="custom">Personnalisée</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">📖 Affichage</label>
+            <select class="field-input" id="studio-subdisplay">
+              <option value="sentence">Phrase entière</option>
+              <option value="word_by_word">Mot à mot</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">✨ Animation d'entrée</label>
+            <select class="field-input" id="studio-subanim">
+              <option value="none">Aucune</option>
+              <option value="pop_spring">Apparition élastique</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Position personnalisée (%) <span class="studio-help" title="Utilisée seulement si la position vaut « Personnalisée ». 0 = haut, 100 = bas.">?</span></label>
+            <input type="number" class="field-input" id="studio-custompos" value="70" min="0" max="100">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔤 Taille de police : <span id="studio-fontsize-val" class="studio-val">60</span></label>
+            <input type="range" class="studio-range" id="studio-fontsize" min="20" max="140" step="1" value="60">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🖊 Épaisseur du contour : <span id="studio-strokewidth-val" class="studio-val">1,50</span></label>
+            <input type="range" class="studio-range" id="studio-strokewidth" min="0" max="8" step="0.1" value="1.5">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎨 Couleur du texte</label>
+            <div class="studio-color-row">
+              <input type="color" id="studio-color-pick" value="#FFFFFF">
+              <input type="text" class="field-input" id="studio-color" value="#FFFFFF">
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🖊 Couleur du contour</label>
+            <div class="studio-color-row">
+              <input type="color" id="studio-stroke-pick" value="#000000">
+              <input type="text" class="field-input" id="studio-stroke" value="#000000">
+            </div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">🟦 Fond des sous-titres</label>
+          <div class="studio-color-row">
+            <input type="color" id="studio-bg-pick" value="#000000">
+            <input type="text" class="field-input" id="studio-bgcolor" placeholder="vide = pas de fond">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+              <input type="checkbox" id="studio-bg-enabled" style="width:auto"> Activer
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+              <input type="checkbox" id="studio-bg-rounded" style="width:auto"> Coins arrondis
+            </label>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top:20px">
+          <button class="btn-ghost" id="studio-reset">↻ RÉGLAGES PAR DÉFAUT</button>
+          <button class="btn-ghost" id="studio-save">💾 ENREGISTRER</button>
+          <button class="btn-primary" id="studio-launch">🚀 GÉNÉRER LA VIDÉO</button>
+        </div>
+      </div>

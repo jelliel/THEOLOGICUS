@@ -3726,6 +3726,112 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* ═══ STUDIO VIDÉO — contrôles additionnels (parité MoneyPrinterTurbo) ═══
+   Le formulaire du studio est dense : quatre panneaux, une trentaine de
+   champs. Ces cinq classes allègent la lecture sans toucher au reste. */
+.studio-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: help;
+  opacity: 0.65;
+  vertical-align: middle;
+}
+.studio-help:hover { opacity: 1; box-shadow: 0 0 10px var(--cyan-dim); }
+/* Valeur courante d'un curseur, alignée sur la ligne du libellé. */
+.studio-val {
+  color: var(--text-bright);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+input[type="range"].studio-range {
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"].studio-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--cyan), rgba(79,142,247,0.18));
+}
+input[type="range"].studio-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 8px var(--cyan-dim);
+}
+input[type="range"].studio-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(79,142,247,0.35);
+}
+input[type="range"].studio-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--cyan);
+}
+/* Sélecteur de couleur + son équivalent textuel, sur une même ligne. */
+.studio-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.studio-color-row input[type="color"] {
+  width: 42px;
+  height: 38px;
+  padding: 2px;
+  flex: 0 0 auto;
+  background: var(--hull);
+  border: var(--hud-border);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.studio-color-row input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.studio-color-row label { color: var(--text-dim); white-space: nowrap; }
+/* Options avancées repliées par défaut : elles ne doivent pas décourager. */
+details.studio-adv {
+  margin-top: 6px;
+  border: var(--border);
+  border-radius: var(--r);
+  background: rgba(0,0,0,0.15);
+  padding: 8px 12px;
+}
+details.studio-adv > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  opacity: 0.85;
+  list-style: none;
+}
+details.studio-adv > summary::-webkit-details-marker { display: none; }
+details.studio-adv > summary::before { content: "▸ "; }
+details.studio-adv[open] > summary::before { content: "▾ "; }
+details.studio-adv[open] > summary { margin-bottom: 10px; }
+
 .info-block {
   background: var(--hull);
   border: var(--border);
@@ -7480,21 +7586,78 @@ window.__ensureTafsirSurah = function(p){
       </div>
 
       <!-- FORMULAIRE -->
+      <!-- FORMULAIRE — reproduit les quatre panneaux de MoneyPrinterTurbo :
+           Video Script Settings, Video Settings, Audio Settings,
+           Subtitle Settings. Les listes (voix, polices, musiques) sont
+           REMPLIES par le service à l'ouverture : rien n'est codé en dur. -->
       <div id="studio-form" style="display:none">
 
-        <div class="section-title">SUJET ET SCRIPT</div>
+        <div class="section-title">📝 SUJET ET SCRIPT</div>
         <div class="field-group">
-          <label class="field-label">🎯 Sujet de la vidéo *</label>
-          <input type="text" class="field-input" id="studio-subject" placeholder="Ex. La Transfiguration du Christ">
-          <div class="field-hint">En une phrase. Le script sera généré à partir de ce sujet.</div>
+          <label class="field-label">🎯 Sujet de la vidéo * <span class="studio-help" title="En une phrase. Le script et les mots-clés seront générés à partir de ce sujet.">?</span></label>
+          <textarea class="field-input" id="studio-subject" rows="3" placeholder="Ex. La Transfiguration du Christ"></textarea>
         </div>
         <div class="field-group">
-          <label class="field-label">📝 Script (vide = généré automatiquement)</label>
+          <label class="field-label">🌐 Langue du script</label>
+          <select class="field-input" id="studio-lang-sel">
+            <option value="">Détection automatique</option>
+            <option value="fr">Français</option>
+            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="de">Deutsch</option>
+            <option value="it">Italiano</option>
+            <option value="pt">Português</option>
+            <option value="ar">العربية</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">📝 Script (vidéo = généré automatiquement)</label>
           <textarea class="field-input" id="studio-script" rows="4" placeholder="Laissez vide pour que le service écrive le script."></textarea>
         </div>
-
-        <div class="section-title">FORMAT ET MONTAGE</div>
+        <div class="field-group">
+          <label class="field-label">🔑 Mots-clés vidéo (anglais, optionnel) <span class="studio-help" title="Mots-clés de recherche de séquences. En anglais, c'est ce que comprennent Pexels et Pixabay. Vide = déduits du script.">?</span></label>
+          <input type="text" class="field-input" id="studio-terms" placeholder="Ex. transfiguration, mountain, light, cloud">
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">📄 Nombre de paragraphes</label>
+            <input type="number" class="field-input" id="studio-paragraphs" value="1" min="1" max="10">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎯 Accorder les séquences au script</label>
+            <select class="field-input" id="studio-match">
+              <option value="false">Non — ordre libre</option>
+              <option value="true">Oui — suivre le script</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">✍️ Consigne de rédaction (optionnel) <span class="studio-help" title="Instruction donnée au modèle pour ce script précis. Ex. « ton contemplatif, phrases courtes, citer l'Écriture ».">?</span></label>
+          <textarea class="field-input" id="studio-script-prompt" rows="2" placeholder="Ex. Ton contemplatif, phrases courtes, une citation biblique."></textarea>
+        </div>
+        <details class="studio-adv">
+          <summary>⚙ Options de script avancées</summary>
+          <div class="field-group" style="margin-top:10px">
+            <label class="field-label">🧠 Invite système personnalisée <span class="studio-help" title="Remplace entièrement l'invite système du modèle. Réservé aux usages experts.">?</span></label>
+            <textarea class="field-input" id="studio-sys-prompt" rows="3" placeholder="Laissez vide pour l'invite par défaut du service."></textarea>
+          </div>
+        </details>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn-ghost" id="studio-gen-script">✨ GÉNÉRER LE SCRIPT AVEC L'IA</button>
+          <button class="btn-ghost" id="studio-gen-terms">🔑 GÉNÉRER LES MOTS-CLÉS</button>
+        </div>
+
+        <div class="section-title">🎞 VIDÉO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎬 Source des séquences <span class="studio-help" title="Pexels et Pixabay sont des banques de vidéos gratuites. « Fichiers locaux » utilise ce que vous avez déposé dans le dossier de matériaux.">?</span></label>
+            <select class="field-input" id="studio-source">
+              <option value="pexels">Pexels</option>
+              <option value="pixabay">Pixabay</option>
+              <option value="local">Fichiers locaux</option>
+            </select>
+          </div>
           <div class="field-group">
             <label class="field-label">📐 Format</label>
             <select class="field-input" id="studio-aspect">
@@ -7504,57 +7667,84 @@ window.__ensureTafsirSurah = function(p){
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">⏱ Durée d'un plan (s)</label>
-            <input type="number" class="field-input" id="studio-clip" value="4" min="1" max="30">
-          </div>
-          <div class="field-group">
-            <label class="field-label">🎞 Nombre de vidéos</label>
-            <input type="number" class="field-input" id="studio-count" value="1" min="1" max="5">
-          </div>
-          <div class="field-group">
-            <label class="field-label">🔀 Enchaînement des plans</label>
+            <label class="field-label">🔀 Enchaînement des séquences</label>
             <select class="field-input" id="studio-concat">
-              <option value="random">Aléatoire</option>
+              <option value="random">Aléatoire (recommandé)</option>
               <option value="sequential">Séquentiel</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">🌐 Langue de la vidéo</label>
-            <input type="text" class="field-input" id="studio-lang" placeholder="fr (vide = détection auto)">
-          </div>
-          <div class="field-group">
-            <label class="field-label">🎬 Source des images</label>
-            <select class="field-input" id="studio-source">
-              <option value="pexels">Pexels</option>
-              <option value="pixabay">Pixabay</option>
+            <label class="field-label">🎞 Transition</label>
+            <select class="field-input" id="studio-transition">
+              <option value="">Aucune</option>
+              <option value="Shuffle">Mélange</option>
+              <option value="FadeIn">Fondu entrant</option>
+              <option value="FadeOut">Fondu sortant</option>
+              <option value="SlideIn">Glissement entrant</option>
+              <option value="SlideOut">Glissement sortant</option>
+              <option value="ZoomIn">Zoom avant</option>
+              <option value="ZoomOut">Zoom arrière</option>
             </select>
           </div>
+          <div class="field-group">
+            <label class="field-label">🖼 Remplissage du cadre <span class="studio-help" title="« Remplir » recadre la séquence pour occuper tout l'écran ; « Contenir » la garde entière, avec des bandes si le format diffère.">?</span></label>
+            <select class="field-input" id="studio-fit">
+              <option value="cover">Remplir (recadre)</option>
+              <option value="contain">Contenir (bandes)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎞 Vidéos par lancement</label>
+            <input type="number" class="field-input" id="studio-count" value="1" min="1" max="5">
+          </div>
+          <div class="field-group">
+            <label class="field-label">⏱ Durée d'une séquence (s)</label>
+            <input type="number" class="field-input" id="studio-clip" value="3" min="1" max="30">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🧵 Fils d'encodage <span class="studio-help" title="Nombre de cœurs utilisés pour l'encodage. Plus haut = plus rapide, mais plus gourmand.">?</span></label>
+            <input type="number" class="field-input" id="studio-threads" value="2" min="1" max="16">
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">⚡ Vitesse des séquences : <span id="studio-speed-val" class="studio-val">1,00×</span></label>
+          <input type="range" class="studio-range" id="studio-speed" min="0.5" max="2" step="0.05" value="1">
         </div>
 
-        <div class="section-title">VOIX ET NARRATION</div>
+        <div class="section-title">🔊 AUDIO</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field-group">
-            <label class="field-label">🔊 Voix</label>
-            <input type="text" class="field-input" id="studio-voice" placeholder="fr-FR-DeniseNeural-Female">
+            <label class="field-label">🎙 Mode de narration</label>
+            <select class="field-input" id="studio-vomode">
+              <option value="auto">Auto — synthèse vocale</option>
+              <option value="none">Aucune — vidéo muette</option>
+            </select>
           </div>
           <div class="field-group">
-            <label class="field-label">⚡ Vitesse de lecture</label>
-            <input type="number" class="field-input" id="studio-rate" value="1.0" min="0.5" max="2.0" step="0.1">
-          </div>
-          <div class="field-group">
-            <label class="field-label">🎚 Volume de la voix</label>
-            <input type="number" class="field-input" id="studio-volume" value="1.0" min="0.1" max="2.0" step="0.1">
+            <label class="field-label">🔊 Voix <span class="studio-help" title="Liste lue depuis le service. Les voix françaises sont groupées en haut.">?</span></label>
+            <select class="field-input" id="studio-voice"><option value="">— charger —</option></select>
           </div>
           <div class="field-group">
             <label class="field-label">🎵 Musique de fond</label>
-            <select class="field-input" id="studio-bgm">
-              <option value="random">Aléatoire</option>
-              <option value="">Aucune</option>
-            </select>
+            <select class="field-input" id="studio-bgm-name"><option value="random">Aléatoire</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Volume de la musique : <span id="studio-bgmvol-val" class="studio-val">20 %</span></label>
+            <input type="range" class="studio-range" id="studio-bgmvol" min="0" max="1" step="0.05" value="0.2">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🎚 Volume de la voix : <span id="studio-volume-val" class="studio-val">100 %</span></label>
+            <input type="range" class="studio-range" id="studio-volume" min="0.1" max="2" step="0.05" value="1">
+          </div>
+          <div class="field-group">
+            <label class="field-label">⚡ Vitesse de la voix : <span id="studio-rate-val" class="studio-val">1,00×</span></label>
+            <input type="range" class="studio-range" id="studio-rate" min="0.5" max="2" step="0.05" value="1">
           </div>
         </div>
 
-        <div class="section-title">SOUS-TITRES</div>
+        <div class="section-title">💬 SOUS-TITRES</div>
         <div class="field-group">
           <label class="field-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="studio-subtitles" checked style="width:auto">
@@ -7563,29 +7753,79 @@ window.__ensureTafsirSurah = function(p){
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field-group">
+            <label class="field-label">🔤 Police</label>
+            <select class="field-input" id="studio-font"><option value="">— charger —</option></select>
+          </div>
+          <div class="field-group">
             <label class="field-label">📍 Position</label>
             <select class="field-input" id="studio-subpos">
-              <option value="bottom">Bas</option>
+              <option value="bottom">Bas (recommandé)</option>
               <option value="top">Haut</option>
               <option value="center">Centre</option>
+              <option value="two_thirds_bottom">Deux tiers bas</option>
+              <option value="custom">Personnalisée</option>
             </select>
           </div>
           <div class="field-group">
-            <label class="field-label">🔤 Taille de police</label>
-            <input type="number" class="field-input" id="studio-fontsize" value="60" min="20" max="140">
+            <label class="field-label">📖 Affichage</label>
+            <select class="field-input" id="studio-subdisplay">
+              <option value="sentence">Phrase entière</option>
+              <option value="word_by_word">Mot à mot</option>
+            </select>
           </div>
+          <div class="field-group">
+            <label class="field-label">✨ Animation d'entrée</label>
+            <select class="field-input" id="studio-subanim">
+              <option value="none">Aucune</option>
+              <option value="pop_spring">Apparition élastique</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Position personnalisée (%) <span class="studio-help" title="Utilisée seulement si la position vaut « Personnalisée ». 0 = haut, 100 = bas.">?</span></label>
+            <input type="number" class="field-input" id="studio-custompos" value="70" min="0" max="100">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔤 Taille de police : <span id="studio-fontsize-val" class="studio-val">60</span></label>
+            <input type="range" class="studio-range" id="studio-fontsize" min="20" max="140" step="1" value="60">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🖊 Épaisseur du contour : <span id="studio-strokewidth-val" class="studio-val">1,50</span></label>
+            <input type="range" class="studio-range" id="studio-strokewidth" min="0" max="8" step="0.1" value="1.5">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="field-group">
             <label class="field-label">🎨 Couleur du texte</label>
-            <input type="text" class="field-input" id="studio-color" value="#FFFFFF">
+            <div class="studio-color-row">
+              <input type="color" id="studio-color-pick" value="#FFFFFF">
+              <input type="text" class="field-input" id="studio-color" value="#FFFFFF">
+            </div>
           </div>
           <div class="field-group">
-            <label class="field-label">🖊 Contour</label>
-            <input type="text" class="field-input" id="studio-stroke" value="#000000">
+            <label class="field-label">🖊 Couleur du contour</label>
+            <div class="studio-color-row">
+              <input type="color" id="studio-stroke-pick" value="#000000">
+              <input type="text" class="field-input" id="studio-stroke" value="#000000">
+            </div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">🟦 Fond des sous-titres</label>
+          <div class="studio-color-row">
+            <input type="color" id="studio-bg-pick" value="#000000">
+            <input type="text" class="field-input" id="studio-bgcolor" placeholder="vide = pas de fond">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+              <input type="checkbox" id="studio-bg-enabled" style="width:auto"> Activer
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px">
+              <input type="checkbox" id="studio-bg-rounded" style="width:auto"> Coins arrondis
+            </label>
           </div>
         </div>
 
         <div class="btn-row" style="margin-top:20px">
-          <button class="btn-ghost" id="studio-save">💾 ENREGISTRER LES RÉGLAGES</button>
+          <button class="btn-ghost" id="studio-reset">↻ RÉGLAGES PAR DÉFAUT</button>
+          <button class="btn-ghost" id="studio-save">💾 ENREGISTRER</button>
           <button class="btn-primary" id="studio-launch">🚀 GÉNÉRER LA VIDÉO</button>
         </div>
       </div>
@@ -19726,34 +19966,144 @@ function bindEvents() {
     }, 1500);
   }
 
-  // Le formulaire suit EXACTEMENT le contrat de VideoParams (app/models/schema.py
-  // de MoneyPrinterTurbo) : c'est MPT qui valide, on ne duplique pas la
-  // validation, sinon les deux divergeraient.
-  function studioPayload() {
-    const v = id => ($(id) ? $(id).value : "");
-    const n = id => { const x = parseFloat(v(id)); return isNaN(x) ? undefined : x; };
-    const p = {
-      video_subject: v("studio-subject").trim(),
-      video_aspect: v("studio-aspect"),
-      video_clip_duration: n("studio-clip") || 4,
-      video_count: n("studio-count") || 1,
-      video_concat_mode: v("studio-concat"),
-      voice_rate: n("studio-rate") || 1.0,
-      voice_volume: n("studio-volume") || 1.0,
-      bgm_type: v("studio-bgm"),
-      subtitle_enabled: $("#studio-subtitles") ? $("#studio-subtitles").checked : true,
-      subtitle_position: v("studio-subpos"),
-      font_size: n("studio-fontsize") || 60,
-      text_fore_color: v("studio-color"),
-      stroke_color: v("studio-stroke"),
-      video_source: v("studio-source"),
+  // ═══════════════════════════════════════════════════════════════════
+  // STUDIO — formulaire (parité avec l'interface MoneyPrinterTurbo)
+  // Le formulaire suit EXACTEMENT le contrat de VideoParams
+  // (app/models/schema.py de MoneyPrinterTurbo) : c'est MPT qui valide, on
+  // ne duplique pas la validation, sinon les deux divergeraient.
+  // Les valeurs par défaut vivent dans le HTML (attribut value) ; le bouton
+  // « Réglages par défaut » les relit au lieu de les recopier ici — une
+  // seule source de vérité, donc pas de dérive silencieuse entre les deux.
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ATTENTION : `$` est `document.querySelector` — il exige le `#`. C'est le
+  // défaut exact qui rendait le bouton STUDIO VIDÉO muet (32 sélecteurs sans
+  // dièse, tous rendant `null` en silence). On ne répète pas l'erreur : ces
+  // trois lecteurs forment le SEUL point d'accès aux champs du studio, et ils
+  // préfixent eux-mêmes. Écrire `$("studio-…")` ailleurs dans ce bloc est un
+  // défaut qui attend son heure.
+  const _SEL = id => document.getElementById(id);
+  const _sv = id => { const e = _SEL(id); return e ? e.value : ""; };
+  const _sn = id => { const x = parseFloat(_sv(id)); return isNaN(x) ? undefined : x; };
+  const _sc = id => { const e = _SEL(id); return e ? !!e.checked : false; };
+
+  // Les couleurs : l'utilisateur peut saisir du texte libre (#FFF, rgb…),
+  // mais un <input type=color> ne rend QUE du #rrggbb. On tente la
+  // conversion pour garder les deux champs d'accord ; si le texte n'est pas
+  // convertible on laisse la pipette telle quelle plutôt que de l'écraser
+  // par du noir — écraser silencieusement une saisie est pire que ne rien
+  // faire.
+  function _studioLierCouleur(idPick, idTexte) {
+    // _SEL et NON $ : les identifiants arrivent en PARAMÈTRES, donc le `#`
+    // ne peut pas figurer dans le littéral. `$(idPick)` chercherait une
+    // balise homonyme, rendrait `null`, et la liaison serait morte — la
+    // pipette et le champ texte divergeraient sans le moindre signe.
+    const pk = _SEL(idPick), tx = _SEL(idTexte);
+    if (!pk || !tx) return;
+    const normalise = s => {
+      s = String(s || "").trim();
+      const court = s.match(/^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+      if (court) return ("#" + court[1] + court[1] + court[2] + court[2] + court[3] + court[3]).toUpperCase();
+      if (/^#[0-9a-f]{6}$/i.test(s)) return s.toUpperCase();
+      if (/^[0-9a-f]{6}$/i.test(s)) return ("#" + s).toUpperCase();
+      return null;
     };
-    const script = v("studio-script").trim();
+    tx.addEventListener("input", () => {
+      const n = normalise(tx.value);
+      if (n) pk.value = n;
+    });
+    pk.addEventListener("input", () => { tx.value = pk.value.toUpperCase(); });
+    tx._studioNormalise = () => { const n = normalise(tx.value); if (n) { tx.value = n; pk.value = n; } };
+  }
+
+  // Un curseur sans son étiquette ne dit rien : on affiche la valeur réelle,
+  // formatée selon l'unité (pourcentage, multiple, entier, décimal).
+  const _STUDIO_CURSEURS = [
+    ["studio-speed", "studio-speed-val", x => x.toFixed(2).replace(".", ",") + "×"],
+    ["studio-bgmvol", "studio-bgmvol-val", x => Math.round(x * 100) + " %"],
+    ["studio-volume", "studio-volume-val", x => Math.round(x * 100) + " %"],
+    ["studio-rate", "studio-rate-val", x => x.toFixed(2).replace(".", ",") + "×"],
+    ["studio-fontsize", "studio-fontsize-val", x => String(Math.round(x))],
+    ["studio-strokewidth", "studio-strokewidth-val", x => x.toFixed(2).replace(".", ",")],
+  ];
+
+  function studioSyncCurseurs() {
+    _STUDIO_CURSEURS.forEach(([idS, idL, fmt]) => {
+      // _SEL et NON $ : ici l'identifiant arrive en VARIABLE, donc le `#`
+      // ne peut pas être écrit à la main. `$(idS)` chercherait une balise
+      // nommée d'après l'identifiant et rendrait `null` en silence — le
+      // curseur bougerait sans que son étiquette suive.
+      const s = _SEL(idS), l = _SEL(idL);
+      if (!s || !l) return;
+      const maj = () => { const x = parseFloat(s.value); l.textContent = isNaN(x) ? "—" : fmt(x); };
+      if (!s._studioLie) { s.addEventListener("input", maj); s._studioLie = true; }
+      maj();
+    });
+  }
+
+  function studioPayload() {
+    const p = {
+      // ---- Sujet et script
+      video_subject: _sv("studio-subject").trim(),
+      video_language: _sv("studio-lang-sel"),
+      paragraph_number: _sn("studio-paragraphs") || 1,
+      match_materials_to_script: _sv("studio-match") === "true",
+      // ---- Vidéo
+      video_source: _sv("studio-source"),
+      video_aspect: _sv("studio-aspect"),
+      video_concat_mode: _sv("studio-concat"),
+      video_fit_mode: _sv("studio-fit"),
+      video_count: _sn("studio-count") || 1,
+      video_clip_duration: _sn("studio-clip") || 3,
+      video_clip_speed: _sn("studio-speed") || 1.0,
+      n_threads: _sn("studio-threads") || 2,
+      // ---- Audio
+      voice_rate: _sn("studio-rate") || 1.0,
+      voice_volume: _sn("studio-volume") || 1.0,
+      bgm_volume: _sn("studio-bgmvol"),
+      // ---- Sous-titres
+      subtitle_enabled: _sc("studio-subtitles"),
+      subtitle_position: _sv("studio-subpos"),
+      subtitle_display_mode: _sv("studio-subdisplay"),
+      subtitle_animation: _sv("studio-subanim"),
+      custom_position: _sn("studio-custompos"),
+      font_size: _sn("studio-fontsize") || 60,
+      text_fore_color: _sv("studio-color").trim() || "#FFFFFF",
+      stroke_color: _sv("studio-stroke").trim() || "#000000",
+      stroke_width: _sn("studio-strokewidth"),
+      rounded_subtitle_background: _sc("studio-bg-rounded"),
+    };
+
+    // Le ton (video_transition_mode) vaut None côté service quand il n'y a
+    // pas de transition : envoyer "" serait refusé par l'énumération.
+    const trans = _sv("studio-transition");
+    p.video_transition_mode = trans ? trans : null;
+
+    // Les chaînes vides sont OMISES, jamais envoyées : MPT distingue
+    // « non fourni » (il génère) de « fourni vide » (il refuse).
+    const script = _sv("studio-script").trim();
     if (script) p.video_script = script;
-    const voice = v("studio-voice").trim();
+    const terms = _sv("studio-terms").trim();
+    if (terms) p.video_terms = terms;
+    const voice = _sv("studio-voice").trim();
     if (voice) p.voice_name = voice;
-    const lang = v("studio-lang").trim();
-    if (lang) p.video_language = lang;
+    const bgm = _sv("studio-bgm-name").trim();
+    if (bgm) p.bgm_name = bgm; else p.bgm_type = "none";
+    const sp = _sv("studio-script-prompt").trim();
+    if (sp) p.video_script_prompt = sp;
+    const sysp = _sv("studio-sys-prompt").trim();
+    if (sysp) p.custom_system_prompt = sysp;
+
+    // Le fond n'est un booléen que s'il est désactivé ; activé, c'est la
+    // couleur elle-même (le service accepte bool | str).
+    const bgc = _sv("studio-bgcolor").trim();
+    p.text_background_color = (_sc("studio-bg-enabled") && bgc) ? bgc : false;
+
+    // Le mode de narration n'est pas un champ de VideoParams : c'est notre
+    // façon de dire « vidéo muette ». On le traduit en absence de voix, ce
+    // que le service comprend déjà.
+    if (_sv("studio-vomode") === "none") { delete p.voice_name; p.voice_volume = 0; }
+
     return p;
   }
 
@@ -19770,35 +20120,232 @@ function bindEvents() {
     } catch (e) { studioLog("Enregistrement impossible : " + e); }
   }
 
+  // Les valeurs du HTML sont la référence : on les capture AVANT toute
+  // restauration, sinon « Réglages par défaut » rendrait les valeurs de la
+  // dernière configuration enregistrée.
+  const _STUDIO_DEFAUTS = {};
+
+  function studioPredéfinis() {
+    ["studio-subject", "studio-lang-sel", "studio-script", "studio-terms",
+     "studio-paragraphs", "studio-match", "studio-script-prompt", "studio-sys-prompt",
+     "studio-source", "studio-aspect", "studio-concat", "studio-transition", "studio-fit",
+     "studio-count", "studio-clip", "studio-threads", "studio-speed",
+     "studio-vomode", "studio-voice", "studio-bgm-name", "studio-bgmvol",
+     "studio-volume", "studio-rate", "studio-font", "studio-subpos", "studio-subdisplay",
+     "studio-subanim", "studio-custompos", "studio-fontsize", "studio-strokewidth",
+     "studio-color-pick", "studio-color", "studio-stroke-pick", "studio-stroke",
+     "studio-bg-pick", "studio-bgcolor"].forEach(id => { if (_SEL(id)) _STUDIO_DEFAUTS[id] = _SEL(id).value; });
+    ["studio-subtitles", "studio-bg-enabled", "studio-bg-rounded"].forEach(id => { if (_SEL(id)) _STUDIO_DEFAUTS[id] = !!_SEL(id).checked; });
+  }
+
+  function studioResetConfig() {
+    Object.keys(_STUDIO_DEFAUTS).forEach(id => {
+      const e = _SEL(id); if (!e) return;
+      if (typeof _STUDIO_DEFAUTS[id] === "boolean") e.checked = _STUDIO_DEFAUTS[id];
+      else e.value = _STUDIO_DEFAUTS[id];
+    });
+    studioSyncCurseurs();
+    studioLog("Réglages remis par défaut (non enregistrés — cliquez ENREGISTRER pour conserver).");
+  }
+
   async function studioLoadConfig() {
     try {
       const r = await fetch("/mpt/config", { cache: "no-store" });
       const c = await r.json();
       if (!c || !Object.keys(c).length) return;
-      const set = (id, val) => { if ($(id) && val !== undefined && val !== null && val !== "") $(id).value = val; };
+      const set = (id, val) => { if (_SEL(id) && val !== undefined && val !== null && val !== "") _SEL(id).value = val; };
       set("studio-subject", c.video_subject);
       set("studio-script", c.video_script);
+      set("studio-terms", Array.isArray(c.video_terms) ? c.video_terms.join(", ") : c.video_terms);
+      set("studio-lang-sel", c.video_language);
+      set("studio-paragraphs", c.paragraph_number);
+      set("studio-script-prompt", c.video_script_prompt);
+      set("studio-sys-prompt", c.custom_system_prompt);
+      set("studio-source", c.video_source);
       set("studio-aspect", c.video_aspect);
+      set("studio-concat", c.video_concat_mode);
+      set("studio-fit", c.video_fit_mode);
+      set("studio-transition", c.video_transition_mode || "");
       set("studio-clip", c.video_clip_duration);
       set("studio-count", c.video_count);
-      set("studio-concat", c.video_concat_mode);
+      set("studio-threads", c.n_threads);
+      set("studio-speed", c.video_clip_speed);
       set("studio-rate", c.voice_rate);
       set("studio-volume", c.voice_volume);
-      set("studio-bgm", c.bgm_type);
+      set("studio-bgmvol", c.bgm_volume);
+      set("studio-bgm-name", c.bgm_name);
       set("studio-voice", c.voice_name);
-      set("studio-lang", c.video_language);
-      set("studio-source", c.video_source);
       set("studio-subpos", c.subtitle_position);
+      set("studio-subdisplay", c.subtitle_display_mode);
+      set("studio-subanim", c.subtitle_animation);
+      set("studio-custompos", c.custom_position);
       set("studio-fontsize", c.font_size);
+      set("studio-strokewidth", c.stroke_width);
       set("studio-color", c.text_fore_color);
       set("studio-stroke", c.stroke_color);
+      set("studio-font", c.font_name);
+      if (typeof c.text_background_color === "string" && c.text_background_color) {
+        set("studio-bgcolor", c.text_background_color);
+        if ($("#studio-bg-enabled")) $("#studio-bg-enabled").checked = true;
+        if ($("#studio-bg-pick")) $("#studio-bg-pick").value = c.text_background_color;
+      }
+      if (c.match_materials_to_script !== undefined) set("studio-match", String(!!c.match_materials_to_script));
       if ($("#studio-subtitles") && c.subtitle_enabled !== undefined) $("#studio-subtitles").checked = !!c.subtitle_enabled;
+      if ($("#studio-bg-rounded") && c.rounded_subtitle_background !== undefined) $("#studio-bg-rounded").checked = !!c.rounded_subtitle_background;
+      // Les deux champs de chaque couleur doivent rester d'accord, sinon la
+      // pipette affiche une couleur que le texte contredit.
+      ["studio-color", "studio-stroke", "studio-bgcolor"].forEach(id => {
+        const e = _SEL(id); if (e && e._studioNormalise) e._studioNormalise();
+      });
+      studioSyncCurseurs();
     } catch (e) { /* pas de config enregistrée : valeurs par défaut du HTML */ }
+  }
+
+  // ═══ Listes lues depuis le service (aucune liste codée en dur) ═══
+  // Une liste vide en dur donnerait une fausse impression de choix : si le
+  // service ne répond pas, on le DIT au lieu d'afficher trois options fixes.
+
+  function _studioRemplirSelect(id, entrees, vide) {
+    // _SEL et NON $ : `$` exige le `#` (voir le commentaire de _SEL).
+    const s = _SEL(id); if (!s) return 0;
+    const choix = s.value;               // ne pas perdre la sélection
+    s.innerHTML = vide ? `<option value="">${vide}</option>` : "";
+    entrees.forEach(([val, lib]) => {
+      const o = document.createElement("option");
+      o.value = val; o.textContent = lib;
+      s.appendChild(o);
+    });
+    if (choix) s.value = choix;
+    return entrees.length;
+  }
+
+  async function studioPopulateVoices() {
+    try {
+      const r = await fetch("/mpt/voices", { cache: "no-store" });
+      const j = await r.json();
+      const liste = (j && j.voices) || [];
+      if (!liste.length) return 0;
+      // Le français d'abord : c'est la langue de cette application. Un
+      // sélecteur de 331 voix ouvert sur l'afrikaans n'aide personne.
+      const fr = liste.filter(v => /^fr-/i.test(v));
+      const autres = liste.filter(v => !/^fr-/i.test(v));
+      const s = $("#studio-voice");
+      if (s) {
+        const choix = s.value;
+        s.innerHTML = "";
+        const groupe = (titre, arr) => {
+          if (!arr.length) return;
+          const g = document.createElement("optgroup"); g.label = titre;
+          arr.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = v; g.appendChild(o); });
+          s.appendChild(g);
+        };
+        groupe("Français (" + fr.length + ")", fr);
+        groupe("Autres langues (" + autres.length + ")", autres);
+        if (choix) s.value = choix;
+      }
+      return liste.length;
+    } catch (e) { studioLog("Voix indisponibles : " + e); return 0; }
+  }
+
+  async function studioPopulateFonts() {
+    try {
+      const r = await fetch("/mpt/fonts", { cache: "no-store" });
+      const j = await r.json();
+      const liste = (j && j.fonts) || [];
+      if (!liste.length) return 0;
+      const s = $("#studio-font");
+      if (s && !s.value) {
+        // STHeitiMedium.ttc est la police par défaut du service : la
+        // présélectionner évite d'envoyer un font_name vide.
+        const pref = liste.find(f => /STHeitiMedium/i.test(f)) || liste[0];
+        _studioRemplirSelect("studio-font", liste.map(f => [f, f]), "");
+        s.value = pref;
+      }
+      return liste.length;
+    } catch (e) { studioLog("Polices indisponibles : " + e); return 0; }
+  }
+
+  async function studioPopulateBgms() {
+    try {
+      const r = await fetch("/mpt/musics", { cache: "no-store" });
+      const j = await r.json();
+      const liste = (j && (j.musics || (j.data && j.data.musics))) || [];
+      const s = $("#studio-bgm-name"); if (!s) return 0;
+      const choix = s.value;
+      s.innerHTML = "";
+      const o0 = document.createElement("option"); o0.value = "random"; o0.textContent = "Aléatoire"; s.appendChild(o0);
+      const o1 = document.createElement("option"); o1.value = ""; o1.textContent = "Aucune"; s.appendChild(o1);
+      liste.forEach(m => { const o = document.createElement("option"); o.value = m; o.textContent = m; s.appendChild(o); });
+      if (choix) s.value = choix;
+      return liste.length;
+    } catch (e) { studioLog("Musiques indisponibles : " + e); return 0; }
+  }
+
+  async function studioChargerListes() {
+    const [nv, nf, nb] = await Promise.all([studioPopulateVoices(), studioPopulateFonts(), studioPopulateBgms()]);
+    if (!nv) studioLog("Aucune voix reçue du service — saisie libre impossible sur ce champ.");
+    return { voix: nv, polices: nf, musiques: nb };
+  }
+
+  // ═══ Génération assistée : script et mots-clés ═══
+  // Ces deux appels passent par le relais, qui relaie vers /api/v1/scripts
+  // et /api/v1/terms. Ils exigent une clé LLM configurée côté service : un
+  // échec n'est pas une panne de l'application, on le dit explicitement.
+
+  async function studioGenerer(cible, bouton, laborieux) {
+    // _SEL et NON $ : le bouton arrive en PARAMÈTRE (identifiant nu). Avec
+    // `$`, on obtiendrait `null` et le bouton ne serait jamais désactivé —
+    // l'utilisateur pourrait lancer dix générations en parallèle.
+    const b = _SEL(bouton);
+    const sujet = _sv("studio-subject").trim();
+    if (!sujet) { studioLog("Indiquez d'abord un sujet."); alert("Indiquez d'abord un sujet."); return; }
+    const texte = b ? b.textContent : "";
+    if (b) { b.disabled = true; b.textContent = "⏳ " + laborieux + "…"; }
+    studioLog(laborieux + " en cours…");
+    try {
+      const corps = cible === "script" ? {
+        video_subject: sujet,
+        video_language: _sv("studio-lang-sel"),
+        paragraph_number: _sn("studio-paragraphs") || 1,
+        video_script_prompt: _sv("studio-script-prompt").trim(),
+        custom_system_prompt: _sv("studio-sys-prompt").trim(),
+      } : {
+        video_subject: sujet,
+        video_script: _sv("studio-script").trim(),
+        amount: 5,
+        match_materials_to_script: _sv("studio-match") === "true",
+      };
+      const r = await fetch("/mpt/" + cible, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corps),
+      });
+      const j = await r.json();
+      const d = j && j.data ? j.data : null;
+      if (!d) {
+        studioLog("Le service a refusé : " + JSON.stringify(j).slice(0, 300));
+        alert("Le service a refusé la demande. Vérifiez qu'une clé LLM est configurée dans MoneyPrinterTurbo.");
+        return;
+      }
+      if (cible === "script" && d.video_script) {
+        $("#studio-script").value = d.video_script;
+        studioLog("Script généré (" + d.video_script.length + " caractères).");
+      } else if (cible === "terms") {
+        const t = Array.isArray(d.video_terms) ? d.video_terms.join(", ") : String(d.video_terms || "");
+        $("#studio-terms").value = t;
+        studioLog("Mots-clés générés : " + t);
+      } else {
+        studioLog("Réponse sans contenu exploitable : " + JSON.stringify(d).slice(0, 300));
+      }
+    } catch (e) {
+      studioLog("Échec de la génération : " + e);
+    } finally {
+      if (b) { b.disabled = false; b.textContent = texte; }
+    }
   }
 
   function studioShow(etape) {
     ["studio-form", "studio-progress", "studio-result"].forEach(id => {
-      const el = $(id); if (!el) return;
+      const el = _SEL(id); if (!el) return;
       el.style.display = (id === etape) ? "block" : "none";
     });
     if (etape === "studio-form") { const p = $("#studio-progress"); if (p) p.style.display = "none"; }
@@ -19930,6 +20477,10 @@ function bindEvents() {
   function studioOpen() {
     const m = $("#studio-modal");
     if (m) m.classList.add("active");
+    // Les listes (voix, polices, musiques) viennent du SERVICE : elles ne
+    // sont ni embarquées ni codées en dur. On les charge à l'ouverture, pas
+    // au chargement de la page — le service peut être lancé après.
+    studioChargerListes();
     studioLoadConfig();
     studioRefreshStatus();
   }
@@ -19938,10 +20489,29 @@ function bindEvents() {
   if ($("#close-studio-modal")) $("#close-studio-modal").onclick = () => { studioStopPolling(); $("#studio-modal").classList.remove("active"); };
   if ($("#studio-modal")) $("#studio-modal").onclick = e => { if (e.target === $("#studio-modal")) { studioStopPolling(); $("#studio-modal").classList.remove("active"); } };
   if ($("#studio-save")) $("#studio-save").onclick = studioSaveConfig;
+  if ($("#studio-reset")) $("#studio-reset").onclick = studioResetConfig;
   if ($("#studio-launch")) $("#studio-launch").onclick = studioLaunch;
+  if ($("#studio-gen-script")) $("#studio-gen-script").onclick = () => studioGenerer("script", "studio-gen-script", "Rédaction du script");
+  if ($("#studio-gen-terms")) $("#studio-gen-terms").onclick = () => studioGenerer("terms", "studio-gen-terms", "Recherche des mots-clés");
   if ($("#studio-cancel")) $("#studio-cancel").onclick = () => { studioStopPolling(); studioShow("studio-form"); };
   if ($("#studio-again")) $("#studio-again").onclick = () => { studioShow("studio-form"); studioRefreshStatus(); };
+
+  // Curseurs, couleurs et valeurs par défaut : câblés une seule fois, ici,
+  // une fois le DOM complet.
+  studioSyncCurseurs();
+  _studioLierCouleur("studio-color-pick", "studio-color");
+  _studioLierCouleur("studio-stroke-pick", "studio-stroke");
+  _studioLierCouleur("studio-bg-pick", "studio-bgcolor");
+  studioPredéfinis();
+
+  // Le studio s'auto-ouvre par lien profond (?studio=1) : pratique pour
+  // comparer avec l'interface de MoneyPrinterTurbo côte à côte.
+  try {
+    if (new URLSearchParams(location.search).get("studio") === "1") setTimeout(studioOpen, 400);
+  } catch (e) { /* environnement sans URLSearchParams : sans effet */ }
+
   window.__studioOpen = studioOpen;
+  window.__studioPayload = studioPayload;
 
   // Data Modal
   const openDataModal = async () => {

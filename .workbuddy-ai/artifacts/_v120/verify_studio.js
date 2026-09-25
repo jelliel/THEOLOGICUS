@@ -118,7 +118,7 @@ const check = (nom, cond, detail) => {
     // fonctionnalité est morte (c'était le cas des 32 appels fautifs).
     const ids = ['studio-status', 'studio-form', 'studio-subject', 'studio-script',
       'studio-aspect', 'studio-clip', 'studio-count', 'studio-concat', 'studio-rate',
-      'studio-volume', 'studio-bgm', 'studio-voice', 'studio-lang', 'studio-source',
+      'studio-volume', 'studio-bgm-name', 'studio-voice', 'studio-lang-sel', 'studio-source',
       'studio-subpos', 'studio-fontsize', 'studio-color', 'studio-stroke',
       'studio-subtitles', 'studio-launch', 'studio-save', 'studio-log'];
     const manquants = ids.filter(i => !document.getElementById(i));

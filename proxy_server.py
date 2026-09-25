@@ -526,7 +526,13 @@ def mpt_requete(methode, chemin, corps=None, timeout=30):
         req = urllib.request.Request(url, data=data, method=methode)
         if data is not None:
             req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        # _boucle_locale() et NON urlopen directement : http_proxy est defini
+        # dans l'environnement et urllib l'honore AUSSI pour 127.0.0.1. Le
+        # proxy ne joint pas la boucle locale et rend 502 — la sonde _mpt_probe
+        # desarmait deja ce piege, pas cet appel-ci. Resultat : le service
+        # etait detecte (status running) mais CHAQUE requete echouait en 502,
+        # ce qui ressemblait a une erreur de MPT.
+        with _boucle_locale().open(req, timeout=timeout) as r:
             brut = r.read().decode("utf-8", "replace")
             try:
                 return True, json.loads(brut)
@@ -546,6 +552,90 @@ def mpt_requete(methode, chemin, corps=None, timeout=30):
         except Exception:
             pass
         return False, str(e)
+
+
+# Le portatif Windows imbrique l'application : la racine porte les .bat et
+# `lib/`, le code Python et `resource/fonts` vivent dans `MoneyPrinterTurbo/`.
+# _mpt_dir() rend la RACINE : chercher `resource/fonts` directement dessous
+# ne trouve rien. On essaie donc la racine PUIS le sous-dossier applicatif.
+_MPT_FONT_DIRS = ("resource/fonts", "resource", "fonts")
+_MPT_SOUS_DOSSIER = "MoneyPrinterTurbo"
+
+
+def _mpt_racines():
+    """Racines ou chercher les ressources de MPT, de la plus precise a la plus
+    large. La premiere qui existe gagne, sans jamais sortir de l'installation."""
+    base = _mpt_dir()
+    if not base:
+        return []
+    cands = [base]
+    sub = os.path.join(base, _MPT_SOUS_DOSSIER)
+    if os.path.isdir(sub):
+        # Le sous-dossier d'abord : c'est la ou vit reellement le code.
+        cands.insert(0, sub)
+    return cands
+
+
+def mpt_fonts():
+    """Polices de sous-titres REELLEMENT presentes dans l'installation MPT.
+
+    Lire le dossier plutot que coder une liste : une police ajoutee par
+    l'utilisateur doit apparaitre, et une police absente ne doit pas etre
+    proposee (choisir une police manquante fait echouer le rendu des
+    sous-titres, souvent a la toute fin de la production)."""
+    racines = _mpt_racines()
+    if not racines:
+        return {"ok": False, "reason": "no-dir", "fonts": []}
+    vues, polices = set(), []
+    for base in racines:
+        for rel in _MPT_FONT_DIRS:
+            racine = os.path.join(base, *rel.split("/"))
+            if not os.path.isdir(racine):
+                continue
+            try:
+                for nom in sorted(os.listdir(racine)):
+                    if not nom.lower().endswith((".ttf", ".ttc", ".otf")):
+                        continue
+                    if nom in vues:
+                        continue
+                    vues.add(nom)
+                    polices.append(nom)
+            except Exception:
+                continue
+    return {"ok": True, "fonts": polices, "count": len(polices)}
+
+
+def mpt_voices():
+    """Catalogue des voix, lu depuis le fichier de donnees de MPT.
+
+    `data/azure_voices.json` est la source de verite du service. On reproduit
+    la meme mise en forme que `get_all_azure_voices` (`<Nom>-<Genre>`) : c'est
+    exactement ce que MPT attend dans `voice_name`. Si le fichier manque, on
+    rend une liste VIDE et `ok:false` — surtout pas une liste inventee, qui
+    ferait echouer la synthese avec une voix inexistante."""
+    if not _mpt_dir():
+        return {"ok": False, "reason": "no-dir", "voices": []}
+    rel = os.path.join("app", "services", "data", "azure_voices.json")
+    chemin = next((os.path.join(r, rel) for r in _mpt_racines()
+                   if os.path.isfile(os.path.join(r, rel))), None)
+    if not chemin:
+        return {"ok": False, "reason": "no-catalog", "voices": []}
+    try:
+        import json as _json
+        with open(chemin, encoding="utf-8") as f:
+            entrees = _json.load(f)
+    except Exception as e:
+        return {"ok": False, "reason": "bad-catalog", "voices": [], "error": str(e)}
+    voix = []
+    for item in entrees:
+        try:
+            nom, genre = item["name"], item["gender"]
+        except Exception:
+            continue
+        if nom and genre:
+            voix.append("%s-%s" % (nom, genre))
+    voix.sort()
+    return {"ok": True, "voices": voix, "count": len(voix)}
 
 
 def mpt_lancer():
@@ -612,6 +702,19 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # Relais LECTURE SEULE de l'API MPT : liste des tâches.
         if self.path.split('?')[0] == '/mpt/tasks':
             ok, data = mpt_requete("GET", "/api/v1/tasks")
+            self._json_response(data if ok else {"ok": False, "error": data})
+            return
+        # Catalogue des voix et des musiques : on ne code RIEN en dur, c'est
+        # le service qui est la source de verite (mise a jour, nouvelle voix,
+        # fichier ajoute dans resource/songs). Le modal se remplit a l'ouverture.
+        if self.path.split('?')[0] == '/mpt/voices':
+            self._json_response(mpt_voices())
+            return
+        if self.path.split('?')[0] == '/mpt/fonts':
+            self._json_response(mpt_fonts())
+            return
+        if self.path.split('?')[0] == '/mpt/musics':
+            ok, data = mpt_requete("GET", "/api/v1/musics")
             self._json_response(data if ok else {"ok": False, "error": data})
             return
         # Config du Studio : formulaire (sujet, format, voix, sous-titres…).
@@ -812,6 +915,21 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "task_id invalide"})
                 return
             ok, data = mpt_requete("DELETE", "/api/v1/tasks/%s" % tid, timeout=30)
+            self._json_response(data if ok else {"ok": False, "error": data})
+        # ── GENERATION PAR IA (boutons « Generer avec l'IA ») ─────────
+        # Trois relais vers l'API MPT. Le corps est transmis tel quel : MPT
+        # valide (Pydantic), donc pas de divergence de contrat.
+        # Timeout LARGE : ce sont des appels LLM, plusieurs dizaines de
+        # secondes sont normales ; un delai court ferait croire a une panne.
+        elif self.path.split('?')[0] in ('/mpt/script', '/mpt/terms', '/mpt/social'):
+            cible = {'/mpt/script': '/api/v1/scripts',
+                     '/mpt/terms': '/api/v1/terms',
+                     '/mpt/social': '/api/v1/social-metadata'}[self.path.split('?')[0]]
+            corps = self._lire_corps_json()
+            if corps is None:
+                self._json_response({"ok": False, "error": "Corps JSON invalide"})
+                return
+            ok, data = mpt_requete("POST", cible, corps, timeout=180)
             self._json_response(data if ok else {"ok": False, "error": data})
         # Config du Studio (formulaire : sujet, format, voix, sous-titres...)
         # Stockée HORS du dossier d'installation, comme la config TTS : elle
