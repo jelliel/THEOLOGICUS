@@ -1,0 +1,21 @@
+docs(skills): record the mirror rules and the gitignore-exemption trap
+
+The skill mirror added in 93178a2 only works if two traps are written down, so
+they are appended to the repo-hygiene section of the apk-build skill:
+
+- The user directory stays the source of truth; after any skill edit run
+  tools/sync_skills.py. The script names the differing files (filecmp on a
+  directory does not say which one changed) and replaces the folder outright so
+  a deleted source file also leaves the mirror.
+- A newly tracked directory can be swallowed by an existing .gitignore pattern.
+  .workbuddy-ai/skills/ shares its file with *secret*, *.key, *credential*,
+  _*.js and _*.py, all legitimately present. The explicit
+  !.workbuddy-ai/skills/** exemption is what keeps a future garde_secret.md
+  from vanishing silently.
+- Scan the STAGED diff for secrets, since the skills cite the signing key by
+  path only.
+
+Also verified here that the guard does its job: editing the skill made
+`--verifier` exit 1 and name the file, then the sync cleared it.
+
+Memory updated with the same facts (MEMORY.md plus the 2026-09-25 log).

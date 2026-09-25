@@ -6,6 +6,15 @@
 **Version = `git rev-list --count HEAD` → `2.0.<n>`.**
 **Ne pas reconstruire ici ce qui est dans un skill — y renvoyer.**
 
+**Les 4 skills sont VERSIONNÉS** dans `.workbuddy-ai/skills/` (miroir de
+`~/.workbuddy-ai/skills/`, qui n'est **pas** un dépôt git). La **source de
+vérité reste le dossier utilisateur** ; après avoir modifié un skill :
+`python tools/sync_skills.py` (copie) ou `--verifier` (contrôle, sortie 1 si
+écart). **Un miroir qui diverge est pire que pas de miroir.** La clé de
+signature `~/.workbuddy-ai/keys/` reste **hors dépôt** — les skills n'en citent
+que le **chemin**. `.gitignore` exempte `!.workbuddy-ai/skills/**` pour que les
+motifs `*secret*`/`_*.js` ne l'avalent pas en silence.
+
 ## Règles qui coûtent cher si violées
 
 - **`python tools/sync_html.py` après CHAQUE correctif** (4 copies). Non synchronisé

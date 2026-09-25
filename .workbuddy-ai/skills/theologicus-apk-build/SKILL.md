@@ -632,6 +632,29 @@ Related DOM traps on the same WebView:
   `git ls-files | git check-ignore --stdin` must return **empty**.
 - **Whatever must stay out of the repo is written in `.gitignore`; it is not
   remembered.** Verify with `git check-ignore` and `git add -An`.
+- **The skills themselves are versioned in `.workbuddy-ai/skills/`** (mirror of
+  `~/.workbuddy-ai/skills/`, which is **not** a git repo). The user directory
+  stays the **source of truth** — that is where the agent loads a skill from.
+  After editing any skill, run **`python tools/sync_skills.py`**; `--verifier`
+  copies nothing and **exits 1** on any difference, so it can gate a check.
+  **A mirror that drifts is worse than no mirror**: it looks like a backup while
+  serving a stale version. The script names the differing files, because
+  `filecmp` on a whole directory does not say *which* file changed, and it
+  replaces the folder outright so a file deleted at the source also leaves the
+  mirror.
+- **A new tracked directory can be swallowed by an existing `*.gitignore`
+  pattern.** `.workbuddy-ai/skills/` sits in the same file as `*secret*`,
+  `*.key`, `*credential*`, `_*.js`, `_*.py` — all of which exist for good
+  reasons. Without an explicit `!.workbuddy-ai/skills/**` exemption, a future
+  file like `garde_secret.md` would be ignored **silently**, and the backup
+  would have a hole nobody would notice. After adding a directory that must be
+  tracked, run `git check-ignore -v <each file>` and confirm the answer is
+  empty (or that it is the exemption you wrote).
+- **Before pushing anything from `~/.workbuddy-ai/`, scan the staged diff for
+  secrets** — the skills reference the signing key by **path**, never by
+  content, and `~/.workbuddy-ai/keys/` must stay out of the repo. Check the
+  **staged** diff (`git diff --cached`), not the working tree: reviewing what
+  will actually be published is the point.
 - Version = `git rev-list --count HEAD` (2.0.N). **Never announce a number before
   reading it from the API.**
 - Drive C: is full (99 %). CDP bench Chrome profiles live in `%TEMP%\theo-*` —
