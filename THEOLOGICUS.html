@@ -6995,6 +6995,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="clear-annotations" title="Supprimer tous les commentaires, surlignages et encadrés du chat">🗑 ANNOT.</button>
     <button class="hud-btn" id="new-chat">+ NEW</button>
     <button class="hud-btn" id="open-archives-desktop">⬡ ARCHIVES</button>
+    <button class="hud-btn" id="open-studio-modal" title="Studio Vidéo — générer une vidéo courte à partir d'un sujet (MoneyPrinterTurbo)">🎬 STUDIO VIDÉO</button>
     <div class="context-meter" id="context-meter" title="Contexte utilisé"><div class="context-bar-track"><div class="context-bar-fill" id="context-bar" style="width:0%"></div></div><span id="context-label">0%</span></div>
     <div id="auto-save-indicator" class="status-pill" style="font-size:9px;opacity:0.5;transition:opacity 0.3s" title="Dernière sauvegarde auto">⏳</div>
   </div>
@@ -7457,6 +7458,178 @@ window.__ensureTafsirSurah = function(p){
 </div>
 
 <!-- ═══════════════════ MODAL : API KEY ═══════════════════ -->
+<!-- ═══════════════════ STUDIO VIDÉO (MoneyPrinterTurbo) ═══════════════════
+     Connecteur vers un service VOISIN (comme Supertonic / LibreTranslate) :
+     MoneyPrinterTurbo expose /api/v1 sur un port sondé par proxy_server.py.
+     Aucune dépendance embarquée — le service doit tourner à côté. -->
+<div class="modal-overlay" id="studio-modal">
+  <div class="modal-box" style="max-width:780px">
+    <div class="corner-deco corner-tl"></div>
+    <div class="corner-deco corner-tr"></div>
+    <div class="corner-deco corner-bl"></div>
+    <div class="corner-deco corner-br"></div>
+    <div class="modal-header">
+      <div class="modal-title">🎬 STUDIO VIDÉO</div>
+      <button class="modal-close" id="close-studio-modal">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- ÉTAT DU SERVICE -->
+      <div id="studio-status" class="info-block" style="border-left-color:var(--neon);margin-bottom:16px">
+        <strong>⏳ Détection du service…</strong>
+      </div>
+
+      <!-- FORMULAIRE -->
+      <div id="studio-form" style="display:none">
+
+        <div class="section-title">SUJET ET SCRIPT</div>
+        <div class="field-group">
+          <label class="field-label">🎯 Sujet de la vidéo *</label>
+          <input type="text" class="field-input" id="studio-subject" placeholder="Ex. La Transfiguration du Christ">
+          <div class="field-hint">En une phrase. Le script sera généré à partir de ce sujet.</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">📝 Script (vide = généré automatiquement)</label>
+          <textarea class="field-input" id="studio-script" rows="4" placeholder="Laissez vide pour que le service écrive le script."></textarea>
+        </div>
+
+        <div class="section-title">FORMAT ET MONTAGE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">📐 Format</label>
+            <select class="field-input" id="studio-aspect">
+              <option value="9:16">Portrait 9:16 (Shorts / TikTok / Reels)</option>
+              <option value="16:9">Paysage 16:9 (YouTube)</option>
+              <option value="1:1">Carré 1:1 (Instagram)</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">⏱ Durée d'un plan (s)</label>
+            <input type="number" class="field-input" id="studio-clip" value="4" min="1" max="30">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎞 Nombre de vidéos</label>
+            <input type="number" class="field-input" id="studio-count" value="1" min="1" max="5">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔀 Enchaînement des plans</label>
+            <select class="field-input" id="studio-concat">
+              <option value="random">Aléatoire</option>
+              <option value="sequential">Séquentiel</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🌐 Langue de la vidéo</label>
+            <input type="text" class="field-input" id="studio-lang" placeholder="fr (vide = détection auto)">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎬 Source des images</label>
+            <select class="field-input" id="studio-source">
+              <option value="pexels">Pexels</option>
+              <option value="pixabay">Pixabay</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-title">VOIX ET NARRATION</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">🔊 Voix</label>
+            <input type="text" class="field-input" id="studio-voice" placeholder="fr-FR-DeniseNeural-Female">
+          </div>
+          <div class="field-group">
+            <label class="field-label">⚡ Vitesse de lecture</label>
+            <input type="number" class="field-input" id="studio-rate" value="1.0" min="0.5" max="2.0" step="0.1">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎚 Volume de la voix</label>
+            <input type="number" class="field-input" id="studio-volume" value="1.0" min="0.1" max="2.0" step="0.1">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎵 Musique de fond</label>
+            <select class="field-input" id="studio-bgm">
+              <option value="random">Aléatoire</option>
+              <option value="">Aucune</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="section-title">SOUS-TITRES</div>
+        <div class="field-group">
+          <label class="field-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="studio-subtitles" checked style="width:auto">
+            Activer les sous-titres incrustés
+          </label>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="field-group">
+            <label class="field-label">📍 Position</label>
+            <select class="field-input" id="studio-subpos">
+              <option value="bottom">Bas</option>
+              <option value="top">Haut</option>
+              <option value="center">Centre</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">🔤 Taille de police</label>
+            <input type="number" class="field-input" id="studio-fontsize" value="60" min="20" max="140">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🎨 Couleur du texte</label>
+            <input type="text" class="field-input" id="studio-color" value="#FFFFFF">
+          </div>
+          <div class="field-group">
+            <label class="field-label">🖊 Contour</label>
+            <input type="text" class="field-input" id="studio-stroke" value="#000000">
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top:20px">
+          <button class="btn-ghost" id="studio-save">💾 ENREGISTRER LES RÉGLAGES</button>
+          <button class="btn-primary" id="studio-launch">🚀 GÉNÉRER LA VIDÉO</button>
+        </div>
+      </div>
+
+      <!-- PROGRESSION -->
+      <div id="studio-progress" style="display:none">
+        <div class="section-title">PRODUCTION EN COURS</div>
+        <div class="info-block" style="border-left-color:var(--cyan)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span id="studio-spin" style="font-size:18px">⏳</span>
+            <div style="flex:1">
+              <div id="studio-progress-label" style="font-family:var(--font-mono);font-size:12px">Initialisation…</div>
+              <div style="margin-top:8px;height:4px;background:rgba(79,142,247,0.15);border-radius:2px;overflow:hidden">
+                <div id="studio-progress-bar" style="height:100%;width:0%;background:var(--cyan);transition:width .4s ease"></div>
+              </div>
+            </div>
+          </div>
+          <div id="studio-progress-hint" style="margin-top:10px;font-size:11px;color:var(--text-dim)">La génération prend plusieurs minutes : recherche des images, synthèse vocale, sous-titres, montage, rendu.</div>
+        </div>
+        <div class="btn-row" style="margin-top:16px">
+          <button class="btn-ghost" id="studio-cancel">✕ FERMER LE SUIVI</button>
+        </div>
+      </div>
+
+      <!-- RÉSULTAT -->
+      <div id="studio-result" style="display:none">
+        <div class="section-title">VIDÉO PRÊTE</div>
+        <video id="studio-video" controls playsinline style="width:100%;border-radius:var(--r);border:var(--hud-border);background:#000"></video>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn-ghost" id="studio-again">↻ NOUVELLE VIDÉO</button>
+          <a class="btn-primary" id="studio-download" download style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center">📥 TÉLÉCHARGER</a>
+        </div>
+      </div>
+
+      <!-- JOURNAL -->
+      <div id="studio-log" style="display:none;margin-top:14px">
+        <div class="section-title">JOURNAL</div>
+        <pre id="studio-log-body" style="max-height:180px;overflow:auto;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);background:rgba(0,0,0,0.25);padding:10px;border-radius:var(--r)"></pre>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="api-modal">
   <div class="modal-box">
     <div class="corner-deco corner-tl"></div>
@@ -19481,6 +19654,295 @@ function bindEvents() {
     if (confirm("Effacer toute la mémoire globale ?")) await memory.clear();
   };
 
+  // ══════════════════════════════════════════════════════════════════
+  // STUDIO VIDÉO — connecteur MoneyPrinterTurbo
+  //
+  // Le service est VOISIN, pas embarqué : on parle au relais de
+  // proxy_server.py (/mpt/…), qui sonde le port et relaie vers /api/v1.
+  // Raison du relais plutôt qu'un appel direct : la page est servie en
+  // 127.0.0.1:8765, appeler 127.0.0.1:8080 serait cross-origin, et MPT
+  // n'ouvre CORS que si l'utilisateur l'a explicitement configuré.
+  // ══════════════════════════════════════════════════════════════════
+  const _studio = { polling: null, taskId: null, duree: 0 };
+
+  async function studioStatus() {
+    try {
+      const r = await fetch("/mpt/status", { cache: "no-store" });
+      return await r.json();
+    } catch (e) {
+      return { running: false, last_error: String(e) };
+    }
+  }
+
+  function studioLog(msg) {
+    const box = $("studio-log"), body = $("studio-log-body");
+    if (!box || !body) return;
+    box.style.display = "block";
+    const h = new Date().toLocaleTimeString();
+    body.textContent += `[${h}] ${msg}\n`;
+    body.scrollTop = body.scrollHeight;
+  }
+
+  async function studioRefreshStatus() {
+    const box = $("studio-status"), form = $("studio-form");
+    if (!box) return null;
+    box.innerHTML = '<strong>⏳ Détection du service…</strong>';
+    const st = await studioStatus();
+    if (st.running) {
+      box.style.borderLeftColor = "var(--neon)";
+      box.innerHTML = `<strong>✓ Service détecté</strong><br>MoneyPrinterTurbo écoute sur le port <code>${st.port}</code>.`;
+      if (form) form.style.display = "block";
+    } else {
+      box.style.borderLeftColor = "var(--danger)";
+      const dossier = st.dir ? "Le dossier est bien installé." : "Dossier non trouvé sur le Bureau.";
+      box.innerHTML = `<strong>✕ Service non détecté</strong><br>
+        MoneyPrinterTurbo ne répond sur aucun port sondé. Lancez <code>api.bat</code> dans son dossier, puis cliquez « Re-détecter ».
+        ${dossier ? "<br><span style='font-size:11px;color:var(--text-dim)'>" + dossier + "</span>" : ""}
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <button class="btn-ghost" id="studio-redetect">↻ RE-DÉTECTER</button>
+          <button class="btn-ghost" id="studio-start">▶ LANCER LE SERVICE</button>
+        </div>`;
+      if ($("studio-redetect")) $("studio-redetect").onclick = studioRefreshStatus;
+      if ($("studio-start")) $("studio-start").onclick = studioStartService;
+    }
+    return st;
+  }
+
+  async function studioStartService() {
+    studioLog("Demande de démarrage du service…");
+    const r = await fetch("/mpt/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const j = await r.json();
+    studioLog("Réponse démarrage : " + JSON.stringify(j));
+    // Le service met plusieurs secondes à ouvrir son port : on re-sonde
+    // quelques fois plutôt que de conclure une seule fois, trop tôt.
+    let essais = 0;
+    const t = setInterval(async () => {
+      essais++;
+      const st = await studioStatus();
+      if (st.running || essais >= 10) {
+        clearInterval(t);
+        studioRefreshStatus();
+      }
+    }, 1500);
+  }
+
+  // Le formulaire suit EXACTEMENT le contrat de VideoParams (app/models/schema.py
+  // de MoneyPrinterTurbo) : c'est MPT qui valide, on ne duplique pas la
+  // validation, sinon les deux divergeraient.
+  function studioPayload() {
+    const v = id => ($(id) ? $(id).value : "");
+    const n = id => { const x = parseFloat(v(id)); return isNaN(x) ? undefined : x; };
+    const p = {
+      video_subject: v("studio-subject").trim(),
+      video_aspect: v("studio-aspect"),
+      video_clip_duration: n("studio-clip") || 4,
+      video_count: n("studio-count") || 1,
+      video_concat_mode: v("studio-concat"),
+      voice_rate: n("studio-rate") || 1.0,
+      voice_volume: n("studio-volume") || 1.0,
+      bgm_type: v("studio-bgm"),
+      subtitle_enabled: $("studio-subtitles") ? $("studio-subtitles").checked : true,
+      subtitle_position: v("studio-subpos"),
+      font_size: n("studio-fontsize") || 60,
+      text_fore_color: v("studio-color"),
+      stroke_color: v("studio-stroke"),
+      video_source: v("studio-source"),
+    };
+    const script = v("studio-script").trim();
+    if (script) p.video_script = script;
+    const voice = v("studio-voice").trim();
+    if (voice) p.voice_name = voice;
+    const lang = v("studio-lang").trim();
+    if (lang) p.video_language = lang;
+    return p;
+  }
+
+  async function studioSaveConfig() {
+    try {
+      const r = await fetch("/mpt/config", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(studioPayload()),
+      });
+      const j = await r.json();
+      studioLog(j.ok ? "Réglages enregistrés." : "Échec de l'enregistrement.");
+      const b = $("studio-save");
+      if (b && j.ok) { const t = b.textContent; b.textContent = "✓ ENREGISTRÉ"; setTimeout(() => b.textContent = t, 1500); }
+    } catch (e) { studioLog("Enregistrement impossible : " + e); }
+  }
+
+  async function studioLoadConfig() {
+    try {
+      const r = await fetch("/mpt/config", { cache: "no-store" });
+      const c = await r.json();
+      if (!c || !Object.keys(c).length) return;
+      const set = (id, val) => { if ($(id) && val !== undefined && val !== null && val !== "") $(id).value = val; };
+      set("studio-subject", c.video_subject);
+      set("studio-script", c.video_script);
+      set("studio-aspect", c.video_aspect);
+      set("studio-clip", c.video_clip_duration);
+      set("studio-count", c.video_count);
+      set("studio-concat", c.video_concat_mode);
+      set("studio-rate", c.voice_rate);
+      set("studio-volume", c.voice_volume);
+      set("studio-bgm", c.bgm_type);
+      set("studio-voice", c.voice_name);
+      set("studio-lang", c.video_language);
+      set("studio-source", c.video_source);
+      set("studio-subpos", c.subtitle_position);
+      set("studio-fontsize", c.font_size);
+      set("studio-color", c.text_fore_color);
+      set("studio-stroke", c.stroke_color);
+      if ($("studio-subtitles") && c.subtitle_enabled !== undefined) $("studio-subtitles").checked = !!c.subtitle_enabled;
+    } catch (e) { /* pas de config enregistrée : valeurs par défaut du HTML */ }
+  }
+
+  function studioShow(etape) {
+    ["studio-form", "studio-progress", "studio-result"].forEach(id => {
+      const el = $(id); if (!el) return;
+      el.style.display = (id === etape) ? "block" : "none";
+    });
+    if (etape === "studio-form") { const p = $("studio-progress"); if (p) p.style.display = "none"; }
+  }
+
+  async function studioLaunch() {
+    const sujet = $("studio-subject") ? $("studio-subject").value.trim() : "";
+    if (!sujet) { studioLog("Le sujet est obligatoire."); alert("Indiquez un sujet pour la vidéo."); return; }
+    const st = await studioStatus();
+    if (!st.running) { studioRefreshStatus(); return; }
+
+    studioShow("studio-progress");
+    _studio.duree = 0;
+    $("studio-progress-label").textContent = "Envoi de la demande…";
+    $("studio-progress-bar").style.width = "5%";
+    studioLog("Sujet : " + sujet);
+    studioLog("Envoi à /mpt/submit…");
+
+    let j;
+    try {
+      const r = await fetch("/mpt/submit", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(studioPayload()),
+      });
+      j = await r.json();
+    } catch (e) {
+      studioLog("Échec de l'envoi : " + e);
+      $("studio-progress-label").textContent = "Échec de l'envoi.";
+      return;
+    }
+    if (!j || !j.data || !j.data.task_id) {
+      studioLog("Réponse inattendue : " + JSON.stringify(j).slice(0, 400));
+      $("studio-progress-label").textContent = "Le service a refusé la demande — voir le journal ci-dessous.";
+      return;
+    }
+    _studio.taskId = j.data.task_id;
+    studioLog("Tâche créée : " + _studio.taskId);
+    $("studio-progress-label").textContent = "Tâche acceptée. Production en cours…";
+    $("studio-progress-bar").style.width = "10%";
+    studioPoll();
+  }
+
+  function studioStopPolling() {
+    if (_studio.polling) { clearInterval(_studio.polling); _studio.polling = null; }
+  }
+
+  function studioPoll() {
+    studioStopPolling();
+    _studio.polling = setInterval(async () => {
+      _studio.duree += 2;
+      // Garde-fou : une vidéo prend des minutes, pas des heures. Au-delà de
+      // 30 min on cesse de sonder et on laisse l'utilisateur consulter MPT.
+      if (_studio.duree > 1800) {
+        studioStopPolling();
+        $("studio-progress-label").textContent = "Délai dépassé (30 min). Le service poursuit peut-être — consultez son interface.";
+        return;
+      }
+      let j;
+      try {
+        const r = await fetch("/mpt/poll", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: _studio.taskId }),
+        });
+        j = await r.json();
+      } catch (e) { studioLog("Sondage interrompu : " + e); return; }
+
+      const d = j && j.data ? j.data : null;
+      if (!d) return;
+      const etat = d.state;
+      const pct = d.progress || 0;
+      $("studio-progress-bar").style.width = Math.max(10, pct) + "%";
+
+      if (etat === 1 || etat === "1") {
+        $("studio-progress-label").textContent = `Production en cours… ${pct}% (${_studio.duree}s)`;
+      } else if (etat === -1 || etat === "-1") {
+        studioStopPolling();
+        // Le service nomme l'étape fautive (script | audio | subtitle |
+        // materials | video | combine) et la cause exacte. On les REMONTE
+        // tels quels : « échec » seul obligerait l'utilisateur à fouiller
+        // l'interface de MPT pour comprendre, alors que la cause est ici.
+        const etape = d.failed_stage ? ` (étape : ${d.failed_stage})` : "";
+        const cause = d.error || "raison non fournie";
+        $("studio-progress-label").textContent = "Échec de la production" + etape + ".";
+        studioLog("ÉCHEC" + etape + " : " + cause);
+        const hint = $("studio-progress-hint");
+        if (hint) {
+          hint.innerHTML = "<strong style='color:var(--danger)'>Cause :</strong> " + cause +
+            "<br>Une clé LLM est requise pour écrire le script (et une clé de rushes pour les images). " +
+            "Configurez-les dans <code>config.toml</code> de MoneyPrinterTurbo, puis relancez.";
+        }
+      } else if (etat === 0 || etat === "0") {
+        // La vidéo est prête. On ne rafraîchit PAS tout de suite : MPT
+        // termine l'écriture du fichier juste après avoir marqué l'état.
+        studioStopPolling();
+        $("studio-progress-label").textContent = "Vidéo prête !";
+        $("studio-progress-bar").style.width = "100%";
+        studioLog("Production terminée.");
+        setTimeout(studioShowResult, 900);
+      }
+    }, 2000);
+  }
+
+  function studioShowResult() {
+    const d = _studio.dernier || null;
+    studioShow("studio-result");
+    // On rejoue la dernière réponse pour retrouver le chemin du fichier.
+    fetch("/mpt/poll", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: _studio.taskId }),
+    }).then(r => r.json()).then(j => {
+      const t = j && j.data ? j.data : null;
+      if (!t) return;
+      const vids = t.videos || [];
+      if (!vids.length) { studioLog("Aucune vidéo dans la réponse."); return; }
+      // MPT rend une URI http://127.0.0.1:8080/tasks/… : on la réécrit vers
+      // notre relais, qui sait joindre le bon port et sert le fichier brut.
+      const uri = vids[0];
+      const m = String(uri).match(/\/tasks\/(.+)$/);
+      const rel = m ? m[1] : String(uri).split("/").pop();
+      const src = "/mpt/download/" + rel;
+      const v = $("studio-video");
+      if (v) { v.src = src; v.load(); }
+      const a = $("studio-download");
+      if (a) { a.href = src; a.setAttribute("download", rel.split("/").pop() || "video.mp4"); }
+      studioLog("Vidéo : " + src);
+    }).catch(e => studioLog("Récupération du résultat impossible : " + e));
+  }
+
+  function studioOpen() {
+    const m = $("studio-modal");
+    if (m) m.classList.add("active");
+    studioLoadConfig();
+    studioRefreshStatus();
+  }
+
+  if ($("#open-studio-modal")) $("#open-studio-modal").onclick = studioOpen;
+  if ($("#close-studio-modal")) $("#close-studio-modal").onclick = () => { studioStopPolling(); $("#studio-modal").classList.remove("active"); };
+  if ($("#studio-modal")) $("#studio-modal").onclick = e => { if (e.target === $("#studio-modal")) { studioStopPolling(); $("#studio-modal").classList.remove("active"); } };
+  if ($("#studio-save")) $("#studio-save").onclick = studioSaveConfig;
+  if ($("#studio-launch")) $("#studio-launch").onclick = studioLaunch;
+  if ($("#studio-cancel")) $("#studio-cancel").onclick = () => { studioStopPolling(); studioShow("studio-form"); };
+  if ($("#studio-again")) $("#studio-again").onclick = () => { studioShow("studio-form"); studioRefreshStatus(); };
+  window.__studioOpen = studioOpen;
+
   // Data Modal
   const openDataModal = async () => {
     await computeStats();
@@ -19671,6 +20133,8 @@ function bindEvents() {
 
     // Mobile API modal
     if ($("#open-api-modal-mob")) $("#open-api-modal-mob").onclick = () => { closeBurger(); $("#api-modal").classList.add("active"); };
+    // Mobile Studio Vidéo (même entrée que le bouton du header)
+    if ($("#open-studio-modal-mob")) $("#open-studio-modal-mob").onclick = () => { closeBurger(); if (typeof window.__studioOpen === 'function') window.__studioOpen(); };
     // Mobile Agent modal
     if ($("#open-agent-modal-mob")) $("#open-agent-modal-mob").onclick = async () => { closeBurger(); await loadAgents(); $("#agent-modal").classList.add("active"); };
     // Mobile Data modal
@@ -20021,6 +20485,9 @@ if (document.readyState === 'loading') {
     'agent-edit':    () => clickIf('open-agent-modal'),
     'api-model':     () => { setView('chat'); focusIf('model-select'); },
     'api-activate':  () => clickIf('open-api-modal'),
+    // __studioOpen et non clickIf : la commande doit AUSSI charger la config
+    // et re-sonder le service, ce que le simple clic ne fait pas.
+    'studio-open':   () => { if (typeof window.__studioOpen === 'function') window.__studioOpen(); },
   };
   const runAct = a => { if (a && actions[a]) actions[a](); };
 
@@ -25262,6 +25729,8 @@ body{ margin:0; }
     ['Modeles', '!', 'Fournisseurs et cles API', 'open-api-modal'],
     ['Modeles', '@', 'Activer Vision / Audio sur un modele', null, 0, 'v13Toast', 'Vision / Audio'],
     ['Modeles', 'd', 'Cle API : telecharger le fichier portable', null, 0, 'v13Toast', 'Cle portable'],
+    ['Studio', 'v', 'Ouvrir le Studio Video', null, 0, 'studio-open'],
+    ['Studio', 'g', 'Generer une video courte', null, 0, 'studio-open'],
 
     /* ── AGENTS ── */
     ['Agents', '&', 'Choisir un agent', 'agent-select', 0, 'v13Focus'],

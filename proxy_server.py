@@ -423,6 +423,154 @@ def st_stop():
     return {"ok": True, **st_status()}
 
 
+# ════════════════════════════════════════════════════════════════════
+# MoneyPrinterTurbo — STUDIO VIDEO de THEOLOGICUS.
+#
+# Ce n'est PAS un modele : c'est un SERVICE VOISIN, comme Supertonic et
+# LibreTranslate ci-dessus. MPT tourne de son cote (portfolio Windows,
+# api.bat) et expose une vraie API REST documentee sur /docs.
+#
+# Pourquoi un relais ici plutot qu'un appel direct depuis le HTML :
+#   1. La page est servie en http://127.0.0.1:8765 ; appeler directement
+#      http://127.0.0.1:8080 ferait une requete CROSS-ORIGIN. MPT ne
+#      repond aux autres origines que si l'utilisateur a configure
+#      CORS_ALLOWED_ORIGINS — frotter le relais evite d'imposer cela.
+#   2. Le POLLING et le DOWNLOAD d'un MP4 passent par un meme point, donc
+#      une seule logique de port a maintenir.
+#   3. Aucune cle API MPT n'a besoin d'entrer dans localStorage.
+#
+# PORT : le piege v117 s'applique exactement ici. api.bat ecoute 8080 par
+# defaut (config.toml: listen_port = 8080), MAIS start.bat lance le WebUI
+# Streamlit qui choisit le premier port libre de 8501 a 8599. On sonde donc
+# une PLAGE, on s'arrete des qu'un service repond, et on JOURNALISE le port
+# retenu : un port qui change en silence fait croire que la config est perdue.
+#
+# Sondage volontairement LECTURE SEULE (/ping) : « est-ce MPT ? » se prouve
+# par le corps 'pong', pas par le fait que le port repond — n'importe quel
+# programme peut occuper 8080.
+# ════════════════════════════════════════════════════════════════════
+MPT_PORTS = (8080, 8081) + tuple(range(8501, 8510))
+# Dossier d'installation par defaut sur CETTE machine (dossier Bureau).
+MPT_DEFAULT_DIR = os.path.join(
+    os.path.expanduser("~"), "Desktop", "MoneyPrinterTurbo-Portable-Windows-1.3.7")
+_mpt = {"port": None, "last_error": "", "probed": 0}
+
+
+def _boucle_locale():
+    """Ouvreur urllib qui N'UTILISE AUCUN proxy.
+
+    Mesuré sur cette machine : ``http_proxy``/``HTTP_PROXY`` sont définis dans
+    l'environnement et urllib les honore AUSSI pour 127.0.0.1. Le proxy ne peut
+    pas joindre la boucle locale et rend **502 Bad Gateway** — un message qui
+    ressemble à « le service a répondu 502 » alors que MPT n'a jamais reçu la
+    requête. Sans ce désarmement, la sonde concluait « service absent » alors
+    que le service tournait.
+    """
+    import urllib.request
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _mpt_probe(port, timeout=0.6):
+    """Interroge /ping sur un port. Rend True UNIQUEMENT si le corps est
+    'pong' : c'est MPT qui repond, pas un inconnu sur le meme port."""
+    try:
+        with _boucle_locale().open(
+                "http://127.0.0.1:%d/ping" % port, timeout=timeout) as r:
+            if r.status != 200:
+                return False
+            # MPT (FastAPI, type str) renvoie le corps JSON '"pong"' AVEC les
+            # guillemets. On accepte les deux formes plutot que d'imposer un
+            # detail d'encodage : ce qui compte est que ce soit bien MPT.
+            corps = r.read(32).decode("utf-8", "replace").strip()
+            return corps in ('pong', '"pong"')
+    except Exception:
+        return False
+
+
+def _mpt_dir():
+    """Dossier du portatif MPT, surchargeable par variable d'environnement.
+    Priorite a MPT_DIR (l'utilisateur peut avoir range le dossier ailleurs),
+    puis au chemin par defaut du Bureau."""
+    cand = os.environ.get("MPT_DIR") or MPT_DEFAULT_DIR
+    return cand if os.path.isdir(cand) else None
+
+
+def mpt_status():
+    """Etat du service. Ne conserve un port QUE s'il repond encore : un
+    service arrete entre-temps doit redevenir 'non detecte', sinon l'UI
+    afficherait un Studio pret a l'emploi qui echoue a chaque envoi."""
+    if _mpt["port"] is not None and _mpt_probe(_mpt["port"]):
+        return {"running": True, "port": _mpt["port"],
+                "dir": _mpt_dir(), "last_error": ""}
+    _mpt["port"] = None
+    # Decouverte : on sonde la plage jusqu'au PREMIER service qui se nomme.
+    for port in MPT_PORTS:
+        if _mpt_probe(port):
+            _mpt["port"] = port
+            print("[MPT] service detecte sur le port %d" % port, flush=True)
+            return {"running": True, "port": port,
+                    "dir": _mpt_dir(), "last_error": ""}
+    return {"running": False, "port": None, "dir": _mpt_dir(),
+            "last_error": _mpt["last_error"]}
+
+
+def mpt_requete(methode, chemin, corps=None, timeout=30):
+    """Appel JSON a l'API MPT. Rend (ok, donnees_ou_message)."""
+    st = mpt_status()
+    if not st["running"]:
+        return False, "Service MoneyPrinterTurbo non detecte (aucun 'pong' sur les ports sondes)."
+    url = "http://127.0.0.1:%d%s" % (st["port"], chemin)
+    try:
+        import urllib.request
+        data = json.dumps(corps).encode("utf-8") if corps is not None else None
+        req = urllib.request.Request(url, data=data, method=methode)
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            brut = r.read().decode("utf-8", "replace")
+            try:
+                return True, json.loads(brut)
+            except Exception:
+                return True, {"raw": brut}
+    except Exception as e:
+        # HTTPError porte un corps JSON utile (400 de validation Pydantic) :
+        # le perdre transformerait un message precis en « erreur reseau ».
+        try:
+            from urllib.error import HTTPError
+            if isinstance(e, HTTPError):
+                brut = e.read().decode("utf-8", "replace")
+                try:
+                    return False, json.loads(brut)
+                except Exception:
+                    return False, brut[:800]
+        except Exception:
+            pass
+        return False, str(e)
+
+
+def mpt_lancer():
+    """Tente de demarrer le portatif MPT (api.bat) si l'utilisateur l'a
+    installe. On ne l'EMBARQUE jamais : on se contente de lancer le script
+    deja present sur le disque, comme le fait le raccourci Bureau."""
+    if mpt_status()["running"]:
+        return {"ok": True, "deja": True, **mpt_status()}
+    dossier = _mpt_dir()
+    if not dossier:
+        return {"ok": False, "reason": "no-dir", **mpt_status()}
+    bat = os.path.join(dossier, "api.bat")
+    if not os.path.isfile(bat):
+        return {"ok": False, "reason": "no-bat", **mpt_status()}
+    if os.name != "nt":
+        return {"ok": False, "reason": "not-windows", **mpt_status()}
+    try:
+        flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        subprocess.Popen(["cmd", "/c", bat], cwd=dossier, creationflags=flags)
+        return {"ok": True, "lance": True, **mpt_status()}
+    except Exception as e:
+        _mpt["last_error"] = str(e)
+        return {"ok": False, "reason": "spawn-failed", **mpt_status()}
+
+
 class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -455,6 +603,62 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # Supertonic local : état (interrogé par PARAMÈTRES)
         if self.path.split('?')[0] == '/supertonic/status':
             self._json_response(st_status())
+            return
+        # ── MoneyPrinterTurbo (STUDIO VIDEO) ──────────────────────────
+        # État du service voisin : port découvert, dossier installé.
+        if self.path.split('?')[0] == '/mpt/status':
+            self._json_response(mpt_status())
+            return
+        # Relais LECTURE SEULE de l'API MPT : liste des tâches.
+        if self.path.split('?')[0] == '/mpt/tasks':
+            ok, data = mpt_requete("GET", "/api/v1/tasks")
+            self._json_response(data if ok else {"ok": False, "error": data})
+            return
+        # Config du Studio : formulaire (sujet, format, voix, sous-titres…).
+        # Même emplacement hors-install que les clés et la config TTS, pour
+        # que le formulaire SURVIVE à une mise à jour de l'exe.
+        if self.path.split('?')[0] == '/mpt/config':
+            chemin = os.path.join(_app_data_dir(), 'theologicus_studio.json')
+            try:
+                with open(chemin, 'rb') as f:
+                    body = f.read()
+            except Exception:
+                body = b'{}'
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        # Relais du téléchargement : le MP4 est renvoyé tel quel (pas de JSON).
+        # Séparé de /download de MPT pour que le <video> du modal puisse
+        # pointer directement dessus sans traverser une couche JSON.
+        if self.path.startswith('/mpt/download/'):
+            rel = self.path[len('/mpt/download/'):].split('?')[0]
+            # Anti-traversée : MPT sert des fichiers sous storage/tasks, on
+            # refuse tout chemin qui remonte ou sort de cette arborescence.
+            if not rel or '..' in rel or rel.startswith('/') or ':' in rel:
+                self.send_error(400, 'Invalid path')
+                return
+            st = mpt_status()
+            if not st["running"]:
+                self.send_error(503, 'MoneyPrinterTurbo not detected')
+                return
+            try:
+                import urllib.request
+                url = "http://127.0.0.1:%d/api/v1/download/%s" % (st["port"], rel)
+                with urllib.request.urlopen(url, timeout=600) as r:
+                    self.send_response(200)
+                    self.send_header('Content-Type', r.headers.get('Content-Type', 'video/mp4'))
+                    self.send_header('Cache-Control', 'no-store')
+                    self.end_headers()
+                    while True:
+                        bloc = r.read(65536)
+                        if not bloc:
+                            break
+                        self.wfile.write(bloc)
+            except Exception as e:
+                self.send_error(502, 'MPT download failed: %s' % e)
             return
         # Config des clés API (fichier séparé, jamais embarqué dans le HTML).
         # Stocké HORS du dossier d'installation (%LOCALAPPDATA%/THEOLOGICUS)
@@ -579,6 +783,41 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 pass
             self._json_response({"tail": tail})
+        # ── MoneyPrinterTurbo (STUDIO VIDEO) ──────────────────────────
+        elif self.path.split('?')[0] == '/mpt/start':
+            self._json_response(mpt_lancer())
+        elif self.path.split('?')[0] == '/mpt/submit':
+            # Relais de création de tâche. Le corps du modal est transmis
+            # TEL QUEL à /api/v1/videos : c'est MPT (Pydantic) qui valide,
+            # donc aucune divergence de contrat possible entre nous deux.
+            corps = self._lire_corps_json()
+            if corps is None:
+                self._json_response({"ok": False, "error": "Corps JSON invalide"})
+                return
+            ok, data = mpt_requete("POST", "/api/v1/videos", corps, timeout=60)
+            self._json_response(data if ok else {"ok": False, "error": data})
+        elif self.path.split('?')[0] == '/mpt/poll':
+            corps = self._lire_corps_json() or {}
+            tid = corps.get("task_id", "")
+            # On ne laisse pas un identifiant arbitraire composer l'URL.
+            if not tid or not re.fullmatch(r'[A-Za-z0-9_\-]{1,64}', tid):
+                self._json_response({"ok": False, "error": "task_id invalide"})
+                return
+            ok, data = mpt_requete("GET", "/api/v1/tasks/%s" % tid, timeout=30)
+            self._json_response(data if ok else {"ok": False, "error": data})
+        elif self.path.split('?')[0] == '/mpt/delete':
+            corps = self._lire_corps_json() or {}
+            tid = corps.get("task_id", "")
+            if not tid or not re.fullmatch(r'[A-Za-z0-9_\-]{1,64}', tid):
+                self._json_response({"ok": False, "error": "task_id invalide"})
+                return
+            ok, data = mpt_requete("DELETE", "/api/v1/tasks/%s" % tid, timeout=30)
+            self._json_response(data if ok else {"ok": False, "error": data})
+        # Config du Studio (formulaire : sujet, format, voix, sous-titres...)
+        # Stockée HORS du dossier d'installation, comme la config TTS : elle
+        # doit survivre à une mise à jour du exe, sinon l'utilisateur retape tout.
+        elif self.path.split('?')[0] == '/mpt/config':
+            self._save_studio()
         elif self.path.startswith('/proxy/'):
             self._proxy_request()
         else:
@@ -594,6 +833,68 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(body)
         except Exception:
             pass
+
+    def _lire_corps_json(self, max_octets=262144):
+        """Corps JSON de la requête, ou None si illisible ou trop gros.
+
+        Borné volontairement : ce corps repart vers un service tiers, on ne
+        laisse pas une requête arbitrairement grosse consommer la mémoire du
+        relais. 256 Ko suffisent largement pour un formulaire de studio.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > max_octets:
+                return None
+            return json.loads(self.rfile.read(length).decode('utf-8'))
+        except Exception:
+            return None
+
+    def _save_studio(self):
+        """Enregistre theologicus_studio.json — le formulaire du STUDIO VIDEO.
+
+        Même emplacement hors dossier d'installation que theologicus_keys.json
+        et theologicus_config.json : une mise à jour du exe ne doit JAMAIS
+        faire retaper le formulaire. Écriture atomique (tmp + os.replace),
+        comme _save_config, pour qu'une coupure ne laisse pas un JSON tronqué.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > 262144:
+                raise ValueError('taille invalide')
+            body = self.rfile.read(length)
+            json.loads(body.decode('utf-8'))  # validation JSON
+            cfg_path = os.path.join(_app_data_dir(), 'theologicus_studio.json')
+            tmp_path = cfg_path + '.tmp'
+            with open(tmp_path, 'wb') as f:
+                f.write(body)
+            os.replace(tmp_path, cfg_path)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+        except Exception as e:
+            try:
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(str(e).encode('utf-8', 'replace'))
+            except Exception:
+                pass
+
+    def _lire_corps_json(self, max_octets=262144):
+        """Corps JSON de la requête, ou None si illisible ou trop gros.
+
+        Borné volontairement : ce corps repart vers un service tiers, on ne
+        laisse pas une requête arbitrairement grosse consommer la mémoire du
+        relais. 256 Ko suffisent largement pour un formulaire de studio.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > max_octets:
+                return None
+            return json.loads(self.rfile.read(length).decode('utf-8'))
+        except Exception:
+            return None
 
     def _save_data(self):
         """Enregistre un export de données dans le dossier de l'application.
