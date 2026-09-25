@@ -1,0 +1,35 @@
+Add API key links and AI video generation sources to video studio
+
+The media sources panel had no way to reach the site where a key is
+obtained: the user had to leave the app and guess the URL. Every key
+field now carries a real clickable link (target=_blank,
+rel=noopener noreferrer) pointing at the provider's own key page, with
+the same "Free / Recommended" badges MoneyPrinterTurbo shows.
+
+The AI video generation section did not exist. It is added from
+MoneyPrinterTurbo's own defaults rather than invented: six providers
+(Metaso MiniMax H3, OFox, ShengSuan Cloud, Volcano Ark Seedance,
+WaveSpeed, MuAPI) with their base URL, model, resolution and upstream
+provider, each served by the new GET /mpt/sources route. The catalogue
+is built by the service, so a provider added upstream appears without
+touching the interface.
+
+Sources are grouped stock / ia / image / local, free options first: a
+menu that opened on a billed service would charge by accident.
+
+Two silent failure modes are fixed:
+
+- a field created outside #studio-modal is never collected, because
+  studioReglagesPayload() only sweeps that selector, and reports
+  nothing. The bench now asserts membership, not just existence.
+- the "paid source" note was written once when the list arrived, so
+  switching to a billed generator afterwards showed no warning --
+  exactly when it matters. studioNoterSource() is now bound to change.
+
+Adds tools/run_benches.py: no background process survives the call that
+started it here (nohup, disown and run_in_background all die), so the
+relay answered the first request then vanished. One invocation now owns
+the relay, waits for it by condition, runs the benches and closes it.
+
+Benches: _v126 137/137 and 109/109. No regression: v125 35/35 + 56/56,
+v124 35/35 + 18/18, v123 78/78, v122 71/71, v120 57/57 + 14/14.

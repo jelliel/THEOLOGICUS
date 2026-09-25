@@ -644,6 +644,45 @@ _MPT_CFG_WHITELIST = {
     # --- Sources de medias (« Material Source Settings ») ---
     "video_source": "str",
     "pexels_api_keys": "list", "pixabay_api_keys": "list", "coverr_api_keys": "list",
+    "twelvelabs_api_keys": "list", "twelvelabs_rerank_terms": "bool",
+    # --- Generation de videos par IA (« AI Video Generation APIs ») ---
+    # Six fournisseurs, chacun avec sa cle, son adresse et ses reglages. Ces
+    # cles sont PAYANTES a l'usage (facturation a la seconde produite) : les
+    # rendre modifiables ici est ce qui permet a l'utilisateur de les voir et
+    # de les corriger sans ouvrir le config.toml d'un autre programme a la main.
+    "metaso_minimax_api_key": "str", "metaso_minimax_base_url": "str",
+    "metaso_minimax_resolution": "str", "metaso_minimax_poll_interval": "int",
+    "metaso_minimax_run_timeout": "int",
+    "ofox_api_key": "str", "ofox_base_url": "str",
+    "ofox_text_to_video_model": "str", "ofox_resolution": "str",
+    "ofox_provider": "str", "ofox_min_duration": "int", "ofox_max_duration": "int",
+    "ofox_poll_interval": "int", "ofox_run_timeout": "int",
+    # ShengSuan (LoomLoom) : un seul jeton pour le script ET la video. Son
+    # adresse est en tete du fichier, hors de la section [app] : on la rend
+    # lisible en lecture seule, jamais ecrite ici.
+    "loomloom_base_url": "str",
+    "loomloom_api_token": "str",
+    "loomloom_request_timeout_seconds": "int",
+    "loomloom_poll_interval_seconds": "int",
+    "loomloom_run_timeout_seconds": "int",
+    "loomloom_video_run_timeout_seconds": "int",
+    "volcengine_seedance_api_key": "str", "volcengine_seedance_base_url": "str",
+    "volcengine_seedance_model": "str", "volcengine_seedance_resolution": "str",
+    "volcengine_seedance_min_duration": "int", "volcengine_seedance_max_duration": "int",
+    "volcengine_seedance_poll_interval": "int", "volcengine_seedance_run_timeout": "int",
+    "volcengine_seedance_watermark": "bool",
+    "wavespeed_api_keys": "list",
+    "muapi_api_key": "str", "muapi_base_url": "str", "muapi_video_endpoint": "str",
+    "muapi_resolution": "str", "muapi_min_duration": "int", "muapi_max_duration": "int",
+    "muapi_poll_interval": "int", "muapi_run_timeout": "int",
+    # --- Image par IA (une seule source pour l'instant) ---
+    "openai_image_base_url": "str", "openai_image_api_keys": "list",
+    "openai_image_model": "str", "openai_image_size": "str",
+    "openai_image_prompt_template": "str",
+    # --- Musique de fond generee (Sonilo) ---
+    "sonilo_api_key": "str", "sonilo_base_url": "str", "sonilo_timeout": "int",
+    # --- Correspondance des plans avec le script ---
+    "match_materials_to_script": "bool",
     # --- Publication automatique (« Auto-Publish Settings ») ---
     "upload_post_enabled": "bool",
     "upload_post_auto_upload": "bool",
@@ -1282,6 +1321,149 @@ _MPT_VOICE_MODES = (
     ("none", "Aucune — video muette"),
 )
 
+# ══════════════════════════════════════════════════════════════════════════
+# Sources de videos et fournisseurs qui les alimentent
+# ══════════════════════════════════════════════════════════════════════════
+# Recopie de `webui/Main.py` : VIDEO_SOURCE_GROUPS donne les identifiants, et
+# `video_source_labels` leur libelle. On ne fusionne PAS les deux dans une
+# seule liste parce que le GROUPEMENT porte du sens : les banques de videos
+# sont gratuites, les generateurs par IA sont PAYANTS a la seconde produite.
+# Les melanger dans un seul menu deroulant ferait choisir un service facture
+# en croyant choisir un stock d'images.
+#
+# `cle` = la cle de config.toml qui porte l'identifiant d'acces du fournisseur,
+# `lien` = la page ou l'obtenir, recopiee de sa traduction anglaise (donc la
+# page officielle que le service lui-meme indique, pas une page devinee).
+_MPT_SOURCES_VIDEO = (
+    # (id, libelle, groupe, cle de config, lien pour obtenir l'acces)
+    ("pexels", "Pexels", "stock", "pexels_api_keys", "https://www.pexels.com/api/"),
+    ("pixabay", "Pixabay", "stock", "pixabay_api_keys",
+     "https://pixabay.com/api/docs/#api_search_videos"),
+    ("coverr", "Coverr", "stock", "coverr_api_keys",
+     "https://coverr.co/developers?ctx=header_navigation"),
+    ("metaso_minimax", "Metaso · MiniMax H3", "ia", "metaso_minimax_api_key",
+     "https://metaso.cn/minimax-h3/?s=MPT"),
+    ("ofox", "OFox AI Video", "ia", "ofox_api_key",
+     "https://ofox.ai/?utm_source=github&utm_medium=sponsorship&utm_content=moneyprinterturbo"),
+    ("loomloom", "ShengSuan Cloud AI Video", "ia", "loomloom_api_token",
+     "https://console.shengsuanyun.com/user/keys"),
+    ("volcengine_seedance", "Volcano Engine Ark · Seedance", "ia",
+     "volcengine_seedance_api_key",
+     "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey"),
+    ("wavespeed", "WaveSpeed AI Video", "ia", "wavespeed_api_keys",
+     "https://wavespeed.ai"),
+    ("muapi", "MuAPI AI Video", "ia", "muapi_api_key", "https://muapi.ai"),
+    ("openai_image", "OpenAI Compatible Text-to-Image", "image",
+     "openai_image_api_keys", "https://api.openai.com/v1"),
+    ("local", "Fichiers locaux", "local", "", ""),
+)
+
+# Fournisseurs de generation par IA : leur fiche complete (adresse, modele,
+# resolution). Recopie des constantes DEFAULT_* de chaque `app/services/*.py`
+# du service. Coder ces valeurs a la main dans l'interface les figeraient :
+# une mise a jour du service changerait son defaut sans que l'interface le
+# sache, et l'utilisateur enverrait un modele qui n'existe plus.
+_MPT_FOURNISSEURS_IA = (
+    {
+        "id": "metaso_minimax", "label": "Metaso · MiniMax H3",
+        "aide": "Genere de nouveaux plans via le proxy MiniMax H3 de Metaso. "
+                "Chaque plan cree une tache asynchrone PAYANTE.",
+        "cle": "metaso_minimax_api_key", "lien": "https://metaso.cn/minimax-h3/?s=MPT",
+        "lien_titre": "Get one",
+        "prefixe": "metaso_minimax",
+        "champs": [
+            ("base_url", "Base URL", "https://metaso.cn/api/minimax", None),
+            ("resolution", "Resolution", "2K", ["768P", "2K"]),
+        ],
+    },
+    {
+        "id": "ofox", "label": "OFox AI Video",
+        "aide": "Une seule cle pour plusieurs modeles de video, avec acces "
+                "direct aux fournisseurs officiels. Paiement a l'usage.",
+        "cle": "ofox_api_key", "lien": "https://ofox.ai/?utm_source=github",
+        "lien_titre": "Get API Key",
+        "prefixe": "ofox",
+        "champs": [
+            ("base_url", "Base URL", "https://api.ofox.ai/v1", None),
+            ("text_to_video_model", "Modele texte-vers-video", "bytedance/seedance-2.0-fast", None),
+            ("resolution", "Resolution", "720p", None),
+            ("provider", "Fournisseur amont", "byteplus", ["byteplus", "volcengine", ""]),
+        ],
+    },
+    {
+        "id": "loomloom", "label": "ShengSuan Cloud AI Video",
+        "aide": "Generation via ShengSuan Cloud. Le jeton est PARTAGE avec la "
+                "generation de script : un seul acces sert aux deux.",
+        "cle": "loomloom_api_token", "lien": "https://console.shengsuanyun.com/user/keys",
+        "lien_titre": "Get an API Key",
+        "prefixe": "loomloom",
+        "champs": [
+            ("base_url", "Base URL", "https://loomloom.shengsuanyun.com/loom/v1", None),
+        ],
+    },
+    {
+        "id": "volcengine_seedance", "label": "Volcano Engine Ark · Seedance",
+        "aide": "Genere de nouveaux plans via l'API officielle Volcano Engine "
+                "Ark Seedance. Chaque plan soumis est une tache Ark PAYANTE.",
+        "cle": "volcengine_seedance_api_key",
+        "lien": "https://console.volcengine.com/ark/region:ark+cn-beijing/apikey",
+        "lien_titre": "Get API Key",
+        "prefixe": "volcengine_seedance",
+        "champs": [
+            ("base_url", "Base URL", "https://ark.cn-beijing.volces.com/api/v3", None),
+            ("model", "Modele ou identifiant de point de terminaison",
+             "doubao-seedance-1-0-pro-250528", None),
+            ("resolution", "Resolution", "1080p", ["480p", "720p", "1080p"]),
+        ],
+    },
+    {
+        "id": "wavespeed", "label": "WaveSpeed AI Video",
+        "aide": "Genere de nouveaux plans avec les modeles texte-vers-video de "
+                "WaveSpeed au lieu de chercher des images d'illustration. "
+                "Facture par plan genere.",
+        "cle": "wavespeed_api_keys", "lien": "https://wavespeed.ai",
+        "lien_titre": "Get API Key",
+        "prefixe": "wavespeed",
+        "champs": [],
+    },
+    {
+        "id": "muapi", "label": "MuAPI AI Video",
+        "aide": "Generation de plans via MuAPI. Facture par plan genere.",
+        "cle": "muapi_api_key", "lien": "https://muapi.ai",
+        "lien_titre": "Get API Key",
+        "prefixe": "muapi",
+        "champs": [
+            ("base_url", "Base URL", "https://api.muapi.ai/api/v1", None),
+            ("video_endpoint", "Point de terminaison video", "seedance-lite-t2v", None),
+            ("resolution", "Resolution", "480p", None),
+        ],
+    },
+)
+
+
+def mpt_sources_video():
+    """Sources de videos : banques gratuites ET generateurs par IA.
+
+    Rend `{ok, sources, groupes, ia:[fiches completes]}`. L'interface s'en
+    sert pour remplir le menu « Video Source » ET pour construire les fiches de
+    chaque fournisseur : une seule source de verite, donc un libelle ne peut
+    pas diverger entre les deux endroits."""
+    sources = [{"id": i, "label": lib, "groupe": g, "cle": cle, "lien": lien}
+               for i, lib, g, cle, lien in _MPT_SOURCES_VIDEO]
+    return {
+        "ok": bool(_mpt_dir()),
+        "reason": "" if _mpt_dir() else "no-dir",
+        "sources": sources,
+        "count": len(sources),
+        "groupes": [
+            {"id": "stock", "label": "Banques de videos"},
+            {"id": "ia", "label": "Generation par IA (payant)"},
+            {"id": "image", "label": "Image par IA"},
+            {"id": "local", "label": "Fichiers locaux"},
+        ],
+        "ia": [dict(f) for f in _MPT_FOURNISSEURS_IA],
+    }
+
 
 def mpt_tts_moteurs():
     """Liste des moteurs TTS, leur libelle et s'ils sont enumerables ici."""
@@ -1498,6 +1680,13 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # Moteurs TTS proposes par MPT, recopies de son WebUI.
         if self.path.split('?')[0] == '/mpt/tts/engines':
             self._json_response(mpt_tts_moteurs())
+            return
+        # Sources de videos (banques gratuites + generateurs par IA) et fiches
+        # completes des fournisseurs IA. L'interface ne code AUCUN de ces
+        # libelles : elle les demande, pour rester juste quand le service en
+        # ajoute un ou change une adresse par defaut.
+        if self.path.split('?')[0] == '/mpt/sources':
+            self._json_response(mpt_sources_video())
             return
         # Suivi d'une synthese d'ecoute (« Voice Sample » / « Full Preview »).
         # La synthese est asynchrone cote service : on interroge jusqu'a ce que

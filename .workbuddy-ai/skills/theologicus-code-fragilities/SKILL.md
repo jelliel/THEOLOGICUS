@@ -740,3 +740,53 @@ par la liste du service arrivée plus tard. Les bancs doivent attendre une
 **condition** (`waitForFunction(() => …)`, ou une boucle sur l'état observé) et
 non un délai (`waitForTimeout(n)`) : un délai fixe « marche ici » et casse
 ailleurs **sans qu'aucun code n'ait bougé**.
+
+### Un processus de fond n'appartient qu'à l'invocation qui l'a lancé (v126)
+
+`nohup python proxy_server.py &`, `disown`, `run_in_background` : **toutes** ces
+formes meurent à la fin de l'invocation. Symptôme trompeur — le relais répond au
+**premier** appel dans l'invocation qui l'a lancé (données correctes, on croit
+avoir vérifié), puis est introuvable à l'appel suivant (`HTTP 0`). On perd des
+allers-retours à « redémarrer le relais » au lieu de conclure une fois pour toutes.
+
+La réponse est `tools/run_benches.py [--mpt] [--port N] [--keep] banc…` : **une
+seule invocation possède le relais**, le lance, attend qu'il réponde par
+**condition**, exécute les bancs comme sous-processus, le referme. Un banc qui
+dépend d'un serveur doit pouvoir se lancer **seul**, sinon il n'est pas
+reproductible.
+
+### Un banc doit partir de l'état qu'il prétend tester (v126)
+
+`verify_service_lifecycle` (35/35) et `verify_studio_autostart` (18/18) exigent
+MPT **ARRÊTÉ** — c'est leur précondition, écrite dedans. Les lancer avec `--mpt`
+donne respectivement **32/35** et **15/18**, avec des échecs qui **accusent
+l'application** : `le service MPT est demarre (prerequis)` et
+`POST /mpt/start emis automatiquement -> 0 appel(s)`. Rien n'était cassé : j'avais
+démarré le service qu'ils veulent trouver à l'arrêt. Avant d'incriminer un code,
+**relire la précondition du banc**.
+
+### Une sonde 404 n'est pas une erreur
+
+`version.txt` est demandé **exprès** et le code se rabat sur `'dev'` quand le
+statut n'est pas 200 (`xhr.status === 200 ? … : 'dev'`). Le 404 est le
+fonctionnement **normal** en développement. Le laisser compter comme erreur JS
+fait échouer le banc en permanence — et **un garde qui crie au loup finit
+désactivé**. Filtrer ce bruit **précis** (`/version\.txt/`), jamais « toutes les
+erreurs console ». Même leçon que le scan de secrets du `pre-commit`.
+
+### Un champ hors du conteneur balayé n'est jamais enregistré
+
+`studioReglagesPayload()` ne balaie que `#studio-modal [data-cle]`. Un champ
+créé ailleurs — ou déplacé hors du modal par une restructuration — **existe dans
+le DOM, se remplit, s'affiche**, et sa valeur **n'est jamais envoyée**, sans
+erreur nulle part. Le banc doit donc vérifier l'**appartenance**
+(`element.closest('#studio-modal')`), pas seulement l'existence de l'identifiant.
+
+### Une note écrite au remplissage ne suit pas le choix
+
+`studioRemplirSources()` écrivait la note « source payante » une seule fois, au
+moment où la liste arrivait du service. L'utilisateur qui **bascule** ensuite sur
+un générateur facturé n'avait **aucun avertissement** — précisément le moment où
+il compte. Une note qui décrit un **choix** doit être branchée sur l'événement
+`change`, avec un garde d'attache unique (`dataset.noteLiee`), pas recalculée au
+seul chargement.

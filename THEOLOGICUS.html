@@ -3726,6 +3726,64 @@ body {
   letter-spacing: 0.5px;
 }
 
+/* ═══ Liens « obtenir une clé » et pastilles de qualité ═══════════════════
+   Recopiés de la présentation de MoneyPrinterTurbo : le libellé d'un champ
+   porte le lien DIRECT vers la page où créer la clé. Sans cela, l'utilisateur
+   doit quitter l'application, chercher le fournisseur, et deviner quelle page
+   donne accès à l'API — trois occasions d'abandonner en cours de route.
+   `:focus-visible` est traité pour que la navigation au clavier reste
+   utilisable : un lien qu'on ne peut pas atteindre au clavier n'existe pas
+   pour une partie des utilisateurs. */
+.cle-lien {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--cyan);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  padding: 2px 1px;
+}
+.cle-lien:hover { color: var(--text-bright); border-bottom-style: solid; }
+.cle-lien:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.cle-lien::after { content: " ↗"; font-size: 9px; opacity: 0.75; }
+/* Les pastilles : vert = gratuit, orange = conseillé (couleur d'alerte pour
+   attirer l'œil sur le fait que c'est le choix par défaut du service), gris =
+   simple précision. */
+.cle-pastille {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  margin-left: 6px;
+  opacity: 0.9;
+  vertical-align: 1px;
+}
+.cle-pastille.gratuit { color: var(--success); }
+.cle-pastille.conseille { color: var(--warning); }
+.cle-pastille.info { color: var(--text-dim); }
+/* Une fiche de fournisseur : un cadre discret pour que six fournisseurs
+   empilés ne se lisent pas comme un seul bloc illisible. */
+.fournisseur-ia {
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: var(--r);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.fournisseur-ia > .field-label {
+  font-size: 11px;
+  opacity: 1;
+  color: var(--text-bright);
+  letter-spacing: 1px;
+}
+
 /* ═══ STUDIO VIDÉO — contrôles additionnels (parité MoneyPrinterTurbo) ═══
    Le formulaire du studio est dense : quatre panneaux, une trentaine de
    champs. Ces cinq classes allègent la lecture sans toucher au reste. */
@@ -8053,35 +8111,51 @@ window.__ensureTafsirSurah = function(p){
       </div><!-- /#studio-panneau-llm -->
 
       <!-- ══════════════ ONGLET 3 : SOURCES DE MÉDIAS ══════════════════════
-           « Material Source Settings ». Les clés Pexels / Pixabay / Coverr
-           sont celles que MoneyPrinterTurbo utilise pour chercher les vidéos
-           d'illustration : elles vont dans SON config.toml. Chez MPT ce sont
-           des LISTES (plusieurs clés en réserve : quand l'une atteint son
-           quota, la suivante prend le relais) — d'où un champ qui accepte
-           plusieurs clés séparées par des virgules. -->
+           « Material Source Settings » + « AI Video Generation APIs ». Deux
+           familles opposées réunies ici parce qu'elles répondent à la même
+           question — « d'où viennent les images ? » — mais elles restent
+           SÉPARÉES à l'écran : les banques sont gratuites, les générateurs par
+           IA facturent chaque seconde produite. Les mêler dans une seule liste
+           ferait choisir un service payant en croyant choisir un stock.
+
+           Chaque champ porte un lien DIRECT vers la page où créer la clé,
+           comme le fait MoneyPrinterTurbo : les adresses sont recopiées de ses
+           traductions, donc ce sont les pages qu'il indique lui-même. -->
       <div class="settings-panneau" data-panneau="material" id="studio-panneau-material" hidden>
 
         <div class="section-title" style="margin-top:0">🎬 BANQUES DE VIDÉOS</div>
-        <div class="field-hint" style="margin-bottom:14px">Plusieurs clés possibles pour un même service, séparées par des virgules — la suivante prend le relais quand la précédente atteint son quota. Écrites dans le <code style="font-family:var(--font-mono)">config.toml</code> du service vidéo.</div>
+        <div class="field-hint" style="margin-bottom:14px">Recherche de plans existants chez des fournisseurs de banques d'images. Plusieurs clés possibles pour un même service, séparées par des virgules — la suivante prend le relais quand la précédente atteint son quota. Écrites dans le <code style="font-family:var(--font-mono)">config.toml</code> du service vidéo.</div>
 
         <div class="field-group">
-          <label class="field-label">🟢 Pexels API Key</label>
-          <input type="password" class="field-input" id="stu-mat-pexels" data-cle="pexels_api_keys" placeholder="Clé Pexels — https://www.pexels.com/api/">
-          <div class="field-hint">▸ Source utilisée par défaut si le champ « Vidéo Source » n'est pas changé.</div>
+          <label class="field-label">🟢 Pexels API Key
+            <a class="cle-lien" href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer">Get API Key</a>
+            <span class="cle-pastille gratuit">Free</span><span class="cle-pastille conseille">Recommandé</span>
+          </label>
+          <input type="password" class="field-input" id="stu-mat-pexels" data-cle="pexels_api_keys" placeholder="Clé Pexels">
+          <div class="field-hint">▸ Source utilisée par défaut si le champ « Vidéo Source » n'est pas changé. Gratuite, et la mieux fournie des trois.</div>
         </div>
 
         <div class="field-group">
-          <label class="field-label">🔵 Pixabay API Key</label>
-          <input type="password" class="field-input" id="stu-mat-pixabay" data-cle="pixabay_api_keys" placeholder="Clé Pixabay — https://pixabay.com/api/docs/">
-          <div class="field-hint">▸ Format attendu par Pixabay : un identifiant numérique.</div>
+          <label class="field-label">🔵 Pixabay API Key
+            <a class="cle-lien" href="https://pixabay.com/api/docs/#api_search_videos" target="_blank" rel="noopener noreferrer">Get API Key</a>
+            <span class="cle-pastille gratuit">Free</span><span class="cle-pastille info">Solution de repli</span>
+          </label>
+          <input type="password" class="field-input" id="stu-mat-pixabay" data-cle="pixabay_api_keys" placeholder="Clé Pixabay">
+          <div class="field-hint">▸ Format attendu par Pixabay : un identifiant numérique. Sert de repli quand Pexels ne rend rien pour un mot-clé.</div>
         </div>
 
         <div class="field-group">
-          <label class="field-label">🟣 Coverr API Key</label>
+          <label class="field-label">🟣 Coverr API Key
+            <a class="cle-lien" href="https://coverr.co/developers?ctx=header_navigation" target="_blank" rel="noopener noreferrer">Get API Key</a>
+          </label>
           <input type="password" class="field-input" id="stu-mat-coverr" data-cle="coverr_api_keys" placeholder="Clé Coverr">
           <div class="field-hint">▸ Optionnelle : Coverr devient disponible dans « Vidéo Source » dès qu'elle est renseignée.</div>
         </div>
 
+        <!-- Le sélecteur de source est REMPLI PAR LE SERVICE (route
+             /mpt/sources) : la liste des sources et leurs libellés vivent en
+             un seul endroit. Les recopier ici ferait diverger l'affichage de
+             ce que le service accepte réellement. -->
         <div class="field-group">
           <label class="field-label">🎯 Source de vidéos par défaut</label>
           <select class="field-input" id="stu-mat-source" data-cle="video_source">
@@ -8089,7 +8163,48 @@ window.__ensureTafsirSurah = function(p){
             <option value="pixabay">Pixabay</option>
             <option value="coverr">Coverr</option>
           </select>
-          <div class="field-hint">▸ La banque interrogée quand le studio cherche des illustrations.</div>
+          <div class="field-hint">▸ La source interrogée quand le studio cherche des plans. Les sources de génération par IA apparaissent ici aussi — elles sont payantes, voir plus bas.</div>
+          <div class="field-hint" id="stu-mat-source-note" hidden></div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔍 Correspondance des plans avec le script
+            <span class="studio-help" title="Activé, le service choisit les plans qui correspondent le mieux au texte de chaque segment, au lieu de répartir les mots-clés dans l'ordre. Meilleur rendu, un peu plus lent.">?</span>
+          </label>
+          <label class="field-check" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="stu-mat-match" data-cle="match_materials_to_script">
+            <span style="font-size:13px">Choisir les plans en fonction du script</span>
+          </label>
+        </div>
+
+        <!-- ═══════════ GÉNÉRATION DE VIDÉOS PAR IA ═══════════════════════
+             Six fournisseurs, dont les fiches sont construites par le service
+             (route /mpt/sources, champ `ia`). Chaque fiche porte : sa clé avec
+             le lien pour l'obtenir, son adresse, son modèle et sa résolution.
+             Ces services FACTURENT chaque plan produit : le libellé le dit,
+             et la confirmation de dépense reste chez le service. -->
+        <div class="section-title">🤖 GÉNÉRATION DE VIDÉOS PAR IA</div>
+        <div class="info-block" style="border-left-color:var(--warning);margin-bottom:14px">
+          <strong>▸ Ces sources sont payantes</strong>
+          <div style="margin-top:6px;font-size:12px;line-height:1.6">Au lieu de chercher des plans existants, le service les <strong>fabrique</strong> à partir du script. Chaque fournisseur facture à la seconde produite. La clé d'un fournisseur ne le sélectionne pas : il faut ensuite le choisir dans « Vidéo Source ».</div>
+        </div>
+
+        <div id="stu-ia-liste"></div>
+
+        <div class="section-title">🖼 IMAGE PAR IA</div>
+        <div class="field-group">
+          <label class="field-label">OpenAI Compatible — Base URL</label>
+          <input type="text" class="field-input" id="stu-img-base" data-cle="openai_image_base_url" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Clés API
+            <a class="cle-lien" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Get API Key</a>
+          </label>
+          <input type="password" class="field-input" id="stu-img-cles" data-cle="openai_image_api_keys" placeholder="Clé (plusieurs possibles, séparées par des virgules)">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Modèle</label>
+          <input type="text" class="field-input" id="stu-img-modele" data-cle="openai_image_model" placeholder="gpt-image-2">
         </div>
 
       </div><!-- /#studio-panneau-material -->
@@ -21978,6 +22093,13 @@ function bindEvents() {
   let _stuReglages = {};
 
   async function studioReglagesCharger() {
+    // Les fiches des fournisseurs par IA sont CONSTRUITES depuis le service :
+    // elles doivent exister AVANT `studioReglagesAppliquer`, sinon les champs
+    // crees plus tard n'auraient rien ou poser les valeurs enregistrees et
+    // l'utilisateur verrait des fiches vides alors que sa config est pleine.
+    // On ne bloque pas sur un echec : sans service, les banques de videos
+    // restent utilisables.
+    await studioChargerSources();
     await studioLlmChargerRegistre();
     let j = null;
     try {
@@ -22189,7 +22311,210 @@ function bindEvents() {
     ["minimax_api_key", "MiniMax"], ["grok_api_key", "Grok"],
     ["pexels_api_keys", "Pexels"], ["pixabay_api_keys", "Pixabay"],
     ["coverr_api_keys", "Coverr"], ["upload_post_api_key", "Upload-Post"],
+    // Sources de generation par IA : ce sont de VRAIES cles, souvent plus
+    // couteuses que les precedentes a l'usage. Les laisser hors de
+    // l'inventaire ferait croire a un export complet alors que la cle la plus
+    // facturee manquerait — le pire des cas pour une sauvegarde.
+    ["metaso_minimax_api_key", "Metaso · MiniMax"],
+    ["ofox_api_key", "OFox"], ["loomloom_api_token", "ShengSuan Cloud"],
+    ["volcengine_seedance_api_key", "Volcano Engine Ark"],
+    ["wavespeed_api_keys", "WaveSpeed"], ["muapi_api_key", "MuAPI"],
+    ["openai_image_api_keys", "Image (OpenAI compatible)"],
+    ["sonilo_api_key", "Sonilo (musique)"],
+    ["twelvelabs_api_keys", "TwelveLabs"],
   ];
+
+  // ═══ Fiches des fournisseurs de génération par IA ═══════════════════════
+  // Construites depuis la réponse du service (`/mpt/sources`, champ `ia`), et
+  // NON écrites en dur : ajouter un fournisseur dans le service doit le faire
+  // apparaître ici sans toucher à l'interface.
+  //
+  // Les champs créés portent `data-cle`, ce qui les fait enregistrer par le
+  // MÉCANISME EXISTANT (studioReglagesPayload / studioReglagesAppliquer) sans
+  // une ligne de plus : une voie d'enregistrement parallèle finirait par
+  // diverger de la première.
+  let _stuSourcesIA = [];
+  let _stuSourcesListe = [];
+
+  function studioConstruireIA(fiches) {
+    const z = _STU("stu-ia-liste");
+    if (!z) return 0;
+    _stuSourcesIA = fiches || [];
+    // On vide AVANT de reconstruire : un rappel après changement de service
+    // empilerait sinon deux jeux de champs portant les mêmes `data-cle`, et
+    // l'enregistrement prendrait la valeur du premier trouvé — donc l'ancienne.
+    z.innerHTML = "";
+    _stuSourcesIA.forEach(f => {
+      const bloc = document.createElement("div");
+      bloc.className = "fournisseur-ia";
+      bloc.id = "stu-ia-" + f.id;
+
+      const titre = document.createElement("div");
+      titre.className = "field-label";
+      titre.textContent = "▸ " + (f.label || f.id);
+      bloc.appendChild(titre);
+
+      if (f.aide) {
+        const a = document.createElement("div");
+        a.className = "field-hint";
+        a.style.marginBottom = "10px";
+        a.textContent = f.aide;
+        bloc.appendChild(a);
+      }
+
+      // La clé : libellé + lien direct d'obtention. Le lien vient du service,
+      // donc il suit ses mises à jour (un changement d'URL partenaire ne nous
+      // laisse pas pointer vers une page morte).
+      const gCle = document.createElement("div");
+      gCle.className = "field-group";
+      const lCle = document.createElement("label");
+      lCle.className = "field-label";
+      lCle.textContent = (f.label || f.id) + " API Key ";
+      if (f.lien) {
+        const a = document.createElement("a");
+        a.className = "cle-lien";
+        a.href = f.lien;
+        // `noopener noreferrer` n'est pas décoratif : sans lui, la page cible
+        // reçoit une référence vers cette fenêtre et peut la rediriger.
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = f.lien_titre || "Get API Key";
+        lCle.appendChild(a);
+      }
+      gCle.appendChild(lCle);
+      const iCle = document.createElement("input");
+      iCle.type = "password";
+      iCle.className = "field-input";
+      iCle.id = "stu-ia-" + f.id + "-cle";
+      iCle.setAttribute("data-cle", f.cle);
+      // Une liste de clés (WaveSpeed, image) se saisit séparée par des
+      // virgules : le service les stocke dans un tableau et en fait le tour.
+      iCle.placeholder = /s$/.test(f.cle || "")
+        ? "Une ou plusieurs clés, séparées par des virgules"
+        : "Clé d'accès " + (f.label || f.id);
+      gCle.appendChild(iCle);
+      bloc.appendChild(gCle);
+
+      // Les champs propres au fournisseur : adresse, modèle, résolution,
+      // fournisseur amont. Une résolution contrainte donne une liste ; sinon
+      // un champ de saisie, car une valeur figée deviendrait fausse dès que le
+      // service ajoute un palier.
+      (f.champs || []).forEach(c => {
+        const nom = c[0], lib = c[1], defaut = c[2], choix = c[3];
+        const g = document.createElement("div");
+        g.className = "field-group";
+        const l = document.createElement("label");
+        l.className = "field-label";
+        l.textContent = lib;
+        g.appendChild(l);
+        let el;
+        if (Array.isArray(choix) && choix.length) {
+          el = document.createElement("select");
+          el.className = "field-input";
+          choix.forEach(v => {
+            const o = document.createElement("option");
+            o.value = v;
+            // Une valeur vide a un sens CHEZ LE SERVICE (« laisser choisir ») :
+            // l'afficher comme une case vide ferait croire à un défaut de
+            // chargement. On la nomme.
+            o.textContent = v === "" ? "Automatique — laisser le service choisir" : v;
+            el.appendChild(o);
+          });
+        } else {
+          el = document.createElement("input");
+          el.type = "text";
+          el.className = "field-input";
+        }
+        el.id = "stu-ia-" + f.id + "-" + nom;
+        el.setAttribute("data-cle", f.prefixe + "_" + nom);
+        if (defaut !== null && defaut !== undefined && defaut !== "") el.value = defaut;
+        g.appendChild(el);
+        bloc.appendChild(g);
+      });
+
+      z.appendChild(bloc);
+    });
+    return _stuSourcesIA.length;
+  }
+
+  // Le service dit quelles sources existent et comment elles s'appellent. On
+  // les regroupe : banques gratuites d'un cote, generation payante de l'autre.
+  // Un seul menu ou les deux se melangent ferait choisir un service facture en
+  // croyant choisir un stock d'images.
+  function studioRemplirSources(sources, groupes) {
+    const s = _STU("stu-mat-source");
+    if (!s || !sources || !sources.length) return 0;
+    const choix = s.value;
+    const parGroupe = {};
+    sources.forEach(x => { (parGroupe[x.groupe] = parGroupe[x.groupe] || []).push(x); });
+    s.innerHTML = "";
+    (groupes || []).forEach(g => {
+      const arr = parGroupe[g.id] || [];
+      if (!arr.length) return;
+      const og = document.createElement("optgroup");
+      og.label = g.label;
+      arr.forEach(x => {
+        const o = document.createElement("option");
+        o.value = x.id;
+        o.textContent = x.label;
+        og.appendChild(o);
+      });
+      s.appendChild(og);
+    });
+    if (choix && sources.some(x => x.id === choix)) s.value = choix;
+    _stuSourcesListe = sources || [];
+    // La note doit suivre le CHOIX DE L'UTILISATEUR, pas seulement le
+    // remplissage : ecrite une seule fois, elle restait muette quand il
+    // basculait sur un generateur payant — precisement le moment ou elle
+    // compte. On branche donc l'evenement, une seule fois.
+    if (!s.dataset.noteLiee) {
+      s.addEventListener("change", studioNoterSource);
+      s.dataset.noteLiee = "1";
+    }
+    studioNoterSource();
+    return sources.length;
+  }
+
+  // Une note qui dit ce que la source choisie implique REELLEMENT : les
+  // generateurs facturent, l'option locale ne cherche rien. Le taire ferait
+  // decouvrir la depense sur la facture du fournisseur.
+  function studioNoterSource() {
+    const s = _STU("stu-mat-source");
+    const note = _STU("stu-mat-source-note");
+    if (!s || !note) return;
+    const cur = _stuSourcesListe.filter(x => x.id === s.value)[0];
+    if (!cur) { note.hidden = true; note.textContent = ""; return; }
+    if (cur.groupe === "ia") {
+      note.hidden = false;
+      note.textContent = "▸ Source payante : « " + cur.label + " » fabrique les plans, "
+        + "chaque seconde produite est facturée. La clé se renseigne plus bas.";
+    } else if (cur.groupe === "local") {
+      note.hidden = false;
+      note.textContent = "▸ Fichiers locaux : aucun plan n'est téléchargé, le service utilise ce que vous avez déposé.";
+    } else {
+      note.hidden = true;
+      note.textContent = "";
+    }
+  }
+
+  async function studioChargerSources() {
+    try {
+      const r = await fetch("/mpt/sources", { cache: "no-store" });
+      const j = await r.json();
+      if (!j || !j.ok) return 0;
+      studioRemplirSources(j.sources, j.groupes);
+      const n = studioConstruireIA(j.ia);
+      // Les champs qui viennent d'être créés n'ont pas encore reçu les valeurs
+      // enregistrées : `studioReglagesAppliquer` ne connaissait pas ces
+      // éléments au moment où il a tourné.
+      if (typeof studioReglagesAppliquer === "function") studioReglagesAppliquer();
+      return n;
+    } catch (e) {
+      // Pas de `studioLog` ici : cette route est appelée aussi hors du modal,
+      // où la zone de journal n'existe pas encore.
+      return 0;
+    }
+  }
 
   function studioKeysInventaire() {
     const z = _STU("stu-keys-resume");
