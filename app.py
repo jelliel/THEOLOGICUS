@@ -38,8 +38,23 @@ def app_dir() -> str:
 # ouverture — exactement le symptôme « je dois tout reconfigurer ».
 # Désormais : port DÉTERMINISTE (8765, puis 8766, 8767...) et réutilisation
 # d'une instance déjà lancée. Le port est enfin stable d'un lancement à l'autre.
+#
+# v119 — POURQUOI LE DÉMARRAGE ÉTAIT DEVENU LENT (mesuré : ~10,7 s).
+# La v117 sondait CHAQUE port de la plage AVANT de démarrer, et le faisait deux
+# fois par port : la sonde d'identité PUIS le contenu de THEOLOGICUS.html. Sur
+# cette machine, un port de la plage qui n'est ni ouvert ni refusé (aucun RST)
+# coûte le timeout ENTIER : 0,4 s. Mesure : 16 ports × (0,4 + 0,4) = 10,7 s.
+# L'ancien code ne payait rien car il se contentait d'un bind (0,0 ms).
+#
+# Le correctif suit un principe simple : NE SONDER QUE CE QUI PEUT RÉPONDRE.
+# Un bind réussi est une preuve INSTANTANÉE que le port est libre — donc on
+# teste le bind d'abord et on ne sonde que les ports occupés. Et on ne sonde
+# qu'UNE fois : le test HTML redondant censé couvrir « une instance d'une
+# ancienne version du exe » coûtait aussi cher que le ping et ne servait que
+# le temps d'une transition, désormais révolue (la v117 est publiée).
+# Coût résultant : 1 bind (0 ms) + 1 sonde sur le seul port occupé (~20 ms).
 PORT_SPAN = 16          # 8765 .. 8780
-PING_TIMEOUT = 0.4
+PING_TIMEOUT = 0.25     # la sonde ne sert qu'en local : inutile d'attendre 0,4 s
 
 
 def port_range(preferred: int) -> list[int]:
@@ -47,50 +62,46 @@ def port_range(preferred: int) -> list[int]:
     return [preferred + i for i in range(PORT_SPAN)]
 
 
+def _port_libre(port: int) -> bool:
+    """Vrai si l'on peut s'y lier. Preuve instantanée : aucun délai réseau."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
 def _est_notre_serveur(port: int) -> bool:
     """Vrai si un serveur THEOLOGICUS écoute déjà sur ce port.
 
-    Deux tests : la sonde dédiée (exécutable récent), et à défaut le contenu de
-    THEOLOGICUS.html — un serveur étranger répond 404 ou sert autre chose. Le
-    second test couvre une instance lancée par une ancienne version du exe.
+    Appelée UNIQUEMENT sur un port occupé (donc un serveur répond : le coût
+    est de quelques millisecondes, jamais un timeout). Un serveur étranger
+    ne connaît pas la sonde et répond 404 → False.
     """
     try:
         with urllib.request.urlopen(
             f"http://127.0.0.1:{port}/__theologicus_ping", timeout=PING_TIMEOUT
         ) as r:
-            if r.status == 200 and b"theologicus" in r.read(64):
-                return True
+            return r.status == 200 and b"theologicus" in r.read(64)
     except Exception:
-        pass
-    try:
-        with urllib.request.urlopen(
-            f"http://127.0.0.1:{port}/THEOLOGICUS.html", timeout=PING_TIMEOUT
-        ) as r:
-            if r.status == 200 and b"THEOLOGICUS" in r.read(4096):
-                return True
-    except Exception:
-        pass
-    return False
+        return False
 
 
-def trouver_instance_existante(ports: list[int]):
-    """Port d'un serveur THEOLOGICUS déjà lancé, ou None."""
+def resoudre_port(ports: list[int]):
+    """Rend (port, instance_existante). Ne sonde QUE les ports occupés.
+
+    Parcours de la plage dans l'ordre : au premier port libre on s'arrête
+    immédiatement (0 ms). Un port occupé est sondé une seule fois — s'il est
+    à nous, on réutilise l'instance (même origine, donc même configuration) ;
+    sinon on continue. Coût typique : ~20 ms, contre ~10 700 ms en v117.
+    """
     for p in ports:
+        if _port_libre(p):
+            return p, False
         if _est_notre_serveur(p):
-            return p
-    return None
-
-
-def choisir_port(ports: list[int]):
-    """Premier port libre de la plage — déterministe, jamais aléatoire."""
-    for p in ports:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", p))
-                return p
-            except OSError:
-                continue
-    return None
+            return p, True
+    return None, False
 
 
 def wait_up(port: int, timeout: float = 5.0) -> bool:
@@ -172,17 +183,18 @@ def main() -> int:
     # v117 — réutiliser l'instance déjà lancée GARANTIT la même origine, donc
     # la même clé API et la même configuration. Deux fenêtres sur deux ports
     # donnaient deux stockages distincts : c'était le bug.
-    port = trouver_instance_existante(ports)
-    if port is not None:
+    # v119 — et le faire SANS sonder les ports libres : voir resoudre_port().
+    port, deja_lancee = resoudre_port(ports)
+    if port is None:
+        print(f"[X] Aucun port libre entre {ports[0]} et {ports[-1]}. "
+              f"Fermez l'application ou libérez un port.", file=sys.stderr)
+        return 1
+
+    url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
+    if deja_lancee:
         print(f"[OK] Instance THEOLOGICUS déjà en écoute sur le port {port} "
               f"— réutilisée (même origine, même configuration).")
-        url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
     else:
-        port = choisir_port(ports)
-        if port is None:
-            print(f"[X] Aucun port libre entre {ports[0]} et {ports[-1]}. "
-                  f"Fermez l'application ou libérez un port.", file=sys.stderr)
-            return 1
         proxy_server.SERVE_DIR = base  # les fichiers statiques sont à côté de l'exe
         handler = partial(proxy_server.CORSProxyHandler, directory=base)
         httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
@@ -191,7 +203,6 @@ def main() -> int:
         server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         server_thread.start()
 
-        url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
         # v117 — tracer le port : sans lui, le symptôme était indiagnosticable.
         print(f"[OK] Serveur local démarré sur le port {port} — origine {url}")
         if port != ports[0]:
