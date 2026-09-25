@@ -1,0 +1,173 @@
+#!/bin/sh
+# pre-commit THEOLOGICUS — les controles qui doivent passer AVANT tout commit.
+#
+# Pourquoi un hook git et pas une discipline : « je penserai a le faire » ne
+# tient pas. Ce hook tourne a chaque `git commit`, quelle que soit la personne
+# ou l'agent qui commit. Il est VERSIONNE (tools/githooks/) puis relie par
+#   git config core.hooksPath tools/githooks
+# sinon il ne servirait a rien : un hook non installe est un voeu pieux.
+#
+# Principe : ne bloquer que sur du VERIFIABLE. Un hook qui crie au loup sur un
+# faux positif se fait desactiver, et on perd tous ses controles.
+#
+# Pour passer outre en connaissance de cause : git commit --no-verify
+# (mais alors dire POURQUOI dans le message de commit).
+
+set -u
+
+RACINE="$(git rev-parse --show-toplevel)"
+cd "$RACINE" || exit 1
+
+# Python : celui du poste, avec repli sur les chemins connus de l'agent.
+trouver_python() {
+  for p in \
+    "$(command -v python 2>/dev/null)" \
+    "$(command -v python3 2>/dev/null)" \
+    "C:/Users/toshr/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe" \
+    "C:/Python314/python.exe"
+  do
+    [ -n "$p" ] && [ -x "$p" ] && { printf '%s\n' "$p"; return 0; }
+  done
+  return 1
+}
+
+PY="$(trouver_python || true)"
+ECHEC=0
+
+echo "[pre-commit] controles THEOLOGICUS"
+
+# ── 1. Le miroir des skills ne doit pas diverger ──────────────────────────
+# Un miroir perime fait croire a une sauvegarde tout en servant une version
+# ancienne : c'est le controle de premier rang, et il est bon marche.
+if [ -n "$PY" ] && [ -f tools/sync_skills.py ]; then
+  if ! "$PY" tools/sync_skills.py --verifier >/tmp/theo_skills.$$ 2>&1; then
+    echo ""
+    echo "  [X] Le miroir des skills a DIVERGE de ~/.workbuddy-ai/skills/"
+    sed 's/^/      /' /tmp/theo_skills.$$ | tail -n +3
+    echo "      -> corriger :  \"$PY\" tools/sync_skills.py"
+    echo "                    puis git add .workbuddy-ai/skills/"
+    ECHEC=1
+  else
+    echo "  [OK] miroir des skills a jour"
+  fi
+  rm -f /tmp/theo_skills.$$
+else
+  echo "  [--] controle du miroir des skills saute (python introuvable)"
+fi
+
+# ── 2. Aucun secret dans ce qui PART ──────────────────────────────────────
+# On inspecte le contenu INDEXE, pas le dossier de travail : ce qui compte est
+# ce qui sera publie. C'est le controle qui a un enjeu irreversible — une cle
+# dans l'historique reste dans l'historique.
+#
+# CE FICHIER EST EXCLU : il contient les MOTIFS de detection eux-memes, donc
+# il se detecte lui-meme (mesure des le premier essai). Un hook qui crie au
+# loup sur son propre code se fait desactiver, et on perd tous ses controles.
+# Un motif peut aussi apparaitre dans un banc, un commentaire ou une
+# documentation : le but est de surprendre une CLE, pas une chaine citant une
+# cle. On exige donc, par defaut, une chaine longue et continue.
+SECRETS="$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -vE '\.(png|jpg|jpeg|gif|webp|ico|wav|mp3|mp4|apk|aab|jks|keystore|p12|pfx|so|dll|exe|md|txt)$' \
+  | grep -vE '^(tools/githooks/|\.workbuddy-ai/skills/|tools/check_)' \
+  | while IFS= read -r f; do
+      [ -f "$f" ] && git show ":$f" 2>/dev/null | grep -nE \
+        'BEGIN [A-Z ]*PRIVATE KEY|sk-[A-Za-z0-9]{24,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}|-----BEGIN CERTIFICATE' \
+        | sed "s|^|$f:|"
+    done)"
+
+if [ -n "$SECRETS" ]; then
+  echo ""
+  echo "  [X] SECRET detecte dans le contenu indexe :"
+  printf '%s\n' "$SECRETS" | head -20 | sed 's/^/      /'
+  echo "      -> ne jamais committer une cle. La cle de signature des Releases"
+  echo "         (~/.workbuddy-ai/keys/) est IRREMPLACABLE : si elle entre dans"
+  echo "         l'historique public, n'importe qui peut publier un APK."
+  ECHEC=1
+else
+  echo "  [OK] aucun secret dans le contenu indexe"
+fi
+
+# ── 3. Un fichier de cle ne doit jamais etre suivi ────────────────────────
+# Deuxieme filet : meme si le contenu ne ressemble pas a une cle (fichier
+# binaire, .jks), le NOM suffit a refuser.
+NOMS_KEYS="$(git diff --cached --name-only --diff-filter=ACM \
+  | grep -iE '(\.jks|\.keystore|\.p12|\.pfx|\.pem|\.key)$|api[ _-]?key.*\.txt$|password.*\.txt$' || true)"
+
+if [ -n "$NOMS_KEYS" ]; then
+  echo ""
+  echo "  [X] Fichier de cle indexe (interdit) :"
+  printf '%s\n' "$NOMS_KEYS" | sed 's/^/      /'
+  echo "      -> retirer : git reset HEAD -- <fichier>"
+  ECHEC=1
+else
+  echo "  [OK] aucun fichier de cle indexe"
+fi
+
+# ── 4. [.gitignore] Aucun fichier SUIVI ne doit etre ignore ───────────────
+# Si un fichier suivi est ignore, le motif l'emporte sur la realite : les
+# modifications disparaissent des diffs et on croit a un depot propre.
+SUIVIS_IGNORES="$(git ls-files | git check-ignore --stdin 2>/dev/null || true)"
+if [ -n "$SUIVIS_IGNORES" ]; then
+  echo ""
+  echo "  [X] Fichiers SUIVIS mais ignores par un motif (anomalie) :"
+  printf '%s\n' "$SUIVIS_IGNORES" | head -10 | sed 's/^/      /'
+  echo "      -> ajouter une exemption '!chemin' dans .gitignore"
+  ECHEC=1
+else
+  echo "  [OK] aucun fichier suivi n'est ignore"
+fi
+
+# ── 5. Le dossier des skills ne doit pas etre avale par un motif ──────────
+# Le piege mesure : .workbuddy-ai/skills/ partage son .gitignore avec
+# *secret*, *.key, *.credential*, _*.js. Sans exemption, un futur fichier
+# disparait EN SILENCE de la sauvegarde.
+if [ -d .workbuddy-ai/skills ]; then
+  AVALES="$(find .workbuddy-ai/skills -type f -print0 2>/dev/null \
+    | xargs -0 -r git check-ignore 2>/dev/null || true)"
+  if [ -n "$AVALES" ]; then
+    echo ""
+    echo "  [X] Fichier de skill IGNORE par un motif de .gitignore :"
+    printf '%s\n' "$AVALES" | head -10 | sed 's/^/      /'
+    echo "      -> la sauvegarde des skills aurait un trou. Ajouter"
+    echo "         !.workbuddy-ai/skills/** dans .gitignore"
+    ECHEC=1
+  else
+    echo "  [OK] les fichiers de skills ne sont pas ignores"
+  fi
+fi
+
+# ── 6. Syntaxe du HTML (seulement s'il est dans le commit) ────────────────
+# `check_syntax.js` valide le JS, jamais le HTML. Un bloc casse rend toute
+# l'app muette : refuser vaut mieux que publier une app morte.
+if git diff --cached --name-only | grep -q '^THEOLOGICUS\.html$'; then
+  NODE=""
+  for n in "$(command -v node 2>/dev/null)" \
+           "C:/Users/toshr/.workbuddy-ai/binaries/node/versions/22.22.2-3/node.exe" \
+           "C:/Program Files/nodejs/node.exe"
+  do
+    [ -n "$n" ] && [ -x "$n" ] && { NODE="$n"; break; }
+  done
+  if [ -n "$NODE" ]; then
+    if SORTIE="$("$NODE" tools/check_syntax.js 2>&1)"; then
+      echo "  [OK] syntaxe JS des $(printf '%s' "$SORTIE" | grep -oE '[0-9]+' | head -1) blocs inline"
+    else
+      echo ""
+      echo "  [X] Syntaxe JS invalide dans THEOLOGICUS.html :"
+      printf '%s\n' "$SORTIE" | tail -20 | sed 's/^/      /'
+      ECHEC=1
+    fi
+  else
+    echo "  [--] controle de syntaxe saute (node introuvable)"
+  fi
+fi
+
+# ── Verdict ───────────────────────────────────────────────────────────────
+if [ "$ECHEC" -ne 0 ]; then
+  echo ""
+  echo "[pre-commit] REFUSE. Corriger ce qui precede, ou git commit --no-verify"
+  echo "             (et alors ecrire POURQUOI dans le message)."
+  exit 1
+fi
+
+echo "[pre-commit] tout est vert"
+exit 0

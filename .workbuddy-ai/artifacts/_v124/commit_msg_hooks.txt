@@ -1,0 +1,33 @@
+chore(hooks): install a versioned pre-commit guard for the skill mirror
+
+The user asked for the skill mirror to be checked every time, not on occasion.
+"Remembering to do it" does not survive; a git hook does, because it runs on
+every commit regardless of who or what commits.
+
+tools/githooks/pre-commit runs six checks, and only fails on things that are
+actually verifiable — a hook that cries wolf gets disabled, taking all its
+checks with it:
+
+1. the skill mirror matches ~/.workbuddy-ai/skills/ (tools/sync_skills.py
+   --verifier, exit 1 on drift, naming the differing files);
+2. no secret in the STAGED content — a key in the history stays in the history;
+3. no keystore-like file added by NAME either, since .jks or .p12 may not look
+   like a key to a content scan;
+4. no tracked file is currently ignored (a pattern winning over reality hides
+   changes from every diff);
+5. no file under .workbuddy-ai/skills/ is swallowed by a .gitignore pattern;
+6. the inline JS of THEOLOGICUS.html parses, but only when that file is staged.
+
+Measured on the first run: the secret scan matched its own detection patterns
+and refused the commit. A hook that fails on its own source is a false positive
+of the worst kind, so the hook excludes itself, the mirror and the check tools,
+and skips .md/.txt where a pattern is quoted rather than a key stored.
+
+Proven end to end: appending to a skill made the hook exit 1 and `git commit`
+refuse the commit; cleaning up made both pass again.
+
+tools/install_hooks.py sets core.hooksPath, which is local to each clone and
+does not travel with the repository. A hook nobody installs is a wish, not a
+control.
+
+Note for anyone overriding with --no-verify: say why in the commit message.
