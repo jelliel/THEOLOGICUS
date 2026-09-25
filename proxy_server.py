@@ -11,7 +11,7 @@ import os
 import sys
 import subprocess
 import traceback
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # Console non-UTF8 (cp1252, exe sans console...) : evite les UnicodeEncodeError sur les logs
 try:
@@ -576,6 +576,553 @@ def _mpt_racines():
     return cands
 
 
+# ════════════════════════════════════════════════════════════════════
+# REGLAGES MPT ECRITS DEPUIS THEOLOGICUS (config.toml)
+#
+# L'API HTTP de MPT n'expose AUCUNE route de configuration : ses reglages
+# (cles Pexels/Pixabay/Coverr, Upload-Post, fournisseur LLM) ne sont ecrits
+# que par son WebUI Streamlit, dans le meme processus que le service. Or ce
+# sont bien CES cles que la generation de video utilise : les afficher sans
+# les ecrire serait un formulaire decoratif.
+#
+# On edite donc config.toml NOUS-MEMES, avec deux garde-fous :
+#   1. edition LIGNE A LIGNE, jamais une reecriture du fichier : les
+#      commentaires et les cles que nous ne connaissons pas survivent (MPT en
+#      ajoute a chaque version, et l'utilisateur peut y avoir mis les siens) ;
+#   2. liste blanche de cles : le formulaire ne peut PAS ecrire n'importe ou.
+#      Une cle hors liste est ignoree en silence cote serveur, jamais ecrite.
+#
+# La section visee est [app] : c'est celle ou MPT range toutes ces cles.
+# ════════════════════════════════════════════════════════════════════
+_MPT_CFG_SECTION = "app"
+
+# Cles modifiables depuis l'interface, avec leur type. `list` = tableau TOML
+# (les cles de banques de medias sont des LISTES de cles chez MPT, pas des
+# chaines : ecrire une chaine la ou il attend une liste casse la recherche de
+# videos). `bool` = booleen TOML ecret en minuscules (true/false).
+_MPT_CFG_WHITELIST = {
+    # --- Fournisseur LLM (« LLM Settings ») ---
+    "llm_provider": "str",
+    "moonshot_api_key": "str", "moonshot_base_url": "str", "moonshot_model_name": "str",
+    "openai_api_key": "str", "openai_base_url": "str", "openai_model_name": "str",
+    "anthropic_api_key": "str", "anthropic_base_url": "str", "anthropic_model_name": "str",
+    "gemini_api_key": "str", "gemini_base_url": "str", "gemini_model_name": "str",
+    "deepseek_api_key": "str", "deepseek_base_url": "str", "deepseek_model_name": "str",
+    "qwen_api_key": "str", "qwen_base_url": "str", "qwen_model_name": "str",
+    "minimax_api_key": "str", "minimax_base_url": "str", "minimax_model_name": "str",
+    "grok_api_key": "str", "grok_base_url": "str", "grok_model_name": "str",
+    "ollama_base_url": "str", "ollama_model_name": "str",
+    # --- Sources de medias (« Material Source Settings ») ---
+    "video_source": "str",
+    "pexels_api_keys": "list", "pixabay_api_keys": "list", "coverr_api_keys": "list",
+    # --- Publication automatique (« Auto-Publish Settings ») ---
+    "upload_post_enabled": "bool",
+    "upload_post_auto_upload": "bool",
+    "upload_post_api_key": "str",
+    "upload_post_username": "str",
+    "upload_post_platforms": "list",
+    "upload_post_youtube_privacy_status": "str",
+    "upload_post_youtube_made_for_kids": "bool",
+    "upload_post_max_pending_tasks": "int",
+    # --- Interface (« Interface Settings ») ---
+    "hide_config": "bool",
+}
+
+
+def _mpt_config_path():
+    """Chemin de config.toml, dans le sous-dossier applicatif s'il existe.
+
+    Meme logique que pour les polices : une installation portative imbrique son
+    application. Chercher au mauvais niveau ne rend pas d'erreur — juste un
+    fichier introuvable et des reglages qui ne s'enregistrent nulle part."""
+    for base in _mpt_racines():
+        cand = os.path.join(base, "config.toml")
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _toml_ligne_cle(ligne):
+    """Nom de cle d'une ligne `cle = valeur`, ou None.
+
+    Volontairement strict : on ne veut PAS reecrire une ligne qui ressemble a
+    une cle sans en etre une (un commentaire, une valeur multiligne, une
+    section). Le nom doit etre en debut de ligne, precede d'un identifiant
+    simple, puis d'un `=`."""
+    m = re.match(r'^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*=', ligne)
+    return m.group(1) if m else None
+
+
+def _toml_valeur(valeur, type_attendu):
+    """Serialise une valeur Python en litteral TOML, selon le type declare.
+
+    Les LISTES sont ecrites sur une seule ligne (`[ "a", "b",]`) comme le fait
+    MPT : un tableau TOML multiligne reste lisible pour `tomllib`, mais une
+    reecriture sur une ligne evite d'avoir a gerer l'indentation et garde le
+    diff d'une sauvegarde minimal."""
+    if type_attendu == "bool":
+        return "true" if valeur else "false"
+    if type_attendu == "int":
+        try:
+            return str(int(valeur))
+        except Exception:
+            return "0"
+    if type_attendu == "list":
+        if isinstance(valeur, str):
+            # Le formulaire envoie une chaine « a, b, c » : on la decoupe, on
+            # retire les vides (une virgule traînante ne doit pas fabriquer une
+            # cle vide, qui ferait echouer l'appel Pexels).
+            items = [x.strip() for x in valeur.replace(" ", "").split(",") if x.strip()]
+        elif isinstance(valeur, (list, tuple)):
+            items = [str(x).strip() for x in valeur if str(x).strip()]
+        else:
+            items = []
+        return "[ " + ", ".join('"' + i.replace('"', '\\"') + '"' for i in items) + ",]"
+    # Chaine : on echappe les guillemets et les antislashs, jamais les accents
+    # (le fichier est en UTF-8, MPT le relit tel quel).
+    s = "" if valeur is None else str(valeur)
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _toml_valeur_python(texte):
+    """Convertit le cote droit d'une ligne TOML en valeur Python.
+
+    `tomllib` (3.11+) est prefere : il connait les echappements et les tableaux.
+    Repli sur une lecture minimale si la bibliotheque manque, pour que la route
+    reste utilisable sur un Python plus ancien."""
+    t = texte.strip()
+    try:
+        import tomllib
+        return tomllib.loads("v = " + t)["v"]
+    except Exception:
+        pass
+    if t in ("true", "false"):
+        return t == "true"
+    if t.startswith('"') and t.endswith('"') and len(t) >= 2:
+        return t[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    if t.startswith("[") and t.endswith("]"):
+        return [x.strip().strip('"') for x in t[1:-1].split(",") if x.strip()]
+    try:
+        return int(t)
+    except Exception:
+        return t
+
+
+def mpt_lire_reglages():
+    """Reglages MPT lisibles par l'interface, plus la liste des chemins.
+
+    Rend TOUJOURS un objet : un config.toml absent donne `ok:false` avec la
+    raison, jamais une exception. L'interface doit pouvoir dire « service non
+    installe » au lieu de rester sur un chargement infini."""
+    chemin = _mpt_config_path()
+    if not chemin:
+        return {"ok": False, "reason": "no-config",
+                "dir": _mpt_dir(), "values": {}}
+    try:
+        with open(chemin, "r", encoding="utf-8", errors="replace") as f:
+            lignes = f.read().splitlines()
+    except Exception as e:
+        return {"ok": False, "reason": "read-failed", "error": str(e),
+                "dir": _mpt_dir(), "values": {}}
+    section, valeurs = None, {}
+    for ligne in lignes:
+        st = ligne.strip()
+        if st.startswith("[") and st.endswith("]"):
+            section = st[1:-1].strip()
+            continue
+        if section != _MPT_CFG_SECTION:
+            continue
+        cle = _toml_ligne_cle(ligne)
+        if cle and cle in _MPT_CFG_WHITELIST:
+            _, _, droite = ligne.partition("=")
+            valeurs[cle] = _toml_valeur_python(droite)
+    return {"ok": True, "path": chemin, "section": _MPT_CFG_SECTION,
+            "values": valeurs, "keys": sorted(_MPT_CFG_WHITELIST.keys())}
+
+
+def mpt_ecrire_reglages(nouvelles):
+    """Ecrit les reglages dans config.toml, en ne touchant QUE les lignes visees.
+
+    Rend `{ok, ecrites, ignorees, reason?}`. Les cles hors liste blanche sont
+    rapportees dans `ignorees` — l'interface peut le dire, et une faute de
+    frappe ne se transforme jamais en ecriture silencieuse dans le fichier d'un
+    autre programme.
+
+    Ecriture ATOMIQUE (tmp + os.replace) : MPT relit ce fichier a chaque
+    generation ; un fichier tronque par une coupure ferait echouer sa
+    configuration entiere, pas seulement le reglage en cours."""
+    if not isinstance(nouvelles, dict) or not nouvelles:
+        return {"ok": False, "reason": "empty"}
+    chemin = _mpt_config_path()
+    if not chemin:
+        return {"ok": False, "reason": "no-config"}
+
+    acceptees = {k: v for k, v in nouvelles.items() if k in _MPT_CFG_WHITELIST}
+    ignorees = sorted(k for k in nouvelles if k not in _MPT_CFG_WHITELIST)
+    if not acceptees:
+        return {"ok": False, "reason": "nothing-allowed", "ignorees": ignorees}
+
+    try:
+        with open(chemin, "r", encoding="utf-8", errors="replace") as f:
+            contenu = f.read()
+    except Exception as e:
+        return {"ok": False, "reason": "read-failed", "error": str(e)}
+
+    fin_de_ligne = "\r\n" if "\r\n" in contenu else "\n"
+    lignes = contenu.split(fin_de_ligne)
+    section, ecrites = None, []
+    for i, ligne in enumerate(lignes):
+        st = ligne.strip()
+        if st.startswith("[") and st.endswith("]"):
+            section = st[1:-1].strip()
+            continue
+        if section != _MPT_CFG_SECTION:
+            continue
+        cle = _toml_ligne_cle(ligne)
+        if cle in acceptees:
+            lignes[i] = cle + " = " + _toml_valeur(acceptees[cle], _MPT_CFG_WHITELIST[cle])
+            ecrites.append(cle)
+
+    # Une cle absente du fichier est AJOUTEE a la fin de la section [app].
+    # On s'arrete a la section suivante ; si [app] est la derniere, on va au
+    # bout. Jamais a la fin du fichier : une cle LLM atterrie dans [app] d'une
+    # autre section serait ignoree par MPT sans le moindre message.
+    manquantes = [k for k in acceptees if k not in ecrites]
+    if manquantes:
+        debut, fin = None, len(lignes)
+        for i, ligne in enumerate(lignes):
+            st = ligne.strip()
+            if st.startswith("[") and st.endswith("]"):
+                if debut is not None:
+                    fin = i
+                    break
+                if st[1:-1].strip() == _MPT_CFG_SECTION:
+                    debut = i
+        if debut is None:
+            # Section [app] absente : on la cree en fin de fichier.
+            if lignes and lignes[-1].strip():
+                lignes.append("")
+            lignes.append("[%s]" % _MPT_CFG_SECTION)
+            fin = len(lignes)
+        bloc = [k + " = " + _toml_valeur(acceptees[k], _MPT_CFG_WHITELIST[k])
+                for k in manquantes]
+        # On insere AVANT la section suivante : a `fin`, ou fin vaut len(lignes)
+        # si [app] est la derniere section.
+        while fin > 0 and not lignes[fin - 1].strip():
+            fin -= 1
+        lignes[fin:fin] = bloc
+        ecrites.extend(manquantes)
+
+    nouveau = fin_de_ligne.join(lignes)
+    tmp = chemin + ".theologicus.tmp"
+    try:
+        # Sauvegarde une fois par ecriture : c'est le fichier d'un AUTRE
+        # programme. Sans filet, une edition fautive se decouvre apres coup.
+        try:
+            import shutil
+            shutil.copy2(chemin, chemin + ".theologicus.bak")
+        except Exception:
+            pass
+        with open(tmp, "w", encoding="utf-8", newline="") as f:
+            f.write(nouveau)
+        os.replace(tmp, chemin)
+    except Exception as e:
+        try:
+            if os.path.isfile(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        return {"ok": False, "reason": "write-failed", "error": str(e)}
+    return {"ok": True, "path": chemin, "ecrites": sorted(ecrites),
+            "ignorees": ignorees}
+
+
+def mpt_llm_tester():
+    """Teste la configuration LLM ECRITE dans config.toml, depuis le relais.
+
+    MPT n'expose AUCUNE route de test : `llm.test_connection()` n'existe que
+    dans son processus. On ne peut donc pas lui demander de tester — mais on
+    peut tester LA MEME CONFIGURATION, puisque c'est nous qui venons de
+    l'ecrire. C'est le point important : ce qui est verifie est bien ce que la
+    generation utilisera (meme base URL, meme cle, meme modele), pas une valeur
+    saisie a l'ecran.
+
+    Requete minimale (« Reply with exactly: OK »), comme le fait MPT : assez
+    pour valider cle + URL + modele, sans consommer de quota inutilement."""
+    reg = mpt_lire_reglages()
+    if not reg.get("ok"):
+        return {"ok": False, "connected": False,
+                "error": "config illisible (%s)" % reg.get("reason")}
+    v = reg.get("values", {})
+    fournisseur = (v.get("llm_provider") or "").strip()
+    if not fournisseur:
+        return {"ok": False, "connected": False,
+                "error": "aucun fournisseur LLM enregistre"}
+    cle = str(v.get(fournisseur + "_api_key", "") or "").strip()
+    base = str(v.get(fournisseur + "_base_url", "") or "").strip()
+    modele = str(v.get(fournisseur + "_model_name", "") or "").strip()
+    # Modele vide = on prend celui du registre, comme le fait MPT.
+    if not modele:
+        for p in mpt_llm_registre().get("providers", []):
+            if p.get("id") == fournisseur:
+                modele = p.get("default_model") or ""
+                break
+    if not base:
+        for p in mpt_llm_registre().get("providers", []):
+            if p.get("id") == fournisseur:
+                eps = p.get("endpoints") or []
+                if eps:
+                    base = eps[0].get("base_url") or ""
+                break
+    if not cle:
+        return {"ok": True, "connected": False, "fournisseur": fournisseur,
+                "modele": modele, "base": base,
+                "error": "aucune cle enregistree pour « %s »" % fournisseur}
+    if not modele:
+        return {"ok": True, "connected": False, "fournisseur": fournisseur,
+                "base": base, "error": "aucun nom de modele enregistre"}
+    if not base:
+        return {"ok": True, "connected": False, "fournisseur": fournisseur,
+                "modele": modele, "error": "aucune Base URL enregistree"}
+
+    import json as _json
+    import time as _t
+    import urllib.request
+    import urllib.error
+    url = base.rstrip("/") + "/chat/completions"
+    corps = _json.dumps({
+        "model": modele,
+        "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+        "max_tokens": 8,
+        "temperature": 0,
+    }).encode("utf-8")
+    entetes = {"Content-Type": "application/json", "Authorization": "Bearer " + cle}
+    # Anthropic a son propre schema d'authentification et refuse un corps
+    # OpenAI : on adapte, sinon le test echouerait sur une configuration
+    # pourtant valide (et enverrait l'utilisateur chercher une faute de cle).
+    if fournisseur == "anthropic":
+        url = base.rstrip("/") + "/messages"
+        corps = _json.dumps({
+            "model": modele, "max_tokens": 8,
+            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+        }).encode("utf-8")
+        entetes = {"Content-Type": "application/json", "x-api-key": cle,
+                   "anthropic-version": "2023-06-01"}
+    t0 = _t.perf_counter()
+    try:
+        req = urllib.request.Request(url, data=corps, headers=entetes, method="POST")
+        with _boucle_locale().open(req, timeout=30) as r:
+            brut = r.read(4096)
+        ecoule = _t.perf_counter() - t0
+        try:
+            rep = _json.loads(brut.decode("utf-8", "replace"))
+        except Exception:
+            rep = {}
+        contenu = ""
+        if isinstance(rep, dict):
+            if rep.get("choices"):
+                contenu = str((rep["choices"][0].get("message") or {}).get("content") or "")
+            elif rep.get("content"):
+                blocs = rep["content"]
+                if isinstance(blocs, list) and blocs:
+                    contenu = str(blocs[0].get("text") or "")
+        return {"ok": True, "connected": True, "fournisseur": fournisseur,
+                "modele": modele, "base": base, "elapsed": round(ecoule, 3),
+                "reponse": contenu[:120]}
+    except urllib.error.HTTPError as e:
+        ecoule = _t.perf_counter() - t0
+        try:
+            detail = e.read(700).decode("utf-8", "replace")
+        except Exception:
+            detail = ""
+        # On REMONTE le corps d'erreur tel quel : « 401 » seul ferait chercher
+        # une faute d'authentification la ou le service dit « model not found ».
+        return {"ok": True, "connected": False, "fournisseur": fournisseur,
+                "modele": modele, "base": base, "elapsed": round(ecoule, 3),
+                "http": e.code,
+                "error": "HTTP %s — %s" % (e.code, detail.strip()[:400] or "sans corps")}
+    except Exception as e:
+        return {"ok": True, "connected": False, "fournisseur": fournisseur,
+                "modele": modele, "base": base,
+                "error": "%s: %s" % (type(e).__name__, e)}
+
+
+def mpt_cache_stats(max_age_days=None):
+    """Statistiques du cache video de MPT, mesurees directement sur le disque.
+
+    On lit le dossier NOUS-MEMES plutot que d'appeler le service : le cache
+    doit pouvoir etre mesure meme MPT arrete, et cela evite d'ajouter une route
+    a un service qu'on ne maitrise pas. Le chemin reproduit celui de
+    `cache_manager.video_cache_dir()` : `storage/cache_videos`.
+
+    `max_age_days=None` compte TOUT ; un entier ne compte que les fichiers
+    plus vieux que ce nombre de jours (c'est l'aperçu avant nettoyage)."""
+    racines = _mpt_racines()
+    if not racines:
+        return {"ok": False, "reason": "no-dir"}
+    racine = None
+    for base in racines:
+        cand = os.path.join(base, "storage", "cache_videos")
+        if os.path.isdir(cand):
+            racine = cand
+            break
+    if not racine:
+        # Le dossier n'existe pas encore : ce n'est PAS une erreur, c'est un
+        # cache vide. Rendre 0 plutot qu'un echec — sinon l'interface affiche
+        # « indisponible » pour un service parfaitement sain.
+        return {"ok": True, "dir": os.path.join(racines[0], "storage", "cache_videos"),
+                "count": 0, "size": 0, "oldest": None, "newest": None}
+    import time as _t
+    maintenant = _t.time()
+    nb, taille = 0, 0
+    plus_vieux, plus_recent = None, None
+    try:
+        for entree in os.scandir(racine):
+            try:
+                if not entree.is_file():
+                    continue
+                st = entree.stat()
+            except Exception:
+                continue
+            if max_age_days:
+                if st.st_mtime >= maintenant - max_age_days * 86400:
+                    continue
+            nb += 1
+            taille += st.st_size
+            plus_vieux = st.st_mtime if plus_vieux is None else min(plus_vieux, st.st_mtime)
+            plus_recent = st.st_mtime if plus_recent is None else max(plus_recent, st.st_mtime)
+    except Exception as e:
+        return {"ok": False, "reason": "scan-failed", "error": str(e)}
+    fmt = lambda ts: _t.strftime("%Y-%m-%d", _t.localtime(ts)) if ts else None
+    return {"ok": True, "dir": racine, "count": nb, "size": taille,
+            "oldest": fmt(plus_vieux), "newest": fmt(plus_recent)}
+
+
+def mpt_cache_nettoyer(max_age_days=None, confirme=False):
+    """Supprime les fichiers du cache video.
+
+    `confirme` doit valoir True : c'est une SUPPRESSION DE FICHIERS, et une
+    requete construite a la main ne doit pas pouvoir la declencher par
+    inadvertance. L'interface coche une case explicite avant d'activer le
+    bouton, et ce garde-fou est repete ici — cote serveur, pas seulement cote
+    interface, qui peut etre contournee.
+
+    On ne supprime QUE des fichiers, jamais un sous-dossier : une suppression
+    recursive dans un dossier de cache peut partir trop loin."""
+    if not confirme:
+        return {"ok": False, "reason": "not-confirmed"}
+    st = mpt_cache_stats(max_age_days)
+    if not st.get("ok"):
+        return {"ok": False, "reason": st.get("reason", "scan-failed")}
+    racine = st.get("dir")
+    if not racine or not os.path.isdir(racine):
+        return {"ok": True, "deleted": 0, "freed": 0, "failed": 0}
+    # Garde-fou de chemin : on ne supprime que dans un dossier nomme
+    # `cache_videos`, et jamais a la racine du service.
+    if os.path.basename(os.path.normpath(racine)) != "cache_videos":
+        return {"ok": False, "reason": "unsafe-dir"}
+    import time as _t
+    maintenant = _t.time()
+    supprimes, liberes, echecs = 0, 0, 0
+    try:
+        for entree in os.scandir(racine):
+            try:
+                if not entree.is_file():
+                    continue
+                stf = entree.stat()
+            except Exception:
+                echecs += 1
+                continue
+            if max_age_days:
+                if stf.st_mtime >= maintenant - max_age_days * 86400:
+                    continue
+            try:
+                taille = stf.st_size
+                os.remove(entree.path)
+                supprimes += 1
+                liberes += taille
+            except Exception:
+                echecs += 1
+    except Exception as e:
+        return {"ok": False, "reason": "clean-failed", "error": str(e),
+                "deleted": supprimes, "freed": liberes, "failed": echecs}
+    return {"ok": True, "deleted": supprimes, "freed": liberes, "failed": echecs}
+
+
+def mpt_llm_registre():
+    """Fournisseurs LLM tels que MPT les connait, lus depuis SON registre.
+
+    Lire `app/models/llm_provider.py` plutot que recopier la liste : MPT en
+    ajoute a chaque version, et une liste figee ici proposerait des
+    fournisseurs qu'il ne sait pas router, ou en cacherait de nouveaux. Le
+    fichier est du Python, pas un format de donnees — on en extrait ce qui est
+    sur : l'identifiant, le libelle, le modele par defaut et les zones.
+
+    En cas d'echec, on rend une liste VIDE avec la raison : l'interface le dit,
+    au lieu d'afficher un sélecteur vide sans explication."""
+    chemin = None
+    for base in _mpt_racines():
+        cand = os.path.join(base, "app", "models", "llm_provider.py")
+        if os.path.isfile(cand):
+            chemin = cand
+            break
+    if not chemin:
+        return {"ok": False, "reason": "no-registry", "providers": []}
+    try:
+        with open(chemin, "r", encoding="utf-8", errors="replace") as f:
+            src = f.read()
+    except Exception as e:
+        return {"ok": False, "reason": "read-failed", "error": str(e),
+                "providers": []}
+
+    fournisseurs, courant, profondeur, dans_entree = [], None, 0, False
+    for ligne in src.splitlines():
+        # On ne compte PAS les lignes de continuation (chaines concatenation
+        # implicite `api_key_url=( "a" "b" )`) ni les commentaires : sinon la
+        # profondeur derive et la fin d'entree tombe au mauvais endroit.
+        code = ligne.split("#")[0]
+        if not courant:
+            if re.match(r'^\s*LLMProviderSpec\(\s*$', code):
+                courant = {"id": None, "label": None, "default_model": "",
+                           "endpoints": []}
+                profondeur = code.count("(") - code.count(")")
+                dans_entree = True
+            continue
+        # Dans une entree : lire les champs AVANT de mettre a jour la profondeur,
+        # pour ne pas attribuer a la ligne suivante ce qui est sur celle-ci.
+        # LLMProviderSpec("moonshot", "Kimi / Moonshot AI", … : les deux
+        # premieres chaines nues sont l'identifiant puis le libelle, DANS CET
+        # ORDRE. Les deux motifs sont donc identiques : c'est l'etat de
+        # `courant` qui decide a qui l'on attribue la chaine, jamais le motif.
+        m = re.match(r'^\s*"([^"]+)",?\s*$', code)
+        if m:
+            if courant["id"] is None:
+                courant["id"] = m.group(1)
+            elif courant["label"] is None:
+                courant["label"] = m.group(1)
+        m = re.search(r'default_model\s*=\s*"([^"]*)"', code)
+        if m and not courant["default_model"]:
+            courant["default_model"] = m.group(1)
+        m = re.search(r'endpoint_id\s*=\s*"([^"]+)"', code)
+        if m and not any(e["id"] == m.group(1) for e in courant["endpoints"]):
+            courant["endpoints"].append({"id": m.group(1), "label": m.group(1),
+                                         "base_url": ""})
+        m = re.search(r'base_url\s*=\s*"([^"]+)"', code)
+        if m and courant["endpoints"] and not courant["endpoints"][-1]["base_url"]:
+            courant["endpoints"][-1]["base_url"] = m.group(1)
+        m = re.search(r'default_label\s*=\s*"([^"]+)"', code)
+        if m and courant["endpoints"]:
+            courant["endpoints"][-1]["label"] = m.group(1)
+        profondeur += code.count("(") - code.count(")")
+        if profondeur <= 0 and dans_entree:
+            if courant["id"]:
+                fournisseurs.append(courant)
+            courant, dans_entree = None, False
+    if courant is not None and courant.get("id"):
+        fournisseurs.append(courant)
+    return {"ok": True, "count": len(fournisseurs), "providers": fournisseurs}
+
+
 def mpt_fonts():
     """Polices de sous-titres REELLEMENT presentes dans l'installation MPT.
 
@@ -716,6 +1263,29 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         if self.path.split('?')[0] == '/mpt/musics':
             ok, data = mpt_requete("GET", "/api/v1/musics")
             self._json_response(data if ok else {"ok": False, "error": data})
+            return
+        # Fournisseurs LLM connus de MPT, lus depuis son propre registre.
+        # L'interface ne recopie PAS cette liste : elle la demande, pour rester
+        # juste quand MPT ajoute un fournisseur ou une zone de service.
+        if self.path.split('?')[0] == '/mpt/llm/providers':
+            self._json_response(mpt_llm_registre())
+            return
+        # Réglages de MPT (config.toml), en LECTURE. C'est ce que l'API HTTP du
+        # service ne sait pas rendre : ses propres réglages ne sont écrits que
+        # par son WebUI, dans le même processus que lui.
+        if self.path.split('?')[0] == '/mpt/settings':
+            self._json_response(mpt_lire_reglages())
+            return
+        # Statistiques du cache vidéo. `?jours=N` compte les fichiers plus
+        # vieux que N jours (aperçu avant nettoyage) ; sans paramètre, tout.
+        if self.path.split('?')[0] == '/mpt/cache':
+            params = parse_qs(urlparse(self.path).query)
+            jours = params.get('jours', [None])[0]
+            try:
+                jours = int(jours) if jours not in (None, '', '0') else None
+            except Exception:
+                jours = None
+            self._json_response(mpt_cache_stats(jours))
             return
         # Config du Studio : formulaire (sujet, format, voix, sous-titres…).
         # Même emplacement hors-install que les clés et la config TTS, pour
@@ -936,6 +1506,18 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # doit survivre à une mise à jour du exe, sinon l'utilisateur retape tout.
         elif self.path.split('?')[0] == '/mpt/config':
             self._save_studio()
+        elif self.path.split('?')[0] == '/mpt/settings':
+            self._save_mpt_settings()
+        elif self.path.split('?')[0] == '/mpt/llm/test':
+            self._json_response(mpt_llm_tester())
+        elif self.path.split('?')[0] == '/mpt/cache':
+            corps = self._lire_corps_json() or {}
+            jours = corps.get('jours')
+            try:
+                jours = int(jours) if jours not in (None, '', 0) else None
+            except Exception:
+                jours = None
+            self._json_response(mpt_cache_nettoyer(jours, confirme=bool(corps.get('confirme'))))
         elif self.path.startswith('/proxy/'):
             self._proxy_request()
         else:
@@ -966,6 +1548,26 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             return json.loads(self.rfile.read(length).decode('utf-8'))
         except Exception:
             return None
+
+    def _save_mpt_settings(self):
+        """Écrit des réglages dans le config.toml de MoneyPrinterTurbo.
+
+        Corps attendu : `{"values": {"pexels_api_keys": "k1,k2", ...}}`. La
+        liste blanche est appliquée côté serveur (`mpt_ecrire_reglages`) : une
+        clé inconnue est IGNORÉE et rapportée, jamais écrite. Cette route ne
+        peut donc pas servir à modifier arbitrairement le fichier d'un autre
+        programme, même si l'interface était compromise.
+        """
+        corps = self._lire_corps_json()
+        if not isinstance(corps, dict):
+            self.send_error(400, 'Invalid JSON body')
+            return
+        valeurs = corps.get('values')
+        if not isinstance(valeurs, dict):
+            self.send_error(400, 'Missing "values" object')
+            return
+        res = mpt_ecrire_reglages(valeurs)
+        self._json_response(res)
 
     def _save_studio(self):
         """Enregistre theologicus_studio.json — le formulaire du STUDIO VIDEO.

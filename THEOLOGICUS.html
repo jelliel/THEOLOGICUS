@@ -3886,6 +3886,30 @@ details.studio-adv[open] > summary { margin-bottom: 10px; }
   .settings-panneau { animation: none; }
 }
 
+/* Pastille d'aide « ? » du studio : c'est un title= natif, donc l'explication
+   longue reste accessible sans JavaScript et sans infobulle maison à empiler.
+   Le curseur signale qu'il y a quelque chose à lire (une pastille qui ne
+   réagit pas au survol ne se lit pas comme une aide). */
+.stu-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px; height: 15px;
+  margin-left: 4px;
+  border: 1px solid var(--text-dim);
+  border-radius: 50%;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  cursor: help;
+  vertical-align: middle;
+}
+.stu-help:hover { border-color: var(--cyan); color: var(--cyan); }
+/* Ligne de case à cocher : la case doit rester solidaire de son libellé au
+   clic (d'où le <label> qui l'englobe), et ne jamais s'étirer en largeur. */
+.field-check { user-select: none; }
+.field-check input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+
 .info-block {
   background: var(--hull);
   border: var(--border);
@@ -7634,6 +7658,26 @@ window.__ensureTafsirSurah = function(p){
     </div>
     <div class="modal-body">
 
+      <!-- BARRE D'ONGLETS — reproduit la fenêtre « Settings » de
+           MoneyPrinterTurbo, qui est une fenêtre À PART de son formulaire de
+           génération. L'onglet « Génération » porte le formulaire d'origine ;
+           les cinq suivants portent SES réglages (LLM, sources de médias,
+           publication automatique, sauvegarde des clés, cache).
+           Cacher par l'attribut `hidden`, jamais par un `display:none` en
+           ligne : le style en ligne gagne contre la feuille et `hidden=false`
+           ne rallume alors plus rien (piège v122). -->
+      <div class="settings-tabs" role="tablist" id="studio-tabs">
+        <button type="button" class="settings-tab active" role="tab" aria-selected="true" data-onglet="generation" id="studio-tab-generation">🎬 Génération</button>
+        <button type="button" class="settings-tab" role="tab" aria-selected="false" data-onglet="llm" id="studio-tab-llm">🧠 Modèle IA</button>
+        <button type="button" class="settings-tab" role="tab" aria-selected="false" data-onglet="material" id="studio-tab-material">🖼 Sources de médias</button>
+        <button type="button" class="settings-tab" role="tab" aria-selected="false" data-onglet="publish" id="studio-tab-publish">📤 Publication auto</button>
+        <button type="button" class="settings-tab" role="tab" aria-selected="false" data-onglet="keys" id="studio-tab-keys">🔑 Sauvegarde des clés</button>
+        <button type="button" class="settings-tab" role="tab" aria-selected="false" data-onglet="cache" id="studio-tab-cache">🧹 Cache</button>
+      </div>
+
+      <!-- ══════════ ONGLET 1 : GÉNÉRATION (formulaire d'origine) ══════════ -->
+      <div class="settings-panneau" data-panneau="generation" id="studio-panneau-generation">
+
       <!-- ÉTAT DU SERVICE -->
       <div id="studio-status" class="info-block" style="border-left-color:var(--neon);margin-bottom:16px">
         <strong>⏳ Détection du service…</strong>
@@ -7919,6 +7963,273 @@ window.__ensureTafsirSurah = function(p){
         <div class="section-title">JOURNAL</div>
         <pre id="studio-log-body" style="max-height:180px;overflow:auto;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);background:rgba(0,0,0,0.25);padding:10px;border-radius:var(--r)"></pre>
       </div>
+
+      </div><!-- /#studio-panneau-generation -->
+
+      <!-- ══════════════════ ONGLET 2 : MODÈLE IA ══════════════════════════
+           Reproduit « LLM Settings » de MoneyPrinterTurbo. La liste des
+           fournisseurs vient de SON registre (`/mpt/llm/providers`), pas
+           d'une copie : MPT en ajoute à chaque version. Les valeurs sont
+           écrites dans SON config.toml — c'est ce que la génération de vidéo
+           lit réellement. -->
+      <div class="settings-panneau" data-panneau="llm" id="studio-panneau-llm" hidden>
+
+        <div class="field-group">
+          <label class="field-label">🧠 Fournisseur LLM</label>
+          <select class="field-input" id="stu-llm-provider" data-cle="llm_provider">
+            <option value="">— charger les réglages —</option>
+          </select>
+          <div class="field-hint" id="stu-llm-provider-hint">▸ Le fournisseur qui écrit les scripts du studio.</div>
+        </div>
+
+        <div id="stu-llm-zone-bloc">
+          <div class="field-group">
+            <label class="field-label">🌍 Zone de service <span class="stu-help" title="Kimi / Moonshot AI expose deux plateformes distinctes : la chinoise (platform.kimi.com) et l'internationale (platform.kimi.ai). Elles n'utilisent PAS le même compte ni la même clé — choisir la mauvaise fait échouer la connexion sans message clair. La zone choisie détermine la Base URL.">?</span></label>
+            <select class="field-input" id="stu-llm-zone"></select>
+            <div class="field-hint" id="stu-llm-zone-hint">▸ Choisir une zone fixe la Base URL ci-dessous.</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔑 Clé API</label>
+          <input type="password" class="field-input" id="stu-llm-key" placeholder="Collez la clé du fournisseur…">
+          <div class="field-hint" id="stu-llm-key-hint">▸ Écrite dans le config.toml du service vidéo.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔗 Base Url</label>
+          <input type="text" class="field-input" id="stu-llm-base" placeholder="https://api…">
+          <div class="field-hint">▸ Remplie automatiquement par la zone choisie ; modifiable en mode personnalisé.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🏷 Model Name</label>
+          <input type="text" class="field-input" id="stu-llm-model" placeholder="kimi-k3">
+          <div class="field-hint" id="stu-llm-model-hint">▸ Valeur par défaut du fournisseur ; voir sa liste de modèles.</div>
+        </div>
+
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn-ghost" id="stu-llm-test">⚡ TESTER LA CONNEXION</button>
+          <button class="btn-ghost" id="stu-llm-defaults">↻ VALEURS DU FOURNISSEUR</button>
+        </div>
+
+        <div id="stu-llm-verdict" class="info-block" style="display:none"></div>
+
+        <div class="info-block" id="stu-llm-aide-bloc" style="border-left-color:var(--cyan);margin-top:14px">
+          <strong id="stu-llm-aide-titre">▸ Configuration du fournisseur</strong>
+          <div id="stu-llm-aide" style="margin-top:8px;font-size:12px;line-height:1.6"></div>
+        </div>
+
+      </div><!-- /#studio-panneau-llm -->
+
+      <!-- ══════════════ ONGLET 3 : SOURCES DE MÉDIAS ══════════════════════
+           « Material Source Settings ». Les clés Pexels / Pixabay / Coverr
+           sont celles que MoneyPrinterTurbo utilise pour chercher les vidéos
+           d'illustration : elles vont dans SON config.toml. Chez MPT ce sont
+           des LISTES (plusieurs clés en réserve : quand l'une atteint son
+           quota, la suivante prend le relais) — d'où un champ qui accepte
+           plusieurs clés séparées par des virgules. -->
+      <div class="settings-panneau" data-panneau="material" id="studio-panneau-material" hidden>
+
+        <div class="section-title" style="margin-top:0">🎬 BANQUES DE VIDÉOS</div>
+        <div class="field-hint" style="margin-bottom:14px">Plusieurs clés possibles pour un même service, séparées par des virgules — la suivante prend le relais quand la précédente atteint son quota. Écrites dans le <code style="font-family:var(--font-mono)">config.toml</code> du service vidéo.</div>
+
+        <div class="field-group">
+          <label class="field-label">🟢 Pexels API Key</label>
+          <input type="password" class="field-input" id="stu-mat-pexels" data-cle="pexels_api_keys" placeholder="Clé Pexels — https://www.pexels.com/api/">
+          <div class="field-hint">▸ Source utilisée par défaut si le champ « Vidéo Source » n'est pas changé.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🔵 Pixabay API Key</label>
+          <input type="password" class="field-input" id="stu-mat-pixabay" data-cle="pixabay_api_keys" placeholder="Clé Pixabay — https://pixabay.com/api/docs/">
+          <div class="field-hint">▸ Format attendu par Pixabay : un identifiant numérique.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🟣 Coverr API Key</label>
+          <input type="password" class="field-input" id="stu-mat-coverr" data-cle="coverr_api_keys" placeholder="Clé Coverr">
+          <div class="field-hint">▸ Optionnelle : Coverr devient disponible dans « Vidéo Source » dès qu'elle est renseignée.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🎯 Source de vidéos par défaut</label>
+          <select class="field-input" id="stu-mat-source" data-cle="video_source">
+            <option value="pexels">Pexels</option>
+            <option value="pixabay">Pixabay</option>
+            <option value="coverr">Coverr</option>
+          </select>
+          <div class="field-hint">▸ La banque interrogée quand le studio cherche des illustrations.</div>
+        </div>
+
+      </div><!-- /#studio-panneau-material -->
+
+      <!-- ═══════════════ ONGLET 4 : PUBLICATION AUTO ═══════════════════════
+           « Auto-Publish Settings » — upload-post.com. Deux interrupteurs
+           INDÉPENDANTS chez MPT : `enabled` autorise un appel externe,
+           `auto_upload` déclenche l'envoi après le rendu. Les fusionner en un
+           seul ferait publier automatiquement quelqu'un qui voulait seulement
+           l'autoriser. On les laisse donc séparés. -->
+      <div class="settings-panneau" data-panneau="publish" id="studio-panneau-publish" hidden>
+
+        <div class="section-title" style="margin-top:0">📤 PUBLICATION AUTOMATIQUE</div>
+        <div class="info-block" style="border-left-color:var(--cyan);margin-bottom:16px">
+          <strong>▸ Publication vers les réseaux sociaux</strong>
+          <div style="margin-top:6px;font-size:12px;line-height:1.6">Le service vidéo peut envoyer la vidéo terminée vers TikTok / Instagram / YouTube via <a href="https://upload-post.com" target="_blank" rel="noopener" style="color:var(--cyan)">upload-post.com</a>. Créez une clé sur leur site, puis renseignez-la ci-dessous.</div>
+        </div>
+
+        <label class="field-check" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+          <input type="checkbox" id="stu-pub-enabled" data-cle="upload_post_enabled">
+          <span style="font-size:13px">Autoriser l'intégration Upload-Post</span>
+        </label>
+
+        <label class="field-check" style="display:flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer">
+          <input type="checkbox" id="stu-pub-auto" data-cle="upload_post_auto_upload">
+          <span style="font-size:13px">Publier automatiquement après le rendu</span>
+        </label>
+        <div class="field-hint" style="margin-bottom:16px">▸ Indépendant du précédent : autoriser l'intégration n'entraîne aucun envoi.</div>
+
+        <div class="field-group">
+          <label class="field-label">🔑 Clé API Upload-Post</label>
+          <input type="password" class="field-input" id="stu-pub-key" data-cle="upload_post_api_key" placeholder="Clé upload-post.com">
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">👤 Nom de profil</label>
+          <input type="text" class="field-input" id="stu-pub-user" data-cle="upload_post_username" placeholder="Nom du profil upload-post.com">
+          <div class="field-hint">▸ Le profil auquel la vidéo est rattachée chez upload-post.com.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🌐 Plateformes</label>
+          <select class="field-input" id="stu-pub-platforms" data-cle="upload_post_platforms" multiple size="3">
+            <option value="tiktok">TikTok</option>
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+          </select>
+          <div class="field-hint">▸ Plusieurs choix possibles (Ctrl ou Cmd pour en sélectionner plusieurs).</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🎬 Confidentialité YouTube</label>
+          <select class="field-input" id="stu-pub-privacy" data-cle="upload_post_youtube_privacy_status">
+            <option value="public">Publique</option>
+            <option value="unlisted">Non répertoriée</option>
+            <option value="private">Privée</option>
+          </select>
+        </div>
+
+        <label class="field-check" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer">
+          <input type="checkbox" id="stu-pub-kids" data-cle="upload_post_youtube_made_for_kids">
+          <span style="font-size:13px">Contenu destiné aux enfants (YouTube)</span>
+        </label>
+
+        <div class="field-group">
+          <label class="field-label">📚 Tâches en attente maximum</label>
+          <input type="number" class="field-input" id="stu-pub-max" data-cle="upload_post_max_pending_tasks" min="1" max="50" value="10">
+          <div class="field-hint">▸ Le service cesse d'accepter de nouvelles publications au-delà de cette limite.</div>
+        </div>
+
+      </div><!-- /#studio-panneau-publish -->
+
+      <!-- ═══════════════ ONGLET 5 : SAUVEGARDE DES CLÉS ════════════════════
+           « Key Backup ». Le principe est celui de THEOLOGICUS : une clé
+           saisie ne doit jamais être perdue par une mise à jour. -->
+      <div class="settings-panneau" data-panneau="keys" id="studio-panneau-keys" hidden>
+
+        <div class="section-title" style="margin-top:0">🔑 SAUVEGARDE DES CLÉS</div>
+
+        <div class="info-block" style="border-left-color:var(--cyan);margin-bottom:14px">
+          <strong>▸ Où sont stockées les clés</strong>
+          <div style="margin-top:6px;font-size:12px;line-height:1.6" id="stu-keys-chemin">Les clés du studio vidéo sont écrites dans le <code style="font-family:var(--font-mono)">config.toml</code> de MoneyPrinterTurbo, hors du dossier d'installation de THEOLOGICUS : une mise à jour de l'application ne les efface pas.</div>
+        </div>
+
+        <div class="info-block" style="border-left-color:var(--danger);margin-bottom:16px">
+          <strong style="color:var(--danger)">⚠ Une sauvegarde contient des clés en clair</strong>
+          <div style="margin-top:6px;font-size:12px;line-height:1.6">Le fichier exporté donne accès à vos comptes Pexels, Pixabay, Upload-Post et à votre compte LLM. Ne le partagez pas et ne le mettez pas dans un dépôt public.</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">📦 Exporter les clés</label>
+          <div class="field-hint" id="stu-keys-resume" style="margin-bottom:10px">▸ Inventaire en cours…</div>
+          <div class="btn-row" style="margin-top:0">
+            <button class="btn-ghost" id="stu-keys-export">⬇ TÉLÉCHARGER LA SAUVEGARDE</button>
+            <button class="btn-ghost" id="stu-keys-refresh">↻ RECOMPTER</button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">📥 Importer une sauvegarde</label>
+          <input type="file" class="field-input" id="stu-keys-import" accept=".json,application/json">
+          <div class="field-hint">▸ Seules les clés connues sont reprises ; le reste du fichier est ignoré.</div>
+        </div>
+
+        <div id="stu-keys-verdict" class="info-block" style="display:none"></div>
+
+      </div><!-- /#studio-panneau-keys -->
+
+      <!-- ═══════════════════ ONGLET 6 : CACHE ══════════════════════════════
+           « Cache Management » : la vidéo de secours téléchargée est mise en
+           cache par le service. On MESURE avant de proposer un nettoyage, et
+           on exige une confirmation explicite. -->
+      <div class="settings-panneau" data-panneau="cache" id="studio-panneau-cache" hidden>
+
+        <div class="section-title" style="margin-top:0">🧹 GESTION DU CACHE</div>
+
+        <div class="field-group">
+          <label class="field-label">📁 Dossier du cache vidéo</label>
+          <div class="field-hint" id="stu-cache-dir" style="font-family:var(--font-mono);font-size:11px;word-break:break-all">▸ Lecture en cours…</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0">
+          <div class="info-block" style="margin:0;text-align:center">
+            <div style="font-size:20px;font-family:var(--font-mono);color:var(--cyan)" id="stu-cache-nb">—</div>
+            <div style="font-size:11px;color:var(--text-dim)">FICHIERS</div>
+          </div>
+          <div class="info-block" style="margin:0;text-align:center;border-left-color:var(--neon)">
+            <div style="font-size:20px;font-family:var(--font-mono);color:var(--neon)" id="stu-cache-taille">—</div>
+            <div style="font-size:11px;color:var(--text-dim)">TAILLE</div>
+          </div>
+          <div class="info-block" style="margin:0;text-align:center">
+            <div style="font-size:20px;font-family:var(--font-mono)" id="stu-cache-ancien">—</div>
+            <div style="font-size:11px;color:var(--text-dim)">PLUS ANCIEN</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">🗑 Que nettoyer ?</label>
+          <select class="field-input" id="stu-cache-plage">
+            <option value="30">Fichiers de plus de 30 jours</option>
+            <option value="7">Fichiers de plus de 7 jours</option>
+            <option value="90">Fichiers de plus de 90 jours</option>
+            <option value="0">Tout le cache vidéo</option>
+          </select>
+          <div class="field-hint" id="stu-cache-apercu">▸ Sélectionnez une plage pour voir ce qui serait supprimé.</div>
+        </div>
+
+        <label class="field-check" style="display:flex;align-items:center;gap:8px;margin:14px 0;cursor:pointer">
+          <input type="checkbox" id="stu-cache-confirme">
+          <span style="font-size:13px;color:var(--danger)">Je confirme vouloir supprimer ces fichiers</span>
+        </label>
+
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn-ghost" id="stu-cache-refresh">↻ ACTUALISER LES STATISTIQUES</button>
+          <button class="btn-ghost" id="stu-cache-nettoyer" disabled>🧹 NETTOYER MAINTENANT</button>
+        </div>
+
+        <div id="stu-cache-verdict" class="info-block" style="display:none"></div>
+
+      </div><!-- /#studio-panneau-cache -->
+
+      <!-- Barre d'action COMMUNE : enregistrer / annuler, valable pour tous
+           les onglets de réglages. Sans elle, chaque onglet devrait porter son
+           propre bouton, et l'utilisateur ne saurait pas si ses changements
+           des onglets précédents ont été conservés. -->
+      <div class="btn-row" id="studio-reglages-actions" style="margin-top:20px;display:none">
+        <button class="btn-ghost" id="stu-reglages-recharger">↻ RELIRE LE SERVICE</button>
+        <button class="btn-primary" id="stu-reglages-enregistrer">💾 ENREGISTRER DANS LE SERVICE</button>
+      </div>
+      <div id="stu-reglages-verdict" class="info-block" style="display:none"></div>
 
     </div>
   </div>
@@ -20966,6 +21277,20 @@ function bindEvents() {
   function studioOpen() {
     const m = $("#studio-modal");
     if (m) m.classList.add("active");
+    // On rouvre sur l'onglet quitté, et PAS seulement au chargement de la page :
+    // `studioOuvrirOnglet` est le seul endroit qui rallume le panneau demandé
+    // ET la vue interne qui lui correspond. Sans cet appel, une réouverture du
+    // modal après être passé par un onglet de réglages rendait un panneau
+    // visible mais vide (`studio-form` gardait son `display:none` en ligne).
+    let onglet = "generation";
+    try {
+      const d = localStorage.getItem("theologicus-studio-onglet");
+      // `STUDIO_ONGLETS` est déclaré plus bas : on teste sa présence plutôt que
+      // de supposer l'ordre, car une ouverture précoce lèverait une
+      // ReferenceError de zone morte temporelle.
+      if (d && typeof STUDIO_ONGLETS !== "undefined" && STUDIO_ONGLETS.indexOf(d) >= 0) onglet = d;
+    } catch (e) { /* stockage refusé : on garde « Génération » */ }
+    if (typeof studioOuvrirOnglet === "function") studioOuvrirOnglet(onglet);
     // Les listes (voix, polices, musiques) viennent du SERVICE : elles ne
     // sont ni embarquées ni codées en dur. On les charge à l'ouverture, pas
     // au chargement de la page — le service peut être lancé après.
@@ -20998,6 +21323,700 @@ function bindEvents() {
   try {
     if (new URLSearchParams(location.search).get("studio") === "1") setTimeout(studioOpen, 400);
   } catch (e) { /* environnement sans URLSearchParams : sans effet */ }
+
+  /* ══════════════════════════════════════════════════════════════════
+     RÉGLAGES DU STUDIO — barre d'onglets (v123)
+
+     MoneyPrinterTurbo sépare ses RÉGLAGES de son FORMULAIRE : la génération
+     de vidéo est sur la page, les réglages sont dans une fenêtre « Settings »
+     à part. On reproduit cette séparation ici, dans le même modal.
+
+     Différence essentielle avec l'onglet « Modèle IA » de PARAMÈTRES : ces
+     champs écrivent dans le config.toml de MoneyPrinterTurbo, parce que c'est
+     LUI qui génère la vidéo. Les clés Pexels/Pixabay y sont donc réellement
+     utiles — les afficher sans les écrire serait un formulaire décoratif.
+
+     Accès unique par `getElementById` : `$(id)` sans `#` est le piège de
+     référence de ce fichier (`$` = `querySelector`, qui attend un SÉLECTEUR).
+     ══════════════════════════════════════════════════════════════════ */
+  const STUDIO_ONGLETS = ["generation", "llm", "material", "publish", "keys", "cache"];
+  const _STU = id => document.getElementById(id);
+
+  function studioOuvrirOnglet(nom) {
+    if (STUDIO_ONGLETS.indexOf(nom) < 0) nom = "generation";
+    document.querySelectorAll("#studio-tabs .settings-tab").forEach(b => {
+      const actif = b.dataset.onglet === nom;
+      b.classList.toggle("active", actif);
+      b.setAttribute("aria-selected", actif ? "true" : "false");
+    });
+    document.querySelectorAll("#studio-modal .settings-panneau").forEach(pa => {
+      pa.hidden = pa.dataset.panneau !== nom;
+    });
+    // La barre ENREGISTRER ne concerne que les réglages : la montrer sur
+    // l'onglet « Génération » ferait croire qu'elle enregistre aussi le
+    // formulaire de génération, qui a déjà son propre bouton.
+    const actions = _STU("studio-reglages-actions");
+    if (actions) actions.style.display = (nom === "generation") ? "none" : "";
+    try { localStorage.setItem("theologicus-studio-onglet", nom); } catch (e) {}
+    window.__studioOnglet = nom;
+    // ── L'onglet « Génération » contient TROIS vues internes ──────────────
+    // `studio-form` (le formulaire), `studio-progress` (le rendu en cours) et
+    // `studio-result` (le résultat). Elles portent un `display:none` EN LIGNE,
+    // qui gagne contre la feuille de style (leçon v122) : rallumer le PANNEAU
+    // ne rallume donc PAS le formulaire qu'il contient. Sans ce rappel, passer
+    // par un onglet de réglages puis revenir sur « Génération » laissait un
+    // panneau vide — les 39 champs présents mais inatteignables.
+    //
+    // On ne force la main que si AUCUNE des trois vues n'est déjà allumée :
+    // un rendu en cours ou un résultat affiché appartient à l'utilisateur, et
+    // le remplacer par le formulaire lui ferait perdre son travail.
+    if (nom === "generation") {
+      const vues = ["studio-form", "studio-progress", "studio-result"];
+      const allumee = vues.filter(id => { const e = _STU(id); return e && e.style.display !== "none"; });
+      if (!allumee.length) studioShow("studio-form");
+    }
+    // Les réglages viennent du SERVICE : on les relit en arrivant sur un
+    // onglet de réglages, pas au chargement de la page (le service peut être
+    // lancé après, et son config.toml modifié entre-temps).
+    if (nom !== "generation") studioReglagesCharger();
+    // Le cache se MESURE à l'arrivée sur son onglet : des statistiques figées
+    // depuis la dernière visite feraient croire à un dossier inchangé après
+    // une suppression. Mesurer est une lecture de dossier, pas un appel réseau.
+    if (nom === "cache") { studioCacheStats().then(() => studioCacheApercu()); }
+  }
+  window.__studioOuvrirOnglet = studioOuvrirOnglet;
+
+  /* ── Le registre des fournisseurs LLM de MPT ───────────────────────
+     Lu depuis SON fichier, pas recopié : MPT en ajoute à chaque version, et
+     une liste figée ici proposerait des fournisseurs qu'il ne sait pas
+     router. En cas d'échec on le DIT (l'utilisateur doit pouvoir relancer le
+     service), au lieu de laisser un sélecteur vide sans explication. */
+  let _stuLlmRegistre = [];
+
+  async function studioLlmChargerRegistre() {
+    const sel = _STU("stu-llm-provider");
+    if (!sel) return;
+    try {
+      const r = await fetch("/mpt/llm/providers", { cache: "no-store" });
+      const j = await r.json();
+      if (j && j.ok && Array.isArray(j.providers) && j.providers.length) {
+        _stuLlmRegistre = j.providers;
+      } else {
+        _stuLlmRegistre = [];
+      }
+    } catch (e) { _stuLlmRegistre = []; }
+
+    if (!_stuLlmRegistre.length) {
+      sel.innerHTML = '<option value="">— service vidéo non détecté —</option>';
+      const h = _STU("stu-llm-provider-hint");
+      if (h) h.textContent = "▸ Le registre du service est introuvable. Démarrez MoneyPrinterTurbo puis rechargez les réglages.";
+      return;
+    }
+    const garde = sel.value;
+    sel.innerHTML = _stuLlmRegistre.map(p =>
+      '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.label || p.id) + '</option>').join("");
+    if (garde) sel.value = garde;
+  }
+
+  function _stuLlmTrouver(id) {
+    return _stuLlmRegistre.filter(p => p.id === id)[0] || null;
+  }
+
+  /* Décrit le fournisseur SÉLECTIONNÉ dans l'interface, sans relire la
+     configuration enregistrée. Deux fonctions, deux responsabilités (leçon
+     v122) :
+       - `studioReglagesAppliquer()` (config -> UI) : à l'ouverture ;
+       - `_stuLlmDecrire()`           (choix UI -> description) : sur onchange.
+     Appeler la première depuis l'`onchange` REMETTRAIT le sélecteur sur la
+     valeur enregistrée, donc annulerait le choix de l'utilisateur. */
+  function _stuLlmDecrire(id, zoneId) {
+    const p = _stuLlmTrouver(id);
+    const blocZone = _STU("stu-llm-zone-bloc");
+    const selZone = _STU("stu-llm-zone");
+    const zones = (p && Array.isArray(p.endpoints)) ? p.endpoints : [];
+    if (blocZone && selZone) {
+      if (zones.length) {
+        const garde = zoneId || selZone.value;
+        selZone.innerHTML = zones.map(z =>
+          '<option value="' + escapeHtml(z.id) + '">' + escapeHtml(z.label || z.id) + '</option>').join("")
+          + '<option value="__custom__">Personnalisée</option>';
+        if (garde && zones.some(z => z.id === garde)) selZone.value = garde;
+        blocZone.hidden = false;
+      } else {
+        // Pas de zones chez ce fournisseur : une Base URL unique. Garder le
+        // sélecteur visible laisserait croire qu'il a un effet.
+        selZone.innerHTML = '<option value="__custom__">Personnalisée</option>';
+        blocZone.hidden = true;
+      }
+    }
+    /* `readOnly` suit la PRÉSENCE de zones, pas le dernier clic. Sans cette
+       ligne, la Base URL restait verrouillée après être passé d'un fournisseur
+       à zones (Kimi) à un fournisseur sans zone : le champ devenait
+       immodifiable pour tous les suivants, et la zone affichait une adresse
+       qui n'était plus la bonne. Un état d'interface doit être RECALCULÉ à
+       chaque changement, jamais hérité du précédent. */
+    if (_STU("stu-llm-base")) _STU("stu-llm-base").readOnly = zones.length > 0;
+    const lieuZone = _STU("stu-llm-zone-hint");
+    if (lieuZone) {
+      lieuZone.textContent = zones.length
+        ? "▸ Choisir une zone fixe la Base URL ci-dessous."
+        : "▸ Ce fournisseur n'a qu'une adresse : la Base URL est libre.";
+    }
+    const hintProv = _STU("stu-llm-provider-hint");
+    if (hintProv) {
+      hintProv.textContent = p
+        ? "▸ " + (p.label || p.id) + (p.default_model ? " · modèle par défaut : " + p.default_model : "")
+        : "▸ Fournisseur inconnu du service.";
+    }
+    const hintMod = _STU("stu-llm-model-hint");
+    if (hintMod) {
+      hintMod.textContent = p && p.default_model
+        ? "▸ Valeur par défaut du service : " + p.default_model
+        : "▸ Aucun modèle par défaut déclaré pour ce fournisseur.";
+    }
+    _stuLlmAide(p, zones);
+  }
+
+  function _stuLlmAide(p, zones) {
+    const t = _STU("stu-llm-aide-titre");
+    const a = _STU("stu-llm-aide");
+    if (!a) return;
+    if (!p) {
+      if (t) t.textContent = "▸ Configuration du fournisseur";
+      a.textContent = "Démarrez MoneyPrinterTurbo pour lire la liste de ses fournisseurs.";
+      return;
+    }
+    if (t) t.textContent = "▸ " + (p.label || p.id);
+    let html = "";
+    if (zones && zones.length) {
+      html += "<strong>Zones de service</strong> — ce fournisseur expose " + zones.length +
+        " plateforme(s) distincte(s) :<ul style=\"margin:6px 0 10px 16px;padding:0\">";
+      zones.forEach(z => {
+        html += "<li><code style=\"font-family:var(--font-mono);font-size:10px;color:var(--cyan)\">" +
+          escapeHtml(z.label || z.id) + "</code> → " + escapeHtml(z.base_url || "(adresse non lue)") + "</li>";
+      });
+      html += "</ul>Les comptes ne sont pas partagés entre zones : une clé créée sur l'une ne fonctionne pas sur l'autre.";
+    } else {
+      html += "Une seule adresse de service pour ce fournisseur" +
+        (p.default_model ? ", avec <code style=\"font-family:var(--font-mono);font-size:10px;color:var(--cyan)\">" +
+          escapeHtml(p.default_model) + "</code> par défaut" : "") + ".";
+    }
+    html += "<br><br>Le nom du modèle est transmis tel quel : un modèle renommé par le fournisseur provoque " +
+      "un « model not found » à la génération, pas au moment de l'enregistrement.";
+    a.innerHTML = html;
+  }
+
+  /* ── Chargement des réglages depuis le service ───────────────────── */
+  let _stuReglages = {};
+
+  async function studioReglagesCharger() {
+    await studioLlmChargerRegistre();
+    let j = null;
+    try {
+      const r = await fetch("/mpt/settings", { cache: "no-store" });
+      j = await r.json();
+    } catch (e) { j = null; }
+    const verdict = _STU("stu-reglages-verdict");
+    if (!j || !j.ok) {
+      _stuReglages = {};
+      if (verdict) {
+        verdict.style.display = "";
+        verdict.style.borderLeftColor = "var(--danger)";
+        const raison = (j && j.reason) || "service-video-injoignable";
+        verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Réglages du service illisibles (" +
+          escapeHtml(raison) + "). Les champs ci-dessous ne sont PAS la configuration active : " +
+          "démarrez MoneyPrinterTurbo avant d'enregistrer, sinon rien ne serait écrit.";
+      }
+      _stuCacheVider();
+      return;
+    }
+    _stuReglages = j.values || {};
+    if (verdict) verdict.style.display = "none";
+    studioReglagesAppliquer();
+  }
+
+  /* config -> interface. Ne JAMAIS appeler depuis un onchange (elle écraserait
+     le choix en cours de l'utilisateur). */
+  function studioReglagesAppliquer() {
+    const v = _stuReglages || {};
+    // Champs simples (texte, mot de passe, select, nombre) : on lit la clé
+    // TOML portée par l'attribut data-cle de chaque champ.
+    document.querySelectorAll("#studio-modal [data-cle]").forEach(el => {
+      const cle = el.getAttribute("data-cle");
+      if (!(cle in v)) return;
+      const val = v[cle];
+      if (el.type === "checkbox") { el.checked = !!val; return; }
+      if (el.multiple && Array.isArray(val)) {
+        Array.prototype.forEach.call(el.options, o => { o.selected = val.indexOf(o.value) >= 0; });
+        return;
+      }
+      if (Array.isArray(val)) el.value = val.join(", ");
+      else el.value = (val === null || val === undefined) ? "" : String(val);
+    });
+
+    // Fournisseur : sélectionner dans la liste PUIS décrire (la description
+    // part du choix, elle ne le relit pas).
+    const prov = _stuReglages.llm_provider;
+    const sel = _STU("stu-llm-provider");
+    if (sel && prov) {
+      sel.value = prov;
+      const p = _stuLlmTrouver(prov);
+      let zone = null;
+      if (p && Array.isArray(p.endpoints) && p.endpoints.length) {
+        const base = _stuReglages[p.id + "_base_url"] || "";
+        const trouve = p.endpoints.filter(e => e.base_url && e.base_url === base)[0];
+        zone = trouve ? trouve.id : "__custom__";
+      }
+      _stuLlmDecrire(prov, zone);
+      if (zone && zone !== "__custom__") {
+        const zs = p.endpoints.filter(e => e.id === zone)[0];
+        if (zs && _STU("stu-llm-base")) _STU("stu-llm-base").value = zs.base_url || "";
+        const zh = _STU("stu-llm-zone-hint");
+        if (zh) zh.textContent = "▸ Zone enregistrée : " + (zs.label || zs.id) + " — la Base URL suit cette zone.";
+      } else if (_STU("stu-llm-base")) {
+        _STU("stu-llm-base").value = _stuReglages[p.id + "_base_url"] || "";
+        const zh = _STU("stu-llm-zone-hint");
+        if (zh) zh.textContent = "▸ Adresse personnalisée enregistrée.";
+      }
+      // Clé du fournisseur choisi, lue à SA clé de configuration : chaque
+      // fournisseur a la sienne chez MPT (<id>_api_key), et une clé d'un autre
+      // fournisseur ne doit jamais être envoyée ici.
+      if (_STU("stu-llm-key")) _STU("stu-llm-key").value = _stuReglages[p.id + "_api_key"] || "";
+      if (_STU("stu-llm-model")) _STU("stu-llm-model").value = _stuReglages[p.id + "_model_name"] || "";
+      const km = _STU("stu-llm-key-hint");
+      if (km) km.textContent = "▸ Clé de « " + (p.label || p.id) + " » (config.toml : " + p.id + "_api_key).";
+    }
+    studioKeysInventaire();
+  }
+
+  /* ── Écriture : on n'envoie QUE les champs modifiables, groupés par clé ── */
+  function studioReglagesPayload() {
+    const vals = {};
+    const p = _stuLlmTrouver(_STU("stu-llm-provider") ? _STU("stu-llm-provider").value : "");
+    if (p) {
+      vals.llm_provider = p.id;
+      if (_STU("stu-llm-key")) vals[p.id + "_api_key"] = _STU("stu-llm-key").value;
+      if (_STU("stu-llm-base")) vals[p.id + "_base_url"] = _STU("stu-llm-base").value;
+      if (_STU("stu-llm-model")) vals[p.id + "_model_name"] = _STU("stu-llm-model").value;
+    }
+    // Champs à data-cle (sources de médias, publication). Les cases à cocher
+    // et les listes multiples sont sérialisées selon leur type réel, pas en
+    // chaîne : une liste de clés écrite comme une chaîne casserait la
+    // recherche de vidéos sans message d'erreur.
+    document.querySelectorAll("#studio-modal [data-cle]").forEach(el => {
+      const cle = el.getAttribute("data-cle");
+      if (cle === "llm_provider" && p) return;
+      if (el.type === "checkbox") { vals[cle] = !!el.checked; return; }
+      if (el.multiple) {
+        vals[cle] = Array.prototype.filter.call(el.options, o => o.selected).map(o => o.value);
+        return;
+      }
+      vals[cle] = el.value;
+    });
+    return vals;
+  }
+
+  async function studioReglagesEnregistrer() {
+    const btn = _STU("stu-reglages-enregistrer");
+    const verdict = _STU("stu-reglages-verdict");
+    const payload = studioReglagesPayload();
+    if (!Object.keys(payload).length) {
+      if (verdict) {
+        verdict.style.display = "";
+        verdict.style.borderLeftColor = "var(--danger)";
+        verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Aucun réglage à envoyer.";
+      }
+      return;
+    }
+    const ancien = btn ? btn.textContent : "";
+    if (btn) { btn.textContent = "⏳ ENREGISTREMENT…"; btn.disabled = true; }
+    try {
+      const r = await fetch("/mpt/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values: payload })
+      });
+      const j = await r.json();
+      if (verdict) {
+        verdict.style.display = "";
+        if (j && j.ok) {
+          verdict.style.borderLeftColor = "var(--neon)";
+          const n = (j.ecrites || []).length;
+          let txt = "<strong style=\"color:var(--neon)\">✔</strong> " + n +
+            " réglage(s) écrit(s) dans le service vidéo.";
+          if (j.ignorees && j.ignorees.length) {
+            txt += " <span style=\"color:var(--text-dim)\">(" + j.ignorees.length +
+              " refusé(s) : " + escapeHtml(j.ignorees.join(", ")) + " — hors liste blanche)</span>";
+          }
+          verdict.innerHTML = txt;
+          studioLog("Réglages studio enregistrés : " + (j.ecrites || []).join(", "));
+        } else {
+          verdict.style.borderLeftColor = "var(--danger)";
+          verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Échec : " +
+            escapeHtml((j && (j.reason || j.error)) || "réponse illisible");
+        }
+      }
+    } catch (e) {
+      if (verdict) {
+        verdict.style.display = "";
+        verdict.style.borderLeftColor = "var(--danger)";
+        verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Enregistrement impossible : " + escapeHtml(String(e));
+      }
+    } finally {
+      if (btn) { btn.textContent = ancien; btn.disabled = false; }
+      // On relit : le service a pu normaliser une valeur (une liste, un
+      // booléen), et c'est SA version qui fait foi.
+      await studioReglagesCharger();
+    }
+  }
+
+  /* ── Test de connexion : la requête part du SERVICE ────────────────
+     Le test doit valider la configuration que la génération utilisera
+     réellement. La sonder depuis le navigateur validerait la clé saisie à
+     l'écran — pas ce que le service a enregistré. On enregistre donc d'abord,
+     puis on demande au service de tester SA configuration. */
+  async function studioLlmTester() {
+    const btn = _STU("stu-llm-test");
+    const verdict = _STU("stu-llm-verdict");
+    const ancien = btn ? btn.textContent : "";
+    if (btn) { btn.textContent = "⏳ TEST EN COURS…"; btn.disabled = true; }
+    if (verdict) {
+      verdict.style.display = "";
+      verdict.style.borderLeftColor = "var(--cyan)";
+      verdict.innerHTML = "<strong style=\"color:var(--cyan)\">◌</strong> Enregistrement puis test de la configuration…";
+    }
+    const t0 = performance.now();
+    try {
+      await studioReglagesEnregistrer();
+      const r = await fetch("/mpt/llm/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const j = await r.json();
+      const ms = Math.round(performance.now() - t0);
+      if (verdict) {
+        verdict.style.display = "";
+        if (j && j.ok && j.connected) {
+          verdict.style.borderLeftColor = "var(--neon)";
+          verdict.innerHTML = "<strong style=\"color:var(--neon)\">✔</strong> Connexion réussie en " +
+            Math.round((j.elapsed || 0) * 1000) + " ms — le service a bien répondu.";
+        } else {
+          verdict.style.borderLeftColor = "var(--danger)";
+          verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Échec après " + ms + " ms : " +
+            escapeHtml((j && j.error) || "cause non rapportée par le service");
+        }
+      }
+    } catch (e) {
+      if (verdict) {
+        verdict.style.display = "";
+        verdict.style.borderLeftColor = "var(--danger)";
+        verdict.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Test impossible : " + escapeHtml(String(e));
+      }
+    } finally {
+      if (btn) { btn.textContent = ancien; btn.disabled = false; }
+    }
+  }
+
+  /* ── Sauvegarde des clés ─────────────────────────────────────────── */
+  const _STU_KEYS_DESCR = [
+    ["moonshot_api_key", "Kimi / Moonshot"], ["openai_api_key", "OpenAI"],
+    ["anthropic_api_key", "Claude"], ["gemini_api_key", "Gemini"],
+    ["deepseek_api_key", "DeepSeek"], ["qwen_api_key", "Qwen"],
+    ["minimax_api_key", "MiniMax"], ["grok_api_key", "Grok"],
+    ["pexels_api_keys", "Pexels"], ["pixabay_api_keys", "Pixabay"],
+    ["coverr_api_keys", "Coverr"], ["upload_post_api_key", "Upload-Post"],
+  ];
+
+  function studioKeysInventaire() {
+    const z = _STU("stu-keys-resume");
+    if (!z) return;
+    const v = _stuReglages || {};
+    const presentes = _STU_KEYS_DESCR.filter(([k]) => {
+      const val = v[k];
+      if (Array.isArray(val)) return val.filter(x => String(x).trim()).length > 0;
+      return val !== undefined && val !== null && String(val).trim() !== "";
+    });
+    z.textContent = "▸ " + presentes.length + " clé(s) renseignée(s) sur " + _STU_KEYS_DESCR.length +
+      (presentes.length ? " : " + presentes.map(([, n]) => n).join(", ") : " — rien à exporter pour l'instant.");
+  }
+
+  function studioKeysExporter() {
+    const v = _stuReglages || {};
+    const cles = {};
+    _STU_KEYS_DESCR.forEach(([k]) => { if (k in v) cles[k] = v[k]; });
+    if (!Object.keys(cles).length) {
+      _stuKeysVerdict("echec", "Aucune clé à exporter — renseignez d'abord un fournisseur ou une banque de vidéos.");
+      return;
+    }
+    const paquet = {
+      _lisezmoi: "Sauvegarde des clés du STUDIO VIDÉO de THEOLOGICUS. Contient des clés en CLAIR : ne pas partager, ne pas versionner.",
+      service: "MoneyPrinterTurbo", quand: new Date().toISOString(), cles: cles
+    };
+    try {
+      const blob = new Blob([JSON.stringify(paquet, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "theologicus-studio-cles-" + new Date().toISOString().slice(0, 10) + ".json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      _stuKeysVerdict("ok", "Sauvegarde de " + Object.keys(cles).length + " clé(s) téléchargée.");
+    } catch (e) {
+      _stuKeysVerdict("echec", "Export impossible : " + e);
+    }
+  }
+
+  function studioKeysImporter(fichier) {
+    if (!fichier) return;
+    const lecteur = new FileReader();
+    lecteur.onload = async () => {
+      let paquet = null;
+      try { paquet = JSON.parse(String(lecteur.result)); } catch (e) {
+        _stuKeysVerdict("echec", "Fichier illisible — ce n'est pas du JSON.");
+        return;
+      }
+      const cles = (paquet && paquet.cles) || paquet;
+      if (!cles || typeof cles !== "object") {
+        _stuKeysVerdict("echec", "Aucune clé reconnue dans ce fichier.");
+        return;
+      }
+      // Seules les clés CONNUES sont reprises : un fichier d'une autre
+      // provenance ne doit pas pouvoir écrire n'importe quoi dans le
+      // config.toml d'un autre programme (le serveur applique de toute façon
+      // sa liste blanche, mais on évite de lui envoyer du bruit).
+      const connues = {};
+      _STU_KEYS_DESCR.forEach(([k]) => { if (k in cles) connues[k] = cles[k]; });
+      const n = Object.keys(connues).length;
+      if (!n) {
+        _stuKeysVerdict("echec", "Ce fichier ne contient aucune clé connue du studio vidéo.");
+        return;
+      }
+      try {
+        const r = await fetch("/mpt/settings", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values: connues })
+        });
+        const j = await r.json();
+        if (j && j.ok) {
+          _stuKeysVerdict("ok", n + " clé(s) restaurée(s) dans le service vidéo.");
+          await studioReglagesCharger();
+        } else {
+          _stuKeysVerdict("echec", "Restauration refusée : " + ((j && (j.reason || j.error)) || "cause inconnue"));
+        }
+      } catch (e) {
+        _stuKeysVerdict("echec", "Restauration impossible : " + e);
+      }
+    };
+    lecteur.readAsText(fichier);
+  }
+
+  function _stuKeysVerdict(etat, texte) {
+    const v = _STU("stu-keys-verdict");
+    if (!v) return;
+    const c = etat === "ok" ? "var(--neon)" : "var(--danger)";
+    v.style.display = "";
+    v.style.borderLeftColor = c;
+    v.innerHTML = "<strong style=\"color:" + c + "\">" + (etat === "ok" ? "✔" : "✕") + "</strong> " + escapeHtml(texte);
+  }
+
+  /* ── Cache ───────────────────────────────────────────────────────── */
+  function _stuCacheVider() {
+    ["stu-cache-nb", "stu-cache-taille", "stu-cache-ancien"].forEach(id => {
+      const e = _STU(id); if (e) e.textContent = "—";
+    });
+    const d = _STU("stu-cache-dir");
+    if (d) d.textContent = "▸ Service vidéo non détecté — statistiques indisponibles.";
+  }
+
+  function _stuTaille(octets) {
+    const n = Number(octets) || 0;
+    if (n < 1024) return n + " o";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " Ko";
+    if (n < 1024 * 1024 * 1024) return (n / 1048576).toFixed(1) + " Mo";
+    return (n / 1073741824).toFixed(2) + " Go";
+  }
+
+  async function studioCacheStats() {
+    let j = null;
+    try {
+      const r = await fetch("/mpt/cache", { cache: "no-store" });
+      j = await r.json();
+    } catch (e) { j = null; }
+    if (!j || !j.ok) { _stuCacheVider(); return null; }
+    const nb = _STU("stu-cache-nb"), taille = _STU("stu-cache-taille"),
+          ancien = _STU("stu-cache-ancien"), dir = _STU("stu-cache-dir");
+    if (nb) nb.textContent = (j.count === undefined ? "—" : j.count);
+    if (taille) taille.textContent = _stuTaille(j.size);
+    if (ancien) ancien.textContent = j.oldest || "—";
+    if (dir) dir.textContent = "📁 " + (j.dir || "(chemin non rapporté)");
+    return j;
+  }
+
+  async function studioCacheApercu() {
+    const sel = _STU("stu-cache-plage");
+    const z = _STU("stu-cache-apercu");
+    const btn = _STU("stu-cache-nettoyer");
+    if (!sel || !z) return;
+    const jours = parseInt(sel.value, 10) || 0;
+    let j = null;
+    try {
+      const r = await fetch("/mpt/cache?jours=" + jours, { cache: "no-store" });
+      j = await r.json();
+    } catch (e) { j = null; }
+    if (!j || !j.ok) {
+      z.textContent = "▸ Aperçu indisponible : le service vidéo ne répond pas.";
+      if (btn) btn.disabled = true;
+      return;
+    }
+    z.textContent = jours === 0
+      ? "▸ Tout le cache vidéo : " + j.count + " fichier(s), " + _stuTaille(j.size) + "."
+      : "▸ " + j.count + " fichier(s) de plus de " + jours + " jour(s), " + _stuTaille(j.size) + ".";
+    const confirme = _STU("stu-cache-confirme");
+    if (btn) btn.disabled = !(confirme && confirme.checked) || !j.count;
+  }
+
+  async function studioCacheNettoyer() {
+    const sel = _STU("stu-cache-plage");
+    const v = _STU("stu-cache-verdict");
+    const jours = sel ? (parseInt(sel.value, 10) || 0) : 0;
+    try {
+      const r = await fetch("/mpt/cache", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jours: jours, confirme: true })
+      });
+      const j = await r.json();
+      if (v) {
+        v.style.display = "";
+        if (j && j.ok) {
+          v.style.borderLeftColor = "var(--neon)";
+          v.innerHTML = "<strong style=\"color:var(--neon)\">✔</strong> " + (j.deleted || 0) +
+            " fichier(s) supprimé(s), " + _stuTaille(j.freed || 0) + " libérés." +
+            ((j.failed || 0) ? " <span style=\"color:var(--danger)\">" + j.failed + " échec(s).</span>" : "");
+        } else {
+          v.style.borderLeftColor = "var(--danger)";
+          v.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Nettoyage refusé : " +
+            escapeHtml((j && (j.reason || j.error)) || "cause inconnue");
+        }
+      }
+    } catch (e) {
+      if (v) {
+        v.style.display = ""; v.style.borderLeftColor = "var(--danger)";
+        v.innerHTML = "<strong style=\"color:var(--danger)\">✕</strong> Nettoyage impossible : " + escapeHtml(String(e));
+      }
+    }
+    // Une confirmation qui reste cochée après une suppression dangereuse
+    // autorise un second nettoyage d'un seul clic, sans relecture. On la
+    // décoche systématiquement : un geste destructeur se reconfirme.
+    const confirme = _STU("stu-cache-confirme");
+    if (confirme) confirme.checked = false;
+    const btn = _STU("stu-cache-nettoyer");
+    if (btn) btn.disabled = true;
+    await studioCacheStats();
+    await studioCacheApercu();
+  }
+
+  /* ── Câblage ─────────────────────────────────────────────────────── */
+  document.querySelectorAll("#studio-tabs .settings-tab").forEach(b => {
+    b.onclick = () => studioOuvrirOnglet(b.dataset.onglet);
+  });
+
+  if (_STU("stu-llm-provider")) {
+    _STU("stu-llm-provider").onchange = () => {
+      const id = _STU("stu-llm-provider").value;
+      const p = _stuLlmTrouver(id);
+      _stuLlmDecrire(id, null);
+      // Changer de fournisseur CHANGE de clé : garder celle du précédent
+      // l'enverrait au mauvais service. On la relit à sa propre clé de
+      // configuration — jamais d'une clé partagée.
+      if (_STU("stu-llm-key")) _STU("stu-llm-key").value = (p && _stuReglages[p.id + "_api_key"]) || "";
+      if (_STU("stu-llm-base")) {
+        const zs = p && p.endpoints && p.endpoints[0];
+        _STU("stu-llm-base").value = (p && _stuReglages[p.id + "_base_url"]) || (zs && zs.base_url) || "";
+      }
+      if (_STU("stu-llm-model")) _STU("stu-llm-model").value = (p && _stuReglages[p.id + "_model_name"]) || "";
+      const ve = _STU("stu-llm-verdict");
+      if (ve) ve.style.display = "none";
+    };
+  }
+
+  if (_STU("stu-llm-zone")) {
+    _STU("stu-llm-zone").onchange = () => {
+      const id = _STU("stu-llm-provider").value;
+      const p = _stuLlmTrouver(id);
+      const zid = _STU("stu-llm-zone").value;
+      const zh = _STU("stu-llm-zone-hint");
+      if (!p || zid === "__custom__") {
+        if (zh) zh.textContent = "▸ Adresse personnalisée : saisissez la Base URL à la main.";
+        if (_STU("stu-llm-base")) _STU("stu-llm-base").readOnly = false;
+        return;
+      }
+      const z = (p.endpoints || []).filter(e => e.id === zid)[0];
+      if (z && _STU("stu-llm-base")) {
+        _STU("stu-llm-base").value = z.base_url || "";
+        _STU("stu-llm-base").readOnly = true;
+      }
+      if (zh) zh.textContent = "▸ Zone « " + ((z && (z.label || z.id)) || zid) + " » — la Base URL suit cette zone.";
+    };
+  }
+
+  if (_STU("stu-llm-defaults")) {
+    _STU("stu-llm-defaults").onclick = () => {
+      const p = _stuLlmTrouver(_STU("stu-llm-provider").value);
+      if (!p) return;
+      const zid = _STU("stu-llm-zone") ? _STU("stu-llm-zone").value : "__custom__";
+      const z = (p.endpoints || []).filter(e => e.id === zid)[0];
+      if (_STU("stu-llm-base")) {
+        _STU("stu-llm-base").value = (z && z.base_url) || "";
+        _STU("stu-llm-base").readOnly = !!z;
+      }
+      // On ne touche PAS à la clé : elle ne peut pas être retrouvée depuis le
+      // service, et l'effacer ferait perdre un identifiant que l'utilisateur
+      // n'a pas sous la main.
+      if (_STU("stu-llm-model") && p.default_model) _STU("stu-llm-model").value = p.default_model;
+      const ve = _STU("stu-llm-verdict");
+      if (ve) {
+        ve.style.display = "";
+        ve.style.borderLeftColor = "var(--cyan)";
+        ve.innerHTML = "<strong style=\"color:var(--cyan)\">◌</strong> Valeurs du fournisseur rétablies (la clé n'est pas touchée).";
+      }
+    };
+  }
+
+  if (_STU("stu-llm-test")) _STU("stu-llm-test").onclick = studioLlmTester;
+  if (_STU("stu-reglages-enregistrer")) _STU("stu-reglages-enregistrer").onclick = studioReglagesEnregistrer;
+  if (_STU("stu-reglages-recharger")) {
+    _STU("stu-reglages-recharger").onclick = async () => {
+      await studioReglagesCharger();
+      const v = _STU("stu-reglages-verdict");
+      if (v) {
+        v.style.display = "";
+        v.style.borderLeftColor = "var(--cyan)";
+        v.innerHTML = "<strong style=\"color:var(--cyan)\">◌</strong> Réglages relus depuis le service vidéo.";
+      }
+    };
+  }
+  if (_STU("stu-keys-export")) _STU("stu-keys-export").onclick = studioKeysExporter;
+  if (_STU("stu-keys-refresh")) _STU("stu-keys-refresh").onclick = () => { studioKeysInventaire(); };
+  if (_STU("stu-keys-import")) {
+    _STU("stu-keys-import").onchange = e => {
+      studioKeysImporter(e.target.files && e.target.files[0]);
+      e.target.value = "";
+    };
+  }
+  if (_STU("stu-cache-refresh")) {
+    _STU("stu-cache-refresh").onclick = async () => { await studioCacheStats(); await studioCacheApercu(); };
+  }
+  if (_STU("stu-cache-plage")) _STU("stu-cache-plage").onchange = studioCacheApercu;
+  if (_STU("stu-cache-confirme")) {
+    _STU("stu-cache-confirme").onchange = () => {
+      const btn = _STU("stu-cache-nettoyer");
+      if (btn) btn.disabled = !_STU("stu-cache-confirme").checked;
+    };
+  }
+  if (_STU("stu-cache-nettoyer")) _STU("stu-cache-nettoyer").onclick = studioCacheNettoyer;
+
+  /* Le studio s'ouvre sur le dernier onglet consulté : quelqu'un qui règle un
+     fournisseur ne veut pas retomber sur le formulaire à chaque ouverture. */
+  try {
+    const dernier = localStorage.getItem("theologicus-studio-onglet");
+    if (dernier && STUDIO_ONGLETS.indexOf(dernier) >= 0) studioOuvrirOnglet(dernier);
+  } catch (e) { /* stockage refusé : on garde l'onglet « Génération » */ }
 
   window.__studioOpen = studioOpen;
   window.__studioPayload = studioPayload;
