@@ -83,12 +83,30 @@ def main():
             estampille = False
 
         if estampille:
-            print("[OK] %-38s deployee (version estampillee par le build)" % cible)
-            continue
+            # v120 — le tampon seul ne prouve RIEN sur la fraicheur : une
+            # installation oubliee depuis des semaines porte aussi un tampon,
+            # et elle etait benie « deployee » a chaque sync. Mesure du
+            # 2026-09-25 : `_inst_v102/THEOLOGICUS.html` datait de 05:53 quand
+            # la source venait d'etre corrigee a 15:20 — le correctif (bouton
+            # STUDIO VIDEO) etait ABSENT de l'installation, et le script disait
+            # « OK ». On exige donc que la cible soit PLUS RECENTE que la source.
+            try:
+                recente = os.path.getmtime(cible) >= os.path.getmtime(source)
+            except Exception:
+                recente = False
+            if recente:
+                print("[OK] %-38s deployee (version estampillee par le build)" % cible)
+                continue
+            print("[!!] %-38s deployee mais PLUS ANCIENNE que la source" % cible)
+            print("     -> le correctif n'est pas dans l'installation : on recopie")
+            # On retombe dans la copie ci-dessous (le tampon sera re-estampille
+            # par le prochain build ; ici la copie est de toute facon en avance).
+            estampille = False
 
-        ecarts += 1
-        etat = "PERIMEE" if t_taille < ref_taille else "DIFFERENTE"
-        print("[!!] %-38s %s (%d -> %d octets)" % (cible, etat, t_taille, ref_taille))
+        if not estampille:
+            ecarts += 1
+            etat = "PERIMEE" if t_taille < ref_taille else "DIFFERENTE"
+            print("[!!] %-38s %s (%d -> %d octets)" % (cible, etat, t_taille, ref_taille))
 
         if verifier_seulement:
             continue
