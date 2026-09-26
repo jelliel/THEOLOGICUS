@@ -1,0 +1,33 @@
+Add the AI VIDEO modal, a third-party studio in a same-origin iframe
+
+Integrates a standalone AI video studio (Mistral, Agnes) as a modal titled
+"AI VIDEO", opened from a button beside STUDIO VIDEO and from the Studio
++ "a" shortcut.
+
+It is served as a separate document in a same-origin iframe rather than
+pasted into the page. Its stylesheet redefines body, :root and *, which
+would repaint the whole application, and it declares 104 global functions
+including escapeHtml and toast, both already defined here. The iframe
+isolates both worlds while still sharing local storage and allowing
+/proxy/... calls.
+
+Two relay defects had to be fixed for it to work:
+
+- /proxy/ was wired only into do_POST. A GET /proxy/... was answered 404
+  by the file handler before ever reaching the provider. The key check is
+  a GET /models, so this would have reported "invalid key" for a valid
+  one. It is now dispatched from do_GET too.
+- The proxied method was hardcoded to POST, giving 405 for everything
+  else. It now forwards self.command, and all incoming headers except
+  Host, length and hop-by-hop: a fixed allow-list silently drops the one
+  header a provider happens to require.
+
+ai-video.html is a second deployed file, so tools/sync_html.py now also
+propagates COMPANIONS to mobile/www, dist and _inst_v102 -- a missing
+companion produces an empty, silent iframe. That change also fixes a
+latent NameError in sync_html.py (getmtime(source) instead of SOURCE)
+swallowed by its except, which made every stamped target look stale.
+
+Bench: _v126/verify_aivideo_ui.js 18/18. No regression: v126 121/121 +
+137/137, v123 78/78, v122 71/71, v125 56/56, v120 57/57 + 14/14,
+v124 18/18 + 35/35.

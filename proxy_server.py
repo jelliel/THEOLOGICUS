@@ -1649,6 +1649,15 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(PING_TOKEN)
             return
+        # v126 — le relais CORS sert aussi en GET. Il était câblé dans la
+        # seule chaîne POST : un GET /proxy/… n'atteignait jamais la route et
+        # le serveur répondait 404 par la distribution de fichiers, AVANT tout
+        # appel au fournisseur. Le studio IA liste ses modèles et sonde ses
+        # tâches en GET ; sans ce branchement, la vérification de clé
+        # échouait et affichait « clé invalide » pour une clé parfaite.
+        if self.path.startswith('/proxy/'):
+            self._proxy_request()
+            return
         # LibreTranslate local : état (interrogé par PARAMÈTRES)
         if self.path.split('?')[0] == '/libretranslate/status':
             self._json_response(lt_status())
@@ -2210,6 +2219,24 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 'Accept': 'application/json',
             }
             # Forward ALL relevant headers
+            #
+            # La liste était fermée ; elle est maintenant ouverte. Un GET vers
+            # `/models` ou une route de sondage n'a pas besoin d'en-têtes
+            # exotiques, mais un fournisseur peut en exiger un que nous
+            # n'avons pas prévu : plutôt que d'ajouter des noms un par un au
+            # fil des pannes, on transmet tout, SAUF ce qui doit être réécrit
+            # par la connexion elle-même (Host, longueur, en-têtes de saut).
+            # Une liste fermée perd silencieusement l'en-tête qui manque ; le
+            # serveur distant répond 401 ou 400 sans qu'on sache pourquoi.
+            _A_EXCLURE = {
+                'host', 'content-length', 'connection', 'keep-alive',
+                'proxy-connection', 'transfer-encoding', 'upgrade',
+                'proxy-authenticate', 'proxy-authorization', 'te', 'trailer',
+            }
+            for h, val in self.headers.items():
+                if h.lower() in _A_EXCLURE:
+                    continue
+                headers[h] = val
             for h in ['Authorization', 'x-api-key', 'anthropic-version', 'User-Agent', 'x-stainless-arch', 'x-stainless-lang', 'x-stainless-os', 'x-stainless-runtime', 'x-stainless-runtime-version']:
                 val = self.headers.get(h)
                 if val:
@@ -2242,7 +2269,13 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             print(f"[PROXY] Headers: {list(headers.keys())}")
 
             try:
-                conn.request('POST', path, body=body, headers=dict(headers))
+                # La méthode RÉELLE de la requête entrante, plus « POST » en
+                # dur : le studio IA a besoin de GET pour lister les modèles et
+                # sonder une tâche. Forcer POST transformait un GET en appel
+                # refusé (405) — donc en « clé invalide » affichée à tort,
+                # puisque le contrôle de clé est précisément un GET /models.
+                methode = (self.command or 'POST').upper()
+                conn.request(methode, path, body=body, headers=dict(headers))
                 resp = conn.getresponse()
             except Exception as e:
                 self.send_response(502)

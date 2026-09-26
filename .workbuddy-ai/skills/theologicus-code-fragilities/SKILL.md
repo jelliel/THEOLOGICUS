@@ -838,3 +838,41 @@ La confirmation de dépense ne s'affiche **que** si la source est dans le groupe
 lus par réflexe ne protège plus rien le jour où elle compte. Le banc vérifie
 les **deux** sens : elle apparaît pour une source payante, elle n'apparaît
 **pas** pour une gratuite.
+
+### Une route ajoutée dans do_POST n'existe pas en GET (v126)
+
+`/proxy/` était câblée dans la seule chaîne `do_POST`. Un `GET /proxy/…`
+n'atteignait donc jamais le relais : la distribution de fichiers répondait
+**404 avant** tout appel au fournisseur. Le symptôme est trompeur — la
+vérification de clé (un `GET /models`) échouait et affichait « clé invalide »
+pour une clé parfaite.
+
+Et forcer la méthode (`conn.request('POST', …)`) donnait un **405** sur
+tout ce qui n'est pas POST. Une route de relais doit être branchée dans
+**chaque** méthode qu'elle sert, et transmettre `self.command`.
+
+### Le relais est mono-thread : il ne peut pas se relayer lui-même
+
+Viser `/proxy/http://127.0.0.1:8765/…` depuis le relais lui-même donne un
+**502** systématique : il ne peut pas se servir une requête pendant qu'il en
+traite une. Un banc qui teste le proxy de cette façon accuse le proxy d'une
+panne qui n'existe pas. Utiliser un **serveur témoin sur un autre port** qui
+renvoie la méthode reçue (`METHODE=GET`) : déterministe et sans ambiguïté.
+
+### Coller une page autonome dans THEOLOGICUS repeint toute l'app
+
+Un document tiers porte presque toujours `body { … }`, `:root { … }` et
+`* { … }`. Injecté tel quel, **il redéfinit l'application entière**, et ses
+fonctions globales (`escapeHtml`, `toast`…) entrent en collision avec les
+nôtres — ici 104 fonctions, dont deux déjà présentes.
+
+La réponse est l'**iframe de même origine** : elle isole les deux mondes
+(CSS et JS), partage le stockage local, et autorise les appels `/proxy/…`.
+Une origine différente rendrait les deux impossibles.
+
+### Un fichier compagnon oublié donne un iframe VIDE, sans erreur
+
+THEOLOGICUS n'est plus un seul fichier : le modal AI VIDEO charge
+`ai-video.html`. Oublier de le propager dans `mobile/www`, `dist` et
+`_inst_v102` donne un cadre vide et muet — invisible sur la machine de
+développement. `tools/sync_html.py` propage donc aussi les `COMPAGNONS`.

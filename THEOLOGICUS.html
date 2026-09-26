@@ -7238,6 +7238,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="new-chat">+ NEW</button>
     <button class="hud-btn" id="open-archives-desktop">⬡ ARCHIVES</button>
     <button class="hud-btn" id="open-studio-modal" title="Studio Vidéo — générer une vidéo courte à partir d'un sujet (MoneyPrinterTurbo)">🎬 STUDIO VIDÉO</button>
+    <button class="hud-btn" id="open-aivideo-modal" title="AI VIDEO — génération vidéo par IA (Mistral, Agnes) : scénario, scène, image et vidéo">🎞 AI VIDEO</button>
     <div class="context-meter" id="context-meter" title="Contexte utilisé"><div class="context-bar-track"><div class="context-bar-fill" id="context-bar" style="width:0%"></div></div><span id="context-label">0%</span></div>
     <div id="auto-save-indicator" class="status-pill" style="font-size:9px;opacity:0.5;transition:opacity 0.3s" title="Dernière sauvegarde auto">⏳</div>
   </div>
@@ -8404,6 +8405,42 @@ window.__ensureTafsirSurah = function(p){
       </div>
       <div id="stu-reglages-verdict" class="info-block" style="display:none"></div>
 
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MODAL : AI VIDEO ═══════════════════════════════
+     Un studio de génération vidéo par IA (Mistral, Agnes) entièrement
+     autonome, intégré COMME UN DOCUMENT SEPARE dans un iframe.
+
+     Pourquoi un iframe et pas un copier-coller du HTML : ce document
+     redéfinit `body`, `:root` et `*` dans sa feuille de style. Collé dans
+     cette page, il repeindrait TOUTE l'application. Il declare aussi 104
+     fonctions globales — `escapeHtml` et `toast` existent deja ici : la
+     collision serait immediate. L'iframe isole les deux mondes.
+
+     L'iframe est de MEME ORIGINE (servi par le relais sur le meme port) :
+     il partage donc le stockage local, et ses appels vers /proxy/… sont
+     autorises. Une origine differente rendrait les deux impossibles. -->
+<div class="modal-overlay" id="aivideo-modal">
+  <div class="modal-box" style="max-width:1100px;height:88vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">🎞 AI VIDEO</div>
+      <button class="modal-close" id="close-aivideo-modal">✕</button>
+    </div>
+    <div class="modal-body" style="flex:1;display:flex;flex-direction:column;padding:0;min-height:0">
+      <iframe id="aivideo-frame" src="/ai-video.html" title="AI VIDEO"
+              style="flex:1;width:100%;border:0;min-height:0;border-radius:0 0 var(--r) var(--r);background:#0a0a0a"></iframe>
+      <!-- Visible seulement si le document n'a pas pu etre servi : sans ce
+           repli, un fichier absent donnerait un cadre VIDE et muet. -->
+      <div id="aivideo-indisponible" class="info-block" hidden style="margin:16px;border-left-color:var(--danger)">
+        <strong>▸ AI VIDEO n'a pas pu être chargé</strong>
+        <div style="margin-top:6px;font-size:12px;line-height:1.6">
+          Le fichier <code style="font-family:var(--font-mono)">ai-video.html</code> n'a pas été
+          servi par le relais. Vérifiez qu'il est bien présent à côté de
+          <code style="font-family:var(--font-mono)">THEOLOGICUS.html</code>, puis rouvrez.
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -20806,6 +20843,37 @@ function bindEvents() {
     };
   }
 
+  // ── AI VIDEO : un document séparé dans un iframe ────────────────────
+  // Le contenu vit dans `ai-video.html`, servi par le relais. On ne le
+  // recharge PAS à chaque ouverture : l'iframe garde son état (galerie,
+  // tâches en attente), et recharger ferait perdre un travail en cours.
+  // On ne vérifie la disponibilité qu'UNE fois, au premier chargement.
+  const aivideoFrame = $("#aivideo-frame");
+  const aivideoIndispo = $("#aivideo-indisponible");
+  if (aivideoFrame) {
+    aivideoFrame.addEventListener("load", () => {
+      const doc = aivideoFrame.contentDocument;
+      // Un `about:blank` (fichier absent) rend un document sans corps réel.
+      const charge = !!doc && !!doc.body && doc.body.children.length > 0;
+      if (aivideoIndispo) aivideoIndispo.hidden = charge;
+    });
+    aivideoFrame.addEventListener("error", () => {
+      if (aivideoIndispo) aivideoIndispo.hidden = false;
+    });
+  }
+  const openAiVideoModal = () => {
+    const m = $("#aivideo-modal");
+    if (m) m.classList.add("active");
+  };
+  const closeAiVideoModal = () => {
+    const m = $("#aivideo-modal");
+    if (m) m.classList.remove("active");
+  };
+  if ($("#open-aivideo-modal")) $("#open-aivideo-modal").onclick = openAiVideoModal;
+  if ($("#close-aivideo-modal")) $("#close-aivideo-modal").onclick = closeAiVideoModal;
+  const aivideoOverlay = $("#aivideo-modal");
+  if (aivideoOverlay) aivideoOverlay.onclick = e => { if (e.target === aivideoOverlay) closeAiVideoModal(); };
+
   // Agent Modal
   const openAgentModal = async () => {
     await loadAgents();
@@ -23496,6 +23564,7 @@ if (document.readyState === 'loading') {
     // __studioOpen et non clickIf : la commande doit AUSSI charger la config
     // et re-sonder le service, ce que le simple clic ne fait pas.
     'studio-open':   () => { if (typeof window.__studioOpen === 'function') window.__studioOpen(); },
+    'aivideo-open':  () => { const m = $("#aivideo-modal"); if (m) m.classList.add("active"); },
   };
   const runAct = a => { if (a && actions[a]) actions[a](); };
 
@@ -28739,6 +28808,7 @@ body{ margin:0; }
     ['Modeles', 'd', 'Cle API : telecharger le fichier portable', null, 0, 'v13Toast', 'Cle portable'],
     ['Studio', 'v', 'Ouvrir le Studio Video', null, 0, 'studio-open'],
     ['Studio', 'g', 'Generer une video courte', null, 0, 'studio-open'],
+    ['Studio', 'a', 'Ouvrir AI VIDEO (generation par IA)', null, 0, 'aivideo-open'],
 
     /* ── AGENTS ── */
     ['Agents', '&', 'Choisir un agent', 'agent-select', 0, 'v13Focus'],

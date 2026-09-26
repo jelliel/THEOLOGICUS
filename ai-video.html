@@ -1,0 +1,1940 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AI VIDEO — THEOLOGICUS</title>
+<meta name="theme-color" content="#c9a961">
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root {
+        --bg: #0a0a0a; --panel: #141414; --panel-2: #1e1e1e; --border: #2a2a2a;
+        --ink: #e8e8e8; --ink-dim: #888; --ink-faint: #555;
+        --success: #4a9e6a; --error: #c0392b; --warn: #d4a017; --info: #6a8cff;
+        --accent: #c9a961; --mistral: #ff7000; --extra: #6a8cff;
+        --radius: 12px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--ink); min-height: 100vh; padding: 1.5rem 1rem 6rem; font-size: 15px; line-height: 1.5; max-width: 900px; margin: 0 auto; }
+    header { margin-bottom: 1.5rem; text-align: center; }
+    h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 0.3rem; text-transform: uppercase; font-family: Georgia, 'Times New Roman', serif; color: var(--accent); text-shadow: 0 0 20px rgba(201,169,97,0.3); }
+    .subtitle { font-size: 0.8rem; color: var(--ink-dim); font-style: italic; letter-spacing: 0.1em; }
+    .film-strip { display: flex; justify-content: center; gap: 0.3rem; margin: 0.8rem 0; opacity: 0.4; }
+    .film-strip span { width: 12px; height: 12px; border: 2px solid var(--accent); border-radius: 2px; }
+    .toast { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%) translateY(-100px); background: var(--panel); color: var(--ink); border: 1px solid var(--accent); padding: 0.85rem 1.4rem; border-radius: 10px; font-size: 0.85rem; font-weight: 500; box-shadow: 0 4px 30px rgba(201,169,97,0.3); z-index: 1000; opacity: 0; transition: transform 0.35s ease, opacity 0.35s ease; max-width: 90vw; text-align: center; display: flex; align-items: center; gap: 0.5rem; }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--error); }
+    .toast.warn { border-color: var(--warn); }
+    .log-panel { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden; }
+    .log-header { padding: 0.7rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+    .log-title { font-size: 0.75rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; font-family: Georgia, serif; display: flex; align-items: center; gap: 0.4rem; }
+    .log-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+    .log-status-dot.active { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+    .log-status-dot.success { background: var(--success); }
+    .log-status-dot.error { background: var(--error); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .log-actions { display: flex; gap: 0.3rem; align-items: center; }
+    .log-action-btn { background: transparent; border: 1px solid var(--border); color: var(--ink-dim); padding: 0.2rem 0.5rem; border-radius: 5px; font-size: 0.62rem; font-weight: 600; font-family: inherit; cursor: pointer; }
+    .log-action-btn.active { background: var(--info); color: #fff; border-color: var(--info); }
+    .log-counter { font-size: 0.6rem; color: var(--ink-dim); padding: 0.15rem 0.4rem; background: var(--panel); border-radius: 8px; font-family: ui-monospace, monospace; }
+    .log-chevron { font-size: 0.7rem; color: var(--ink-faint); transition: transform 0.2s; }
+    .log-panel.collapsed .log-chevron { transform: rotate(-90deg); }
+    .log-panel.collapsed .log-body { max-height: 0; }
+    .log-panel.collapsed .log-filters-bar { display: none; }
+    .log-filters-bar { padding: 0.5rem 1rem; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
+    .log-filter-chip { padding: 0.2rem 0.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--ink-dim); font-size: 0.6rem; font-weight: 600; cursor: pointer; }
+    .log-filter-chip.active { color: #fff; }
+    .log-filter-chip.info.active { background: var(--info); border-color: var(--info); }
+    .log-filter-chip.success.active { background: var(--success); border-color: var(--success); }
+    .log-filter-chip.warn.active { background: var(--warn); border-color: var(--warn); color: #0a0a0a; }
+    .log-filter-chip.error.active { background: var(--error); border-color: var(--error); }
+    .log-filter-chip.step.active { background: var(--accent); border-color: var(--accent); color: #0a0a0a; }
+    .log-body { max-height: 350px; overflow-y: auto; padding: 0.5rem; background: #050505; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 0.72rem; line-height: 1.5; }
+    .log-entry { display: grid; grid-template-columns: 70px 50px 1fr; gap: 0.5rem; padding: 0.25rem 0.5rem; border-radius: 4px; margin-bottom: 0.15rem; animation: logFadeIn 0.25s ease; }
+    @keyframes logFadeIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: translateX(0); } }
+    .log-time { color: #555; font-size: 0.65rem; white-space: nowrap; }
+    .log-level { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; padding: 0.1rem 0.35rem; border-radius: 3px; text-align: center; }
+    .log-entry.level-info .log-level { background: rgba(106,140,255,0.15); color: var(--info); }
+    .log-entry.level-success .log-level { background: rgba(74,158,106,0.15); color: var(--success); }
+    .log-entry.level-warn .log-level { background: rgba(212,160,23,0.15); color: var(--warn); }
+    .log-entry.level-error .log-level { background: rgba(192,57,43,0.15); color: var(--error); }
+    .log-entry.level-step .log-level { background: rgba(201,169,97,0.15); color: var(--accent); }
+    .log-message { word-break: break-word; line-height: 1.4; }
+    .log-entry.level-info .log-message { color: #b8c5e8; }
+    .log-entry.level-success .log-message { color: #b8e8c5; }
+    .log-entry.level-warn .log-message { color: #e8dcb8; }
+    .log-entry.level-error .log-message { color: #e8b8b8; }
+    .log-entry.level-step .log-message { color: #e8d8b8; font-weight: 600; }
+    .log-message code { background: rgba(255,255,255,0.06); padding: 0.05rem 0.3rem; border-radius: 3px; color: var(--accent); font-size: 0.68rem; }
+    .log-message strong { color: var(--accent); }
+    .log-empty { text-align: center; color: #444; font-size: 0.75rem; padding: 2rem 1rem; font-style: italic; }
+    .style-picker-trigger { width: 100%; padding: 1rem 1.2rem; border-radius: var(--radius); border: 2px solid var(--accent); background: linear-gradient(135deg, #1a1508 0%, #0f0a05 100%); color: var(--ink); font-family: inherit; font-size: 0.9rem; font-weight: 700; cursor: pointer; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+    .style-picker-trigger .spt-left { display: flex; align-items: center; gap: 0.7rem; min-width: 0; flex: 1; }
+    .style-picker-trigger .spt-emoji { font-size: 1.6rem; }
+    .style-picker-trigger .spt-info { text-align: left; min-width: 0; flex: 1; }
+    .style-picker-trigger .spt-label { font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; display: block; }
+    .style-picker-trigger .spt-name { font-size: 0.95rem; font-weight: 700; color: var(--ink); font-family: Georgia, serif; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .style-picker-trigger .spt-name.empty { color: var(--ink-dim); font-style: italic; font-weight: 400; }
+    .style-picker-trigger .spt-count { font-size: 0.6rem; color: var(--ink-dim); padding: 0.2rem 0.5rem; background: rgba(201,169,97,0.15); border-radius: 10px; font-weight: 600; }
+    .style-picker-trigger .spt-arrow { font-size: 1rem; color: var(--accent); }
+    .selected-styles-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; padding: 0.6rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); min-height: 3rem; align-items: center; }
+    .selected-styles-bar.empty { justify-content: center; color: var(--ink-dim); font-size: 0.75rem; font-style: italic; }
+    .selected-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.6rem; border-radius: 14px; background: var(--accent); color: #0a0a0a; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+    .selected-chip .chip-x { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(0,0,0,0.25); font-size: 0.6rem; font-weight: 900; }
+    .picker-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); z-index: 500; display: none; }
+    .picker-modal.open { display: flex; }
+    .picker-container { background: var(--bg); width: 100%; height: 100%; max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; overflow: hidden; }
+    .picker-header { padding: 1rem 1.2rem; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; }
+    .picker-header .ph-title { flex: 1; font-size: 1rem; font-weight: 700; font-family: Georgia, serif; color: var(--accent); text-transform: uppercase; }
+    .picker-header .ph-selected-count { font-size: 0.7rem; padding: 0.3rem 0.6rem; border-radius: 12px; background: rgba(201,169,97,0.2); color: var(--accent); font-weight: 700; }
+    .picker-close { background: transparent; border: 1px solid var(--border); color: var(--ink-dim); width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+    .picker-search-bar { padding: 0.7rem 1.2rem; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; }
+    .picker-search { flex: 1; padding: 0.6rem 0.85rem; border-radius: 8px; border: 1px solid var(--border); background: #0f0f0f; color: var(--ink); font-size: 0.85rem; }
+    .picker-reset { background: transparent; border: 1px solid var(--border); color: var(--ink-dim); padding: 0.55rem 0.8rem; border-radius: 8px; font-size: 0.7rem; font-weight: 600; cursor: pointer; }
+    .picker-tag-bar, .picker-categories { padding: 0.6rem 1.2rem; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; gap: 0.35rem; overflow-x: auto; }
+    .picker-tag-chip, .picker-cat-chip { padding: 0.3rem 0.6rem; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-2); color: var(--ink-dim); font-size: 0.62rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+    .picker-tag-chip.active { background: var(--info); color: #fff; border-color: var(--info); }
+    .picker-cat-chip.active { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+    .picker-body { flex: 1; overflow-y: auto; padding: 0.8rem 1.2rem 2rem; }
+    .picker-section-title { font-size: 0.68rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.15em; padding: 0.8rem 0 0.5rem; font-family: Georgia, serif; border-bottom: 1px solid var(--border); margin-bottom: 0.6rem; }
+    .picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.55rem; margin-bottom: 1rem; }
+    .style-card-full { padding: 0; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .style-card-full:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .style-card-full.selected { border-color: var(--accent); box-shadow: 0 0 20px rgba(201,169,97,0.6), inset 0 0 0 2px var(--accent); }
+    .style-card-full.selected .scf-check { opacity: 1; transform: scale(1); }
+    .scf-preview { height: 52px; position: relative; overflow: hidden; }
+    .scf-preview .scf-preview-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; z-index: 2; }
+    .scf-preview .scf-preview-num { position: absolute; top: 4px; left: 4px; font-size: 0.55rem; font-weight: 700; padding: 0.15rem 0.35rem; border-radius: 5px; background: rgba(0,0,0,0.6); color: var(--accent); z-index: 3; }
+    .scf-check { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #0a0a0a; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; opacity: 0; transform: scale(0.5); transition: all 0.2s; z-index: 4; }
+    .style-card-full .scf-info { padding: 0.5rem 0.6rem 0.6rem; flex: 1; }
+    .style-card-full .scf-name { font-size: 0.78rem; font-weight: 700; font-family: Georgia, serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .style-card-full .scf-desc { font-size: 0.62rem; color: var(--ink-dim); margin-top: 0.15rem; }
+    .picker-footer { padding: 0.8rem 1.2rem; background: var(--panel); border-top: 1px solid var(--border); display: flex; gap: 0.5rem; }
+    .picker-clear-all { padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--ink-dim); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+    .picker-validate { flex: 1; padding: 0.75rem 1.2rem; border-radius: 8px; border: none; background: var(--accent); color: #0a0a0a; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+    .picker-empty { grid-column: 1 / -1; padding: 2rem; text-align: center; color: var(--ink-dim); font-size: 0.8rem; font-style: italic; }
+    .api-panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; margin-bottom: 1rem; }
+    .api-provider-header { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; font-family: Georgia, serif; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
+    .api-provider-header .provider-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .api-provider-header.agnes { color: var(--accent); } .api-provider-header.agnes .provider-dot { background: var(--accent); }
+    .api-provider-header.mistral { color: var(--mistral); } .api-provider-header.mistral .provider-dot { background: var(--mistral); }
+    .api-provider-header.extra { color: var(--extra); } .api-provider-header.extra .provider-dot { background: var(--extra); }
+    .api-key-row { display: flex; gap: 0.4rem; align-items: stretch; margin-bottom: 0.5rem; }
+    .api-key-input { flex: 1; padding: 0.85rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: #0f0f0f; color: var(--ink); font-family: ui-monospace, monospace; font-size: 0.85rem; min-width: 0; }
+    .api-key-input.valid { border-color: var(--success); background: #0f1a0f; }
+    .api-key-input.invalid { border-color: var(--error); background: #1a0f0f; }
+    .api-key-input.checking { border-color: var(--warn); }
+    .api-btn { padding: 0 0.8rem; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 0.7rem; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap; flex-shrink: 0; display: flex; align-items: center; gap: 0.25rem; }
+    .api-btn.mistral { border-color: var(--mistral); color: var(--mistral); }
+    .api-btn.loading { opacity: 0.5; pointer-events: none; }
+    .api-status-line { font-size: 0.75rem; padding: 0.55rem 0.85rem; border-radius: 6px; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; background: var(--panel-2); color: var(--ink-dim); flex-wrap: wrap; }
+    .api-status-line.ok { background: #1a2a1e; color: var(--success); font-weight: 600; }
+    .api-status-line.ok-mistral { background: #2a1f0f; color: var(--mistral); font-weight: 600; }
+    .api-status-line.error { background: #2a1a1a; color: var(--error); font-weight: 600; }
+    .api-status-line.checking { background: #2a2418; color: var(--warn); font-weight: 600; }
+    .api-status-line .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+    .api-status-line.ok .status-dot { background: var(--success); }
+    .api-status-line.ok-mistral .status-dot { background: var(--mistral); }
+    .api-status-line.error .status-dot { background: var(--error); }
+    .api-status-line.checking .status-dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+    .api-status-line .status-detail { font-size: 0.68rem; opacity: 0.8; font-weight: 400; font-family: ui-monospace, monospace; }
+    .api-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.4rem; }
+    .api-hint a { color: var(--accent); }
+    .api-hint a.mistral-link { color: var(--mistral); }
+    .api-divider { height: 1px; background: var(--border); margin: 1rem 0; opacity: 0.6; }
+    .active-models-bar { background: linear-gradient(135deg, #0f0a05 0%, #1a1208 100%); border: 1px solid var(--accent); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 0.7rem 1rem; margin-bottom: 1rem; display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+    .active-models-bar .amb-label { font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; font-family: Georgia, serif; flex-shrink: 0; }
+    .active-models-bar .amb-count { font-size: 0.6rem; padding: 0.15rem 0.4rem; background: rgba(201,169,97,0.2); color: var(--accent); border-radius: 8px; font-weight: 700; font-family: ui-monospace, monospace; }
+    .active-model-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0.6rem; border-radius: 14px; background: var(--accent); color: #0a0a0a; font-size: 0.7rem; font-weight: 700; font-family: ui-monospace, monospace; cursor: pointer; max-width: 100%; }
+    .active-model-chip.extra-model { background: var(--extra); color: #fff; }
+    .active-model-chip .amc-x { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; background: rgba(0,0,0,0.25); font-size: 0.6rem; font-weight: 900; }
+    .active-model-chip .amc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+    .active-models-bar .amb-empty { font-size: 0.7rem; color: var(--ink-dim); font-style: italic; }
+    .model-selector { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
+    .model-selector-label { font-size: 0.7rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; font-family: Georgia, serif; margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between; gap: 0.3rem; flex-wrap: wrap; }
+    .model-selector-label.mistral { color: var(--mistral); }
+    .model-selector-label.extra-label { color: var(--extra); }
+    .model-actions-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+    .model-action-btn { background: transparent; border: 1px solid var(--border); color: var(--ink-dim); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.62rem; font-weight: 600; font-family: inherit; cursor: pointer; }
+    .model-action-btn.mistral { color: var(--mistral); border-color: #3a2a15; }
+    .model-action-btn.extra { color: var(--extra); border-color: #1f2a40; }
+    .model-action-btn.loading { opacity: 0.5; pointer-events: none; }
+    .model-current { font-size: 0.68rem; color: var(--ink-dim); font-family: ui-monospace, monospace; margin-bottom: 0.3rem; }
+    .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.4rem; max-height: 250px; overflow-y: auto; }
+    .model-card { padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); cursor: pointer; display: flex; flex-direction: column; gap: 0.15rem; position: relative; border-left: 3px solid #888; transition: all 0.15s; }
+    .model-card.selected { background: var(--accent); color: #0a0a0a; }
+    .model-card.mistral-card { border-left-color: var(--mistral); }
+    .model-card.mistral-card.selected { background: var(--mistral); color: #fff; }
+    .model-card.extra-card { border-left-color: var(--extra); background: #0f1420; }
+    .model-card.extra-card.selected { background: var(--extra); color: #fff; }
+    .model-card .model-name { font-size: 0.75rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-card .model-desc { font-size: 0.6rem; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .model-card .model-provider { position: absolute; bottom: 4px; right: 6px; font-size: 0.5rem; opacity: 0.65; font-weight: 700; }
+    .model-card .model-active-badge { position: absolute; top: 4px; right: 4px; width: 16px; height: 16px; border-radius: 50%; background: var(--success); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 900; }
+    .model-empty { grid-column: 1 / -1; padding: 1rem; text-align: center; color: var(--ink-dim); font-size: 0.72rem; font-style: italic; border: 1px dashed var(--border); border-radius: 6px; }
+    .add-model-row { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+    .add-model-input { flex: 1; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid #1f2a40; background: #0f0f0f; color: var(--ink); font-family: ui-monospace, monospace; font-size: 0.75rem; min-width: 0; }
+    .add-model-btn { padding: 0.55rem 0.8rem; border-radius: 8px; border: 1px solid var(--extra); background: transparent; color: var(--extra); font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+    .gallery-panel { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: var(--radius); margin-top: 1rem; margin-bottom: 1rem; overflow: hidden; }
+    .gallery-header { padding: 0.7rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; flex-wrap: wrap; cursor: pointer; user-select: none; border-bottom: 1px solid var(--border); background: var(--panel-2); }
+    .gallery-title { font-size: 0.75rem; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.12em; font-family: Georgia, serif; display: flex; align-items: center; gap: 0.4rem; }
+    .gallery-counter { font-size: 0.6rem; color: var(--ink-dim); padding: 0.15rem 0.4rem; background: var(--panel); border-radius: 8px; font-family: ui-monospace, monospace; }
+    .gallery-actions { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; }
+    .gallery-action-btn { background: transparent; border: 1px solid var(--border); color: var(--ink-dim); padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.62rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.15s; }
+    .gallery-action-btn:hover { border-color: var(--success); color: var(--success); }
+    .gallery-action-btn.active { background: var(--success); color: #fff; border-color: var(--success); }
+    .gallery-chevron { font-size: 0.7rem; color: var(--ink-faint); transition: transform 0.2s; }
+    .gallery-panel.collapsed .gallery-chevron { transform: rotate(-90deg); }
+    .gallery-panel.collapsed .gallery-body { max-height: 0; padding: 0; }
+    .gallery-body { padding: 0.8rem; max-height: 600px; overflow-y: auto; transition: max-height 0.3s; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.6rem; }
+    .video-card { background: #000; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: all 0.2s; position: relative; }
+    .video-card:hover { border-color: var(--success); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(74,158,106,0.3); }
+    .video-card video { width: 100%; display: block; aspect-ratio: 9/16; object-fit: cover; background: #000; cursor: pointer; }
+    .video-card .vc-info { padding: 0.4rem 0.5rem; background: var(--panel); font-size: 0.65rem; color: var(--ink-dim); display: flex; justify-content: space-between; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+    .video-card .vc-label { font-weight: 700; color: var(--success); font-family: Georgia, serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .video-card .vc-meta { font-size: 0.55rem; opacity: 0.7; font-family: ui-monospace, monospace; }
+    .video-card .vc-actions { padding: 0.4rem 0.5rem; display: flex; gap: 0.3rem; background: var(--panel-2); border-top: 1px solid var(--border); }
+    .video-card .vc-btn { flex: 1; padding: 0.35rem 0.4rem; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--ink-dim); font-size: 0.6rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.15s; text-align: center; display: flex; align-items: center; justify-content: center; gap: 0.2rem; }
+    .video-card .vc-btn:hover { border-color: var(--success); color: var(--success); }
+    .video-card .vc-btn.delete:hover { border-color: var(--error); color: var(--error); }
+    .gallery-empty { text-align: center; padding: 2rem 1rem; color: var(--ink-dim); font-size: 0.75rem; font-style: italic; }
+    .video-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.95); backdrop-filter: blur(8px); z-index: 600; display: none; align-items: center; justify-content: center; padding: 1rem; }
+    .video-modal.open { display: flex; }
+    .video-modal .vm-content { position: relative; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+    .video-modal video { max-width: 90vw; max-height: 75vh; border-radius: 12px; border: 1px solid var(--accent); box-shadow: 0 0 40px rgba(201,169,97,0.3); background: #000; }
+    .video-modal .vm-info { color: var(--ink); font-size: 0.8rem; font-family: Georgia, serif; text-align: center; }
+    .video-modal .vm-close { position: absolute; top: -40px; right: 0; background: transparent; border: 1px solid var(--accent); color: var(--accent); width: 34px; height: 34px; border-radius: 50%; font-size: 1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .video-modal .vm-download { padding: 0.5rem 1rem; border-radius: 8px; border: none; background: var(--success); color: #fff; font-size: 0.75rem; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .stat-line { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.5rem; padding: 0.4rem 0.6rem; background: var(--panel-2); border-radius: 6px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.3rem; }
+    .section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden; }
+    .section-header { padding: 0.9rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em; color: var(--accent); font-weight: 700; font-family: Georgia, serif; }
+    .section-header .chevron { font-size: 0.7rem; color: var(--ink-faint); transition: transform 0.2s; }
+    .section.open .section-header .chevron { transform: rotate(180deg); }
+    .section-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+    .section.open .section-body { max-height: 6000px; }
+    .section-content { padding: 0 1.1rem 1.1rem; }
+    .mode-switch { display: flex; gap: 0.3rem; margin-bottom: 1rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.35rem; overflow-x: auto; }
+    .mode-btn { flex: 0 0 auto; padding: 0.7rem 0.7rem; border-radius: 8px; border: none; background: transparent; color: var(--ink-dim); font-size: 0.75rem; font-weight: 600; font-family: inherit; cursor: pointer; white-space: nowrap; }
+    .mode-btn.active { background: var(--accent); color: #0a0a0a; }
+    .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 2rem 1rem; text-align: center; cursor: pointer; margin-bottom: 1rem; background: var(--panel); }
+    .upload-icon { font-size: 2.2rem; margin-bottom: 0.6rem; color: var(--accent); }
+    .upload-text { font-size: 0.95rem; font-family: Georgia, serif; }
+    .upload-hint { font-size: 0.75rem; color: var(--ink-dim); margin-top: 0.2rem; }
+    .upload-zone input[type="file"] { display: none; }
+    .images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
+    .image-card { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #1a1a1a; aspect-ratio: 9/16; }
+    .image-card img { width: 100%; height: 100%; object-fit: cover; }
+    .image-card .remove-btn { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.75); color: #fff; border: 1px solid var(--accent); width: 22px; height: 22px; border-radius: 50%; font-size: 11px; cursor: pointer; }
+    .prompt-main { width: 100%; padding: 0.85rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: #0f0f0f; color: var(--ink); font-family: Georgia, serif; font-size: 0.9rem; min-height: 110px; resize: vertical; line-height: 1.6; }
+    .prompt-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .prompt-action-btn { padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid var(--mistral); background: transparent; color: var(--mistral); font-size: 0.7rem; font-weight: 600; font-family: inherit; cursor: pointer; }
+    .prompt-action-btn.loading { opacity: 0.6; pointer-events: none; }
+    .control-row { margin-bottom: 0.9rem; }
+    .control-label { display: block; font-size: 0.72rem; color: var(--ink-dim); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; font-family: Georgia, serif; }
+    select { width: 100%; padding: 0.7rem 0.9rem; border-radius: 8px; border: 1px solid var(--border); background: #0f0f0f; color: var(--ink); font-size: 0.88rem; }
+    .btn-primary { width: 100%; padding: 1.1rem; border-radius: var(--radius); border: none; background: var(--accent); color: #0a0a0a; font-size: 1rem; font-weight: 700; font-family: Georgia, serif; cursor: pointer; margin-bottom: 1rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-stop { width: 100%; padding: 0.8rem; border-radius: var(--radius); border: 1px solid var(--error); background: var(--panel); color: var(--error); font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-bottom: 1rem; display: none; }
+    .btn-stop.visible { display: block; }
+    .btn-check { width: 100%; padding: 0.8rem; border-radius: var(--radius); border: 1px solid var(--info); background: var(--panel); color: var(--info); font-size: 0.85rem; font-weight: 700; cursor: pointer; margin-bottom: 1rem; display: none; }
+    .btn-check.visible { display: block; }
+    .status-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--accent); color: #0a0a0a; padding: 0.7rem 1rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.6rem; transform: translateY(100%); transition: transform 0.3s; z-index: 100; font-weight: 600; }
+    .status-bar.visible { transform: translateY(0); }
+    .status-bar .spinner { width: 12px; height: 12px; border: 2px solid rgba(10,10,10,0.3); border-top-color: #0a0a0a; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .mode-hidden { display: none !important; }
+    .videos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
+    .video-thumb { position: relative; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: #000; aspect-ratio: 9/16; cursor: pointer; }
+    .video-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .video-thumb .video-name { position: absolute; bottom: 0; left: 0; right: 0; padding: 0.3rem 0.4rem; background: linear-gradient(transparent, rgba(0,0,0,0.85)); font-size: 0.6rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+    .video-thumb .video-remove { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.75); color: #fff; border: 1px solid var(--accent); width: 22px; height: 22px; border-radius: 50%; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .video-thumb .video-duration { position: absolute; top: 4px; left: 4px; padding: 0.1rem 0.35rem; background: rgba(0,0,0,0.7); color: var(--accent); font-size: 0.55rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Cinéma Noir</h1>
+    <div class="film-strip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <p class="subtitle">« Studio IA complet — Timeout intelligent »</p>
+</header>
+
+<div class="log-panel" id="log-panel">
+    <div class="log-header" id="log-header">
+        <div class="log-title"><span class="log-status-dot" id="log-status-dot"></span><span>📊 Journal</span></div>
+        <div class="log-actions">
+            <span class="log-counter" id="log-counter">0</span>
+            <button type="button" class="log-action-btn" id="log-autoscroll-btn">⬇️ Auto</button>
+            <button type="button" class="log-action-btn" id="log-export-btn">💾</button>
+            <button type="button" class="log-action-btn" id="log-clear-btn">🗑️</button>
+            <span class="log-chevron">▼</span>
+        </div>
+    </div>
+    <div class="log-filters-bar">
+        <span style="font-size:0.6rem;color:var(--ink-dim);">Filtres :</span>
+        <div class="log-filter-chip info active" data-filter="info">ℹ️ Info</div>
+        <div class="log-filter-chip step active" data-filter="step">🎬 Étape</div>
+        <div class="log-filter-chip success active" data-filter="success">✓ Succès</div>
+        <div class="log-filter-chip warn active" data-filter="warn">⚠️ Warn</div>
+        <div class="log-filter-chip error active" data-filter="error">✕ Erreur</div>
+    </div>
+    <div class="log-body" id="log-body"><div class="log-empty">En attente d'activité…</div></div>
+</div>
+
+<div class="gallery-panel" id="gallery-panel">
+    <div class="gallery-header" id="gallery-header">
+        <div class="gallery-title"><span>🎬 Galerie vidéos</span><span class="gallery-counter" id="gallery-counter">0</span></div>
+        <div class="gallery-actions">
+            <button type="button" class="gallery-action-btn" id="gallery-autodl-btn">📥 Auto-DL</button>
+            <button type="button" class="gallery-action-btn" id="gallery-dl-all-btn">⬇️ Tout</button>
+            <button type="button" class="gallery-action-btn" id="gallery-clear-btn">🗑️</button>
+            <span class="gallery-chevron">▼</span>
+        </div>
+    </div>
+    <div class="gallery-body" id="gallery-body">
+        <div class="gallery-empty">Aucune vidéo générée.</div>
+    </div>
+</div>
+
+<button type="button" class="style-picker-trigger" id="style-picker-trigger">
+    <div class="spt-left">
+        <span class="spt-emoji" id="spt-emoji">🎬</span>
+        <div class="spt-info">
+            <span class="spt-label">Styles actifs</span>
+            <span class="spt-name empty" id="spt-name">Aucun style sélectionné</span>
+        </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0.5rem;">
+        <span class="spt-count" id="spt-count">— styles</span>
+        <span class="spt-arrow">▶</span>
+    </div>
+</button>
+<div class="selected-styles-bar empty" id="selected-styles-bar">Aucun style sélectionné</div>
+
+<div class="picker-modal" id="picker-modal">
+    <div class="picker-container">
+        <div class="picker-header">
+            <span class="ph-title">🎬 Choisir les styles</span>
+            <span class="ph-selected-count" id="ph-selected-count">0</span>
+            <button type="button" class="picker-close" id="picker-close">✕</button>
+        </div>
+        <div class="picker-search-bar">
+            <input type="text" class="picker-search" id="picker-search" placeholder="Rechercher un style…">
+            <button type="button" class="picker-reset" id="picker-reset">Effacer</button>
+        </div>
+        <div class="picker-tag-bar" id="picker-tag-bar"></div>
+        <div class="picker-categories" id="picker-categories"></div>
+        <div class="picker-body" id="picker-body"></div>
+        <div class="picker-footer">
+            <button type="button" class="picker-clear-all" id="picker-clear-all">🗑️ Tout retirer</button>
+            <button type="button" class="picker-validate" id="picker-validate">✓ Valider</button>
+        </div>
+    </div>
+</div>
+
+<div class="active-models-bar" id="active-models-bar">
+    <span class="amb-label">⚡ Modèles actifs</span>
+    <span class="amb-count" id="amb-count">0</span>
+    <div id="active-models-chips" style="display:contents;"></div>
+</div>
+
+<div class="api-panel">
+    <div class="api-provider-header agnes"><span class="provider-dot"></span><span>AGNES AI — Génération vidéo</span></div>
+    <div class="api-key-row">
+        <input type="password" class="api-key-input" id="api-key-input" placeholder="Clé Agnes (sk-...)" autocomplete="off">
+        <button type="button" class="api-btn" id="api-verify-btn">🔍 Vérifier</button>
+    </div>
+    <div class="api-status-line" id="api-status-line">
+        <span class="status-dot"></span>
+        <span id="api-status-text">Aucune clé Agnes</span>
+        <span class="status-detail" id="api-status-detail"></span>
+    </div>
+    <div class="api-hint">Clé sur <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a></div>
+
+    <div class="model-selector">
+        <div class="model-selector-label">
+            <span>🧠 Modèles Agnes</span>
+            <div class="model-actions-row"><button type="button" class="model-action-btn" id="model-refresh-btn">🔄 Détecter</button></div>
+        </div>
+        <div class="model-current" id="model-current-label">—</div>
+        <div class="model-grid" id="model-grid"><div class="model-empty">Cliquez sur « Détecter » après avoir saisi votre clé.</div></div>
+    </div>
+
+    <div class="api-divider"></div>
+
+    <div class="api-provider-header mistral"><span class="provider-dot"></span><span>MISTRAL AI — Analyse (optionnel)</span></div>
+    <div class="api-key-row">
+        <input type="password" class="api-key-input" id="mistral-key-input" placeholder="Clé Mistral" autocomplete="off">
+        <button type="button" class="api-btn mistral" id="mistral-verify-btn">🔍 Vérifier</button>
+    </div>
+    <div class="api-status-line" id="mistral-status-line">
+        <span class="status-dot"></span>
+        <span id="mistral-status-text">Aucune clé Mistral</span>
+        <span class="status-detail" id="mistral-status-detail"></span>
+    </div>
+    <div class="api-hint">Clé sur <a href="https://console.mistral.ai/api-keys/" target="_blank" class="mistral-link">console.mistral.ai</a></div>
+
+    <div class="model-selector">
+        <div class="model-selector-label mistral">
+            <span>🔥 Modèles Mistral</span>
+            <div class="model-actions-row"><button type="button" class="model-action-btn mistral" id="mistral-refresh-btn">🔄 Détecter</button></div>
+        </div>
+        <div class="model-current" id="mistral-current-label">—</div>
+        <div class="model-grid" id="mistral-model-grid"><div class="model-empty">Enregistrez puis vérifiez votre clé Mistral.</div></div>
+    </div>
+
+    <div class="api-divider"></div>
+
+    <div class="api-provider-header extra"><span class="provider-dot"></span><span>⚡ MODÈLES EXTRAS</span></div>
+    <div class="api-hint" style="margin-bottom:0.5rem;">Ajoutez des IDs de modèles. Activez-les en cliquant dessus.</div>
+    <div class="model-selector" style="margin-top:0.5rem; padding-top:0.5rem;">
+        <div class="model-selector-label extra-label">
+            <span>⚡ Modèles extras disponibles</span>
+            <div class="model-actions-row"><button type="button" class="model-action-btn extra" id="extra-clear-btn">🗑️ Tout supprimer</button></div>
+        </div>
+        <div class="model-grid" id="extra-model-grid"><div class="model-empty">Aucun modèle extra.</div></div>
+        <div class="add-model-row">
+            <input type="text" class="add-model-input" id="extra-model-input" placeholder="Ex: agnes-video-v3, pixtral-large-latest…">
+            <button type="button" class="add-model-btn" id="extra-add-btn">＋ Ajouter</button>
+        </div>
+    </div>
+
+    <div class="stat-line">
+        <span>📊 <span id="stat-speed">en attente</span></span>
+        <span id="stat-samples">0 génération</span>
+    </div>
+</div>
+
+<div class="mode-switch">
+    <button type="button" class="mode-btn active" data-mode="image">🖼️ Image</button>
+    <button type="button" class="mode-btn" data-mode="text">✍️ Texte</button>
+    <button type="button" class="mode-btn" data-mode="image_text">🎨 Image + Texte</button>
+    <button type="button" class="mode-btn" data-mode="audio">🎙️ Audio</button>
+    <button type="button" class="mode-btn" data-mode="video">🎥 Vidéo</button>
+    <button type="button" class="mode-btn" data-mode="combo">🎬 Combo</button>
+</div>
+
+<div id="mode-image">
+    <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" accept="image/*,.heic,.heif,.avif,.webp,.bmp,.tiff,.tif,.svg,.ico,.jfif,.jpe,.jpeg,.jpg,.png,.gif" multiple>
+        <div class="upload-icon">🎬</div>
+        <div class="upload-text">Ajoutez vos images</div>
+        <div class="upload-hint">JPG · PNG · GIF · WEBP · HEIC · AVIF · BMP · TIFF · SVG</div>
+    </div>
+    <div class="images-grid" id="images-grid"></div>
+    <div class="section open">
+        <div class="section-header" data-toggle="section-prompt"><span class="section-title">✍️ Scénario</span><span class="chevron">▼</span></div>
+        <div class="section-body">
+            <div class="section-content"><textarea class="prompt-main" id="main-prompt" placeholder="Décrivez votre scène..."></textarea></div>
+        </div>
+    </div>
+</div>
+
+<div id="mode-text" class="mode-hidden">
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🎬 Scène</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content"><textarea class="prompt-main" id="scene-base-text" placeholder="Décrivez la scène..."></textarea></div>
+        </div>
+    </div>
+</div>
+
+<div id="mode-image_text" class="mode-hidden">
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🖼️ Image de départ</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-it">
+                    <input type="file" id="file-input-it" accept="image/*,.heic,.heif,.avif,.webp,.bmp,.tiff,.tif,.svg,.ico,.jfif,.jpe,.jpeg,.jpg,.png,.gif" multiple>
+                    <div class="upload-icon">🎨</div>
+                    <div class="upload-text">Ajoutez vos images</div>
+                </div>
+                <div class="images-grid" id="images-grid-it"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">✍️ Description</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content"><textarea class="prompt-main" id="main-prompt-it" placeholder="Décrivez la transformation..."></textarea></div>
+        </div>
+    </div>
+</div>
+
+<div id="mode-audio" class="mode-hidden">
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🎙️ Fichier audio</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-audio">
+                    <input type="file" id="file-input-audio" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.wma,.aiff,.aif,.alac,.amr,.3gp" multiple>
+                    <div class="upload-icon">🎵</div>
+                    <div class="upload-text">Ajoutez vos fichiers audio</div>
+                    <div class="upload-hint">MP3 · WAV · M4A · AAC · OGG · FLAC · OPUS · WMA</div>
+                </div>
+                <div id="audio-list"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">✍️ Description</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content"><textarea class="prompt-main" id="main-prompt-audio" placeholder="Décrivez l'ambiance visuelle..."></textarea></div>
+        </div>
+    </div>
+</div>
+
+<div id="mode-video" class="mode-hidden">
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🎥 Vidéo de départ</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-video">
+                    <input type="file" id="file-input-video" accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.flv,.wmv,.m4v,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.m2ts" multiple>
+                    <div class="upload-icon">🎥</div>
+                    <div class="upload-text">Ajoutez vos vidéos</div>
+                    <div class="upload-hint">MP4 · MOV · AVI · MKV · WEBM · FLV · WMV · M4V · MPG · 3GP · TS</div>
+                </div>
+                <div class="videos-grid" id="videos-grid"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">✍️ Description</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <textarea class="prompt-main" id="main-prompt-video" placeholder="Décrivez la transformation à appliquer."></textarea>
+                <div class="prompt-actions">
+                    <button type="button" class="prompt-action-btn" id="mistral-enrich-btn-5">🔥 Enrichir avec Mistral</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="mode-combo" class="mode-hidden">
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🖼️ Images (optionnel)</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-combo-img">
+                    <input type="file" id="file-input-combo" accept="image/*,.heic,.heif,.avif,.webp,.bmp,.tiff,.tif,.svg,.ico,.jfif,.jpe,.jpeg,.jpg,.png,.gif" multiple>
+                    <div class="upload-icon">🖼️</div>
+                    <div class="upload-text">Images de base</div>
+                </div>
+                <div class="images-grid" id="images-grid-combo"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🎥 Vidéo de base (optionnel)</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-combo-vid">
+                    <input type="file" id="file-input-combo-video" accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.flv,.wmv,.m4v,.mpg,.mpeg,.3gp,.ogv,.ts,.mts,.m2ts" multiple>
+                    <div class="upload-icon">🎥</div>
+                    <div class="upload-text">Vidéo de départ</div>
+                </div>
+                <div class="videos-grid" id="videos-grid-combo"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">🎙️ Audio (optionnel)</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <div class="upload-zone" id="upload-zone-combo-audio">
+                    <input type="file" id="file-input-combo-audio" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.opus,.wma,.aiff,.aif,.alac,.amr,.3gp" multiple>
+                    <div class="upload-icon">🎵</div>
+                    <div class="upload-text">Piste audio</div>
+                </div>
+                <div id="audio-list-combo"></div>
+            </div>
+        </div>
+    </div>
+    <div class="section open">
+        <div class="section-header"><span class="section-title">✍️ Description combinée</span></div>
+        <div class="section-body" style="max-height:6000px;">
+            <div class="section-content">
+                <textarea class="prompt-main" id="main-prompt-combo" placeholder="Décrivez la transformation globale..."></textarea>
+                <div class="prompt-actions">
+                    <button type="button" class="prompt-action-btn" id="mistral-enrich-btn-6">🔥 Enrichir avec Mistral</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="section">
+    <div class="section-header" data-toggle="section-tech"><span class="section-title">🎥 Réglages</span><span class="chevron">▼</span></div>
+    <div class="section-body">
+        <div class="section-content">
+            <div class="control-row">
+                <label class="control-label">Durée de chaque scène</label>
+                <select id="duration-select">
+                    <option value="121">5 secondes</option>
+                    <option value="153" selected>6,4 secondes</option>
+                    <option value="241">10 secondes</option>
+                    <option value="361">15 secondes</option>
+                    <option value="601">25 secondes</option>
+                    <option value="1201">50 secondes</option>
+                    <option value="2161">1 minute 30</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <label class="control-label">Intensité du mouvement</label>
+                <select id="intensity-select">
+                    <option value="random">Aléatoire</option>
+                    <option value="subtle">Subtile</option>
+                    <option value="moderate">Modérée</option>
+                    <option value="strong">Forte</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button type="button" class="btn-primary" id="generate-btn" disabled>Créer les scènes</button>
+<button type="button" class="btn-stop" id="stop-btn">⏹ Arrêter</button>
+<button type="button" class="btn-check" id="check-status-btn">🔍 Vérifier les tâches en cours</button>
+
+<div class="video-modal" id="video-modal">
+    <div class="vm-content">
+        <button type="button" class="vm-close" id="vm-close">✕</button>
+        <video id="vm-video" controls playsinline></video>
+        <div class="vm-info" id="vm-info"></div>
+        <button type="button" class="vm-download" id="vm-download">⬇️ Télécharger cette vidéo</button>
+    </div>
+</div>
+
+<div class="status-bar" id="status-bar">
+    <div class="spinner"></div>
+    <span id="status-text">Préparation…</span>
+</div>
+
+<div class="toast" id="toast">
+    <span class="toast-icon" id="toast-icon">✓</span>
+    <span id="toast-text">Message</span>
+</div>
+
+<canvas id="noSleepCanvas" width="2" height="2"></canvas>
+<video id="noSleepVideo" playsinline muted loop></video>
+
+<script>
+const ALL_TAGS = {
+    sombre: { emoji: '🌑', label: 'Sombre' }, lumineux: { emoji: '☀️', label: 'Lumineux' },
+    chaud: { emoji: '🔥', label: 'Chaud' }, froid: { emoji: '❄️', label: 'Froid' },
+    coloré: { emoji: '🎨', label: 'Coloré' }, monochrome: { emoji: '⚫', label: 'Monochrome' },
+    rétro: { emoji: '📼', label: 'Rétro' }, futuriste: { emoji: '🚀', label: 'Futuriste' },
+    naturel: { emoji: '🌿', label: 'Naturel' }, urbain: { emoji: '🏙️', label: 'Urbain' },
+    minimal: { emoji: '◻️', label: 'Minimal' }, détaillé: { emoji: '🔍', label: 'Détaillé' },
+    graphique: { emoji: '📐', label: 'Graphique' }, organique: { emoji: '🌊', label: 'Organique' },
+    réaliste: { emoji: '📷', label: 'Réaliste' }, stylisé: { emoji: '🎭', label: 'Stylisé' },
+    dramatique: { emoji: '🎬', label: 'Dramatique' }, doux: { emoji: '🌸', label: 'Doux' },
+    épique: { emoji: '⚡', label: 'Épique' }, intime: { emoji: '💭', label: 'Intime' },
+    japonais: { emoji: '🇯🇵', label: 'Japonais' }, asiatique: { emoji: '🏯', label: 'Asiatique' },
+    fantasy: { emoji: '🧙', label: 'Fantasy' }, nature: { emoji: '🌲', label: 'Nature' }
+};
+
+const STYLE_CATEGORIES = [
+    { id: 'cinema', name: '🎬 Cinéma', styles: [
+        { e: '🎩', n: 'Film Noir', d: 'Noir et blanc', tags: ['sombre', 'monochrome', 'rétro'], color: ['#1a1a1a', '#000'], p: 'classic 1940s film noir, high contrast black and white' },
+        { e: '🌆', n: 'Néo-Noir', d: 'Néon, pluie', tags: ['sombre', 'urbain', 'coloré'], color: ['#1a0a2a', '#ff0044'], p: 'modern neo-noir, rain-soaked night, neon reflections' },
+        { e: '🤠', n: 'Western', d: 'Far West', tags: ['chaud', 'rétro', 'naturel'], color: ['#8b5a2b', '#d4a017'], p: 'classic western, dusty frontier, sunset' },
+        { e: '🔍', n: 'Polar', d: 'Enquête', tags: ['sombre', 'urbain', 'dramatique'], color: ['#1a1a2e', '#444'], p: 'crime thriller, tense atmosphere' },
+        { e: '👻', n: 'Horreur', d: 'Épouvante', tags: ['sombre', 'dramatique'], color: ['#0a0000', '#8b0000'], p: 'horror aesthetic, dark shadows' },
+        { e: '💕', n: 'Romance', d: 'Doux', tags: ['chaud', 'doux', 'intime'], color: ['#ff9bb3', '#ffb3d1'], p: 'romantic film, soft warm lighting' },
+        { e: '🚀', n: 'Science-Fiction', d: 'Futur', tags: ['futuriste', 'coloré'], color: ['#003366', '#00d4ff'], p: 'science fiction, futuristic technology' },
+        { e: '🧙', n: 'Fantasy', d: 'Magie', tags: ['fantasy', 'coloré', 'épique'], color: ['#4a148c', '#9c27b0'], p: 'fantasy epic, magical atmosphere' },
+        { e: '🐉', n: 'Médiéval', d: 'Châteaux', tags: ['rétro', 'épique'], color: ['#3e2723', '#795548'], p: 'medieval setting, castles, knights' },
+        { e: '⚔️', n: 'Péplum', d: 'Antiquité', tags: ['rétro', 'épique', 'chaud'], color: ['#8d6e63', '#d4a017'], p: 'ancient epic, Roman setting' },
+        { e: '🕵️', n: 'Espionnage', d: 'Mission', tags: ['urbain', 'dramatique'], color: ['#0a0a0a', '#c9a961'], p: 'spy thriller, sleek gadgets' },
+        { e: '🎭', n: 'Drame', d: 'Émotion', tags: ['intime', 'dramatique'], color: ['#2c1810', '#6b4423'], p: 'character drama, emotional lighting' },
+        { e: '💥', n: 'Blockbuster', d: 'Action', tags: ['dramatique', 'épique'], color: ['#ff4400', '#ffcc00'], p: 'blockbuster action, explosions' },
+        { e: '🎞️', n: 'Cinéma Muet', d: 'Sépia', tags: ['rétro', 'monochrome'], color: ['#5d4a3a', '#a08060'], p: 'silent film era, sepia, 1920s' },
+        { e: '🖤', n: 'Gothique', d: 'Sombre', tags: ['sombre', 'dramatique'], color: ['#0a0014', '#4a0080'], p: 'gothic cinema, dark romantic' }
+    ]},
+    { id: 'manga', name: '🇯🇵 Manga & Anime', styles: [
+        { e: '🌿', n: 'Studio Ghibli', d: 'Nature', tags: ['japonais', 'nature', 'doux'], color: ['#7cb342', '#aed581'], p: 'Studio Ghibli, Miyazaki, hand-painted' },
+        { e: '🍥', n: 'Anime Shonen', d: 'Action', tags: ['japonais', 'coloré', 'épique'], color: ['#ff5722', '#ffc107'], p: 'shonen anime, dynamic action' },
+        { e: '🌸', n: 'Anime Shojo', d: 'Romance', tags: ['japonais', 'doux', 'coloré'], color: ['#f8bbd0', '#e1bee7'], p: 'shojo anime, pastel' },
+        { e: '⚔️', n: 'Anime Seinen', d: 'Mature', tags: ['japonais', 'sombre'], color: ['#1a1a2e', '#6a1b9a'], p: 'seinen anime, mature' },
+        { e: '🎨', n: 'Manga N&B', d: 'Encre', tags: ['japonais', 'monochrome'], color: ['#000', '#fff'], p: 'black and white manga, ink lines' },
+        { e: '🌊', n: 'Anime 90s', d: 'VHS', tags: ['japonais', 'rétro'], color: ['#37474f', '#78909c'], p: '90s anime, VHS grain' },
+        { e: '🏮', n: 'Cyberpunk Anime', d: 'Néon', tags: ['japonais', 'futuriste'], color: ['#e91e63', '#00e5ff'], p: 'cyberpunk anime, Akira' },
+        { e: '🎌', n: 'Kawaii', d: 'Mignon', tags: ['japonais', 'doux'], color: ['#ffb6c1', '#ffe4e1'], p: 'kawaii, pastel, cute' },
+        { e: '🎴', n: 'Ukiyo-e', d: 'Estampe', tags: ['japonais', 'rétro'], color: ['#283593', '#ef6c00'], p: 'ukiyo-e woodblock, Hokusai' },
+        { e: '🌸', n: 'Sumi-e', d: 'Encre noire', tags: ['japonais', 'minimal'], color: ['#1a1a1a', '#666'], p: 'sumi-e ink wash, zen' }
+    ]},
+    { id: 'art', name: '🎨 Art', styles: [
+        { e: '🌻', n: 'Impressionnisme', d: 'Monet', tags: ['chaud', 'organique'], color: ['#ffd54f', '#ff8a65'], p: 'impressionist, Monet, brushstrokes' },
+        { e: '🌀', n: 'Expressionnisme', d: 'Émotion', tags: ['dramatique', 'coloré'], color: ['#b71c1c', '#01579b'], p: 'expressionist art, distorted' },
+        { e: '💭', n: 'Surréalisme', d: 'Dali', tags: ['stylisé', 'coloré'], color: ['#7e57c2', '#ffca28'], p: 'surrealist, dreamlike, Dali' },
+        { e: '🎭', n: 'Baroque', d: 'Opulent', tags: ['chaud', 'dramatique'], color: ['#6d4c41', '#ffb300'], p: 'baroque, Caravaggio' },
+        { e: '👑', n: 'Renaissance', d: 'Classique', tags: ['chaud', 'réaliste'], color: ['#8d6e63', '#d4af37'], p: 'Renaissance, sfumato' },
+        { e: '🖌️', n: 'Art Nouveau', d: 'Courbes', tags: ['stylisé', 'organique'], color: ['#c8a97e', '#6b8e5a'], p: 'Art Nouveau, Mucha' },
+        { e: '✨', n: 'Art Déco', d: 'Doré', tags: ['rétro', 'graphique'], color: ['#1a1a1a', '#d4af37'], p: 'Art Deco, geometric gold' },
+        { e: '🎨', n: 'Pop Art', d: 'Warhol', tags: ['coloré', 'graphique'], color: ['#ffeb3b', '#e91e63'], p: 'pop art, Warhol' },
+        { e: '🎨', n: 'Aquarelle', d: 'Translucide', tags: ['doux', 'organique'], color: ['#b3e5fc', '#f8bbd0'], p: 'watercolor, soft bleeding edges' },
+        { e: '✏️', n: 'Croquis', d: 'Crayon', tags: ['minimal', 'monochrome'], color: ['#e0e0e0', '#424242'], p: 'pencil sketch, graphite' }
+    ]},
+    { id: 'anime3d', name: '🧊 3D & Animation', styles: [
+        { e: '🍩', n: 'Les Simpson', d: 'Yellow', tags: ['stylisé', 'rétro'], color: ['#ffd700', '#ff9800'], p: 'Simpsons cartoon style' },
+        { e: '🏰', n: 'Disney', d: 'Conte', tags: ['coloré', 'chaud'], color: ['#ff9bb3', '#ffd54f'], p: 'Disney classic animation' },
+        { e: '✨', n: 'Pixar 3D', d: 'Expressif', tags: ['coloré', 'lumineux'], color: ['#ff9800', '#42a5f5'], p: 'Pixar 3D, expressive' },
+        { e: '🦸', n: 'Comics US', d: 'Marvel', tags: ['graphique', 'coloré'], color: ['#d32f2f', '#1976d2'], p: 'American superhero comic' },
+        { e: '📘', n: 'BD Franco-Belge', d: 'Tintin', tags: ['graphique', 'rétro'], color: ['#fbc02d', '#c62828'], p: 'Franco-Belgian BD' },
+        { e: '🧱', n: 'Claymation', d: 'Pâte', tags: ['organique', 'stylisé'], color: ['#8d6e63', '#ffb74d'], p: 'claymation, Aardman' },
+        { e: '📦', n: 'Low Poly', d: 'Géométrique', tags: ['minimal', 'futuriste'], color: ['#26c6da', '#7e57c2'], p: 'low poly 3D' },
+        { e: '👾', n: 'Pixel Art', d: '8-bit', tags: ['rétro', 'graphique'], color: ['#4caf50', '#ffeb3b'], p: 'pixel art, 8-bit' },
+        { e: '🎨', n: 'Cel Shading', d: 'Cartoon 3D', tags: ['stylisé', 'coloré'], color: ['#ff9800', '#03a9f4'], p: 'cel-shaded 3D' },
+        { e: '🎞️', n: 'Stop Motion', d: 'Image par image', tags: ['organique', 'rétro'], color: ['#795548', '#a1887f'], p: 'stop-motion' }
+    ]},
+    { id: 'futur', name: '🚀 Futur & Sci-Fi', styles: [
+        { e: '🌃', n: 'Cyberpunk', d: 'Néon', tags: ['futuriste', 'urbain'], color: ['#e91e63', '#00e5ff'], p: 'cyberpunk, Blade Runner' },
+        { e: '⚙️', n: 'Steampunk', d: 'Vapeur', tags: ['rétro', 'chaud'], color: ['#8d6e63', '#d4af37'], p: 'steampunk, gears, Victorian' },
+        { e: '🌌', n: 'Space Opera', d: 'Galaxie', tags: ['futuriste', 'épique'], color: ['#1a237e', '#e91e63'], p: 'space opera, Star Wars' },
+        { e: '🛸', n: 'UFO / Alien', d: 'OVNI', tags: ['futuriste', 'sombre'], color: ['#4a148c', '#00e5ff'], p: 'alien encounter, UFO' },
+        { e: '🤖', n: 'Robot & IA', d: 'Androïdes', tags: ['futuriste', 'minimal'], color: ['#37474f', '#00bcd4'], p: 'robot, AI, androids' },
+        { e: '🌍', n: 'Post-Apocalyptique', d: 'Ruines', tags: ['sombre', 'chaud'], color: ['#4e342e', '#ff6f00'], p: 'post-apocalyptic, Mad Max' },
+        { e: '⚡', n: 'Vaporwave', d: 'Pastel', tags: ['rétro', 'coloré'], color: ['#ff80ab', '#80deea'], p: 'vaporwave, VHS, 90s' },
+        { e: '🌈', n: 'Synthwave', d: 'Années 80', tags: ['rétro', 'futuriste'], color: ['#e91e63', '#00bcd4'], p: 'synthwave, neon grid' },
+        { e: '📼', n: 'VHS', d: 'Grain', tags: ['rétro', 'organique'], color: ['#5d4037', '#ffd54f'], p: 'VHS tape, tracking lines' },
+        { e: '🔊', n: 'Hologramme', d: 'Translucide', tags: ['futuriste', 'lumineux'], color: ['#00e5ff', '#e1f5fe'], p: 'holographic projection' }
+    ]},
+    { id: 'epoque', name: '🏛️ Époques', styles: [
+        { e: '🐍', n: 'Égypte Antique', d: 'Pyramides', tags: ['rétro', 'chaud'], color: ['#d4af37', '#8d6e63'], p: 'Ancient Egypt, pharaoh' },
+        { e: '🏛️', n: 'Grèce Antique', d: 'Temple', tags: ['rétro', 'lumineux'], color: ['#e0e0e0', '#8d6e63'], p: 'Ancient Greece, marble' },
+        { e: '🦅', n: 'Rome Antique', d: 'Colisée', tags: ['rétro', 'épique'], color: ['#a0522d', '#d4af37'], p: 'Ancient Rome, legions' },
+        { e: '⚔️', n: 'Moyen Âge', d: 'Châteaux', tags: ['rétro', 'épique'], color: ['#3e2723', '#795548'], p: 'medieval, knights' },
+        { e: '🎩', n: 'Victorien', d: 'Industrie', tags: ['rétro', 'sombre'], color: ['#37474f', '#8d6e63'], p: 'Victorian, industrial' },
+        { e: '🎷', n: 'Années 1920', d: 'Charleston', tags: ['rétro', 'chaud'], color: ['#d4af37', '#c62828'], p: 'Roaring Twenties, jazz' },
+        { e: '🎺', n: 'Années 1950', d: 'Rock', tags: ['rétro', 'coloré'], color: ['#e91e63', '#03a9f4'], p: '1950s, rock and roll' },
+        { e: '📼', n: 'Années 1980', d: 'Néon', tags: ['rétro', 'futuriste'], color: ['#e91e63', '#00e5ff'], p: '1980s, neon, synth' },
+        { e: '💿', n: 'Années 1990', d: 'Grunge', tags: ['rétro', 'sombre'], color: ['#455a64', '#ff4081'], p: '1990s, grunge, MTV' },
+        { e: '📱', n: 'Années 2000', d: 'Y2K', tags: ['rétro', 'coloré'], color: ['#ff80ab', '#00bcd4'], p: '2000s Y2K, flip phones' }
+    ]},
+    { id: 'fantasy', name: '🧙 Fantasy', styles: [
+        { e: '🐉', n: 'Dragon', d: 'Feu', tags: ['fantasy', 'épique'], color: ['#b71c1c', '#ff6f00'], p: 'dragon, fire breath' },
+        { e: '🦄', n: 'Licorne', d: 'Magique', tags: ['fantasy', 'doux'], color: ['#f8bbd0', '#e1bee7'], p: 'unicorn, enchanted forest' },
+        { e: '🧜', n: 'Sirène', d: 'Océan', tags: ['fantasy', 'organique'], color: ['#00acc1', '#80deea'], p: 'mermaid, ocean, siren' },
+        { e: '🔥', n: 'Phénix', d: 'Renaissance', tags: ['fantasy', 'chaud'], color: ['#ff5722', '#ffc107'], p: 'phoenix, flames, rebirth' },
+        { e: '🧛', n: 'Vampire', d: 'Nuit', tags: ['fantasy', 'sombre'], color: ['#000', '#8b0000'], p: 'vampire, gothic' },
+        { e: '😇', n: 'Ange', d: 'Divin', tags: ['fantasy', 'lumineux'], color: ['#fff', '#ffd54f'], p: 'angel, wings, divine' },
+        { e: '😈', n: 'Démon', d: 'Enfer', tags: ['fantasy', 'sombre'], color: ['#b71c1c', '#ff5722'], p: 'demon, horns, hellish' },
+        { e: '🧝', n: 'Elfe', d: 'Forêt', tags: ['fantasy', 'nature'], color: ['#66bb6a', '#a5d6a7'], p: 'elven, archer, forest' },
+        { e: '🔮', n: 'Sorcière', d: 'Magie', tags: ['fantasy', 'coloré'], color: ['#6200ea', '#d500f9'], p: 'witch, mage, magic' },
+        { e: '🏰', n: 'Château', d: 'Enchanté', tags: ['fantasy', 'rétro'], color: ['#37474f', '#d4af37'], p: 'enchanted castle, fairy tale' }
+    ]},
+    { id: 'action', name: '💥 Action', styles: [
+        { e: '🥋', n: 'Kung Fu', d: 'Chine', tags: ['asiatique', 'épique'], color: ['#b71c1c', '#d4af37'], p: 'kung fu, Chinese temple' },
+        { e: '🥊', n: 'Boxe', d: 'Ring', tags: ['dramatique', 'sombre'], color: ['#c62828', '#212121'], p: 'boxing, ring, combat' },
+        { e: '🗡️', n: 'Samouraï', d: 'Katana', tags: ['japonais', 'épique'], color: ['#b71c1c', '#212121'], p: 'samurai, katana, Japan' },
+        { e: '🥷', n: 'Ninja', d: 'Furtif', tags: ['japonais', 'sombre'], color: ['#000', '#616161'], p: 'ninja, shuriken, smoke' },
+        { e: '🏹', n: 'Archerie', d: 'Précision', tags: ['naturel', 'minimal'], color: ['#8d6e63', '#4caf50'], p: 'archery, bow, precision' },
+        { e: '🗡️', n: 'Gladiateur', d: 'Colisée', tags: ['rétro', 'épique'], color: ['#8d6e63', '#d4af37'], p: 'gladiator, Colosseum' },
+        { e: '🔫', n: 'Gunfight', d: 'Western', tags: ['chaud', 'rétro'], color: ['#8b5a2b', '#d4af37'], p: 'gunfight, western duel' },
+        { e: '💣', n: 'Explosion', d: 'Action', tags: ['dramatique', 'épique'], color: ['#ff4400', '#ffcc00'], p: 'explosion, fireball' },
+        { e: '🏎️', n: 'Course-Poursuite', d: 'Vitesse', tags: ['urbain', 'dramatique'], color: ['#212121', '#ff5722'], p: 'car chase, high-speed' },
+        { e: '🌪️', n: 'Parkour', d: 'Urbain', tags: ['urbain', 'dramatique'], color: ['#455a64', '#ff5722'], p: 'parkour, rooftop jumps' }
+    ]},
+    { id: 'nature', name: '🌿 Nature', styles: [
+        { e: '🏔️', n: 'Montagne', d: 'Sommets', tags: ['nature', 'froid'], color: ['#1976d2', '#fff'], p: 'Alpine mountains, snow peaks' },
+        { e: '🌊', n: 'Océan', d: 'Vagues', tags: ['nature', 'froid'], color: ['#0277bd', '#4fc3f7'], p: 'ocean, waves, blue' },
+        { e: '🏜️', n: 'Désert', d: 'Dunes', tags: ['nature', 'chaud'], color: ['#d4af37', '#8d6e63'], p: 'desert, dunes, emptiness' },
+        { e: '🌴', n: 'Jungle', d: 'Tropicale', tags: ['nature', 'coloré'], color: ['#2e7d32', '#4caf50'], p: 'jungle, tropical, dense' },
+        { e: '❄️', n: 'Arctique', d: 'Glace', tags: ['nature', 'froid'], color: ['#e1f5fe', '#4fc3f7'], p: 'arctic, snow, ice' },
+        { e: '🍁', n: 'Automne', d: 'Rouge', tags: ['nature', 'chaud'], color: ['#bf360c', '#ffb300'], p: 'autumn, red leaves' },
+        { e: '🌸', n: 'Cerisiers', d: 'Sakura', tags: ['japonais', 'doux'], color: ['#f8bbd0', '#e1bee7'], p: 'cherry blossoms, sakura' },
+        { e: '🌋', n: 'Volcan', d: 'Lave', tags: ['nature', 'chaud'], color: ['#bf360c', '#212121'], p: 'volcano, lava flows' },
+        { e: '🌌', n: 'Aurore Boréale', d: 'Vert, rose', tags: ['nature', 'coloré'], color: ['#00e676', '#e91e63'], p: 'aurora borealis' },
+        { e: '🌠', n: 'Ciel Étoilé', d: 'Voie lactée', tags: ['nature', 'épique'], color: ['#1a237e', '#fff'], p: 'starry night, milky way' }
+    ]},
+    { id: 'atmosphere', name: '🌫️ Ambiance', styles: [
+        { e: '🌅', n: 'Golden Hour', d: 'Or', tags: ['chaud', 'doux'], color: ['#ff9800', '#ffc107'], p: 'golden hour, warm amber' },
+        { e: '🌇', n: 'Coucher de Soleil', d: 'Orange', tags: ['chaud', 'doux'], color: ['#ff5722', '#e91e63'], p: 'sunset, orange, romantic' },
+        { e: '🌙', n: 'Nuit Noire', d: 'Sombre', tags: ['sombre', 'froid'], color: ['#000', '#1a237e'], p: 'dark night, deep blacks' },
+        { e: '💡', n: 'Néon', d: 'Coloré', tags: ['urbain', 'coloré'], color: ['#e91e63', '#00e5ff'], p: 'neon, urban, cyberpunk' },
+        { e: '🕯️', n: 'Bougie', d: 'Intime', tags: ['chaud', 'intime'], color: ['#3e2723', '#ffb300'], p: 'candlelight, intimate' },
+        { e: '⛈️', n: 'Orage', d: 'Éclairs', tags: ['dramatique', 'sombre'], color: ['#212121', '#ffeb3b'], p: 'thunderstorm, lightning' },
+        { e: '✨', n: 'Magique', d: 'Étincelles', tags: ['fantasy', 'lumineux'], color: ['#9c27b0', '#ffeb3b'], p: 'magical, sparkles' },
+        { e: '😢', n: 'Mélancolique', d: 'Triste', tags: ['sombre', 'intime'], color: ['#37474f', '#78909c'], p: 'melancholic, blue' },
+        { e: '💪', n: 'Épique', d: 'Grand', tags: ['épique', 'dramatique'], color: ['#d4af37', '#8d6e63'], p: 'epic heroic atmosphere' },
+        { e: '😍', n: 'Romantique', d: 'Amoureux', tags: ['chaud', 'doux'], color: ['#f8bbd0', '#ff80ab'], p: 'romantic, tender' }
+    ]},
+    { id: 'special', name: '✨ Effets', styles: [
+        { e: '📸', n: 'Noir & Blanc', d: 'Monochrome', tags: ['monochrome', 'minimal'], color: ['#000', '#fff'], p: 'black and white' },
+        { e: '🎞️', n: 'Sépia', d: 'Vintage', tags: ['rétro', 'chaud'], color: ['#5d4a3a', '#a08060'], p: 'sepia tone, vintage' },
+        { e: '📷', n: 'Polaroïd', d: 'Bord blanc', tags: ['rétro', 'doux'], color: ['#fff3e0', '#8d6e63'], p: 'Polaroid, instant' },
+        { e: '📼', n: 'VHS', d: 'Grain', tags: ['rétro', 'organique'], color: ['#5d4037', '#ffd54f'], p: 'VHS, tracking lines' },
+        { e: '🌐', n: 'Glitch', d: 'Data', tags: ['futuriste', 'graphique'], color: ['#ff00ff', '#00ffff'], p: 'datamosh, glitch art' },
+        { e: '🌫️', n: 'Soft Focus', d: 'Doux', tags: ['doux', 'lumineux'], color: ['#f8bbd0', '#e1bee7'], p: 'soft focus, dreamy' },
+        { e: '✨', n: 'Bokeh', d: 'Cercles', tags: ['doux', 'coloré'], color: ['#ffeb3b', '#ff80ab'], p: 'bokeh, blurred lights' },
+        { e: '🎨', n: 'Double Exposition', d: 'Superposition', tags: ['stylisé', 'intime'], color: ['#7e57c2', '#e91e63'], p: 'double exposure' },
+        { e: '🔮', n: 'Kaléidoscope', d: 'Symétrie', tags: ['graphique', 'coloré'], color: ['#e91e63', '#00bcd4'], p: 'kaleidoscope' },
+        { e: '🌈', n: 'Prisme', d: 'Arc-en-ciel', tags: ['coloré', 'lumineux'], color: ['#e91e63', '#00e5ff'], p: 'prism, rainbow light' }
+    ]},
+    { id: 'contemporain', name: '🎨 Contemporain', styles: [
+        { e: '📱', n: 'TikTok', d: 'Vertical', tags: ['urbain', 'coloré'], color: ['#ff0050', '#00f2ea'], p: 'TikTok aesthetic' },
+        { e: '📸', n: 'Instagram', d: 'Filtré', tags: ['doux', 'chaud'], color: ['#e1306c', '#f77737'], p: 'Instagram aesthetic' },
+        { e: '🌈', n: 'Y2K', d: 'Retour 2000', tags: ['rétro', 'coloré'], color: ['#ff80ab', '#00e5ff'], p: 'Y2K revival' },
+        { e: '🍄', n: 'Cottagecore', d: 'Nature', tags: ['nature', 'doux'], color: ['#a5d6a7', '#fff9c4'], p: 'cottagecore, pastoral' },
+        { e: '🖤', n: 'Dark Academia', d: 'Livres', tags: ['sombre', 'rétro'], color: ['#3e2723', '#d4af37'], p: 'dark academia' },
+        { e: '🌸', n: 'Coquette', d: 'Féminin', tags: ['doux', 'coloré'], color: ['#f8bbd0', '#e1bee7'], p: 'coquette, pink bows' },
+        { e: '🌌', n: 'Cosmic', d: 'Étoiles', tags: ['futuriste', 'coloré'], color: ['#311b92', '#e91e63'], p: 'cosmic aesthetic' },
+        { e: '🔮', n: 'Witchcore', d: 'Sorcière', tags: ['fantasy', 'sombre'], color: ['#4a148c', '#c9a961'], p: 'witchcore, crystals' },
+        { e: '☕', n: 'Coffee Shop', d: 'Cosy', tags: ['chaud', 'intime'], color: ['#8d6e63', '#ffb74d'], p: 'coffee shop, cozy' },
+        { e: '🎮', n: 'Gamer RGB', d: 'Néon', tags: ['urbain', 'coloré'], color: ['#000', '#ff00ff'], p: 'gamer RGB, neon setup' }
+    ]},
+    { id: 'tech', name: '🔬 Tech & Sciences', styles: [
+        { e: '🧬', n: 'ADN', d: 'Double hélice', tags: ['futuriste', 'détaillé'], color: ['#00bcd4', '#e91e63'], p: 'DNA double helix' },
+        { e: '🧠', n: 'Neurones', d: 'Synapses', tags: ['futuriste', 'organique'], color: ['#9c27b0', '#ff4081'], p: 'neural network, synapses' },
+        { e: '🌌', n: 'Galaxie', d: 'Spirale', tags: ['futuriste', 'épique'], color: ['#311b92', '#e91e63'], p: 'galaxy, spiral arms' },
+        { e: '🕳️', n: 'Trou Noir', d: 'Distorsion', tags: ['futuriste', 'sombre'], color: ['#000', '#ff6f00'], p: 'black hole, accretion disk' },
+        { e: '⚛️', n: 'Atome', d: 'Électrons', tags: ['futuriste', 'graphique'], color: ['#00bcd4', '#e91e63'], p: 'atom, nucleus' },
+        { e: '💻', n: 'Code Source', d: 'Matrix', tags: ['futuriste', 'monochrome'], color: ['#000', '#00ff00'], p: 'source code, Matrix' },
+        { e: '🚀', n: 'Fusée', d: 'Décollage', tags: ['futuriste', 'chaud'], color: ['#ff6f00', '#212121'], p: 'rocket launch, space' },
+        { e: '🦠', n: 'Virus', d: 'Propagation', tags: ['futuriste', 'coloré'], color: ['#8b0000', '#ffeb3b'], p: 'virus, pandemic' },
+        { e: '🤖', n: 'IA', d: 'Réseau', tags: ['futuriste', 'coloré'], color: ['#00bcd4', '#e91e63'], p: 'artificial intelligence' },
+        { e: '🌐', n: 'Internet', d: 'Connexion', tags: ['futuriste', 'coloré'], color: ['#2196f3', '#00e5ff'], p: 'global network' }
+    ]},
+    { id: 'food', name: '🍔 Food', styles: [
+        { e: '🍕', n: 'Pizza', d: 'Napoli', tags: ['chaud', 'naturel'], color: ['#d32f2f', '#ffb300'], p: 'Italian pizza, wood-fired' },
+        { e: '🍣', n: 'Sushi', d: 'Frais', tags: ['japonais', 'minimal'], color: ['#e91e63', '#37474f'], p: 'Japanese sushi' },
+        { e: '🍰', n: 'Pâtisserie', d: 'Gâteau', tags: ['doux', 'coloré'], color: ['#f8bbd0', '#ff80ab'], p: 'French patisserie' },
+        { e: '🍔', n: 'Burger', d: 'Diner', tags: ['chaud', 'rétro'], color: ['#d32f2f', '#ffb300'], p: 'American burger, diner' },
+        { e: '🍜', n: 'Ramen', d: 'Bouillon', tags: ['japonais', 'chaud'], color: ['#d4af37', '#8d6e63'], p: 'Japanese ramen' },
+        { e: '☕', n: 'Café Latte', d: 'Cosy', tags: ['chaud', 'intime'], color: ['#5d4037', '#ffcc80'], p: 'latte art, coffee shop' },
+        { e: '🍷', n: 'Vin', d: 'Élégant', tags: ['chaud', 'rétro'], color: ['#8b0000', '#d4af37'], p: 'wine tasting, red wine' },
+        { e: '🍫', n: 'Chocolat', d: 'Fondant', tags: ['chaud', 'doux'], color: ['#3e2723', '#d4af37'], p: 'chocolate, rich' },
+        { e: '🥗', n: 'Healthy', d: 'Frais', tags: ['naturel', 'coloré'], color: ['#8bc34a', '#4caf50'], p: 'healthy salad' },
+        { e: '🍸', n: 'Cocktail', d: 'Élégant', tags: ['coloré', 'intime'], color: ['#ff4081', '#00e5ff'], p: 'cocktail bar, elegant' }
+    ]},
+    { id: 'sports', name: '⚽ Sports', styles: [
+        { e: '⚽', n: 'Football', d: 'Stade', tags: ['dramatique', 'réaliste'], color: ['#4caf50', '#fff'], p: 'soccer, stadium' },
+        { e: '🏀', n: 'Basketball', d: 'Dunk', tags: ['urbain', 'dramatique'], color: ['#ff6f00', '#212121'], p: 'basketball, dunk' },
+        { e: '🎾', n: 'Tennis', d: 'Raquette', tags: ['lumineux', 'réaliste'], color: ['#d4e157', '#fff'], p: 'tennis, racket' },
+        { e: '🏈', n: 'Football US', d: 'Casque', tags: ['dramatique', 'épique'], color: ['#8d6e63', '#212121'], p: 'American football' },
+        { e: '🏊', n: 'Natation', d: 'Eau', tags: ['naturel', 'lumineux'], color: ['#03a9f4', '#b3e5fc'], p: 'swimming, olympic pool' },
+        { e: '🥇', n: 'Jeux Olympiques', d: 'Or', tags: ['épique', 'chaud'], color: ['#d4af37', '#fff'], p: 'Olympic games, gold' },
+        { e: '🧘', n: 'Yoga', d: 'Zen', tags: ['doux', 'naturel'], color: ['#a5d6a7', '#fff8e1'], p: 'yoga, zen, balance' },
+        { e: '🚴', n: 'Cyclisme', d: 'Vélo', tags: ['nature', 'dramatique'], color: ['#ffeb3b', '#03a9f4'], p: 'cycling, road bike' },
+        { e: '🏂', n: 'Snowboard', d: 'Neige', tags: ['nature', 'froid'], color: ['#03a9f4', '#fff'], p: 'snowboarding, powder' },
+        { e: '🛹', n: 'Skateboard', d: 'Trick', tags: ['urbain', 'dramatique'], color: ['#ff5722', '#212121'], p: 'skateboarding, urban' }
+    ]},
+    { id: 'misc', name: '🎭 Divers', styles: [
+        { e: '🌌', n: 'Cosmic Horror', d: 'Lovecraft', tags: ['sombre', 'épique'], color: ['#1a1a2e', '#00e5ff'], p: 'cosmic horror, Lovecraftian' },
+        { e: '🔮', n: 'Psychédélique', d: 'Distorsion', tags: ['coloré', 'organique'], color: ['#e91e63', '#00e5ff'], p: 'psychedelic, vibrant' },
+        { e: '🕳️', n: 'Escher', d: 'Impossible', tags: ['graphique', 'minimal'], color: ['#212121', '#e0e0e0'], p: 'MC Escher, impossible geometry' },
+        { e: '🎭', n: 'Théâtre Baroque', d: 'Opéra', tags: ['dramatique', 'chaud'], color: ['#6d4c41', '#d4af37'], p: 'baroque theater, opera' },
+        { e: '🌊', n: 'Fluid Art', d: 'Marbré', tags: ['organique', 'coloré'], color: ['#e91e63', '#00e5ff'], p: 'fluid art, marbled colors' },
+        { e: '💎', n: 'Cristal', d: 'Diamant', tags: ['lumineux', 'graphique'], color: ['#e1f5fe', '#4fc3f7'], p: 'crystalline, faceted' },
+        { e: '🌊', n: 'Liquide Métal', d: 'Chrome', tags: ['futuriste', 'minimal'], color: ['#90a4ae', '#e0e0e0'], p: 'liquid metal, chrome' },
+        { e: '🎪', n: 'Cirque Vintage', d: 'Clown', tags: ['rétro', 'coloré'], color: ['#c62828', '#d4af37'], p: 'vintage circus, 1920s' },
+        { e: '🎠', n: 'Parc Attractions', d: 'Manège', tags: ['coloré', 'doux'], color: ['#e91e63', '#ffeb3b'], p: 'amusement park, carousel' },
+        { e: '💀', n: 'Memento Mori', d: 'Crâne', tags: ['sombre', 'rétro'], color: ['#212121', '#d4af37'], p: 'memento mori, skull' }
+    ]}
+];
+
+const ALL_STYLES = [];
+let globalIndex = 0;
+STYLE_CATEGORIES.forEach(cat => {
+    cat.styles.forEach(s => {
+        ALL_STYLES.push({ ...s, id: cat.id + '_' + globalIndex, category: cat.id, categoryName: cat.name, index: globalIndex + 1, globalIndex });
+        globalIndex++;
+    });
+});
+console.log('[Cinéma Noir] ' + ALL_STYLES.length + ' styles dans ' + STYLE_CATEGORIES.length + ' catégories');
+
+/* ── Adresses des fournisseurs ──────────────────────────────────────────
+   Servi par le relais THEOLOGICUS, ce document appelle les fournisseurs par
+   `/proxy/<url>` : un appel DIRECT du navigateur vers api.mistral.ai est
+   refuse (403 Cloudflare sur l'en-tete Origin), exactement comme dans
+   THEOLOGICUS. Le relais retire l'en-tete Origin en relayant.
+
+   Ouvert en `file://` (double-clic), le relais n'existe pas : on garde alors
+   l'adresse directe, comme le fait `apiEndpoint()` dans THEOLOGICUS. */
+const _VIA_RELAIS = location.protocol !== 'file:';
+function _viaRelais(url) { return _VIA_RELAIS ? '/proxy/' + url : url; }
+
+const API_BASE = _viaRelais('https://apihub.agnes-ai.com/v1');
+const POLL_BASE = _viaRelais('https://apihub.agnes-ai.com/agnesapi');
+const MISTRAL_API_BASE = _viaRelais('https://api.mistral.ai/v1');
+const FRAME_RATE = 24;
+const MAX_SELECTED_STYLES = 5;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+
+const BASE_POLL_TIMEOUT = 900;
+const POLL_TIMEOUT_PER_SEC = 60;
+const MAX_POLL_TIMEOUT = 3600;
+const POLL_INTERVAL = 10;
+
+const SK = {
+    AGNES: 'agnes_api_key', MISTRAL: 'mistral_api_key_v1',
+    AGNES_MODEL: 'agnes_selected_model_v1', MISTRAL_MODEL: 'mistral_selected_model_v1',
+    AGNES_MODELS: 'agnes_detected_models_v1', MISTRAL_MODELS: 'mistral_detected_models_v1',
+    STYLES: 'cinema_noir_selected_styles_v2',
+    AGNES_STATUS: 'agnes_api_status_v1', MISTRAL_STATUS: 'mistral_api_status_v1',
+    EXTRA_MODELS: 'cinema_noir_extra_models_v1', ACTIVE_MODELS: 'cinema_noir_active_models_v1',
+    GALLERY: 'cinema_noir_gallery_v1', AUTODL: 'cinema_noir_autodl_v1',
+    PENDING_TASKS: 'agnes_pending_tasks_v1'
+};
+
+const state = {
+    mode: 'image',
+    images: [], audios: [], videos: [],
+    comboImages: [], comboVideos: [], comboAudios: [],
+    isRunning: false, stopRequested: false,
+    selectedStyles: [], mainPrompt: '', textBase: '',
+    intensity: 'random', durationFrames: 153,
+    isLoadingImages: false,
+    pickerCategory: 'all', pickerSearch: '', pickerTag: null,
+    pendingSelection: [],
+    agnesKeyStatus: null, mistralKeyStatus: null,
+    extraModels: [], activeModels: []
+};
+
+const LOG_MAX = 500;
+const logState = { entries: [], filter: { info: true, step: true, success: true, warn: true, error: true }, autoScroll: true };
+function addLog(level, message) {
+    logState.entries.push({ id: 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), level, message, timestamp: Date.now() });
+    if (logState.entries.length > LOG_MAX) logState.entries.shift();
+    renderLogEntries(); updateLogCounter();
+}
+function logInfo(m) { addLog('info', m); }
+function logStep(m) { addLog('step', m); }
+function logSuccess(m) { addLog('success', m); }
+function logWarn(m) { addLog('warn', m); }
+function logError(m) { addLog('error', m); }
+function formatLogTime(ts) { const d = new Date(ts); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); }
+function renderLogEntries() {
+    const body = document.getElementById('log-body'); if (!body) return;
+    const filtered = logState.entries.filter(e => logState.filter[e.level]);
+    if (!filtered.length) { body.innerHTML = '<div class="log-empty">Aucune entrée…</div>'; return; }
+    body.innerHTML = filtered.map(e => {
+        const L = { info: 'INFO', step: 'ÉTAPE', success: 'SUCCÈS', warn: 'WARN', error: 'ERREUR' }[e.level];
+        return '<div class="log-entry level-' + e.level + '"><span class="log-time">' + formatLogTime(e.timestamp) + '</span><span class="log-level">' + L + '</span><span class="log-message">' + e.message + '</span></div>';
+    }).join('');
+    if (logState.autoScroll) body.scrollTop = body.scrollHeight;
+}
+function updateLogCounter() {
+    const el = document.getElementById('log-counter');
+    if (el) { const t = logState.entries.length; const s = logState.entries.filter(e => logState.filter[e.level]).length; el.textContent = t === s ? t : s + '/' + t; }
+}
+function clearLogs() { if (!logState.entries.length) return; if (!confirm('Vider le journal ?')) return; logState.entries = []; renderLogEntries(); updateLogCounter(); logInfo('🗑️ Journal vidé'); }
+function exportLogs() {
+    if (!logState.entries.length) { logWarn('Aucun log'); return; }
+    const text = logState.entries.map(e => '[' + new Date(e.timestamp).toISOString() + '] [' + e.level.toUpperCase().padEnd(7) + '] ' + e.message.replace(/<[^>]+>/g, '')).join('\n');
+    const blob = new Blob([text], { type: 'text/plain' }); const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'cinema-noir-logs-' + Date.now() + '.txt';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000); logSuccess('💾 Journal exporté');
+}
+function setLogStatusDot(s) { const dot = document.getElementById('log-status-dot'); if (dot) { dot.className = 'log-status-dot'; if (s !== 'idle') dot.classList.add(s); } }
+
+let toastTimeout = null;
+function showToast(msg, type = 'success', dur = 2500) {
+    const toast = document.getElementById('toast'); if (!toast) return;
+    toast.classList.remove('visible', 'success', 'error', 'warn'); void toast.offsetWidth;
+    document.getElementById('toast-icon').textContent = { success: '✓', error: '✕', warn: '⚠' }[type] || '✓';
+    document.getElementById('toast-text').textContent = msg; toast.classList.add(type, 'visible');
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => toast.classList.remove('visible'), dur);
+}
+function setStatus(text) {
+    const bar = document.getElementById('status-bar'); const txt = document.getElementById('status-text');
+    if (!bar || !txt) return;
+    if (text) { bar.classList.add('visible'); txt.textContent = text; } else bar.classList.remove('visible');
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function maskKey(k) { return k ? k.slice(0, 6) + '…' + k.slice(-4) : '—'; }
+function formatBytes(b) { if (!b) return '0 o'; if (b < 1024) return b + ' o'; if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko'; return (b / (1024 * 1024)).toFixed(1) + ' Mo'; }
+function formatDuration(sec) { if (!sec) return '—'; const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+function formatTimeStr(sec) { const m = Math.floor(sec / 60); const s = sec % 60; return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's' : s + 's'; }
+
+function getApiKey() { try { return (localStorage.getItem(SK.AGNES) || '').trim(); } catch (e) { return ''; } }
+function getMistralKey() { try { return (localStorage.getItem(SK.MISTRAL) || '').trim(); } catch (e) { return ''; } }
+function getSelectedModelId() { try { return localStorage.getItem(SK.AGNES_MODEL) || 'agnes-video-v2.0'; } catch (e) { return 'agnes-video-v2.0'; } }
+function loadExtraModels() { try { return JSON.parse(localStorage.getItem(SK.EXTRA_MODELS) || '[]'); } catch (e) { return []; } }
+function saveExtraModels(l) { try { localStorage.setItem(SK.EXTRA_MODELS, JSON.stringify(l)); } catch (e) {} }
+function loadActiveModels() { try { return JSON.parse(localStorage.getItem(SK.ACTIVE_MODELS) || '[]'); } catch (e) { return []; } }
+function saveActiveModels(l) { try { localStorage.setItem(SK.ACTIVE_MODELS, JSON.stringify(l)); } catch (e) {} }
+function saveDetectedAgnes(m) { try { localStorage.setItem(SK.AGNES_MODELS, JSON.stringify(m)); } catch (e) {} }
+function loadDetectedAgnes() { try { return JSON.parse(localStorage.getItem(SK.AGNES_MODELS) || '[]'); } catch (e) { return []; } }
+function saveDetectedMistral(m) { try { localStorage.setItem(SK.MISTRAL_MODELS, JSON.stringify(m)); } catch (e) {} }
+function loadDetectedMistral() { try { return JSON.parse(localStorage.getItem(SK.MISTRAL_MODELS) || '[]'); } catch (e) { return []; } }
+
+function detectProvider(id) {
+    if (!id) return 'custom'; const lc = id.toLowerCase();
+    if (lc.includes('pixtral') || lc.includes('mistral') || lc.includes('ministral') || lc.includes('codestral')) return 'mistral';
+    if (lc.includes('agnes')) return 'agnes';
+    if (lc.includes('gpt') || lc.includes('sora')) return 'openai';
+    if (lc.includes('claude')) return 'anthropic';
+    if (lc.includes('gemini') || lc.includes('veo')) return 'google';
+    return 'custom';
+}
+
+function loadPendingTasks() { try { return JSON.parse(localStorage.getItem(SK.PENDING_TASKS) || '[]'); } catch (e) { return []; } }
+function savePendingTasks(list) { try { localStorage.setItem(SK.PENDING_TASKS, JSON.stringify(list)); } catch (e) {} }
+function addPendingTask(task) { const list = loadPendingTasks(); list.push({ ...task, addedAt: Date.now() }); savePendingTasks(list); updateCheckBtn(); }
+function removePendingTask(videoId) { const list = loadPendingTasks().filter(t => t.videoId !== videoId); savePendingTasks(list); updateCheckBtn(); }
+function updateCheckBtn() {
+    const btn = document.getElementById('check-status-btn'); if (!btn) return;
+    const count = loadPendingTasks().length;
+    if (count > 0) { btn.style.display = 'block'; btn.textContent = '🔍 Vérifier ' + count + ' tâche(s) en cours'; }
+    else btn.style.display = 'none';
+}
+
+async function checkPendingTasks() {
+    const tasks = loadPendingTasks();
+    if (!tasks.length) { showToast('Aucune tâche en attente', 'warn'); return; }
+    logStep('🔍 Vérification de <strong>' + tasks.length + '</strong> tâche(s)');
+    const btn = document.getElementById('check-status-btn'); if (btn) btn.classList.add('loading');
+    let recovered = 0, failed = 0, stillRunning = 0;
+    for (const task of tasks) {
+        try {
+            const url = POLL_BASE + '?video_id=' + encodeURIComponent(task.videoId) + '&model_name=' + encodeURIComponent(task.modelId);
+            const r = await apiFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + getApiKey() } });
+            const d = await r.json();
+            const status = d.status || 'unknown'; const progress = d.progress || 0;
+            logInfo('📋 <code>' + task.videoId.slice(0, 16) + '…</code> → <strong>' + status + '</strong> (' + progress + '%)');
+            if (status === 'completed' || status === 'succeeded' || status === 'done') {
+                const videoUrl = (d.metadata && d.metadata.url) || d.url || (d.output && d.output.url);
+                if (videoUrl) { await addVideoToGallery(videoUrl, task.label, { model: task.modelId }); logSuccess('🎉 Récupérée !'); removePendingTask(task.videoId); recovered++; }
+                else { removePendingTask(task.videoId); }
+            } else if (status === 'failed' || status === 'error' || status === 'cancelled') {
+                logError('❌ Échouée (' + status + ')'); removePendingTask(task.videoId); failed++;
+            } else { logInfo('⏳ Toujours en cours (' + progress + '%)'); stillRunning++; }
+        } catch (e) { logWarn('Erreur : ' + escapeHtml(e.message)); }
+    }
+    if (btn) btn.classList.remove('loading');
+    logStep('━━━ <strong>Résumé</strong> ━━━');
+    logSuccess('✅ Récupérées : <strong>' + recovered + '</strong>');
+    if (failed > 0) logError('❌ Échouées : <strong>' + failed + '</strong>');
+    if (stillRunning > 0) logInfo('⏳ En cours : <strong>' + stillRunning + '</strong>');
+    showToast(recovered + ' récupérée(s), ' + stillRunning + ' en cours', 'success', 3000);
+    updateCheckBtn();
+}
+
+const MAX_GALLERY = 100;
+let autoDownloadEnabled = false;
+try { autoDownloadEnabled = localStorage.getItem(SK.AUTODL) === '1'; } catch (e) {}
+
+function loadGallery() { try { return JSON.parse(localStorage.getItem(SK.GALLERY) || '[]'); } catch (e) { return []; } }
+function saveGallery(list) {
+    try { if (list.length > MAX_GALLERY) list = list.slice(0, MAX_GALLERY); localStorage.setItem(SK.GALLERY, JSON.stringify(list)); }
+    catch (e) { try { const light = list.map(v => ({ ...v, blob: null })).slice(0, 30); localStorage.setItem(SK.GALLERY, JSON.stringify(light)); logWarn('⚠️ Stockage saturé — blobs purgés'); } catch (e2) { logError('❌ Sauvegarde impossible'); } }
+}
+async function fetchVideoBlob(url) {
+    /* L'adresse de la video rendue est ABSOLUE chez le fournisseur : un fetch
+       direct serait cross-origin et refuse (sans CORS) -> blob vide -> aucun
+       telechargement, sans message. On la fait donc passer par le relais, qui
+       sait la joindre. La LECTURE par <video src> reste directe : un element
+       media n'est pas soumis a la meme regle, et streamer par le relais
+       serait inutilement lent. */
+    try {
+        const cible = (_VIA_RELAIS && /^https?:\/\//.test(url)) ? ('/proxy/' + url) : url;
+        const r = await fetch(cible); if (!r.ok) return null; return await r.blob();
+    } catch (e) { return null; }
+}
+function blobToDataUrl(blob) { return new Promise((resolve) => { const r = new FileReader(); r.onloadend = () => resolve(r.result); r.onerror = () => resolve(null); r.readAsDataURL(blob); }); }
+
+async function addVideoToGallery(videoUrl, label, meta = {}) {
+    logInfo('📥 Ajout galerie : <code>' + escapeHtml(label) + '</code>');
+    let blobDataUrl = null, size = 0;
+    try { const blob = await fetchVideoBlob(videoUrl); if (blob) { size = blob.size; if (size < 4 * 1024 * 1024) blobDataUrl = await blobToDataUrl(blob); } } catch (e) {}
+    const entry = { id: 'vid_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), url: videoUrl, blob: blobDataUrl, label, size, model: meta.model || '', scene: meta.scene || '', timestamp: Date.now() };
+    const gallery = loadGallery(); gallery.unshift(entry); saveGallery(gallery); renderGallery();
+    if (autoDownloadEnabled) { logInfo('📥 Auto-DL → téléchargement'); downloadVideoEntry(entry.id); }
+    logSuccess('✅ Vidéo ajoutée (' + formatBytes(size) + ')');
+    return entry.id;
+}
+function removeVideoFromGallery(id) { saveGallery(loadGallery().filter(v => v.id !== id)); renderGallery(); logInfo('🗑️ Vidéo retirée'); }
+function clearGallery() { const g = loadGallery(); if (!g.length) return; if (!confirm('Vider la galerie ? (' + g.length + ' vidéos)')) return; localStorage.removeItem(SK.GALLERY); renderGallery(); logWarn('🗑️ Galerie vidée'); }
+function renderGallery() {
+    const body = document.getElementById('gallery-body'); const counter = document.getElementById('gallery-counter');
+    if (!body) return;
+    const gallery = loadGallery();
+    if (counter) counter.textContent = gallery.length;
+    if (!gallery.length) { body.innerHTML = '<div class="gallery-empty">Aucune vidéo générée.</div>'; return; }
+    body.innerHTML = '<div class="gallery-grid">' + gallery.map(v => {
+        const src = v.blob || v.url;
+        const dateStr = new Date(v.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        const sizeStr = v.size ? formatBytes(v.size) : '—';
+        return '<div class="video-card"><video src="' + src + '" preload="metadata" muted playsinline data-video-click="' + v.id + '"></video>' +
+            '<div class="vc-info"><span class="vc-label">' + escapeHtml(v.label) + '</span><span class="vc-meta">' + sizeStr + ' · ' + dateStr + '</span></div>' +
+            '<div class="vc-actions">' +
+                '<button class="vc-btn" data-vc-preview="' + v.id + '">🔍 Voir</button>' +
+                '<button class="vc-btn" data-vc-download="' + v.id + '">⬇️ DL</button>' +
+                '<button class="vc-btn delete" data-vc-delete="' + v.id + '">✕</button>' +
+            '</div></div>';
+    }).join('') + '</div>';
+    body.querySelectorAll('[data-video-click]').forEach(el => el.addEventListener('click', () => openVideoModal(el.dataset.videoClick)));
+    body.querySelectorAll('[data-vc-preview]').forEach(el => el.addEventListener('click', () => openVideoModal(el.dataset.vcPreview)));
+    body.querySelectorAll('[data-vc-download]').forEach(el => el.addEventListener('click', () => downloadVideoEntry(el.dataset.vcDownload)));
+    body.querySelectorAll('[data-vc-delete]').forEach(el => el.addEventListener('click', () => { if (confirm('Supprimer cette vidéo ?')) removeVideoFromGallery(el.dataset.vcDelete); }));
+}
+async function downloadVideoEntry(id) {
+    const v = loadGallery().find(x => x.id === id); if (!v) return;
+    const safeLabel = (v.label || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 50);
+    const filename = 'cinema-noir_' + safeLabel + '_' + v.id.slice(-6) + '.mp4';
+    logInfo('⬇️ Téléchargement : <code>' + escapeHtml(filename) + '</code>');
+    try {
+        let blob = null;
+        if (v.blob) { const res = await fetch(v.blob); blob = await res.blob(); }
+        else blob = await fetchVideoBlob(v.url);
+        if (!blob) { logWarn('⚠️ Blob indisponible'); window.open(v.url, '_blank'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+        logSuccess('✅ Téléchargement lancé');
+        showToast('📥 Téléchargement…', 'success', 2000);
+    } catch (e) { logError('❌ Erreur : ' + escapeHtml(e.message)); }
+}
+async function downloadAllVideos() {
+    const gallery = loadGallery();
+    if (!gallery.length) { showToast('Aucune vidéo', 'warn'); return; }
+    if (!confirm('Télécharger ' + gallery.length + ' vidéo(s) ?')) return;
+    logStep('⬇️ <strong>Téléchargement de ' + gallery.length + ' vidéo(s)</strong>');
+    let success = 0, errors = 0;
+    for (let i = 0; i < gallery.length; i++) {
+        setStatus('Téléchargement ' + (i + 1) + '/' + gallery.length + '…');
+        try {
+            const v = gallery[i];
+            const safeLabel = (v.label || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 50);
+            const filename = 'cinema-noir_' + safeLabel + '_' + v.id.slice(-6) + '.mp4';
+            let blob = null;
+            if (v.blob) { const res = await fetch(v.blob); blob = await res.blob(); }
+            else blob = await fetchVideoBlob(v.url);
+            if (blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                success++;
+            } else {
+                const a = document.createElement('a');
+                a.href = v.url; a.download = filename; a.target = '_blank';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                success++;
+            }
+            await sleep(600);
+        } catch (e) { errors++; }
+    }
+    setStatus(null);
+    logSuccess('✅ Téléchargées : <strong>' + success + '</strong> / ' + gallery.length);
+    if (errors > 0) logError('❌ Erreurs : ' + errors);
+    showToast('📥 ' + success + ' vidéo(s)', 'success', 3000);
+}
+function openVideoModal(id) {
+    const v = loadGallery().find(x => x.id === id); if (!v) return;
+    const modal = document.getElementById('video-modal'); const video = document.getElementById('vm-video');
+    const info = document.getElementById('vm-info'); const dlBtn = document.getElementById('vm-download');
+    video.src = v.blob || v.url;
+    const dateStr = new Date(v.timestamp).toLocaleString('fr-FR');
+    info.innerHTML = '<strong>' + escapeHtml(v.label) + '</strong><br>' + '<span style="font-size:0.7rem;opacity:0.7;">' + (v.size ? formatBytes(v.size) : '—') + ' · ' + dateStr + '</span>' + (v.model ? '<br><span style="font-size:0.65rem;color:var(--accent);">🧠 ' + escapeHtml(v.model) + '</span>' : '');
+    dlBtn.onclick = () => downloadVideoEntry(v.id);
+    modal.classList.add('open'); document.body.style.overflow = 'hidden';
+    video.play().catch(() => {});
+}
+function closeVideoModal() {
+    const modal = document.getElementById('video-modal'); const video = document.getElementById('vm-video');
+    if (video) { video.pause(); video.src = ''; }
+    if (modal) modal.classList.remove('open');
+    document.body.style.overflow = '';
+}
+function toggleAutoDownload() {
+    autoDownloadEnabled = !autoDownloadEnabled;
+    try { localStorage.setItem(SK.AUTODL, autoDownloadEnabled ? '1' : '0'); } catch (e) {}
+    updateAutoDownloadBtn();
+    if (autoDownloadEnabled) { logSuccess('📥 Auto-DL <strong>activé</strong>'); showToast('📥 Auto-DL activé', 'success'); }
+    else { logWarn('📥 Auto-DL <strong>désactivé</strong>'); showToast('📥 Auto-DL désactivé', 'warn'); }
+}
+function updateAutoDownloadBtn() {
+    const btn = document.getElementById('gallery-autodl-btn'); if (!btn) return;
+    btn.classList.toggle('active', autoDownloadEnabled);
+    btn.textContent = autoDownloadEnabled ? '📥 Auto-DL ✓' : '📥 Auto-DL';
+}
+
+function addExtraModel(id) {
+    const clean = (id || '').trim(); if (!clean) { showToast('Saisissez un ID', 'warn'); return; }
+    if (state.extraModels.includes(clean)) { showToast('Déjà présent', 'warn'); return; }
+    state.extraModels.push(clean); saveExtraModels(state.extraModels); renderExtraModelGrid();
+    logSuccess('⚡ Modèle extra : <code>' + escapeHtml(clean) + '</code>');
+    showToast('Modèle extra ajouté', 'success');
+    document.getElementById('extra-model-input').value = '';
+}
+function clearAllExtraModels() {
+    if (!state.extraModels.length) return;
+    if (!confirm('Supprimer tous les modèles extras ?')) return;
+    state.activeModels = state.activeModels.filter(x => !state.extraModels.includes(x));
+    state.extraModels = [];
+    saveExtraModels([]); saveActiveModels(state.activeModels);
+    renderExtraModelGrid(); renderActiveModelsBar();
+    logWarn('⚡ Modèles extras supprimés');
+}
+
+async function verifyAgnesKey(silent = false) {
+    const key = getApiKey();
+    if (!key) { if (!silent) { logWarn('🔑 Aucune clé Agnes'); showToast('Aucune clé Agnes', 'warn'); } updateAgnesKeyStatusUI(null); return false; }
+    const btn = document.getElementById('api-verify-btn');
+    if (btn && !silent) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
+    if (!silent) setStatus('🔍 Vérification…');
+    logStep('🔍 Vérification clé Agnes <code>' + maskKey(key) + '</code>');
+    updateAgnesKeyStatusUI('checking');
+    try {
+        const start = Date.now();
+        const res = await fetch(API_BASE + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
+        const elapsed = Date.now() - start;
+        if (res.ok) {
+            const data = await res.json(); const models = data.data || data.models || data || [];
+            const count = Array.isArray(models) ? models.length : 0;
+            logSuccess('✅ Clé Agnes <strong>valide</strong> (' + elapsed + 'ms) — ' + count + ' modèle(s)');
+            updateAgnesKeyStatusUI('valid', elapsed + 'ms · ' + count + ' modèles');
+            state.agnesKeyStatus = 'valid'; localStorage.setItem(SK.AGNES_STATUS, 'valid');
+            if (!silent) { showToast('✓ Clé Agnes valide', 'success'); setStatus(null); }
+            if (count > 0) {
+                const detected = models.map(m => ({ id: m.id || m.name, name: m.name || m.id, desc: m.description || m.owned_by || 'Agnes', provider: 'agnes' })).filter(m => m.id);
+                saveDetectedAgnes(detected); renderAgnesModelGrid(detected);
+                logInfo('🧠 ' + detected.length + ' modèles Agnes détectés');
+            }
+            return true;
+        } else if (res.status === 401) {
+            logError('❌ Clé Agnes <strong>invalide</strong> — HTTP 401');
+            updateAgnesKeyStatusUI('invalid', 'HTTP 401'); state.agnesKeyStatus = 'invalid';
+            localStorage.setItem(SK.AGNES_STATUS, 'invalid');
+            if (!silent) { showToast('✕ Clé invalide', 'error'); setStatus(null); }
+            return false;
+        } else {
+            logError('⚠️ Réponse ' + res.status);
+            updateAgnesKeyStatusUI('invalid', 'HTTP ' + res.status);
+            if (!silent) { showToast('Erreur ' + res.status, 'error'); setStatus(null); }
+            return false;
+        }
+    } catch (e) {
+        logError('🌐 ' + escapeHtml(e.message));
+        updateAgnesKeyStatusUI('invalid', 'Erreur réseau');
+        if (!silent) { showToast('Erreur réseau', 'error'); setStatus(null); }
+        return false;
+    } finally { if (btn && !silent) { btn.classList.remove('loading'); btn.textContent = '🔍 Vérifier'; } }
+}
+async function verifyMistralKey(silent = false) {
+    const key = getMistralKey();
+    if (!key) { if (!silent) { logWarn('🔥 Aucune clé Mistral'); showToast('Aucune clé Mistral', 'warn'); } updateMistralKeyStatusUI(null); return false; }
+    const btn = document.getElementById('mistral-verify-btn');
+    if (btn && !silent) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
+    if (!silent) setStatus('🔍 Vérification…');
+    logStep('🔍 Vérification clé Mistral <code>' + maskKey(key) + '</code>');
+    updateMistralKeyStatusUI('checking');
+    try {
+        const start = Date.now();
+        const res = await fetch(MISTRAL_API_BASE + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
+        const elapsed = Date.now() - start;
+        if (res.ok) {
+            const data = await res.json(); const models = data.data || data.models || data || [];
+            const count = Array.isArray(models) ? models.length : 0;
+            logSuccess('✅ Clé Mistral <strong>valide</strong> (' + elapsed + 'ms) — ' + count + ' modèle(s)');
+            updateMistralKeyStatusUI('valid', elapsed + 'ms · ' + count + ' modèles');
+            state.mistralKeyStatus = 'valid'; localStorage.setItem(SK.MISTRAL_STATUS, 'valid');
+            if (!silent) { showToast('✓ Clé Mistral valide', 'success'); setStatus(null); }
+            if (count > 0) {
+                const detected = models.map(m => { const id = m.id || ''; const lc = id.toLowerCase(); const vision = lc.includes('pixtral') || lc.includes('vision'); return { id, name: m.name || id, desc: m.description || (m.owned_by ? 'par ' + m.owned_by : 'Mistral'), vision, tags: vision ? ['vision'] : ['texte'] }; }).filter(m => m.id);
+                saveDetectedMistral(detected); renderMistralModelGrid(detected);
+                logInfo('🔥 ' + detected.length + ' modèles Mistral détectés');
+            }
+            return true;
+        } else if (res.status === 401) {
+            logError('❌ Clé Mistral <strong>invalide</strong> — HTTP 401');
+            updateMistralKeyStatusUI('invalid', 'HTTP 401'); state.mistralKeyStatus = 'invalid';
+            if (!silent) { showToast('✕ Clé invalide', 'error'); setStatus(null); }
+            return false;
+        } else {
+            logError('⚠️ Réponse ' + res.status);
+            updateMistralKeyStatusUI('invalid', 'HTTP ' + res.status);
+            if (!silent) { showToast('Erreur ' + res.status, 'error'); setStatus(null); }
+            return false;
+        }
+    } catch (e) {
+        logError('🌐 ' + escapeHtml(e.message));
+        updateMistralKeyStatusUI('invalid', 'Erreur réseau');
+        if (!silent) { showToast('Erreur réseau', 'error'); setStatus(null); }
+        return false;
+    } finally { if (btn && !silent) { btn.classList.remove('loading'); btn.textContent = '🔍 Vérifier'; } }
+}
+function updateAgnesKeyStatusUI(status, detail = '') {
+    const line = document.getElementById('api-status-line'), txt = document.getElementById('api-status-text'), det = document.getElementById('api-status-detail'), inp = document.getElementById('api-key-input');
+    if (!line || !txt || !det) return;
+    line.classList.remove('ok', 'error', 'checking'); if (inp) inp.classList.remove('valid', 'invalid', 'checking');
+    const key = getApiKey();
+    if (!key) { txt.textContent = 'Aucune clé Agnes'; det.textContent = ''; return; }
+    if (status === 'valid') { line.classList.add('ok'); if (inp) inp.classList.add('valid'); txt.textContent = '✓ Clé Agnes valide · ' + maskKey(key); det.textContent = detail; }
+    else if (status === 'invalid') { line.classList.add('error'); if (inp) inp.classList.add('invalid'); txt.textContent = '✕ Clé Agnes invalide · ' + maskKey(key); det.textContent = detail; }
+    else if (status === 'checking') { line.classList.add('checking'); if (inp) inp.classList.add('checking'); txt.textContent = '⏳ Vérification…'; det.textContent = ''; }
+    else { txt.textContent = 'Clé Agnes · ' + maskKey(key) + ' (non vérifiée)'; det.textContent = ''; }
+}
+function updateMistralKeyStatusUI(status, detail = '') {
+    const line = document.getElementById('mistral-status-line'), txt = document.getElementById('mistral-status-text'), det = document.getElementById('mistral-status-detail'), inp = document.getElementById('mistral-key-input');
+    if (!line || !txt || !det) return;
+    line.classList.remove('ok-mistral', 'error', 'checking'); if (inp) inp.classList.remove('valid', 'invalid', 'checking');
+    const key = getMistralKey();
+    if (!key) { txt.textContent = 'Aucune clé Mistral'; det.textContent = ''; return; }
+    if (status === 'valid') { line.classList.add('ok-mistral'); if (inp) inp.classList.add('valid'); txt.textContent = '✓ Clé Mistral valide · ' + maskKey(key); det.textContent = detail; }
+    else if (status === 'invalid') { line.classList.add('error'); if (inp) inp.classList.add('invalid'); txt.textContent = '✕ Clé Mistral invalide · ' + maskKey(key); det.textContent = detail; }
+    else if (status === 'checking') { line.classList.add('checking'); if (inp) inp.classList.add('checking'); txt.textContent = '⏳ Vérification…'; det.textContent = ''; }
+    else { txt.textContent = 'Clé Mistral · ' + maskKey(key) + ' (non vérifiée)'; det.textContent = ''; }
+}
+
+function renderAgnesModelGrid(models) {
+    const grid = document.getElementById('model-grid'); if (!grid) return;
+    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle. Vérifiez la clé Agnes.</div>'; return; }
+    const sel = getSelectedModelId();
+    grid.innerHTML = models.map(m => {
+        const isActive = state.activeModels.includes(m.id);
+        return '<div class="model-card ' + (m.id === sel ? 'selected' : '') + '" data-agnes-id="' + escapeHtml(m.id) + '">' +
+            (isActive ? '<div class="model-active-badge">✓</div>' : '') +
+            '<div class="model-name">' + escapeHtml(m.name || m.id) + '</div>' +
+            '<div class="model-desc">' + escapeHtml(m.desc || '') + '</div>' +
+            '<div class="model-provider">AGNES</div></div>';
+    }).join('');
+    grid.querySelectorAll('[data-agnes-id]').forEach(el => el.addEventListener('click', () => toggleActiveModel(el.dataset.agnesId)));
+}
+function renderMistralModelGrid(models) {
+    const grid = document.getElementById('mistral-model-grid'); if (!grid) return;
+    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle. Vérifiez la clé Mistral.</div>'; return; }
+    const sel = localStorage.getItem(SK.MISTRAL_MODEL) || (models[0] && models[0].id);
+    grid.innerHTML = models.map(m => {
+        const isActive = state.activeModels.includes(m.id);
+        return '<div class="model-card mistral-card ' + (m.id === sel ? 'selected' : '') + '" data-mistral-id="' + escapeHtml(m.id) + '">' +
+            (isActive ? '<div class="model-active-badge">✓</div>' : '') +
+            '<div class="model-name">' + escapeHtml(m.name || m.id) + (m.vision ? ' 👁️' : '') + '</div>' +
+            '<div class="model-desc">' + escapeHtml(m.desc || '') + '</div>' +
+            '<div class="model-provider">MISTRAL</div></div>';
+    }).join('');
+    grid.querySelectorAll('[data-mistral-id]').forEach(el => el.addEventListener('click', () => toggleActiveModel(el.dataset.mistralId)));
+}
+function renderExtraModelGrid() {
+    const grid = document.getElementById('extra-model-grid'); if (!grid) return;
+    if (!state.extraModels.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle extra.</div>'; return; }
+    grid.innerHTML = state.extraModels.map(id => {
+        const isActive = state.activeModels.includes(id);
+        const provider = detectProvider(id);
+        const lbl = { agnes: 'AGNES', mistral: 'MISTRAL', openai: 'OPENAI', anthropic: 'ANTHROPIC', google: 'GOOGLE', custom: 'EXTRA' }[provider] || 'EXTRA';
+        return '<div class="model-card extra-card ' + (isActive ? 'selected' : '') + '" data-extra-id="' + escapeHtml(id) + '">' +
+            (isActive ? '<div class="model-active-badge">✓</div>' : '') +
+            '<div class="model-name">' + escapeHtml(id) + '</div>' +
+            '<div class="model-desc">' + (isActive ? 'Actif' : 'Inactif') + '</div>' +
+            '<div class="model-provider">' + lbl + '</div></div>';
+    }).join('');
+    grid.querySelectorAll('[data-extra-id]').forEach(el => el.addEventListener('click', () => toggleActiveModel(el.dataset.extraId)));
+}
+
+function toggleActiveModel(id) {
+    const idx = state.activeModels.indexOf(id);
+    if (idx >= 0) { state.activeModels.splice(idx, 1); logInfo('⚡ Désactivé : <code>' + escapeHtml(id) + '</code>'); }
+    else { state.activeModels.push(id); logSuccess('⚡ Activé : <code>' + escapeHtml(id) + '</code>'); }
+    saveActiveModels(state.activeModels); renderActiveModelsBar();
+    renderAgnesModelGrid(loadDetectedAgnes()); renderMistralModelGrid(loadDetectedMistral());
+    renderExtraModelGrid(); updateGenerateBtn();
+}
+function renderActiveModelsBar() {
+    const countEl = document.getElementById('amb-count'); const chips = document.getElementById('active-models-chips');
+    if (!countEl || !chips) return;
+    countEl.textContent = state.activeModels.length;
+    if (!state.activeModels.length) { chips.innerHTML = '<span class="amb-empty">Aucun modèle activé</span>'; return; }
+    chips.innerHTML = state.activeModels.map(id => {
+        const provider = detectProvider(id); const isExtra = state.extraModels.includes(id);
+        return '<span class="active-model-chip ' + (isExtra ? 'extra-model' : '') + '" data-active-remove="' + escapeHtml(id) + '">' +
+            '<span class="amc-name">' + escapeHtml(id) + '</span>' +
+            '<span class="amc-mode">' + provider + '</span>' +
+            '<span class="amc-x">×</span></span>';
+    }).join('');
+    chips.querySelectorAll('[data-active-remove]').forEach(chip => chip.addEventListener('click', () => toggleActiveModel(chip.dataset.activeRemove)));
+}
+
+function loadSelectedStyles() {
+    try { const raw = localStorage.getItem(SK.STYLES); if (!raw) return []; return JSON.parse(raw).map(i => ALL_STYLES.find(s => s.globalIndex === i)).filter(Boolean); }
+    catch (e) { return []; }
+}
+function saveSelectedStyles(s) { try { localStorage.setItem(SK.STYLES, JSON.stringify(s.map(x => x.globalIndex))); } catch (e) {} }
+function updateStyleTrigger() {
+    const emoji = document.getElementById('spt-emoji'), name = document.getElementById('spt-name'), count = document.getElementById('spt-count'), bar = document.getElementById('selected-styles-bar');
+    const styles = state.selectedStyles;
+    if (!styles.length) { emoji.textContent = '🎬'; name.textContent = 'Aucun style sélectionné'; name.classList.add('empty'); count.textContent = ALL_STYLES.length + ' styles'; }
+    else if (styles.length === 1) { emoji.textContent = styles[0].e; name.textContent = styles[0].n; name.classList.remove('empty'); count.textContent = '#' + styles[0].index; }
+    else { emoji.textContent = styles.slice(0, 3).map(s => s.e).join(''); name.textContent = styles.length + ' styles'; name.classList.remove('empty'); count.textContent = styles.length + '/' + MAX_SELECTED_STYLES; }
+    if (!styles.length) { bar.className = 'selected-styles-bar empty'; bar.textContent = 'Aucun style sélectionné'; }
+    else {
+        bar.className = 'selected-styles-bar';
+        bar.innerHTML = styles.map(s => '<span class="selected-chip" data-chip-remove="' + s.globalIndex + '"><span>' + s.e + ' ' + escapeHtml(s.n) + '</span><span class="chip-x">×</span></span>').join('');
+        bar.querySelectorAll('[data-chip-remove]').forEach(c => c.addEventListener('click', e => {
+            e.stopPropagation(); const idx = parseInt(c.dataset.chipRemove, 10);
+            state.selectedStyles = state.selectedStyles.filter(s => s.globalIndex !== idx);
+            saveSelectedStyles(state.selectedStyles); updateStyleTrigger(); logInfo('Style retiré');
+        }));
+    }
+}
+function openStylePicker() { state.pendingSelection = [...state.selectedStyles]; document.getElementById('picker-modal').classList.add('open'); document.body.style.overflow = 'hidden'; renderTagBar(); renderPickerCategories(); renderPickerBody(); updatePickerHeaderCount(); }
+function closeStylePicker() { document.getElementById('picker-modal').classList.remove('open'); document.body.style.overflow = ''; }
+function validatePickerSelection() { state.selectedStyles = [...state.pendingSelection]; saveSelectedStyles(state.selectedStyles); updateStyleTrigger(); closeStylePicker(); logSuccess('Styles : ' + (state.selectedStyles.map(s => s.n).join(', ') || 'aucun')); }
+function clearAllStyles() { state.pendingSelection = []; renderPickerBody(); updatePickerHeaderCount(); }
+function updatePickerHeaderCount() { const el = document.getElementById('ph-selected-count'); if (el) el.textContent = state.pendingSelection.length + '/' + MAX_SELECTED_STYLES; }
+function renderTagBar() {
+    const bar = document.getElementById('picker-tag-bar');
+    let html = '<div class="picker-tag-chip ' + (state.pickerTag === null ? 'active' : '') + '" data-tag="null">🏷️ Tous</div>';
+    Object.entries(ALL_TAGS).forEach(([k, t]) => { html += '<div class="picker-tag-chip ' + (state.pickerTag === k ? 'active' : '') + '" data-tag="' + k + '">' + t.emoji + ' ' + t.label + '</div>'; });
+    bar.innerHTML = html;
+    bar.querySelectorAll('[data-tag]').forEach(c => c.addEventListener('click', () => {
+        const t = c.dataset.tag; state.pickerTag = (t === 'null') ? null : t; renderTagBar(); renderPickerBody();
+    }));
+}
+function renderPickerCategories() {
+    const c = document.getElementById('picker-categories');
+    let html = '<div class="picker-cat-chip ' + (state.pickerCategory === 'all' ? 'active' : '') + '" data-cat="all">Toutes</div>';
+    STYLE_CATEGORIES.forEach(cat => { html += '<div class="picker-cat-chip ' + (state.pickerCategory === cat.id ? 'active' : '') + '" data-cat="' + cat.id + '">' + cat.name + ' (' + cat.styles.length + ')</div>'; });
+    c.innerHTML = html;
+    c.querySelectorAll('[data-cat]').forEach(chip => chip.addEventListener('click', () => { state.pickerCategory = chip.dataset.cat; renderPickerCategories(); renderPickerBody(); }));
+}
+function renderPickerBody() {
+    const body = document.getElementById('picker-body');
+    const search = (state.pickerSearch || '').toLowerCase().trim();
+    let cats = STYLE_CATEGORIES;
+    if (state.pickerCategory !== 'all') cats = cats.filter(c => c.id === state.pickerCategory);
+    let html = '', total = 0;
+    cats.forEach(cat => {
+        let styles = cat.styles.map(s => ALL_STYLES.find(x => x.n === s.n && x.category === cat.id)).filter(Boolean);
+        if (search) styles = styles.filter(s => (s.n + ' ' + s.d + ' ' + s.p + ' ' + (s.tags || []).join(' ')).toLowerCase().includes(search));
+        if (state.pickerTag) styles = styles.filter(s => (s.tags || []).includes(state.pickerTag));
+        if (!styles.length) return;
+        html += '<div class="picker-section-title">' + cat.name + '</div><div class="picker-grid">';
+        html += styles.map(s => {
+            const isSel = state.pendingSelection.some(x => x.globalIndex === s.globalIndex);
+            const gradient = 'linear-gradient(135deg,' + s.color[0] + ',' + s.color[1] + ')';
+            return '<div class="style-card-full ' + (isSel ? 'selected' : '') + '" data-style-index="' + s.globalIndex + '">' +
+                '<div class="scf-preview"><div style="position:absolute;inset:0;background:' + gradient + ';"></div>' +
+                '<div class="scf-preview-num">#' + s.index + '</div>' +
+                '<div class="scf-preview-emoji">' + s.e + '</div>' +
+                '<div class="scf-check">✓</div></div>' +
+                '<div class="scf-info"><div class="scf-name">' + escapeHtml(s.n) + '</div><div class="scf-desc">' + escapeHtml(s.d) + '</div></div></div>';
+        }).join('');
+        html += '</div>'; total += styles.length;
+    });
+    if (total === 0) html = '<div class="picker-empty">Aucun style trouvé.</div>';
+    body.innerHTML = html;
+    body.querySelectorAll('[data-style-index]').forEach(el => el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.styleIndex, 10);
+        const style = ALL_STYLES.find(s => s.globalIndex === idx); if (!style) return;
+        const existing = state.pendingSelection.findIndex(s => s.globalIndex === idx);
+        if (existing >= 0) { state.pendingSelection.splice(existing, 1); el.classList.remove('selected'); }
+        else {
+            if (state.pendingSelection.length >= MAX_SELECTED_STYLES) { showToast('Max ' + MAX_SELECTED_STYLES + ' styles', 'warn', 1500); return; }
+            state.pendingSelection.push(style); el.classList.add('selected');
+        }
+        updatePickerHeaderCount();
+    }));
+}
+
+function getCombinedStylePrompt() { return state.selectedStyles.map(s => s.p).join(', '); }
+function buildImagePrompt() {
+    const parts = ['Animate this image. Subject identical.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (state.mainPrompt.trim()) parts.push('Direction: ' + state.mainPrompt.trim());
+    parts.push('dramatic lighting, slow dolly-in', 'Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+function buildTextPrompt(t) {
+    const parts = ['Generate cinematic video scene.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (t.trim()) parts.push('Scene: ' + t.trim());
+    parts.push('Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+function buildImageTextPrompt() {
+    const parts = ['Animate this image, preserve subject.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (state.mainPrompt.trim()) parts.push('Transform: ' + state.mainPrompt.trim());
+    parts.push('Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+function buildAudioPrompt() {
+    const parts = ['Cinematic video synced to audio.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (state.mainPrompt.trim()) parts.push('Visual: ' + state.mainPrompt.trim());
+    parts.push('Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+function buildVideoPrompt() {
+    const parts = ['Transform this exact video. Preserve subject.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (state.mainPrompt.trim()) parts.push('Transformation: ' + state.mainPrompt.trim());
+    parts.push('dramatic lighting, coherent motion', 'Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+function buildComboPrompt() {
+    const parts = ['Generate cinematic video combining image, video, and audio.'];
+    const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
+    if (state.mainPrompt.trim()) parts.push('Direction: ' + state.mainPrompt.trim());
+    if (state.comboImages.length) parts.push('Use image as visual reference.');
+    if (state.comboVideos.length) parts.push('Use video as motion guide.');
+    if (state.comboAudios.length) parts.push('Sync with audio.');
+    parts.push('Portrait 9:16, 24fps, no text');
+    return parts.join('. ');
+}
+
+async function apiFetch(url, options = {}) {
+    for (let attempt = 0; attempt < 7; attempt++) {
+        if (state.stopRequested) throw new Error('Arrêt');
+        try {
+            const res = await fetch(url, options);
+            if (res.status === 429) { const w = [15, 30, 45, 60, 90, 120, 180][Math.min(attempt, 6)]; logWarn('⏳ 429 — ' + w + 's'); setStatus('Rate limit… ' + w + 's'); await sleep(w * 1000); continue; }
+            if (res.status === 503) { const w = [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)]; logWarn('⚠️ 503 — ' + w + 's'); await sleep(w * 1000); continue; }
+            return res;
+        } catch (e) { if (e.message === 'Arrêt') throw e; logWarn('🌐 Réseau — retry'); await sleep(3000); }
+    }
+    return fetch(url, options);
+}
+async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri) {
+    const body = { model: modelId, prompt, num_frames: state.durationFrames, frame_rate: FRAME_RATE };
+    if (imageDataUri) body.image = imageDataUri;
+    if (audioDataUri) body.audio = audioDataUri;
+    if (videoDataUri) body.video = videoDataUri;
+    logStep('🎬 Envoi à <code>' + escapeHtml(modelId) + '</code>');
+    logInfo('📝 Prompt : <code>' + escapeHtml(prompt.slice(0, 160)) + (prompt.length > 160 ? '…' : '') + '</code>');
+    if (videoDataUri) logInfo('🎥 Vidéo jointe');
+    if (imageDataUri) logInfo('🖼️ Image jointe');
+    if (audioDataUri) logInfo('🎵 Audio joint');
+    const res = await apiFetch(API_BASE + '/videos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { const err = await res.text(); logError('❌ HTTP ' + res.status + ' — ' + escapeHtml(err.slice(0, 150))); throw new Error('HTTP ' + res.status); }
+    const data = await res.json();
+    const videoId = data.video_id || data.id || data.task_id;
+    if (!videoId) { logError('❌ Pas de video_id'); throw new Error('Pas de video_id'); }
+    logSuccess('✅ Tâche — <code>' + videoId.slice(0, 24) + '…</code>');
+    addPendingTask({ videoId: videoId, modelId: modelId, label: 'Vidéo ' + (new Date().toLocaleTimeString('fr-FR').replace(/:/g, '')) });
+    return videoId;
+}
+
+async function pollUntilDone(videoId, modelId, sceneLabel) {
+    const videoDurationSec = state.durationFrames / FRAME_RATE;
+    const maxTimeoutSec = Math.min(MAX_POLL_TIMEOUT, Math.max(BASE_POLL_TIMEOUT, videoDurationSec * POLL_TIMEOUT_PER_SEC));
+    const maxAttempts = Math.floor(maxTimeoutSec / POLL_INTERVAL);
+    const start = Date.now();
+    let lastProgress = -1, attempts = 0;
+    logStep('⏳ Suivi <code>' + videoId.slice(0, 16) + '…</code> (' + sceneLabel + ')');
+    logInfo('⏱️ Durée : <strong>' + videoDurationSec.toFixed(1) + 's</strong> — timeout : <strong>' + Math.round(maxTimeoutSec / 60) + ' min</strong>');
+    const initialWait = Math.max(30, Math.floor(videoDurationSec * 3));
+    logInfo('⏸️ Préparation : <strong>' + initialWait + 's</strong>');
+    for (let s = initialWait; s > 0; s--) {
+        if (state.stopRequested) throw new Error('Arrêt');
+        setStatus(sceneLabel + ' — préparation ' + formatTimeStr(s));
+        await sleep(1000);
+    }
+    while (attempts < maxAttempts) {
+        if (state.stopRequested) throw new Error('Arrêt');
+        attempts++;
+        let waitSec = POLL_INTERVAL;
+        while (waitSec > 0) {
+            if (state.stopRequested) throw new Error('Arrêt');
+            const elapsedTotal = Math.floor((Date.now() - start) / 1000);
+            setStatus(sceneLabel + ' — ' + formatTimeStr(elapsedTotal) + ' (essai ' + attempts + '/' + maxAttempts + ')');
+            await sleep(1000); waitSec--;
+        }
+        try {
+            const url = POLL_BASE + '?video_id=' + encodeURIComponent(videoId) + '&model_name=' + encodeURIComponent(modelId);
+            const r = await apiFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + getApiKey() } });
+            const d = await r.json();
+            const status = d.status || 'unknown'; const progress = d.progress || 0;
+            if (progress !== lastProgress) { lastProgress = progress; logInfo('🔄 ' + sceneLabel + ' — <strong>' + progress + '%</strong> (' + status + ')'); }
+            else if (attempts % 5 === 0) { logInfo('🔄 ' + sceneLabel + ' — ' + progress + '% (essai ' + attempts + '/' + maxAttempts + ')'); }
+            const elapsedSec = Math.floor((Date.now() - start) / 1000);
+            setStatus(sceneLabel + ' — ' + progress + '% · ' + formatTimeStr(elapsedSec));
+            if (status === 'completed' || status === 'succeeded' || status === 'done') {
+                const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+                logSuccess('🎉 ' + sceneLabel + ' terminée en <strong>' + elapsed + 's</strong>');
+                const videoUrl = (d.metadata && d.metadata.url) || d.url || (d.output && d.output.url);
+                if (videoUrl) { try { await addVideoToGallery(videoUrl, sceneLabel, { model: modelId, scene: sceneLabel }); } catch (e) { logWarn('⚠️ Ajout galerie : ' + escapeHtml(e.message)); } }
+                else { logWarn('⚠️ Aucune URL retournée'); }
+                removePendingTask(videoId);
+                return { elapsed: parseFloat(elapsed), videoUrl };
+            }
+            if (status === 'failed' || status === 'error' || status === 'cancelled') {
+                logError('❌ ' + sceneLabel + ' — statut <code>' + status + '</code>');
+                const errMsg = d.error || d.message || 'Échec';
+                logError('Détail : ' + escapeHtml(String(errMsg)));
+                removePendingTask(videoId);
+                throw new Error('Échec (' + status + ')');
+            }
+        } catch (e) {
+            if (e.message === 'Arrêt') throw e;
+            if (e.message.startsWith('Échec')) throw e;
+            logWarn('🔄 Erreur polling (essai ' + attempts + ') : ' + escapeHtml(e.message));
+            await sleep(3000);
+        }
+    }
+    const totalSec = Math.floor((Date.now() - start) / 1000);
+    logError('❌ ' + sceneLabel + ' — Délai dépassé après <strong>' + totalSec + 's</strong> (' + Math.round(totalSec / 60) + ' min)');
+    logWarn('💡 Suggestions : réduire la durée, essayer un autre modèle, réessayer plus tard');
+    throw new Error('Délai maximal (' + totalSec + 's)');
+}
+
+function fileToDataUri(file) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.onerror = () => reject(new Error('Erreur')); r.readAsDataURL(file); }); }
+async function processOneImage(file) {
+    const validExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif|svg|ico|heic|heif|avif|jfif|jpe)$/i;
+    const isImg = file.type.startsWith('image/') || validExts.test(file.name);
+    if (!isImg || file.size > 12 * 1024 * 1024) return null;
+    try { const d = await fileToDataUri(file); return { type: 'image', dataUri: d, thumbnail: d, id: Date.now() + Math.random(), name: file.name, size: file.size }; } catch (e) { return null; }
+}
+async function processOneAudio(file) {
+    const validExts = /\.(mp3|wav|m4a|aac|ogg|flac|opus|wma|aiff|aif|alac|amr|3gp)$/i;
+    const isAudio = file.type.startsWith('audio/') || validExts.test(file.name);
+    if (!isAudio || file.size > 25 * 1024 * 1024) return null;
+    try { const d = await fileToDataUri(file); return { type: 'audio', dataUri: d, name: file.name, size: file.size, id: Date.now() + Math.random() }; } catch (e) { return null; }
+}
+function getVideoDuration(file) {
+    return new Promise((resolve) => { try { const v = document.createElement('video'); v.preload = 'metadata'; v.onloadedmetadata = () => { resolve(v.duration || 0); URL.revokeObjectURL(v.src); }; v.onerror = () => resolve(0); v.src = URL.createObjectURL(file); } catch (e) { resolve(0); } });
+}
+function generateVideoThumbnail(file) {
+    return new Promise((resolve) => {
+        try {
+            const video = document.createElement('video'); video.preload = 'metadata'; video.muted = true; video.playsInline = true;
+            video.onloadeddata = () => { video.currentTime = Math.min(1, video.duration / 2); };
+            video.onseeked = () => {
+                try { const canvas = document.createElement('canvas'); const ratio = video.videoHeight / video.videoWidth || 1.78; canvas.width = 200; canvas.height = Math.round(200 * ratio); const ctx = canvas.getContext('2d'); ctx.drawImage(video, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL('image/jpeg', 0.7)); URL.revokeObjectURL(video.src); } catch (e) { resolve(null); URL.revokeObjectURL(video.src); }
+            };
+            video.onerror = () => { resolve(null); URL.revokeObjectURL(video.src); };
+            video.src = URL.createObjectURL(file);
+        } catch (e) { resolve(null); }
+    });
+}
+async function processOneVideo(file) {
+    const validExts = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg|3gp|ogv|ts|mts|m2ts|mxf|asf|vob)$/i;
+    const isVideo = file.type.startsWith('video/') || validExts.test(file.name);
+    if (!isVideo) return null;
+    if (file.size > MAX_VIDEO_SIZE) { logWarn('⚠️ Vidéo trop lourde (>100 Mo)'); return null; }
+    try { const dataUri = await fileToDataUri(file); const thumbnail = await generateVideoThumbnail(file); const duration = await getVideoDuration(file); return { type: 'video', dataUri, thumbnail, duration, name: file.name, size: file.size, id: Date.now() + Math.random() }; } catch (e) { return null; }
+}
+async function handleFiles(files, target) {
+    const arr = Array.from(files); if (!arr.length) return;
+    logInfo('📥 Import de <strong>' + arr.length + '</strong> fichier(s)');
+    state.isLoadingImages = true; updateGenerateBtn(); setStatus('Chargement…');
+    let ok = 0;
+    for (const f of arr) {
+        let r = null;
+        if (target === 'audios' || target === 'combo-audios') r = await processOneAudio(f);
+        else if (target === 'videos' || target === 'combo-videos') r = await processOneVideo(f);
+        else r = await processOneImage(f);
+        if (r) {
+            if (target === 'images') state.images.push(r);
+            else if (target === 'audios') state.audios.push(r);
+            else if (target === 'videos') state.videos.push(r);
+            else if (target === 'combo-images') state.comboImages.push(r);
+            else if (target === 'combo-videos') state.comboVideos.push(r);
+            else if (target === 'combo-audios') state.comboAudios.push(r);
+            ok++;
+        } else logWarn('Rejeté : <code>' + escapeHtml(f.name) + '</code>');
+    }
+    state.isLoadingImages = false; setStatus(null);
+    renderImages(); renderAudios(); renderVideos(); renderComboLists();
+    updateGenerateBtn();
+    logSuccess(ok + ' fichier(s) importé(s)');
+}
+function removeImage(id) { state.images = state.images.filter(i => i.id !== id); renderImages(); updateGenerateBtn(); }
+function removeAudio(id) { state.audios = state.audios.filter(a => a.id !== id); renderAudios(); updateGenerateBtn(); }
+function removeVideo(id) { state.videos = state.videos.filter(v => v.id !== id); state.comboVideos = state.comboVideos.filter(v => v.id !== id); renderVideos(); updateGenerateBtn(); }
+function renderImages() {
+    const html = state.images.map(img => '<div class="image-card"><img src="' + img.thumbnail + '"><button class="remove-btn" data-remove="' + img.id + '">✕</button></div>').join('');
+    const g1 = document.getElementById('images-grid'), g2 = document.getElementById('images-grid-it');
+    if (g1) g1.innerHTML = html; if (g2) g2.innerHTML = html;
+    document.querySelectorAll('[data-remove]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); removeImage(parseFloat(btn.dataset.remove)); }));
+}
+function renderAudios() {
+    const renderList = (list, listId, removeAttr) => {
+        const el = document.getElementById(listId); if (!el) return;
+        if (!list.length) { el.innerHTML = ''; return; }
+        el.innerHTML = list.map(a => '<div style="display:flex;align-items:center;gap:0.7rem;padding:0.6rem;background:var(--panel-2);border-radius:8px;margin-bottom:0.4rem;"><span style="font-size:1.3rem;">🎵</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(a.name) + '</span><button class="remove-btn" ' + removeAttr + '="' + a.id + '" style="position:static;background:transparent;border:1px solid var(--error);color:var(--error);">✕</button></div>').join('');
+        el.querySelectorAll('[' + removeAttr + ']').forEach(btn => btn.addEventListener('click', () => {
+            if (removeAttr === 'data-audio-remove') removeAudio(parseFloat(btn.dataset.audioRemove));
+            else { state.comboAudios = state.comboAudios.filter(x => x.id !== parseFloat(btn.dataset.comboAudioRemove)); renderComboLists(); updateGenerateBtn(); }
+        }));
+    };
+    renderList(state.audios, 'audio-list', 'data-audio-remove');
+    renderList(state.comboAudios, 'audio-list-combo', 'data-combo-audio-remove');
+}
+function renderVideos() {
+    const renderGrid = (list, gridId) => {
+        const grid = document.getElementById(gridId); if (!grid) return;
+        if (!list.length) { grid.innerHTML = ''; return; }
+        grid.innerHTML = list.map(v =>
+            '<div class="video-thumb"><video src="' + v.dataUri + '" muted preload="metadata"></video>' +
+            '<div class="video-duration">' + formatDuration(v.duration) + '</div>' +
+            '<div class="video-name">' + escapeHtml(v.name) + '</div>' +
+            '<button class="video-remove" data-video-remove="' + v.id + '">✕</button></div>'
+        ).join('');
+        grid.querySelectorAll('[data-video-remove]').forEach(btn => btn.addEventListener('click', e => { e.stopPropagation(); removeVideo(parseFloat(btn.dataset.videoRemove)); }));
+    };
+    renderGrid(state.videos, 'videos-grid');
+    renderGrid(state.comboVideos, 'videos-grid-combo');
+}
+function renderComboLists() {
+    const grid = document.getElementById('images-grid-combo'); if (!grid) return;
+    if (!state.comboImages.length) { grid.innerHTML = ''; return; }
+    grid.innerHTML = state.comboImages.map(img => '<div class="image-card"><img src="' + img.thumbnail + '"><button class="remove-btn" data-combo-img-remove="' + img.id + '">✕</button></div>').join('');
+    grid.querySelectorAll('[data-combo-img-remove]').forEach(btn => btn.addEventListener('click', () => { state.comboImages = state.comboImages.filter(x => x.id !== parseFloat(btn.dataset.comboImgRemove)); renderComboLists(); updateGenerateBtn(); }));
+}
+
+async function startGeneration() {
+    if (state.isRunning) return;
+    if (!getApiKey()) { showToast('Ajoutez une clé Agnes', 'error'); return; }
+    if (state.agnesKeyStatus === 'invalid') { showToast('Clé Agnes invalide', 'error'); return; }
+    if (state.mode === 'image') state.mainPrompt = document.getElementById('main-prompt').value.trim();
+    else if (state.mode === 'text') state.textBase = document.getElementById('scene-base-text').value.trim();
+    else if (state.mode === 'image_text') state.mainPrompt = document.getElementById('main-prompt-it').value.trim();
+    else if (state.mode === 'audio') state.mainPrompt = document.getElementById('main-prompt-audio').value.trim();
+    else if (state.mode === 'video') state.mainPrompt = document.getElementById('main-prompt-video').value.trim();
+    else if (state.mode === 'combo') state.mainPrompt = document.getElementById('main-prompt-combo').value.trim();
+    const items = [];
+    if (state.mode === 'image' && state.images.length) items.push(...state.images.map((img, i) => ({ mode: 'image', index: i, image: img })));
+    else if (state.mode === 'text' && state.textBase.trim()) items.push({ mode: 'text', index: 0, text: state.textBase });
+    else if (state.mode === 'image_text' && state.images.length) items.push(...state.images.map((img, i) => ({ mode: 'image_text', index: i, image: img })));
+    else if (state.mode === 'audio' && state.audios.length) items.push(...state.audios.map((a, i) => ({ mode: 'audio', index: i, audio: a })));
+    else if (state.mode === 'video' && state.videos.length) items.push(...state.videos.map((v, i) => ({ mode: 'video', index: i, video: v })));
+    else if (state.mode === 'combo') {
+        const n = Math.max(state.comboImages.length, state.comboVideos.length, state.comboAudios.length, 1);
+        for (let i = 0; i < n; i++) items.push({ mode: 'combo', index: i, image: state.comboImages[i] || null, video: state.comboVideos[i] || null, audio: state.comboAudios[i] || null });
+    }
+    if (!items.length) { showToast('Aucune scène', 'warn'); return; }
+    let modelsToUse = [...state.activeModels];
+    if (!modelsToUse.length) { modelsToUse = [getSelectedModelId()]; logWarn('⚠️ Aucun modèle — fallback : <code>' + escapeHtml(modelsToUse[0]) + '</code>'); }
+    state.isRunning = true; state.stopRequested = false; setLogStatusDot('active');
+    logStep('🚀 <strong>Démarrage</strong>');
+    logInfo('📦 Scènes : <strong>' + items.length + '</strong>');
+    logInfo('⚡ Modèles : <strong>' + modelsToUse.length + '</strong>');
+    document.getElementById('stop-btn').classList.add('visible');
+    document.getElementById('generate-btn').disabled = true;
+    let completed = 0, failed = 0;
+    const totalStart = Date.now();
+    const totalJobs = items.length * modelsToUse.length;
+    let jobIndex = 0;
+    for (let i = 0; i < items.length; i++) {
+        if (state.stopRequested) { logWarn('⏹ Arrêt'); break; }
+        const item = items[i];
+        for (let mi = 0; mi < modelsToUse.length; mi++) {
+            if (state.stopRequested) break;
+            const modelId = modelsToUse[mi];
+            jobIndex++;
+            const sceneLabel = 'Scène ' + (i + 1) + '/' + items.length + ' · ' + modelId;
+            logStep('━━━ <strong>Job ' + jobIndex + '/' + totalJobs + '</strong> ━━━');
+            try {
+                let prompt;
+                if (item.mode === 'text') prompt = buildTextPrompt(item.text);
+                else if (item.mode === 'audio') prompt = buildAudioPrompt();
+                else if (item.mode === 'image_text') prompt = buildImageTextPrompt();
+                else if (item.mode === 'video') prompt = buildVideoPrompt();
+                else if (item.mode === 'combo') prompt = buildComboPrompt();
+                else prompt = buildImagePrompt();
+                const img = item.image ? item.image.dataUri : null;
+                const aud = item.audio ? item.audio.dataUri : null;
+                const vid = item.video ? item.video.dataUri : null;
+                const videoId = await createVideoTask(prompt, img, aud, modelId, vid);
+                await pollUntilDone(videoId, modelId, sceneLabel);
+                completed++;
+            } catch (e) {
+                if (e.message === 'Arrêt') break;
+                failed++;
+                logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
+            }
+            if (jobIndex < totalJobs && !state.stopRequested) {
+                logInfo('⏸️ Pause 62s');
+                for (let s = 62; s > 0; s--) { if (state.stopRequested) break; setStatus('Pause… ' + s + 's'); await sleep(1000); }
+            }
+        }
+    }
+    const totalElapsed = ((Date.now() - totalStart) / 1000).toFixed(1);
+    state.isRunning = false; state.stopRequested = false;
+    document.getElementById('stop-btn').classList.remove('visible'); updateGenerateBtn();
+    logStep('━━━ <strong>Résumé</strong> ━━━');
+    logSuccess('✅ Réussies : <strong>' + completed + '</strong> / ' + totalJobs);
+    if (failed > 0) logError('❌ Échecs : <strong>' + failed + '</strong>');
+    logInfo('⏱️ Total : <strong>' + totalElapsed + 's</strong>');
+    if (completed > 0) { setLogStatusDot('success'); setStatus('✦ ' + completed + ' / ' + totalJobs + ' ✦'); showToast(completed + ' vidéo(s)', 'success'); }
+    else { setLogStatusDot('error'); showToast('Aucune vidéo', 'error'); }
+    await sleep(4000); setStatus(null);
+    setTimeout(() => setLogStatusDot('idle'), 5000);
+}
+function stopGeneration() { if (!state.isRunning) return; state.stopRequested = true; logWarn('⏹ Arrêt…'); setStatus('Arrêt…'); }
+
+function updateGenerateBtn() {
+    const btn = document.getElementById('generate-btn'); if (!btn) return;
+    if (state.isRunning) { btn.disabled = true; btn.textContent = 'Production…'; return; }
+    if (!getApiKey()) { btn.disabled = true; btn.textContent = 'Ajoutez votre clé Agnes'; return; }
+    if (state.agnesKeyStatus === 'invalid') { btn.disabled = true; btn.textContent = '⚠️ Clé Agnes invalide'; return; }
+    let ready = false, label = '';
+    if (state.mode === 'image') { ready = state.images.length > 0; label = ready ? 'Créer ' + state.images.length + ' scène(s)' : 'Ajoutez des images'; }
+    else if (state.mode === 'text') { ready = !!(state.textBase || '').trim(); label = ready ? 'Créer la vidéo' : 'Décrivez une scène'; }
+    else if (state.mode === 'image_text') { ready = state.images.length > 0; label = ready ? 'Transformer ' + state.images.length + ' image(s)' : 'Ajoutez une image'; }
+    else if (state.mode === 'audio') { ready = state.audios.length > 0; label = ready ? 'Générer ' + state.audios.length + ' vidéo(s)' : 'Ajoutez un audio'; }
+    else if (state.mode === 'video') { ready = state.videos.length > 0; label = ready ? 'Transformer ' + state.videos.length + ' vidéo(s)' : 'Ajoutez des vidéos'; }
+    else if (state.mode === 'combo') { const total = state.comboImages.length + state.comboVideos.length + state.comboAudios.length; ready = total > 0; label = ready ? 'Combo (' + state.comboImages.length + '🖼️ + ' + state.comboVideos.length + '🎥 + ' + state.comboAudios.length + '🎵)' : 'Ajoutez un fichier'; }
+    if (ready && state.activeModels.length > 1) {
+        const baseCount = state.mode === 'image' ? state.images.length : state.mode === 'audio' ? state.audios.length : state.mode === 'video' ? state.videos.length : state.mode === 'combo' ? Math.max(state.comboImages.length, state.comboVideos.length, state.comboAudios.length, 1) : 1;
+        label += ' × ' + state.activeModels.length + ' = ' + (baseCount * state.activeModels.length);
+    }
+    btn.disabled = !ready; btn.textContent = label;
+}
+
+function setMode(mode) {
+    state.mode = mode;
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.mode === mode));
+    ['image', 'text', 'image_text', 'audio', 'video', 'combo'].forEach(m => {
+        const el = document.getElementById('mode-' + m);
+        if (el) el.classList.toggle('mode-hidden', m !== mode);
+    });
+    updateGenerateBtn();
+    logInfo('🔀 Mode : <code>' + mode + '</code>');
+}
+
+async function enrichWithMistral(btn, textareaId) {
+    const ta = document.getElementById(textareaId); if (!ta) return;
+    if (!getMistralKey()) { showToast('Clé Mistral requise', 'error'); return; }
+    const txt = ta.value.trim(); if (!txt) { showToast('Écrivez un prompt', 'warn'); return; }
+    const orig = btn.textContent; btn.textContent = '⏳ Mistral…'; btn.classList.add('loading');
+    try {
+        const res = await fetch(MISTRAL_API_BASE + '/chat/completions', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + getMistralKey(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: localStorage.getItem(SK.MISTRAL_MODEL) || 'mistral-small-latest', messages: [{ role: 'system', content: 'Enrichis ce prompt en anglais avec des détails cinématographiques. Réponds uniquement avec le prompt enrichi.' }, { role: 'user', content: txt }] })
+        });
+        const d = await res.json();
+        if (d.choices && d.choices[0]) { ta.value = d.choices[0].message.content.trim(); showToast('Prompt enrichi ✓', 'success'); }
+    } catch (e) { showToast('Erreur Mistral', 'error'); }
+    finally { btn.textContent = orig; btn.classList.remove('loading'); }
+}
+
+(function init() {
+    document.getElementById('log-header')?.addEventListener('click', (e) => {
+        if (e.target.closest('.log-action-btn')) return;
+        document.getElementById('log-panel').classList.toggle('collapsed');
+    });
+    document.getElementById('log-clear-btn')?.addEventListener('click', (e) => { e.stopPropagation(); clearLogs(); });
+    document.getElementById('log-export-btn')?.addEventListener('click', (e) => { e.stopPropagation(); exportLogs(); });
+    const autoBtn = document.getElementById('log-autoscroll-btn');
+    if (autoBtn) { autoBtn.classList.add('active'); autoBtn.addEventListener('click', (e) => { e.stopPropagation(); logState.autoScroll = !logState.autoScroll; autoBtn.classList.toggle('active', logState.autoScroll); }); }
+    document.querySelectorAll('[data-filter]').forEach(chip => chip.addEventListener('click', () => {
+        const f = chip.dataset.filter; logState.filter[f] = !logState.filter[f];
+        chip.classList.toggle('active', logState.filter[f]); renderLogEntries(); updateLogCounter();
+    }));
+    document.getElementById('gallery-header')?.addEventListener('click', (e) => {
+        if (e.target.closest('.gallery-action-btn')) return;
+        document.getElementById('gallery-panel').classList.toggle('collapsed');
+    });
+    document.getElementById('gallery-clear-btn')?.addEventListener('click', (e) => { e.stopPropagation(); clearGallery(); });
+    document.getElementById('gallery-dl-all-btn')?.addEventListener('click', (e) => { e.stopPropagation(); downloadAllVideos(); });
+    document.getElementById('gallery-autodl-btn')?.addEventListener('click', (e) => { e.stopPropagation(); toggleAutoDownload(); });
+    document.getElementById('vm-close')?.addEventListener('click', closeVideoModal);
+    document.getElementById('video-modal')?.addEventListener('click', (e) => { if (e.target.id === 'video-modal') closeVideoModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeVideoModal(); });
+    document.getElementById('style-picker-trigger')?.addEventListener('click', openStylePicker);
+    document.getElementById('picker-close')?.addEventListener('click', closeStylePicker);
+    document.getElementById('picker-validate')?.addEventListener('click', validatePickerSelection);
+    document.getElementById('picker-clear-all')?.addEventListener('click', clearAllStyles);
+    const ps = document.getElementById('picker-search');
+    if (ps) ps.addEventListener('input', e => { state.pickerSearch = e.target.value; renderPickerBody(); });
+    document.getElementById('picker-reset')?.addEventListener('click', () => { state.pickerSearch = ''; if (ps) ps.value = ''; renderPickerBody(); });
+    document.getElementById('picker-modal')?.addEventListener('click', e => { if (e.target.id === 'picker-modal') closeStylePicker(); });
+    state.selectedStyles = loadSelectedStyles();
+    updateStyleTrigger();
+    document.getElementById('api-verify-btn')?.addEventListener('click', () => verifyAgnesKey(false));
+    document.getElementById('mistral-verify-btn')?.addEventListener('click', () => verifyMistralKey(false));
+    const apiInput = document.getElementById('api-key-input');
+    if (apiInput) {
+        apiInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); verifyAgnesKey(false); } });
+        if (getApiKey()) apiInput.value = getApiKey();
+    }
+    const mistralInput = document.getElementById('mistral-key-input');
+    if (mistralInput) {
+        mistralInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); verifyMistralKey(false); } });
+        if (getMistralKey()) mistralInput.value = getMistralKey();
+    }
+    document.getElementById('model-refresh-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('model-refresh-btn');
+        if (btn) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
+        const ok = await verifyAgnesKey(true);
+        showToast(ok ? 'Modèles détectés ✓' : 'Échec', ok ? 'success' : 'error');
+        if (btn) { btn.classList.remove('loading'); btn.textContent = '🔄 Détecter'; }
+    });
+    document.getElementById('mistral-refresh-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('mistral-refresh-btn');
+        if (btn) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
+        const ok = await verifyMistralKey(true);
+        showToast(ok ? 'Modèles détectés ✓' : 'Échec', ok ? 'success' : 'error');
+        if (btn) { btn.classList.remove('loading'); btn.textContent = '🔄 Détecter'; }
+    });
+    document.getElementById('extra-add-btn')?.addEventListener('click', () => addExtraModel(document.getElementById('extra-model-input').value));
+    document.getElementById('extra-model-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addExtraModel(e.target.value); } });
+    document.getElementById('extra-clear-btn')?.addEventListener('click', clearAllExtraModels);
+    document.getElementById('check-status-btn')?.addEventListener('click', checkPendingTasks);
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+    [['upload-zone', 'images'], ['upload-zone-it', 'images'], ['upload-zone-audio', 'audios'], ['upload-zone-video', 'videos'], ['upload-zone-combo-img', 'combo-images'], ['upload-zone-combo-vid', 'combo-videos'], ['upload-zone-combo-audio', 'combo-audios']].forEach(([id, t]) => {
+        const z = document.getElementById(id); if (!z) return;
+        const inp = z.querySelector('input[type=file]'); if (!inp) return;
+        z.addEventListener('click', () => inp.click());
+        inp.addEventListener('change', e => { handleFiles(e.target.files, t); inp.value = ''; });
+    });
+    document.getElementById('main-prompt')?.addEventListener('input', e => state.mainPrompt = e.target.value);
+    document.getElementById('scene-base-text')?.addEventListener('input', e => { state.textBase = e.target.value; updateGenerateBtn(); });
+    document.getElementById('main-prompt-it')?.addEventListener('input', e => state.mainPrompt = e.target.value);
+    document.getElementById('main-prompt-audio')?.addEventListener('input', e => state.mainPrompt = e.target.value);
+    document.getElementById('main-prompt-video')?.addEventListener('input', e => state.mainPrompt = e.target.value);
+    document.getElementById('main-prompt-combo')?.addEventListener('input', e => state.mainPrompt = e.target.value);
+    document.getElementById('mistral-enrich-btn-5')?.addEventListener('click', (e) => enrichWithMistral(e.target, 'main-prompt-video'));
+    document.getElementById('mistral-enrich-btn-6')?.addEventListener('click', (e) => enrichWithMistral(e.target, 'main-prompt-combo'));
+    document.getElementById('duration-select')?.addEventListener('change', e => state.durationFrames = parseInt(e.target.value, 10));
+    document.getElementById('intensity-select')?.addEventListener('change', e => state.intensity = e.target.value);
+    document.getElementById('generate-btn')?.addEventListener('click', startGeneration);
+    document.getElementById('stop-btn')?.addEventListener('click', stopGeneration);
+    document.querySelectorAll('[data-toggle]').forEach(h => h.addEventListener('click', () => { const t = document.getElementById(h.dataset.toggle); if (t) t.classList.toggle('open'); }));
+    document.querySelectorAll('.section').forEach(s => { if (!s.classList.contains('mode-hidden')) s.classList.add('open'); });
+    state.extraModels = loadExtraModels();
+    state.activeModels = loadActiveModels();
+    renderExtraModelGrid(); renderActiveModelsBar();
+    const prevAgnes = loadDetectedAgnes();
+    if (prevAgnes.length) renderAgnesModelGrid(prevAgnes);
+    const prevMistral = loadDetectedMistral();
+    if (prevMistral.length) renderMistralModelGrid(prevMistral);
+    if (getApiKey()) {
+        const s = localStorage.getItem(SK.AGNES_STATUS);
+        if (s === 'valid') { state.agnesKeyStatus = 'valid'; updateAgnesKeyStatusUI('valid'); }
+        else if (s === 'invalid') { state.agnesKeyStatus = 'invalid'; updateAgnesKeyStatusUI('invalid'); }
+        else updateAgnesKeyStatusUI(null);
+    } else updateAgnesKeyStatusUI(null);
+    if (getMistralKey()) {
+        const s = localStorage.getItem(SK.MISTRAL_STATUS);
+        if (s === 'valid') { state.mistralKeyStatus = 'valid'; updateMistralKeyStatusUI('valid'); }
+        else if (s === 'invalid') { state.mistralKeyStatus = 'invalid'; updateMistralKeyStatusUI('invalid'); }
+        else updateMistralKeyStatusUI(null);
+    } else updateMistralKeyStatusUI(null);
+    renderImages(); renderAudios(); renderVideos(); renderComboLists(); updateGenerateBtn();
+    renderGallery(); updateAutoDownloadBtn(); updateCheckBtn();
+    logInfo('🎬 <strong>Cinéma Noir — Studio complet</strong>');
+    logInfo('📚 <strong>' + ALL_STYLES.length + '</strong> styles dans <strong>' + STYLE_CATEGORIES.length + '</strong> catégories');
+    logInfo('⏱️ <strong>Timeout dynamique</strong> : 15-60 min selon la durée');
+    if (getApiKey()) logInfo('🔑 Clé Agnes · ' + maskKey(getApiKey()));
+    else logWarn('🔑 Aucune clé Agnes');
+    if (getMistralKey()) logInfo('🔥 Clé Mistral · ' + maskKey(getMistralKey()));
+    if (state.extraModels.length) logInfo('⚡ ' + state.extraModels.length + ' modèle(s) extra(s)');
+    if (state.activeModels.length) logSuccess('⚡ ' + state.activeModels.length + ' modèle(s) actif(s)');
+    const savedGallery = loadGallery();
+    if (savedGallery.length) logInfo('🎬 ' + savedGallery.length + ' vidéo(s) en galerie');
+    const pending = loadPendingTasks();
+    if (pending.length) logWarn('⏳ ' + pending.length + ' tâche(s) en attente');
+    if (autoDownloadEnabled) logSuccess('📥 Auto-DL activé');
+    logInfo('✨ Prêt');
+})();
+</script>
+
+</body>
+</html>

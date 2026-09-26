@@ -33,6 +33,19 @@ CIBLES = [
     "_inst_v102/THEOLOGICUS.html",        # installation locale lancee
 ]
 
+# v126 — THEOLOGICUS.html n'est plus seul : le modal AI VIDEO charge un
+# SECOND document. Oublier de le propager donne un iframe VIDE sur le mobile
+# et dans l'installable, sans la moindre erreur — exactement le genre de
+# panne qu'on ne voit pas sur sa machine de developpement. Meme regle que le
+# HTML principal : un fichier absent de `dist/` est une fonction absente.
+COMPAGNONS = {
+    "ai-video.html": [
+        "mobile/www/ai-video.html",              # Capacitor (APK)
+        "dist/THEOLOGICUS/ai-video.html",        # distribution Windows
+        "_inst_v102/ai-video.html",              # installation locale
+    ],
+}
+
 
 def md5(path):
     with open(path, "rb") as f:
@@ -91,7 +104,7 @@ def main():
             # STUDIO VIDEO) etait ABSENT de l'installation, et le script disait
             # « OK ». On exige donc que la cible soit PLUS RECENTE que la source.
             try:
-                recente = os.path.getmtime(cible) >= os.path.getmtime(source)
+                recente = os.path.getmtime(cible) >= os.path.getmtime(SOURCE)
             except Exception:
                 recente = False
             if recente:
@@ -129,6 +142,35 @@ def main():
             print("     -> synchronisee")
         else:
             print("     -> ECHEC de la copie !")
+
+    # ── Les documents compagnons ──────────────────────────────────────
+    # Regle simple, et differente du HTML principal : un compagnon n'est
+    # jamais estampille, donc la seule question est « est-il identique ? ».
+    # Une cible ABSENTE est copiee (et non ignoree) : c'est justement le cas
+    # qui produit un iframe vide.
+    print("")
+    for src, cibles in COMPAGNONS.items():
+        if not os.path.isfile(src):
+            print("[--] %-38s source absente, ignoree" % src)
+            continue
+        s_md5 = md5(src)
+        for cible in cibles:
+            dossier = os.path.dirname(cible)
+            if dossier and not os.path.isdir(dossier):
+                print("[--] %-38s dossier absent, ignoree" % cible)
+                continue
+            if os.path.isfile(cible) and md5(cible) == s_md5:
+                print("[OK] %-38s deja identique" % cible)
+                continue
+            ecarts += 1
+            if os.path.isfile(cible):
+                print("[!!] %-38s PERIMEE" % cible)
+            else:
+                print("[!!] %-38s ABSENTE" % cible)
+            if verifier_seulement:
+                continue
+            shutil.copyfile(src, cible)
+            print("     -> copiee" if md5(cible) == s_md5 else "     -> ECHEC de la copie !")
 
     print("")
     if verifier_seulement:
