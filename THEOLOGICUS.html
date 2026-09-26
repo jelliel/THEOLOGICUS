@@ -1089,7 +1089,14 @@
 /* Références bibliques dans les commentaires annotés */
 .atc-tip-a .atc-vref{color:#ffcc80;font-weight:700;cursor:pointer;border-bottom:1px dotted rgba(255,204,128,.55);padding:0 1px;border-radius:2px;transition:all .15s ease}
 .atc-tip-a .atc-vref:hover{background:rgba(255,204,128,.14);text-shadow:0 0 8px rgba(255,204,128,.35)}
-#verse-mini-tip{position:fixed;z-index:var(--z-panneau,9000);width:min(360px,88vw);max-height:60vh;overflow-y:auto;overscroll-behavior:contain;background:#fffdf5;color:#4a3520;border:1px solid #8a6d3b;border-radius:10px;padding:11px 13px;box-shadow:0 8px 26px rgba(0,0,0,.5);font-family:Georgia,'Times New Roman',serif;font-size:12.5px;line-height:1.6;display:none}
+/* v126m — la mini-tip de prévisualisation porte --z-panneau (9000) alors
+   qu'elle naît du survol d'un span.atc-vref, qui n'existe qu'au sein de
+   #atc-tip (calc(--z-bulle+1) = 100001). Deux éléments de premier niveau
+   appendus à document.body : 9000 < 100001 → elle passait DERRIÈRE son
+   hôte. Idiome v94 (« ne JAMAIS remonter l'un sans l'autre ») : on couple
+   son rang à --z-bulle via calc, +2 pour coiffer #atc-tip (+1). Effet
+   collatéral assumé : elle couvre aussi --z-toast (10000). */
+#verse-mini-tip{position:fixed;z-index:calc(var(--z-bulle,100000) + 2);width:min(360px,88vw);max-height:60vh;overflow-y:auto;overscroll-behavior:contain;background:#fffdf5;color:#4a3520;border:1px solid #8a6d3b;border-radius:10px;padding:11px 13px;box-shadow:0 8px 26px rgba(0,0,0,.5);font-family:Georgia,'Times New Roman',serif;font-size:12.5px;line-height:1.6;display:none}
 #verse-mini-tip .vmt-ref{font-weight:700;color:#8a5a20;margin-bottom:5px;font-size:12.5px}
 #verse-mini-tip .vmt-txt{font-style:normal;color:#3d2b16}
 #verse-mini-tip .vmt-suite{color:#8a7040;font-size:11px;margin-top:5px}
