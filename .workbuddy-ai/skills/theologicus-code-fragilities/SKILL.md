@@ -909,3 +909,35 @@ l'event `input` n'ait été délivré) et contre les écritures échouées
 (quota, mode privé). Bonus : appeler la fonction de mise-à-jour du
 statut dans le listener `input` rend le statut live, sans attendre le
 clic Vérifier.
+
+### Un relais sans proxy système échoue là où le navigateur sort — « Erreur réseau » à tort
+
+Piège vérifié (v126h) : un relais local qui fait l'amont avec `http.client`
+(ou tout client sans `env http_proxy`) ne rejoint PAS l'API cible DERRIÈRE
+UN PROXY D'ENTREPRISE, alors que le navigateur (WebView2) OUI, car il lit la
+config réseau de l'OS. Le fetch via le relais est alors rejeté (ou renvoie
+502/404), et le code affiche un « Erreur réseau » générique pour une clé
+pourtant valide. Ce n'est ni un bug d'iframe (testé : `srcdoc`/`about:srcdoc`
+résout une URL relative `/proxy/...` comme un `http://` normal), ni un bug du
+relais→API (testé : `curl /proxy/...` renvoie le vrai 401 de l'API).
+
+Règles :
+1. **Un fetch peut être rejeté (exception) — pas seulement rendre un statut.**
+   Séparer « le relais est mort » (rejet, 502, 404 HTML d'un relais obsolète)
+   de « l'API répond » (401, 200...). Ne jamais aplatir en un seul message
+   opaque « Erreur réseau » : un statut HTTP réel (401) doit rester lisible.
+2. **Repli sur un appel DIRECT** quand le relais est mort : le navigateur
+   gère proxy + certificats. Possible si l'API renvoie `Access-Control-
+   Allow-Origin: *` (constaté sur Agnes/Mistral `/models`). Garder `_VIA_RELAIS`
+   pour ne tenter le direct que hors `file://` (en `file://` l'URL est déjà
+   directe).
+3. **Ne jamais `res.json()` aveuglément** : un 404 HTML (relais obsolète) le
+   fait lever → « Erreur réseau » à tort. Lire `res.text()`, ne parser que si
+   `Content-Type` est JSON (ou le texte débute par `{`).
+4. **`res.text()` consomme le corps** : lire d'abord le texte, puis parser, et
+   traiter `data` (jamais `res.json()` après coup).
+
+NOTA banc (headless) : `frameLocator().evaluate(b=>b.click())` plutôt que
+`.click()` Playwright (avalé par hit-test du HUD) ; ouvrir le modal via
+`evaluate` et poser `localStorage['theologicus_wizard_skipped']='1'` en
+`addInitScript` pour court-circuiter l'assistant.
