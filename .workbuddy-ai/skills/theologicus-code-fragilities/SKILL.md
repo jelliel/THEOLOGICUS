@@ -969,3 +969,19 @@ délai, afficher « Limite API — reprise automatique », puis retenter. Au
 dernier essai, retourner la dernière réponse 429 : ne pas envoyer une
 requête supplémentaire sans délai. Tester au minimum 429 + Retry-After court
 → nouvelle tentative → 200, ainsi que les régressions iframe/UI.
+
+### Un relais HTTP doit préserver l'encodage avant `response.json()`
+
+Piège vérifié (v126k) : `http.client` lit des octets bruts. Si le fournisseur
+répond en gzip/br et que le relais ne demande pas `Accept-Encoding: identity`
+ou ne retransmet pas `Content-Encoding`, le navigateur reçoit des octets
+compressés sans information de décodage. `response.json()` lève alors
+`Unexpected token ... is not valid JSON`, souvent affiché dans un commentaire
+AI comme si le modèle avait mal répondu.
+
+Règle : demander `Accept-Encoding: identity` côté amont ; si l'amont compresse
+malgré tout, retransmettre `Content-Encoding` côté réponse. Tester avec un
+serveur amont qui renvoie volontairement du gzip et vérifier que le JSON est
+encore décodable via le relais. Si le relais est embarqué par PyInstaller,
+reconstruire l'exe après le correctif Python : modifier le HTML seul ne suffit
+pas.
