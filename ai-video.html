@@ -645,6 +645,137 @@ const STYLE_CATEGORIES = [
     { id: 'fidelite', name: '🆔 Fidélité', styles: [
         { e: '🧬', n: 'Image Identique', d: 'Zéro transformation', tags: ['fidèle', 'identique', 'neutre'], color: ['#0f1f0f', '#8ff08f'], p: 'keep the source image exactly identical: same subject, same identity, same pose, same clothing, same colors, same lighting, same framing and composition as the source image; do not restyle, do not recolor, do not add or remove any element; static locked camera, no zoom, no pan; only the minimal natural motion required for a living video' },
     ]},
+    /* v126o — catégorie fournie par l'utilisateur (fichier deepseek_javascript_
+       20260926_dfdde1.js) : 16 styles de verrouillage d'identité. Chacun
+       prescrit SON éclairage dans son propre prompt ; la signature caméra
+       générique est donc remplacée par une caméra fixe quand l'un d'eux est
+       actif (voir _estFamilleFidelite). */
+    {
+        id: 'identity_lock',
+        name: '🔒 IDENTITY LOCK — Réalisme',
+        styles: [
+            {
+                e: '🔒',
+                n: 'Identity Lock — Portrait Pur',
+                d: 'Respect absolu du visage, photoréalisme',
+                tags: ['réaliste', 'détaillé', 'intime'],
+                color: ['#1a1a1a', '#c9a961'],
+                p: 'STRICT IDENTITY PRESERVATION. The subject must remain 100% IDENTICAL to the source image: exact facial features, exact bone structure, exact eye shape and color, exact nose shape, exact lip shape, exact jawline, exact skin tone, exact hair color and texture, exact body proportions, exact age, exact gender. ABSOLUTELY NO facial modification, NO beautification, NO aging, NO slimming, NO reshaping, NO stylization. Photorealistic continuation. Only natural micro-movements: subtle breathing, slight blinking, micro-shifts in posture. Cinematic lighting that does NOT alter the subject. Ultra high fidelity preservation, 8K photorealistic detail, natural skin texture with pores, natural light reflections. The person is exactly who they are — nothing more, nothing less.'
+            },
+            {
+                e: '📸',
+                n: 'Photo Studio Réaliste',
+                d: 'Éclairage pro, identité intacte',
+                tags: ['réaliste', 'lumineux', 'détaillé'],
+                color: ['#e0e0e0', '#8d6e63'],
+                p: 'PROFESSIONAL STUDIO PHOTOGRAPHY animation. The subject is preserved EXACTLY as in the source image — same face, same features, same skin, same hair, same body. Only the LIGHTING is enhanced to professional studio quality: soft key light, gentle fill, subtle rim light. No facial modification whatsoever. Natural breathing, subtle eye movement, minimal head motion. Photorealistic, commercial photography grade, natural skin texture preserved with all its details, no smoothing, no beautification. Ultra sharp focus on the actual subject.'
+            },
+            {
+                e: '🎬',
+                n: 'Cinéma Réaliste Hollywood',
+                d: 'Cinéma pro, identité verrouillée',
+                tags: ['réaliste', 'détaillé', 'dramatique'],
+                color: ['#2a2a2a', '#d4af37'],
+                p: 'HOLLYWOOD CINEMA grade animation. Maintain EXTREME FIDELITY to the subject: identical facial structure, identical skin texture, identical hair, identical body, identical age. Cinema-quality lighting only (cinematic three-point lighting, soft falloff, natural color grading). NO alteration of physical features. Professional motion picture realism. Subtle breathing, natural posture micro-adjustments, minimal eye movement. Preserve every mole, every wrinkle, every freckle, every skin imperfection — they define the person. 35mm film realism, ARRI Alexa quality, natural grain. Nothing about the person changes.'
+            },
+            {
+                e: '🪞',
+                n: 'Miroir Vivant',
+                d: 'Reflet exact, mouvement minimal',
+                tags: ['réaliste', 'minimal', 'intime'],
+                color: ['#37474f', '#90a4ae'],
+                p: 'LIVING MIRROR effect. The output must be a perfect mirror of the source — identical in every way: same face, same expression baseline, same skin, same hair, same posture, same proportions. The ONLY change is the addition of natural life signs: subtle breathing in the chest/shoulders, micro eye movements, slight involuntary facial micro-expressions that do NOT alter identity. Photorealistic, hyper-real, documentary-level fidelity. No stylization, no filter, no aesthetic choice. Pure reality continuation.'
+            },
+            {
+                e: '👤',
+                n: 'Documentaire Authentique',
+                d: 'Style documentaire, zéro altération',
+                tags: ['réaliste', 'naturel', 'minimal'],
+                color: ['#555', '#888'],
+                p: 'DOCUMENTARY authenticity. Preserve the subject with 100% accuracy — every feature, every proportion, every detail of the skin, hair and body must match the source exactly. Documentary-style natural lighting only. Handheld subtle motion permitted. No artistic filter, no color grading, no stylization. The person is exactly as they are in real life. Natural breathing, natural subtle movements, candid realism. BBC / National Geographic documentary realism quality.'
+            },
+            {
+                e: '📷',
+                n: 'Portrait Argentique',
+                d: 'Film 35mm, identité strict',
+                tags: ['réaliste', 'chaud', 'rétro'],
+                color: ['#8d6e63', '#d4af37'],
+                p: 'ANALOG 35mm PORTRAIT animation. The subject is preserved ABSOLUTELY IDENTICALLY to the source image: same face, same features, same skin, same hair, same body. The only treatment applied is a fine analog film aesthetic: Kodak Portra 400 color palette, natural organic grain, gentle highlight rolloff, soft realistic tones. NO modification of physical appearance. Subtle breathing, natural eye movement, minimal motion. Preserve all skin details — pores, freckles, wrinkles, moles. Photographic realism, no retouching, no beautification.'
+            },
+            {
+                e: '⚡',
+                n: 'Hyperréalisme',
+                d: 'Ultra HD, chaque détail préservé',
+                tags: ['réaliste', 'détaillé', 'lumineux'],
+                color: ['#000', '#c9a961'],
+                p: 'HYPERREALISM at maximum detail. Preserve every single physical characteristic of the subject with forensic precision: facial bone structure, eye pupils and iris patterns, eyelash count and shape, eyebrow hair direction, nose contour, lip texture, teeth visibility, jawline, ears, neck, shoulders, hair strands individually visible, skin pores, micro-wrinkles, natural asymmetry of the human face. DO NOT symmetrize, DO NOT smooth, DO NOT beautify, DO NOT reshape. Natural breathing, subtle blinking, micro head movements. 8K photorealistic rendering, ray-traced lighting realism, subsurface scattering preserved for natural skin look. The subject remains 100% themselves.'
+            },
+            {
+                e: '🎞️',
+                n: 'Cinéma Vérité',
+                d: 'Réalité brute, film direct',
+                tags: ['réaliste', 'naturel', 'minimal'],
+                color: ['#455a64', '#b0bec5'],
+                p: 'CINÉMA VÉRITÉ realism. Absolute preservation of the subject — same face, same features, same proportions, same skin, same everything. French New Wave documentary approach: natural available light, spontaneous feel, handheld subtle drift. No artificial beautification, no smoothing, no reshaping. The subject as they truly are. Natural breathing, subtle eye movement, minimal involuntary micro-movements. Black and white or natural color as source dictates. Grain and texture of authentic film. Nothing added, nothing removed from the person.'
+            },
+            {
+                e: '🔬',
+                n: 'Fidélité Absolue',
+                d: 'Reproduction médico-légale',
+                tags: ['réaliste', 'détaillé', 'minimal'],
+                color: ['#263238', '#e0e0e0'],
+                p: 'FORENSIC-GRADE FIDELITY. Treat the source image as an identity document. Preserve with legal precision: exact distance between eyes, exact nose-to-mouth ratio, exact facial proportions, exact hairline, exact eyebrow shape, exact eye color and shape, exact lip shape, exact skin tone and undertone, exact blemishes and markings. ABSOLUTELY NO modification. The subject remains recognizable as a biometric match. Add only natural life signs: breathing, subtle blinking, micro-movements. Photorealistic rendering, 8K, natural lighting, natural skin preservation. This is the same person, in the same frame, now breathing.'
+            },
+            {
+                e: '🌅',
+                n: 'Golden Hour Réaliste',
+                d: 'Lumière dorée, identité préservée',
+                tags: ['réaliste', 'chaud', 'doux'],
+                color: ['#ff9800', '#ffc107'],
+                p: 'GOLDEN HOUR realism. Preserve the subject completely and identically — face, features, proportions, skin, hair, body all unchanged. Only the LIGHTING changes: warm golden hour sun (last 30 min before sunset), soft orange rim light, gentle amber glow, long soft shadows, natural outdoor warmth. The subject remains 100% themselves. Subtle breathing, natural eye movement, minimal motion. Photorealistic skin texture preserved, no smoothing, no beautification. Documentary realism with golden light.'
+            },
+            {
+                e: '🌙',
+                n: 'Clair de Lune Réaliste',
+                d: 'Nuit douce, identité intacte',
+                tags: ['réaliste', 'froid', 'doux'],
+                color: ['#1a237e', '#90caf9'],
+                p: 'MOONLIGHT realism. Preserve the subject with absolute fidelity — same face, same features, same skin, same hair, same proportions. Only the LIGHTING changes: soft moonlight, cool blue tones, gentle silver rim light, natural night atmosphere, subtle sky reflections. The subject remains completely themselves. Subtle breathing, natural eye movement, minimal motion. Photorealistic skin texture preserved. Cinematic realism with lunar lighting, no stylization, no identity alteration.'
+            },
+            {
+                e: '🖼️',
+                n: 'Peinture Hyperréaliste',
+                d: 'Hyperréalisme pictural, identité verrouillée',
+                tags: ['réaliste', 'détaillé', 'chaud'],
+                color: ['#3e2723', '#d4af37'],
+                p: 'HYPERREALIST PAINTING animation. The subject is preserved with absolute fidelity — same face, same features, same proportions, same skin, same hair, same body. The rendering style is hyperrealist painting (Chuck Close, Ron Mueck level): oil paint visible brushwork that reproduces reality more accurately than photography. Every pore, every hair, every detail painted. NO modification of the actual person. Subtle breathing, natural eye movement, minimal motion. The subject remains exactly themselves, rendered in hyperrealist painting technique.'
+            },
+            {
+                e: '🎥',
+                n: 'Cinéma 4D Réaliste',
+                d: 'Rendu 3D photoréaliste, identité intacte',
+                tags: ['réaliste', 'futuriste', 'détaillé'],
+                color: ['#212121', '#00e5ff'],
+                p: 'PHOTOREALISTIC 3D rendering. Preserve the subject with 100% identity accuracy — same face, same features, same proportions, same skin texture, same hair, same body. Rendering quality: Unreal Engine 5 MetaHuman level, ray-traced lighting, subsurface scattering for realistic skin, natural eye reflections, individual hair strand rendering, natural skin micro-details (pores, wrinkles, blemishes). NO modification of the actual person. Subtle breathing, natural eye movement, minimal motion. The output looks like real filmed footage, not CGI — but with 3D perfection.'
+            },
+            {
+                e: '📺',
+                n: 'Broadcast TV Réaliste',
+                d: 'Qualité télé, identité préservée',
+                tags: ['réaliste', 'lumineux', 'minimal'],
+                color: ['#1565c0', '#e0e0e0'],
+                p: 'BROADCAST QUALITY animation. Preserve the subject with strict identity fidelity — same face, same features, same skin, same hair, same proportions. Professional broadcast lighting setup: even key light, gentle fill, natural color balance, soft controlled shadows. The subject remains completely themselves — no beautification, no smoothing, no reshaping. Subtle breathing, natural eye movement, minimal motion. Photorealistic rendering, broadcast-grade realism, natural skin texture preserved.'
+            },
+            {
+                e: '🌆',
+                n: 'Urban Realism',
+                d: 'Réalité urbaine, identité stricte',
+                tags: ['réaliste', 'urbain', 'détaillé'],
+                color: ['#455a64', '#ff5722'],
+                p: 'URBAN REALISM. Preserve the subject with absolute fidelity — same face, same features, same skin, same hair, same body. Environment: real urban setting with natural available light (street lamps, shop windows, neon signs at realistic intensity). The subject remains 100% themselves — no stylization, no beautification. Subtle breathing, natural eye movement, minimal motion. Natural skin texture preserved under city lighting. Photorealistic, documentary-grade urban realism.'
+            }
+        ]
+    },
     { id: 'cinema', name: '🎬 Cinéma', styles: [
         { e: '🎩', n: 'Film Noir', d: 'Noir et blanc', tags: ['sombre', 'monochrome', 'rétro'], color: ['#1a1a1a', '#000'], p: 'classic 1940s film noir, high contrast black and white' },
         { e: '🌆', n: 'Néo-Noir', d: 'Néon, pluie', tags: ['sombre', 'urbain', 'coloré'], color: ['#1a0a2a', '#ff0044'], p: 'modern neo-noir, rain-soaked night, neon reflections' },
@@ -1625,14 +1756,16 @@ function renderPickerBody() {
 function getCombinedStylePrompt() { return state.selectedStyles.map(s => s.p).join(', '); }
 /* v126n — les styles de Fidélité excluent la signature caméra/lumière en dur
    (« dramatic lighting, slow dolly-in ») : elle contredirait la consigne de
-   garder l'image identique. */
-function _estFidele() { return state.selectedStyles.some(s => s.category === 'fidelite'); }
+   garder l'image identique. v126o — la catégorie 🔒 IDENTITY LOCK rejoint la
+   famille : chacun de ses 16 styles prescrit déjà SON éclairage et un
+   mouvement minimal dans son propre prompt. */
+function _estFamilleFidelite() { return state.selectedStyles.some(s => s.category === 'fidelite' || s.category === 'identity_lock'); }
 function _signatureCamera() {
-    return _estFidele() ? 'static locked camera, no zoom, no pan, minimal natural motion'
+    return _estFamilleFidelite() ? 'static locked camera, no zoom, no pan, minimal natural motion'
                         : 'dramatic lighting, slow dolly-in';
 }
 function _signatureCameraVideo() {
-    return _estFidele() ? 'static locked camera, content preserved identically frame to frame, minimal natural motion'
+    return _estFamilleFidelite() ? 'static locked camera, content preserved identically frame to frame, minimal natural motion'
                         : 'dramatic lighting, coherent motion';
 }
 function buildImagePrompt() {
