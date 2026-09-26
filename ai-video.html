@@ -1181,7 +1181,13 @@ function clearAllExtraModels() {
 }
 
 async function verifyAgnesKey(silent = false) {
-    const key = getApiKey();
+    // v126f — l'input courant est la source de vérité : on le lit, on le
+    // persiste (au cas où l'event « input » n'aurait pas encore écrit), et on
+    // l'utilise. getApiKey() (localStorage) restait vide parce que rien
+    // n'écrivait la clé.
+    const inp = document.getElementById('api-key-input');
+    const key = ((inp ? inp.value : '') || getApiKey()).trim();
+    try { localStorage.setItem(SK.AGNES, key); } catch (e) {}
     if (!key) { if (!silent) { logWarn('🔑 Aucune clé Agnes'); showToast('Aucune clé Agnes', 'warn'); } updateAgnesKeyStatusUI(null); return false; }
     const btn = document.getElementById('api-verify-btn');
     if (btn && !silent) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
@@ -1225,7 +1231,10 @@ async function verifyAgnesKey(silent = false) {
     } finally { if (btn && !silent) { btn.classList.remove('loading'); btn.textContent = '🔍 Vérifier'; } }
 }
 async function verifyMistralKey(silent = false) {
-    const key = getMistralKey();
+    // v126f — idem : lire l'input courant (source de vérité) et persister.
+    const inp = document.getElementById('mistral-key-input');
+    const key = ((inp ? inp.value : '') || getMistralKey()).trim();
+    try { localStorage.setItem(SK.MISTRAL, key); } catch (e) {}
     if (!key) { if (!silent) { logWarn('🔥 Aucune clé Mistral'); showToast('Aucune clé Mistral', 'warn'); } updateMistralKeyStatusUI(null); return false; }
     const btn = document.getElementById('mistral-verify-btn');
     if (btn && !silent) { btn.classList.add('loading'); btn.textContent = '⏳…'; }
@@ -1851,11 +1860,17 @@ async function enrichWithMistral(btn, textareaId) {
     document.getElementById('mistral-verify-btn')?.addEventListener('click', () => verifyMistralKey(false));
     const apiInput = document.getElementById('api-key-input');
     if (apiInput) {
+        // v126f — la clé n'était JAMAIS persistée (aucun setItem(SK.AGNES)
+        // dans le code) : getApiKey() lisait localStorage, toujours vide, donc
+        // « Aucune clé Agnes » même après saisie. On écrit à chaque frappe.
+        apiInput.addEventListener('input', () => { try { localStorage.setItem(SK.AGNES, apiInput.value.trim()); } catch (e) {} updateAgnesKeyStatusUI(state.agnesKeyStatus); });
         apiInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); verifyAgnesKey(false); } });
         if (getApiKey()) apiInput.value = getApiKey();
     }
     const mistralInput = document.getElementById('mistral-key-input');
     if (mistralInput) {
+        // v126f — idem pour Mistral (setItem(SK.MISTRAL) inexistant).
+        mistralInput.addEventListener('input', () => { try { localStorage.setItem(SK.MISTRAL, mistralInput.value.trim()); } catch (e) {} updateMistralKeyStatusUI(state.mistralKeyStatus); });
         mistralInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); verifyMistralKey(false); } });
         if (getMistralKey()) mistralInput.value = getMistralKey();
     }
