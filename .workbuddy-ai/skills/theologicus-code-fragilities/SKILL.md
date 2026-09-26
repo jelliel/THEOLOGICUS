@@ -941,3 +941,18 @@ NOTA banc (headless) : `frameLocator().evaluate(b=>b.click())` plutôt que
 `.click()` Playwright (avalé par hit-test du HUD) ; ouvrir le modal via
 `evaluate` et poser `localStorage['theologicus_wizard_skipped']='1'` en
 `addInitScript` pour court-circuiter l'assistant.
+
+### Une réponse « modèles » non standard ne doit pas devenir zéro en silence
+
+Piège vérifié (v126i) : une réponse HTTP 200 peut être JSON mais enveloppée
+autrement (`data`, `models`, `items`, `result`, `result.data`). Si le code
+ne connaît que `data`, la clé paraît acceptée mais la grille reste vide.
+Pire : une page HTML d'un relais obsolète peut être traitée comme une liste
+vide au lieu de déclencher le repli direct.
+
+Règle : normaliser explicitement les enveloppes en distinguant `[]` (vraie
+liste vide) de `null` (réponse illisible). Pour une réponse 200 illisible du
+relais, tenter l'URL directe avant d'afficher un résultat vide. Toujours
+rendre la grille et afficher « aucun modèle renvoyé par l'API » si la liste
+est réellement vide ; ne pas coder en dur des modèles qui pourraient ne pas
+être autorisés par la clé.
