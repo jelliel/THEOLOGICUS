@@ -640,6 +640,11 @@ const ALL_TAGS = {
 };
 
 const STYLE_CATEGORIES = [
+    /* v126n — catégorie demandée par l'utilisateur : garder l'image de départ
+       IDENTIQUE dans la vidéo montée (aucune transformation stylistique). */
+    { id: 'fidelite', name: '🆔 Fidélité', styles: [
+        { e: '🧬', n: 'Image Identique', d: 'Zéro transformation', tags: ['fidèle', 'identique', 'neutre'], color: ['#0f1f0f', '#8ff08f'], p: 'keep the source image exactly identical: same subject, same identity, same pose, same clothing, same colors, same lighting, same framing and composition as the source image; do not restyle, do not recolor, do not add or remove any element; static locked camera, no zoom, no pan; only the minimal natural motion required for a living video' },
+    ]},
     { id: 'cinema', name: '🎬 Cinéma', styles: [
         { e: '🎩', n: 'Film Noir', d: 'Noir et blanc', tags: ['sombre', 'monochrome', 'rétro'], color: ['#1a1a1a', '#000'], p: 'classic 1940s film noir, high contrast black and white' },
         { e: '🌆', n: 'Néo-Noir', d: 'Néon, pluie', tags: ['sombre', 'urbain', 'coloré'], color: ['#1a0a2a', '#ff0044'], p: 'modern neo-noir, rain-soaked night, neon reflections' },
@@ -1618,11 +1623,23 @@ function renderPickerBody() {
 }
 
 function getCombinedStylePrompt() { return state.selectedStyles.map(s => s.p).join(', '); }
+/* v126n — les styles de Fidélité excluent la signature caméra/lumière en dur
+   (« dramatic lighting, slow dolly-in ») : elle contredirait la consigne de
+   garder l'image identique. */
+function _estFidele() { return state.selectedStyles.some(s => s.category === 'fidelite'); }
+function _signatureCamera() {
+    return _estFidele() ? 'static locked camera, no zoom, no pan, minimal natural motion'
+                        : 'dramatic lighting, slow dolly-in';
+}
+function _signatureCameraVideo() {
+    return _estFidele() ? 'static locked camera, content preserved identically frame to frame, minimal natural motion'
+                        : 'dramatic lighting, coherent motion';
+}
 function buildImagePrompt() {
     const parts = ['Animate this image. Subject identical.'];
     const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
     if (state.mainPrompt.trim()) parts.push('Direction: ' + state.mainPrompt.trim());
-    parts.push('dramatic lighting, slow dolly-in', 'Portrait 9:16, 24fps, no text');
+    parts.push(_signatureCamera(), 'Portrait 9:16, 24fps, no text');
     return parts.join('. ');
 }
 function buildTextPrompt(t) {
@@ -1650,7 +1667,7 @@ function buildVideoPrompt() {
     const parts = ['Transform this exact video. Preserve subject.'];
     const sp = getCombinedStylePrompt(); if (sp) parts.push('STYLE: ' + sp);
     if (state.mainPrompt.trim()) parts.push('Transformation: ' + state.mainPrompt.trim());
-    parts.push('dramatic lighting, coherent motion', 'Portrait 9:16, 24fps, no text');
+    parts.push(_signatureCameraVideo(), 'Portrait 9:16, 24fps, no text');
     return parts.join('. ');
 }
 function buildComboPrompt() {
