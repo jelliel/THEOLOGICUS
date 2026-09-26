@@ -23,6 +23,7 @@ on:
     branches: [main]
     paths:
       - 'THEOLOGICUS.html'
+      - 'ai-video.html'   # v126m : compagnon AI VIDEO — sans lui, un correctif du studio seul ne publiait jamais
       - 'bible/**'
       - 'quran/**'
       - 'tafsir/**'
