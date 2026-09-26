@@ -1579,27 +1579,46 @@ function retryAfterSeconds(res, fallback) {
     if (Number.isFinite(when)) return Math.max(1, Math.ceil((when - Date.now()) / 1000));
     return fallback;
 }
+/* Le compte gratuit Agnes n'accepte qu'UNE generation video a la fois
+   (429 « rate limit for free users » des 2 requetes rapprochees, mesure
+   2026-09-26) et la place se libere au bout de quelques minutes. La lance
+   de 7 essais (~6 min) pouvait donc s'epuiser avant la liberation — d'ou
+   les echecs systematiques quand une autre generation tournait. On etend
+   a 10 essais (~18 min) et on journalise le message du fournisseur pour
+   que le JOURNAL explique lui-meme la cause. */
+const APIFETCH_429_WAITS = [20, 30, 45, 60, 90, 120, 180, 240, 300, 300];
+async function _journaliseErreurFournisseur(res) {
+    try {
+        const txt = await res.clone().text();
+        let msg = '';
+        try {
+            const j = JSON.parse(txt);
+            msg = (j.error && (j.error.message || j.error.type)) || j.message || '';
+        } catch (e) { msg = txt.slice(0, 140); }
+        if (msg) logInfo('ℹ️ Fournisseur : <code>' + escapeHtml(String(msg).slice(0, 160)) + '</code>');
+    } catch (e) { /* corps illisible : on ne journalise que le statut */ }
+}
 async function apiFetch(url, options = {}) {
     let lastResponse = null;
-    for (let attempt = 0; attempt < 7; attempt++) {
+    for (let attempt = 0; attempt < APIFETCH_429_WAITS.length; attempt++) {
         if (state.stopRequested) throw new Error('Arrêt');
+        const dernier = attempt === APIFETCH_429_WAITS.length - 1;
         try {
             const res = await fetch(url, options);
             lastResponse = res;
             if (res.status === 429) {
-                const fallback = [15, 30, 45, 60, 90, 120, 180][Math.min(attempt, 6)];
-                const w = retryAfterSeconds(res, fallback);
-                logWarn('⏳ Limite API — 429 — reprise automatique dans ' + w + 's');
+                const w = retryAfterSeconds(res, APIFETCH_429_WAITS[attempt]);
+                logWarn('⏳ Limite API Agnes (gratuit : une génération à la fois) — reprise automatique dans ' + w + 's');
                 setStatus('Limite API… reprise dans ' + w + 's');
-                if (attempt === 6) return res;
+                await _journaliseErreurFournisseur(res);
+                if (dernier) return res;
                 await sleep(w * 1000);
                 continue;
             }
             if (res.status === 503) {
-                const fallback = [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)];
-                const w = retryAfterSeconds(res, fallback);
+                const w = retryAfterSeconds(res, [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)]);
                 logWarn('⚠️ Service temporairement indisponible — 503 — reprise dans ' + w + 's');
-                if (attempt === 6) return res;
+                if (dernier) return res;
                 await sleep(w * 1000);
                 continue;
             }
@@ -1607,7 +1626,7 @@ async function apiFetch(url, options = {}) {
         } catch (e) {
             if (e.message === 'Arrêt') throw e;
             logWarn('🌐 Réseau — nouvelle tentative');
-            if (attempt === 6) break;
+            if (dernier) break;
             await sleep(3000);
         }
     }

@@ -2228,6 +2228,13 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         try:
             # Extract target URL from path: /proxy/<encoded_url>
             target_url = self.path[7:]  # remove /proxy/
+            # v126l — défense en profondeur : un client qui repasse une URL
+            # déjà préfixée (« /proxy//proxy/https://… ») produisait une cible
+            # « https:///proxy/… » sans hôte → 502 illisible. On Strippe tous
+            # les préfixes répétés ; un appel sain n'en a qu'un, il ne change
+            # donc rien pour lui.
+            while target_url.startswith('/proxy/'):
+                target_url = target_url[7:]
             # NB : startswith('http') suffirait mal — httpbin.org commence par 'http' !
             if not (target_url.startswith('http://') or target_url.startswith('https://')):
                 target_url = 'https://' + target_url

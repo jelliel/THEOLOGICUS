@@ -985,3 +985,30 @@ serveur amont qui renvoie volontairement du gzip et vérifier que le JSON est
 encore décodable via le relais. Si le relais est embarqué par PyInstaller,
 reconstruire l'exe après le correctif Python : modifier le HTML seul ne suffit
 pas.
+
+### Un préfixeur de route (/proxy/) doit être idempotent ou appelé à UN endroit
+
+Piège vérifié (v126l) : `callLLM` préfixait l'endpoint via `apiEndpoint`, puis
+`fetchLLMResponse(url)` repassait la même URL dans `apiEndpoint` → «
+/proxy//proxy/https://… ». Le relais construisait une cible sans hôte et tout
+appel non-streaming (commentaires de sélection, quiz…) échouait en mode servi,
+alors que `file://` (apiEndpoint sans effet) et le chat streaming
+(`callLLMStream`, un seul préfixe) passaient — le succès du chat masquait le
+bug depuis des semaines. Règle : une fonction de routage retourne tel reloc ce
+qui est déjà préfixé, et le préfixe n'est appliqué qu'à un seul endroit de la
+chaîne d'appel. Côté serveur, stripper les préfixes répétés en défense.
+Banc : servir la page, mocker `/proxy/`, journaliser les URLs reçues — le
+double préfixe saute aux yeux.
+
+### Un 429 fournisseur peut être une VRAIE limite de compte, pas un bug client
+
+Piège vérifié (v126l) : « Limite API — 429 » dans l'app alors que le même
+module en `file://` « marchait » a fait chercher une différence de relais ou
+d'en-têtes. Mesure directe : le compte gratuit Agnes n'accepte qu'UNE
+génération vidéo à la fois (2ᵉ POST 3 s après le 1ᵉʳ → 429 ; POST de nouveau
+200 ~7 min plus tard). Le standalone marchait parce qu'il tournait seul avec
+la même clé. Règle : avant d'incriminer le code, reproduire par appels réseau
+directs (clé incluse — IndexedDB/localStorage du navigateur) et mesurer la
+limite réelle. Côté app : lance de relance plus longue que la fenêtre
+d'indisponibilité mesurée, message du fournisseur journalisé, et repli sur un
+autre fournisseur dont la clé est valide (Mistral quota épuisé → Agnes chat).
