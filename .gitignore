@@ -87,3 +87,4 @@ _bak_*/
 # minimaux) : un run les régénère, rien à livrer.
 .workbuddy-ai/artifacts/_v126/_keys_bench/
 .workbuddy-ai/artifacts/_v126/_sans_compagnon/
+.workbuddy-ai/artifacts/_v126/_detect_bench/

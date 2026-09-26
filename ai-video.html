@@ -1197,45 +1197,69 @@ function clearAllExtraModels() {
 // (sans route GET /proxy/) renvoie un 404 HTML et res.json() lèverait ->
 // « Erreur réseau » à tort. On lit le texte et on ne parse que si c'est JSON.
 //
+// Extrait une liste de modèles depuis les enveloppes OpenAI-compatibles
+// connues. Certains relais ajoutent une enveloppe `result`/`items` autour de
+// `data`; ne pas transformer un objet de réponse en « 0 modèle » en silence.
+function _listeModeles(data) {
+  if (Array.isArray(data)) return data;
+  const candidats = [
+    data && data.data,
+    data && data.models,
+    data && data.items,
+    data && data.result,
+    data && data.result && data.result.data,
+  ];
+  const liste = candidats.find(Array.isArray);
+  return liste === undefined ? null : liste;
+}
+
 // Renvoie { ok, count, models, status } ou null si les deux chemins
 // (relais puis direct) ont échoué au niveau réseau.
 async function _verifCle(apiBaseRelais, apiBaseDirect, key, applyUI) {
   const start = Date.now();
-  let res = null, viaRelais = true;
-  try {
-    res = await fetch(apiBaseRelais + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
-  } catch (e) { res = null; }
-  // Relais injoignable (fetch rejeté) ou relais incapable de joindre l'amont
-  // (502 = proxy en erreur, 404 = relais obsolète) -> on tente l'appel direct.
-  const relaisHS = !res || res.status === 502 || res.status === 404;
-  if (relaisHS && apiBaseDirect && _VIA_RELAIS) {
+  const cibles = [{ url: apiBaseRelais, viaRelais: true }];
+  if (_VIA_RELAIS && apiBaseDirect) cibles.push({ url: apiBaseDirect, viaRelais: false });
+  let dernier = null;
+
+  for (const cible of cibles) {
+    let res = null;
     try {
-      res = await fetch(apiBaseDirect + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
-      viaRelais = false;
-    } catch (e2) { /* on garde res (null ou 502) */ }
+      res = await fetch(cible.url + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
+    } catch (e) {
+      dernier = null;
+      continue;
+    }
+    const ctype = (res.headers && res.headers.get) ? (res.headers.get('Content-Type') || '') : '';
+    const txt = await res.text();
+    let data = null;
+    if (ctype.includes('json') || (txt && txt.trim().startsWith('{') || txt && txt.trim().startsWith('['))) {
+      try { data = JSON.parse(txt); } catch (_) { data = null; }
+    }
+    const models = _listeModeles(data);
+    const relaisInutilisable = cible.viaRelais && (res.status === 502 || res.status === 404 || (res.ok && !Array.isArray(models)));
+    // Un relais obsolète peut répondre avec une page HTML 200/404. Essayer
+    // l'URL directe avant d'afficher « 0 modèle » dans ce cas.
+    if (relaisInutilisable) { dernier = res; continue; }
+    if (res.ok) {
+      const elapsed = Date.now() - start;
+      const detail = elapsed + 'ms · ' + models.length + ' modèles' + (cible.viaRelais ? '' : ' (direct)');
+      applyUI('valid', detail);
+      return { ok: true, count: models.length, models, status: res.status, detail };
+    }
+    if (res.status === 401) {
+      applyUI('invalid', 'HTTP 401');
+      return { ok: false, count: 0, models: [], status: 401 };
+    }
+    dernier = res;
+    // Un 502/404 du relais doit laisser sa chance à la cible directe.
+    if (!(cible.viaRelais && (res.status === 502 || res.status === 404))) break;
   }
-  if (!res) {
+  if (!dernier) {
     applyUI('invalid', 'Erreur réseau');
     return null;
   }
-  const elapsed = Date.now() - start;
-  const ctype = (res.headers && res.headers.get) ? (res.headers.get('Content-Type') || '') : '';
-  const txt = await res.text();
-  let data = null;
-  if (ctype.includes('json') || (txt && txt.trim().startsWith('{'))) {
-    try { data = JSON.parse(txt); } catch (_) { data = null; }
-  }
-  if (res.ok) {
-    const models = data ? (data.data || data.models || data || []) : [];
-    const count = Array.isArray(models) ? models.length : 0;
-    applyUI('valid', elapsed + 'ms · ' + count + ' modèles' + (viaRelais ? '' : ' (direct)'));
-    return { ok: true, count, models, status: res.status };
-  } else if (res.status === 401) {
-    applyUI('invalid', 'HTTP 401');
-    return { ok: false, count: 0, models: [], status: 401 };
-  }
-  applyUI('invalid', 'HTTP ' + res.status + (!data ? ' — relais ?' : ''));
-  return { ok: false, count: 0, models: [], status: res.status };
+  applyUI('invalid', 'HTTP ' + dernier.status + ' — réponse API illisible');
+  return { ok: false, count: 0, models: [], status: dernier.status };
 }
 
 async function verifyAgnesKey(silent = false) {
@@ -1270,11 +1294,10 @@ async function verifyAgnesKey(silent = false) {
         logSuccess('✅ Clé Agnes <strong>valide</strong> — ' + r.count + ' modèle(s)');
         state.agnesKeyStatus = 'valid'; localStorage.setItem(SK.AGNES_STATUS, 'valid');
         if (!silent) { showToast('✓ Clé Agnes valide', 'success'); setStatus(null); }
-        if (r.count > 0) {
-            const detected = r.models.map(m => ({ id: m.id || m.name, name: m.name || m.id, desc: m.description || m.owned_by || 'Agnes', provider: 'agnes' })).filter(m => m.id);
-            saveDetectedAgnes(detected); renderAgnesModelGrid(detected);
-            logInfo('🧠 ' + detected.length + ' modèles Agnes détectés');
-        }
+        const detected = r.models.map(m => ({ id: m.id || m.name, name: m.name || m.id, desc: m.description || m.owned_by || 'Agnes', provider: 'agnes' })).filter(m => m.id);
+        saveDetectedAgnes(detected); renderAgnesModelGrid(detected);
+        if (detected.length) logInfo('🧠 ' + detected.length + ' modèles Agnes détectés');
+        else logWarn('⚠️ Clé Agnes acceptée, mais l’API n’a renvoyé aucun modèle');
         return true;
     }
     state.agnesKeyStatus = 'invalid'; localStorage.setItem(SK.AGNES_STATUS, 'invalid');
@@ -1314,11 +1337,10 @@ async function verifyMistralKey(silent = false) {
         logSuccess('✅ Clé Mistral <strong>valide</strong> — ' + r.count + ' modèle(s)');
         state.mistralKeyStatus = 'valid'; localStorage.setItem(SK.MISTRAL_STATUS, 'valid');
         if (!silent) { showToast('✓ Clé Mistral valide', 'success'); setStatus(null); }
-        if (r.count > 0) {
-            const detected = r.models.map(m => { const id = m.id || ''; const lc = id.toLowerCase(); const vision = lc.includes('pixtral') || lc.includes('vision'); return { id, name: m.name || id, desc: m.description || (m.owned_by ? 'par ' + m.owned_by : 'Mistral'), vision, tags: vision ? ['vision'] : ['texte'] }; }).filter(m => m.id);
-            saveDetectedMistral(detected); renderMistralModelGrid(detected);
-            logInfo('🔥 ' + detected.length + ' modèles Mistral détectés');
-        }
+        const detected = r.models.map(m => { const id = m.id || ''; const lc = id.toLowerCase(); const vision = lc.includes('pixtral') || lc.includes('vision'); return { id, name: m.name || id, desc: m.description || (m.owned_by ? 'par ' + m.owned_by : 'Mistral'), vision, tags: vision ? ['vision'] : ['texte'] }; }).filter(m => m.id);
+        saveDetectedMistral(detected); renderMistralModelGrid(detected);
+        if (detected.length) logInfo('🔥 ' + detected.length + ' modèles Mistral détectés');
+        else logWarn('⚠️ Clé Mistral acceptée, mais l’API n’a renvoyé aucun modèle');
         return true;
     }
     if (!silent) {
@@ -1354,7 +1376,7 @@ function updateMistralKeyStatusUI(status, detail = '') {
 
 function renderAgnesModelGrid(models) {
     const grid = document.getElementById('model-grid'); if (!grid) return;
-    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle. Vérifiez la clé Agnes.</div>'; return; }
+    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle renvoyé par l’API Agnes.</div>'; return; }
     const sel = getSelectedModelId();
     grid.innerHTML = models.map(m => {
         const isActive = state.activeModels.includes(m.id);
@@ -1368,7 +1390,7 @@ function renderAgnesModelGrid(models) {
 }
 function renderMistralModelGrid(models) {
     const grid = document.getElementById('mistral-model-grid'); if (!grid) return;
-    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle. Vérifiez la clé Mistral.</div>'; return; }
+    if (!models || !models.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle renvoyé par l’API Mistral.</div>'; return; }
     const sel = localStorage.getItem(SK.MISTRAL_MODEL) || (models[0] && models[0].id);
     grid.innerHTML = models.map(m => {
         const isActive = state.activeModels.includes(m.id);

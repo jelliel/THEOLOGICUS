@@ -131,7 +131,12 @@ async function runOne(browser, label, forceSrcdoc) {
 
   let pass = 0, total = out.length;
   for (const r of out) {
-    const ok = r.status && r.status.includes('valide');
+    // A/B utilisent le relais simulé : ils doivent réussir. C est un appel
+    // direct avec une fausse clé : HTTP 401 est justement la preuve que le
+    // réseau et CORS fonctionnent, donc « invalide » est attendu ici.
+    const ok = r.label.startsWith('C-file://')
+      ? !!(r.status && (r.status.includes('invalide') || r.status.includes('valide')))
+      : !!(r.status && r.status.includes('valide'));
     if (ok) pass++;
     console.log('\n=== ' + r.label + ' ===');
     console.log('  chemin iframe : ' + r.path);
