@@ -1180,6 +1180,64 @@ function clearAllExtraModels() {
     logWarn('⚡ Modèles extras supprimés');
 }
 
+// v126h — Vérifie une clé en interrogeant GET /models, avec repli robuste.
+//
+// Pourquoi un repli : le relais (proxy_server.py) utilise http.client SANS le
+// proxy système de l'OS (choix volontaire : on ne veut pas qu'un http_proxy
+// intermédiaire pollue les appels). Conséquence : DERRIÈRE UN PROXY
+// D'ENTREPRISE, le relais ne rejoint PAS l'API Agnes/Mistral, alors que le
+// navigateur (WebView2) OUI, car il utilise la config réseau système. Le
+// fetch via relais échoue alors (502, ou rejet réseau) alors que la clé est
+// valide. On replie donc sur un appel DIRECT (URL nue https://…) : le
+// navigateur gère le proxy et les certificats. L'API renvoie
+// Access-Control-Allow-Origin: * (constaté sur /models), donc l'appel direct
+// cross-origin aboutit.
+//
+// On ne suppose plus non plus que le corps est du JSON : un relais obsolète
+// (sans route GET /proxy/) renvoie un 404 HTML et res.json() lèverait ->
+// « Erreur réseau » à tort. On lit le texte et on ne parse que si c'est JSON.
+//
+// Renvoie { ok, count, models, status } ou null si les deux chemins
+// (relais puis direct) ont échoué au niveau réseau.
+async function _verifCle(apiBaseRelais, apiBaseDirect, key, applyUI) {
+  const start = Date.now();
+  let res = null, viaRelais = true;
+  try {
+    res = await fetch(apiBaseRelais + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
+  } catch (e) { res = null; }
+  // Relais injoignable (fetch rejeté) ou relais incapable de joindre l'amont
+  // (502 = proxy en erreur, 404 = relais obsolète) -> on tente l'appel direct.
+  const relaisHS = !res || res.status === 502 || res.status === 404;
+  if (relaisHS && apiBaseDirect && _VIA_RELAIS) {
+    try {
+      res = await fetch(apiBaseDirect + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
+      viaRelais = false;
+    } catch (e2) { /* on garde res (null ou 502) */ }
+  }
+  if (!res) {
+    applyUI('invalid', 'Erreur réseau');
+    return null;
+  }
+  const elapsed = Date.now() - start;
+  const ctype = (res.headers && res.headers.get) ? (res.headers.get('Content-Type') || '') : '';
+  const txt = await res.text();
+  let data = null;
+  if (ctype.includes('json') || (txt && txt.trim().startsWith('{'))) {
+    try { data = JSON.parse(txt); } catch (_) { data = null; }
+  }
+  if (res.ok) {
+    const models = data ? (data.data || data.models || data || []) : [];
+    const count = Array.isArray(models) ? models.length : 0;
+    applyUI('valid', elapsed + 'ms · ' + count + ' modèles' + (viaRelais ? '' : ' (direct)'));
+    return { ok: true, count, models, status: res.status };
+  } else if (res.status === 401) {
+    applyUI('invalid', 'HTTP 401');
+    return { ok: false, count: 0, models: [], status: 401 };
+  }
+  applyUI('invalid', 'HTTP ' + res.status + (!data ? ' — relais ?' : ''));
+  return { ok: false, count: 0, models: [], status: res.status };
+}
+
 async function verifyAgnesKey(silent = false) {
     // v126f — l'input courant est la source de vérité : on le lit, on le
     // persiste (au cas où l'event « input » n'aurait pas encore écrit), et on
@@ -1194,41 +1252,38 @@ async function verifyAgnesKey(silent = false) {
     if (!silent) setStatus('🔍 Vérification…');
     logStep('🔍 Vérification clé Agnes <code>' + maskKey(key) + '</code>');
     updateAgnesKeyStatusUI('checking');
+    let r = null;
     try {
-        const start = Date.now();
-        const res = await fetch(API_BASE + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
-        const elapsed = Date.now() - start;
-        if (res.ok) {
-            const data = await res.json(); const models = data.data || data.models || data || [];
-            const count = Array.isArray(models) ? models.length : 0;
-            logSuccess('✅ Clé Agnes <strong>valide</strong> (' + elapsed + 'ms) — ' + count + ' modèle(s)');
-            updateAgnesKeyStatusUI('valid', elapsed + 'ms · ' + count + ' modèles');
-            state.agnesKeyStatus = 'valid'; localStorage.setItem(SK.AGNES_STATUS, 'valid');
-            if (!silent) { showToast('✓ Clé Agnes valide', 'success'); setStatus(null); }
-            if (count > 0) {
-                const detected = models.map(m => ({ id: m.id || m.name, name: m.name || m.id, desc: m.description || m.owned_by || 'Agnes', provider: 'agnes' })).filter(m => m.id);
-                saveDetectedAgnes(detected); renderAgnesModelGrid(detected);
-                logInfo('🧠 ' + detected.length + ' modèles Agnes détectés');
-            }
-            return true;
-        } else if (res.status === 401) {
-            logError('❌ Clé Agnes <strong>invalide</strong> — HTTP 401');
-            updateAgnesKeyStatusUI('invalid', 'HTTP 401'); state.agnesKeyStatus = 'invalid';
-            localStorage.setItem(SK.AGNES_STATUS, 'invalid');
-            if (!silent) { showToast('✕ Clé invalide', 'error'); setStatus(null); }
-            return false;
-        } else {
-            logError('⚠️ Réponse ' + res.status);
-            updateAgnesKeyStatusUI('invalid', 'HTTP ' + res.status);
-            if (!silent) { showToast('Erreur ' + res.status, 'error'); setStatus(null); }
-            return false;
-        }
+        r = await _verifCle(API_BASE, 'https://apihub.agnes-ai.com/v1', key, (s, d) => updateAgnesKeyStatusUI(s, d));
     } catch (e) {
         logError('🌐 ' + escapeHtml(e.message));
         updateAgnesKeyStatusUI('invalid', 'Erreur réseau');
         if (!silent) { showToast('Erreur réseau', 'error'); setStatus(null); }
         return false;
     } finally { if (btn && !silent) { btn.classList.remove('loading'); btn.textContent = '🔍 Vérifier'; } }
+    if (!r) {
+        if (!silent) { showToast('Erreur réseau — relais local injoignable', 'error'); setStatus(null); }
+        state.agnesKeyStatus = 'invalid'; localStorage.setItem(SK.AGNES_STATUS, 'invalid');
+        return false;
+    }
+    if (r.ok) {
+        logSuccess('✅ Clé Agnes <strong>valide</strong> — ' + r.count + ' modèle(s)');
+        state.agnesKeyStatus = 'valid'; localStorage.setItem(SK.AGNES_STATUS, 'valid');
+        if (!silent) { showToast('✓ Clé Agnes valide', 'success'); setStatus(null); }
+        if (r.count > 0) {
+            const detected = r.models.map(m => ({ id: m.id || m.name, name: m.name || m.id, desc: m.description || m.owned_by || 'Agnes', provider: 'agnes' })).filter(m => m.id);
+            saveDetectedAgnes(detected); renderAgnesModelGrid(detected);
+            logInfo('🧠 ' + detected.length + ' modèles Agnes détectés');
+        }
+        return true;
+    }
+    state.agnesKeyStatus = 'invalid'; localStorage.setItem(SK.AGNES_STATUS, 'invalid');
+    if (!silent) {
+        if (r.status === 401) { logError('❌ Clé Agnes <strong>invalide</strong> — HTTP 401'); showToast('✕ Clé invalide', 'error'); }
+        else { logError('⚠️ Réponse ' + r.status); showToast('Erreur ' + r.status, 'error'); }
+        setStatus(null);
+    }
+    return false;
 }
 async function verifyMistralKey(silent = false) {
     // v126f — idem : lire l'input courant (source de vérité) et persister.
@@ -1241,40 +1296,38 @@ async function verifyMistralKey(silent = false) {
     if (!silent) setStatus('🔍 Vérification…');
     logStep('🔍 Vérification clé Mistral <code>' + maskKey(key) + '</code>');
     updateMistralKeyStatusUI('checking');
+    let r = null;
     try {
-        const start = Date.now();
-        const res = await fetch(MISTRAL_API_BASE + '/models', { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
-        const elapsed = Date.now() - start;
-        if (res.ok) {
-            const data = await res.json(); const models = data.data || data.models || data || [];
-            const count = Array.isArray(models) ? models.length : 0;
-            logSuccess('✅ Clé Mistral <strong>valide</strong> (' + elapsed + 'ms) — ' + count + ' modèle(s)');
-            updateMistralKeyStatusUI('valid', elapsed + 'ms · ' + count + ' modèles');
-            state.mistralKeyStatus = 'valid'; localStorage.setItem(SK.MISTRAL_STATUS, 'valid');
-            if (!silent) { showToast('✓ Clé Mistral valide', 'success'); setStatus(null); }
-            if (count > 0) {
-                const detected = models.map(m => { const id = m.id || ''; const lc = id.toLowerCase(); const vision = lc.includes('pixtral') || lc.includes('vision'); return { id, name: m.name || id, desc: m.description || (m.owned_by ? 'par ' + m.owned_by : 'Mistral'), vision, tags: vision ? ['vision'] : ['texte'] }; }).filter(m => m.id);
-                saveDetectedMistral(detected); renderMistralModelGrid(detected);
-                logInfo('🔥 ' + detected.length + ' modèles Mistral détectés');
-            }
-            return true;
-        } else if (res.status === 401) {
-            logError('❌ Clé Mistral <strong>invalide</strong> — HTTP 401');
-            updateMistralKeyStatusUI('invalid', 'HTTP 401'); state.mistralKeyStatus = 'invalid';
-            if (!silent) { showToast('✕ Clé invalide', 'error'); setStatus(null); }
-            return false;
-        } else {
-            logError('⚠️ Réponse ' + res.status);
-            updateMistralKeyStatusUI('invalid', 'HTTP ' + res.status);
-            if (!silent) { showToast('Erreur ' + res.status, 'error'); setStatus(null); }
-            return false;
-        }
+        r = await _verifCle(MISTRAL_API_BASE, 'https://api.mistral.ai/v1', key, (s, d) => updateMistralKeyStatusUI(s, d));
     } catch (e) {
         logError('🌐 ' + escapeHtml(e.message));
         updateMistralKeyStatusUI('invalid', 'Erreur réseau');
         if (!silent) { showToast('Erreur réseau', 'error'); setStatus(null); }
         return false;
     } finally { if (btn && !silent) { btn.classList.remove('loading'); btn.textContent = '🔍 Vérifier'; } }
+    if (!r) {
+        if (!silent) { showToast('Erreur réseau — relais local injoignable', 'error'); setStatus(null); }
+        state.mistralKeyStatus = 'invalid';
+        return false;
+    }
+    if (r.ok) {
+        logSuccess('✅ Clé Mistral <strong>valide</strong> — ' + r.count + ' modèle(s)');
+        state.mistralKeyStatus = 'valid'; localStorage.setItem(SK.MISTRAL_STATUS, 'valid');
+        if (!silent) { showToast('✓ Clé Mistral valide', 'success'); setStatus(null); }
+        if (r.count > 0) {
+            const detected = r.models.map(m => { const id = m.id || ''; const lc = id.toLowerCase(); const vision = lc.includes('pixtral') || lc.includes('vision'); return { id, name: m.name || id, desc: m.description || (m.owned_by ? 'par ' + m.owned_by : 'Mistral'), vision, tags: vision ? ['vision'] : ['texte'] }; }).filter(m => m.id);
+            saveDetectedMistral(detected); renderMistralModelGrid(detected);
+            logInfo('🔥 ' + detected.length + ' modèles Mistral détectés');
+        }
+        return true;
+    }
+    if (!silent) {
+        if (r.status === 401) { logError('❌ Clé Mistral <strong>invalide</strong> — HTTP 401'); showToast('✕ Clé invalide', 'error'); }
+        else { logError('⚠️ Réponse ' + r.status); showToast('Erreur ' + r.status, 'error'); }
+        setStatus(null);
+    }
+    state.mistralKeyStatus = 'invalid';
+    return false;
 }
 function updateAgnesKeyStatusUI(status, detail = '') {
     const line = document.getElementById('api-status-line'), txt = document.getElementById('api-status-text'), det = document.getElementById('api-status-detail'), inp = document.getElementById('api-key-input');

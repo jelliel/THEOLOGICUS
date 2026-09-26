@@ -53,6 +53,18 @@ nulle part.** Le service est un **voisin** (« non détecté » est vrai) : 2 s 
 indispensable** sinon `http_proxy`=53051 rend un 502 qui ressemble à une réponse.
 `mpt_lancer()` rend `lance:true` **avant** que MPT réponde → sonder la condition.
 
+## AI VIDEO — vérification de clé (v126h)
+
+`verifyAgnesKey`/`verifyMistralKey` passent par `_verifCle(relais, direct,
+key, applyUI)`. **Le relais (proxy_server) utilise `http.client` SANS le
+proxy système** → derrière un proxy d'entreprise il ne sort PAS, alors que
+WebView2 OUI. Donc si le fetch `/proxy/` est rejeté, 502 ou 404 HTML (relais
+obsolète), **repli sur un fetch DIRECT vers l'URL nue** (`_VIA_RELAIS` + CORS
+`*` le permettent). **Ne jamais `res.json()` aveuglément** (un 404 HTML le
+fait lever → « Erreur réseau » à tort) : lire le texte, ne parser que si
+`Content-Type` JSON ou tête `{`. `fetch` rejeté = relais/API injoignable ;
+tout le reste renvoie un statut lisible (valide / invalide / HTTP n).
+
 ## Sources de médias (v126)
 
 11 sources, 4 groupes (`stock` 3 · `ia` 6 · `image` 1 · `local` 1), via

@@ -83,3 +83,7 @@ tools/.supertonic_cache/
 .workbuddy-ai/artifacts/_tts/frames/
 _inst_*
 _bak_*/
+# Copies de travail jetables créées par les bancs AI VIDEO (serveurs locaux
+# minimaux) : un run les régénère, rien à livrer.
+.workbuddy-ai/artifacts/_v126/_keys_bench/
+.workbuddy-ai/artifacts/_v126/_sans_compagnon/
