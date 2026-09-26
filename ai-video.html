@@ -1570,17 +1570,48 @@ function buildComboPrompt() {
     return parts.join('. ');
 }
 
+function retryAfterSeconds(res, fallback) {
+    const raw = res && res.headers ? res.headers.get('Retry-After') : '';
+    if (!raw) return fallback;
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds)) return Math.max(1, Math.ceil(seconds));
+    const when = Date.parse(raw);
+    if (Number.isFinite(when)) return Math.max(1, Math.ceil((when - Date.now()) / 1000));
+    return fallback;
+}
 async function apiFetch(url, options = {}) {
+    let lastResponse = null;
     for (let attempt = 0; attempt < 7; attempt++) {
         if (state.stopRequested) throw new Error('Arrêt');
         try {
             const res = await fetch(url, options);
-            if (res.status === 429) { const w = [15, 30, 45, 60, 90, 120, 180][Math.min(attempt, 6)]; logWarn('⏳ 429 — ' + w + 's'); setStatus('Rate limit… ' + w + 's'); await sleep(w * 1000); continue; }
-            if (res.status === 503) { const w = [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)]; logWarn('⚠️ 503 — ' + w + 's'); await sleep(w * 1000); continue; }
+            lastResponse = res;
+            if (res.status === 429) {
+                const fallback = [15, 30, 45, 60, 90, 120, 180][Math.min(attempt, 6)];
+                const w = retryAfterSeconds(res, fallback);
+                logWarn('⏳ Limite API — 429 — reprise automatique dans ' + w + 's');
+                setStatus('Limite API… reprise dans ' + w + 's');
+                if (attempt === 6) return res;
+                await sleep(w * 1000);
+                continue;
+            }
+            if (res.status === 503) {
+                const fallback = [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)];
+                const w = retryAfterSeconds(res, fallback);
+                logWarn('⚠️ Service temporairement indisponible — 503 — reprise dans ' + w + 's');
+                if (attempt === 6) return res;
+                await sleep(w * 1000);
+                continue;
+            }
             return res;
-        } catch (e) { if (e.message === 'Arrêt') throw e; logWarn('🌐 Réseau — retry'); await sleep(3000); }
+        } catch (e) {
+            if (e.message === 'Arrêt') throw e;
+            logWarn('🌐 Réseau — nouvelle tentative');
+            if (attempt === 6) break;
+            await sleep(3000);
+        }
     }
-    return fetch(url, options);
+    return lastResponse || fetch(url, options);
 }
 async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri) {
     const body = { model: modelId, prompt, num_frames: state.durationFrames, frame_rate: FRAME_RATE };
