@@ -287,6 +287,7 @@
     <div class="gallery-header" id="gallery-header">
         <div class="gallery-title"><span>🎬 Galerie vidéos</span><span class="gallery-counter" id="gallery-counter">0</span></div>
         <div class="gallery-actions">
+            <button type="button" class="gallery-action-btn" id="gallery-dir-btn" title="Choisir le dossier de destination des vidéos téléchargées">📁 Dossier</button>
             <button type="button" class="gallery-action-btn" id="gallery-autodl-btn">📥 Auto-DL</button>
             <button type="button" class="gallery-action-btn" id="gallery-dl-all-btn">⬇️ Tout</button>
             <button type="button" class="gallery-action-btn" id="gallery-clear-btn">🗑️</button>
@@ -1048,7 +1049,7 @@ async function addVideoToGallery(videoUrl, label, meta = {}) {
     try { const blob = await fetchVideoBlob(videoUrl); if (blob) { size = blob.size; if (size < 4 * 1024 * 1024) blobDataUrl = await blobToDataUrl(blob); } } catch (e) {}
     const entry = { id: 'vid_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), url: videoUrl, blob: blobDataUrl, label, size, model: meta.model || '', scene: meta.scene || '', timestamp: Date.now() };
     const gallery = loadGallery(); gallery.unshift(entry); saveGallery(gallery); renderGallery();
-    if (autoDownloadEnabled) { logInfo('📥 Auto-DL → téléchargement'); downloadVideoEntry(entry.id); }
+    if (autoDownloadEnabled) { logInfo('📥 Auto-DL → téléchargement'); downloadVideoEntry(entry.id, false); }
     logSuccess('✅ Vidéo ajoutée (' + formatBytes(size) + ')');
     return entry.id;
 }
@@ -1077,7 +1078,92 @@ function renderGallery() {
     body.querySelectorAll('[data-vc-download]').forEach(el => el.addEventListener('click', () => downloadVideoEntry(el.dataset.vcDownload)));
     body.querySelectorAll('[data-vc-delete]').forEach(el => el.addEventListener('click', () => { if (confirm('Supprimer cette vidéo ?')) removeVideoFromGallery(el.dataset.vcDelete); }));
 }
-async function downloadVideoEntry(id) {
+/* ── v126m — Dossier de destination choisi par popup ───────────────────
+   Les téléchargements partaient dans le dossier du navigateur, sans choix.
+   window.showDirectoryPicker() (File System Access API, Chromium) ouvre la
+   popup native de sélection de répertoire ; le handle se garde dans
+   IndexedDB (localStorage ne peut pas stocker un FileSystemDirectoryHandle).
+   Au clic DL / Tout : dossier déjà choisi → écriture directe ; sinon la
+   popup s'ouvre une fois. Annulation ou API absente → téléchargement
+   classique. Auto-DL n'étant pas un geste utilisateur, il ne peut PAS
+   ouvrir la popup : il utilise le dossier déjà choisi, sinon repli. */
+let _dirHandle = null;
+function _fsDb() {
+    return new Promise((res, rej) => {
+        const rq = indexedDB.open('cinema_noir_fs', 1);
+        rq.onupgradeneeded = () => rq.result.createObjectStore('handles');
+        rq.onsuccess = () => res(rq.result);
+        rq.onerror = () => rej(rq.error);
+    });
+}
+async function _fsSet(cle, val) {
+    const db = await _fsDb();
+    return new Promise((res, rej) => {
+        const tx = db.transaction('handles', 'readwrite');
+        tx.objectStore('handles').put(val, cle);
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+    });
+}
+async function _fsGet(cle) {
+    const db = await _fsDb();
+    return new Promise((res, rej) => {
+        const tx = db.transaction('handles', 'readonly');
+        const rq = tx.objectStore('handles').get(cle);
+        rq.onsuccess = () => res(rq.result);
+        rq.onerror = () => rej(rq.error);
+    });
+}
+function updateDirBtn() {
+    const btn = document.getElementById('gallery-dir-btn'); if (!btn) return;
+    btn.textContent = _dirHandle ? '📁 ' + _dirHandle.name : '📁 Dossier';
+    btn.title = _dirHandle ? 'Dossier choisi : ' + _dirHandle.name + ' — cliquer pour changer' : 'Choisir le dossier de destination des vidéos téléchargées';
+}
+async function chargerDossier() {
+    if (_dirHandle) return _dirHandle;
+    try { const h = await _fsGet('dirHandle'); if (h) { _dirHandle = h; updateDirBtn(); } } catch (e) { /* IndexedDB absent : pas grave */ }
+    return _dirHandle;
+}
+async function permissionDossier(h) {
+    if (!h) return false;
+    try {
+        if (await h.queryPermission({ mode: 'readwrite' }) === 'granted') return true;
+        // requestPermission exige un geste utilisateur : les clics DL / Tout en ont un.
+        return await h.requestPermission({ mode: 'readwrite' }) === 'granted';
+    } catch (e) { return false; }
+}
+async function choisirDossier() {
+    if (!window.showDirectoryPicker) { showToast("Ce navigateur n'a pas de sélecteur de dossier — téléchargement classique", 'warn', 3000); return null; }
+    try {
+        const h = await window.showDirectoryPicker({ id: 'cinema-noir-videos', startIn: 'videos', mode: 'readwrite' });
+        _dirHandle = h;
+        try { await _fsSet('dirHandle', h); } catch (e) { /* persistance impossible : le choix tient la session */ }
+        updateDirBtn();
+        logSuccess('📁 Dossier choisi : <code>' + escapeHtml(h.name) + '</code>');
+        return h;
+    } catch (e) { return null; } /* annulation utilisateur : repli classique */
+}
+/* Dossier prêt : le choix existant est réutilisé (permission redemandée si
+   besoin) ; sinon la popup s'ouvre. Auto-DL (sans geste utilisateur) passe
+   autoriserPopup=false : il réutilise le dossier choisi, sinon repli classique. */
+async function dossierPourTelechargement(autoriserPopup = true) {
+    if (!_dirHandle) await chargerDossier();
+    if (_dirHandle) return (await permissionDossier(_dirHandle)) ? _dirHandle : null;
+    return autoriserPopup ? await choisirDossier() : null;
+}
+async function ecrireDansDossier(blob, filename) {
+    const h = _dirHandle;
+    if (!h) return false;
+    if (!(await permissionDossier(h))) return false;
+    try {
+        const fh = await h.getFileHandle(filename, { create: true });
+        const w = await fh.createWritable(); await w.write(blob); await w.close();
+        logSuccess('📁 Enregistré dans <code>' + escapeHtml(h.name) + '</code> — <code>' + escapeHtml(filename) + '</code>');
+        return true;
+    } catch (e) { logError('❌ Écriture dans le dossier : ' + escapeHtml(e.message)); return false; }
+}
+
+async function downloadVideoEntry(id, autoriserPopup = true) {
     const v = loadGallery().find(x => x.id === id); if (!v) return;
     const safeLabel = (v.label || 'video').replace(/[^a-z0-9_-]/gi, '_').slice(0, 50);
     const filename = 'cinema-noir_' + safeLabel + '_' + v.id.slice(-6) + '.mp4';
@@ -1087,6 +1173,11 @@ async function downloadVideoEntry(id) {
         if (v.blob) { const res = await fetch(v.blob); blob = await res.blob(); }
         else blob = await fetchVideoBlob(v.url);
         if (!blob) { logWarn('⚠️ Blob indisponible'); window.open(v.url, '_blank'); return; }
+        /* v126m — dossier choisi → écriture directe ; sinon popup de choix une fois. */
+        if (await dossierPourTelechargement(autoriserPopup)) {
+            if (await ecrireDansDossier(blob, filename)) { showToast('📁 Enregistré dans le dossier', 'success', 2500); return; }
+            logWarn('⚠️ Écriture dossier impossible — téléchargement classique');
+        }
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = filename;
@@ -1100,7 +1191,9 @@ async function downloadAllVideos() {
     const gallery = loadGallery();
     if (!gallery.length) { showToast('Aucune vidéo', 'warn'); return; }
     if (!confirm('Télécharger ' + gallery.length + ' vidéo(s) ?')) return;
-    logStep('⬇️ <strong>Téléchargement de ' + gallery.length + ' vidéo(s)</strong>');
+    /* v126m — la popup de dossier s'ouvre UNE fois pour tout le lot. */
+    const dossier = await dossierPourTelechargement();
+    logStep('⬇️ <strong>Téléchargement de ' + gallery.length + ' vidéo(s)</strong>' + (dossier ? ' → <code>' + escapeHtml(dossier.name) + '</code>' : ''));
     let success = 0, errors = 0;
     for (let i = 0; i < gallery.length; i++) {
         setStatus('Téléchargement ' + (i + 1) + '/' + gallery.length + '…');
@@ -1111,6 +1204,7 @@ async function downloadAllVideos() {
             let blob = null;
             if (v.blob) { const res = await fetch(v.blob); blob = await res.blob(); }
             else blob = await fetchVideoBlob(v.url);
+            if (blob && dossier && await ecrireDansDossier(blob, filename)) { success++; await sleep(150); continue; }
             if (blob) {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1967,6 +2061,7 @@ async function enrichWithMistral(btn, textareaId) {
     });
     document.getElementById('gallery-clear-btn')?.addEventListener('click', (e) => { e.stopPropagation(); clearGallery(); });
     document.getElementById('gallery-dl-all-btn')?.addEventListener('click', (e) => { e.stopPropagation(); downloadAllVideos(); });
+    document.getElementById('gallery-dir-btn')?.addEventListener('click', async (e) => { e.stopPropagation(); await choisirDossier(); });
     document.getElementById('gallery-autodl-btn')?.addEventListener('click', (e) => { e.stopPropagation(); toggleAutoDownload(); });
     document.getElementById('vm-close')?.addEventListener('click', closeVideoModal);
     document.getElementById('video-modal')?.addEventListener('click', (e) => { if (e.target.id === 'video-modal') closeVideoModal(); });
@@ -2059,6 +2154,7 @@ async function enrichWithMistral(btn, textareaId) {
     } else updateMistralKeyStatusUI(null);
     renderImages(); renderAudios(); renderVideos(); renderComboLists(); updateGenerateBtn();
     renderGallery(); updateAutoDownloadBtn(); updateCheckBtn();
+    chargerDossier(); /* v126m — restaure le dossier choisi lors d'une session précédente */
     logInfo('🎬 <strong>Cinéma Noir — Studio complet</strong>');
     logInfo('📚 <strong>' + ALL_STYLES.length + '</strong> styles dans <strong>' + STYLE_CATEGORIES.length + '</strong> catégories');
     logInfo('⏱️ <strong>Timeout dynamique</strong> : 15-60 min selon la durée');
