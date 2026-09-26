@@ -6,10 +6,16 @@
 bancs `.workbuddy-ai/artifacts/`. **Version = `git rev-list --count HEAD` → `2.0.<n>`.**
 
 Skills **versionnés** dans `.workbuddy-ai/skills/` (miroir de
-`~/.workbuddy-ai/skills/`, hors dépôt). Après modification : `python
-tools/sync_skills.py` ou `--verifier`. `tools/githooks/pre-commit` vérifie ce
-miroir **à chaque commit**, plus secrets indexés, clés par nom, syntaxe JS du HTML.
-Clone neuf : `python tools/install_hooks.py` (`core.hooksPath` ne voyage pas).
+`~/.workbuddy-ai/skills/`, hors dépôt). **Le canonique vit dans le
+répertoire utilisateur** (`~/.workbuddy-ai/skills/`) ; le repo n'en est que
+le MIROIR. `tools/sync_skills.py` copie **Source (user) → Miroir (repo)**
+— donc **éditer directement `.workbuddy-ai/skills/…/SKILL.md` puis lancer
+`sync_skills` ÉCRASE l'ajout** avec la version user (sans la leçon). Bon
+flux : éditer `~/.workbuddy-ai/skills/…/SKILL.md`, puis `sync_skills.py`
+miroite, puis `git add .workbuddy-ai/skills/`. `tools/githooks/pre-commit`
+vérifie ce miroir **à chaque commit**, plus secrets indexés, clés par nom,
+syntaxe JS du HTML. Clone neuf : `python tools/install_hooks.py`
+(`core.hooksPath` ne voyage pas).
 
 ## Règles qui coûtent cher
 
