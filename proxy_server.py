@@ -2264,6 +2264,15 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 if val:
                     headers[h] = val
 
+            # Le relais lit les octets bruts avec http.client. Si l'amont
+            # répond en gzip/br mais que l'en-tête Content-Encoding n'est pas
+            # retransmis au navigateur, `response.json()` tente de parser les
+            # octets compressés et produit « Unexpected token … is not valid
+            # JSON » — précisément le symptôme des commentaires AI. Demander
+            # l'identité évite la compression ; l'en-tête de réponse est aussi
+            # retransmis plus bas par garde-fou si l'amont l'ignore.
+            headers['Accept-Encoding'] = 'identity'
+
             # Use http.client for better header control
             parsed = urlparse(target_url)
             is_https = parsed.scheme == 'https'
@@ -2310,6 +2319,12 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(resp.status)
             ct = resp.getheader('Content-Type', 'application/json')
             self.send_header('Content-Type', ct)
+            # Garde-fou : si le fournisseur compresse malgré
+            # Accept-Encoding: identity, le navigateur doit connaître le
+            # codage pour décompresser avant response.json().
+            ce = resp.getheader('Content-Encoding')
+            if ce:
+                self.send_header('Content-Encoding', ce)
             self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
 
