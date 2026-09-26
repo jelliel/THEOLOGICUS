@@ -25,12 +25,16 @@ import os
 import shutil
 import sys
 
+import embed_aivideo  # v126 — embarque ai-video.html dans THEOLOGICUS.html
+
 SOURCE = "THEOLOGICUS.html"
 
 CIBLES = [
     "mobile/www/index.html",              # Capacitor (APK)
     "dist/THEOLOGICUS/THEOLOGICUS.html",  # distribution Windows
     "_inst_v102/THEOLOGICUS.html",        # installation locale lancee
+    ".workbuddy-ai/artifacts/_v123/_pub/installe/THEOLOGICUS.html",  # exe reel lance par l'utilisateur
+    "_pub_v167/THEOLOGICUS.html",         # build publie (2.0.167)
 ]
 
 # v126 — THEOLOGICUS.html n'est plus seul : le modal AI VIDEO charge un
@@ -43,6 +47,7 @@ COMPAGNONS = {
         "mobile/www/ai-video.html",              # Capacitor (APK)
         "dist/THEOLOGICUS/ai-video.html",        # distribution Windows
         "_inst_v102/ai-video.html",              # installation locale
+        "_pub_v167/ai-video.html",               # build publie (2.0.167)
     ],
 }
 
@@ -171,6 +176,17 @@ def main():
                 continue
             shutil.copyfile(src, cible)
             print("     -> copiee" if md5(cible) == s_md5 else "     -> ECHEC de la copie !")
+
+    # ── Embarquer ai-video.html dans THEOLOGICUS.html ───────────────────
+    # Dernier rempart : un exe packagé sert THEOLOGICUS.html depuis son
+    # propre dossier, qui n'a pas forcément ai-video.html (oubli de
+    # propagation, build incomplet). On injecte le document COMPAGNON en
+    # base64 dans THEOLOGICUS.html ; le modal le ré-injecte via srcdoc si la
+    # route /ai-video.html échoue. Ainsi AUCUNE copie ne dépend d'un fichier
+    # séparé — le studio s'affiche partout.
+    print("")
+    print("Embarquement de ai-video.html dans THEOLOGICUS.html…")
+    embed_aivideo.run()
 
     print("")
     if verifier_seulement:
