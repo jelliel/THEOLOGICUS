@@ -776,6 +776,138 @@ const STYLE_CATEGORIES = [
             }
         ]
     },
+    /* v126p — catégorie fournie par l'utilisateur (fichier deepseek_javascript_
+       20260926_c4d969.js) : 15 styles « MOTION ONLY » — le sujet est figé à
+       l'identique, seule une animation ambiante précise vit. Famille à part :
+       on ne prescrit NI caméra fixe NI dolly-in générique — chaque style dit
+       lui-même ce qui bouge (« ONLY CAMERA MOVES » prescrit par exemple son
+       propre dolly-in très lent). */
+    {
+        id: 'motion_only',
+        name: '🎞️ MOTION ONLY — Animate sans modifier',
+        styles: [
+            {
+                e: '🔒',
+                n: 'MOTION ONLY — Pur',
+                d: 'Animation pure, zéro altération du sujet',
+                tags: ['réaliste', 'minimal', 'doux'],
+                color: ['#0a0a0a', '#c9a961'],
+                p: 'ANIMATE ONLY. DO NOT MODIFY. This is a MOTION-ONLY animation task. The input image MUST be used as-is, unchanged in every pixel of the subject. Do not regenerate, do not re-imagine, do not beautify, do not smooth, do not reshape, do not age, do not rejuvenate, do not change skin, hair, clothes, expression baseline, proportions, or any physical attribute. The face and body are FROZEN — identical to the source. The ONLY thing that moves is natural life: subtle breathing visible in chest and shoulders, micro eye movements, tiny involuntary shifts. Ambient motion only: gentle light fluctuation, subtle atmospheric particles, natural depth-of-field breathing. Think of a photograph that starts living — nothing about the person changes, only reality continues around them. Absolute identity lock. Photorealistic. Zero alteration of the subject.'
+            },
+            {
+                e: '🌬️',
+                n: 'Respiration Seule',
+                d: "Seule la respiration anime l'image",
+                tags: ['réaliste', 'minimal', 'intime'],
+                color: ['#1a1a1a', '#8d6e63'],
+                p: 'ONLY BREATHING MOVES. The subject is 100% frozen — identical face, identical features, identical skin, identical hair, identical clothes, identical expression. The ONLY animation is breathing: subtle rise and fall of the chest and shoulders, tiny natural head micro-movement synchronized with breath. Nothing else moves. No facial animation. No eye movement. No expression change. Absolute identity preservation. Photorealistic realism. Continuous natural breathing cycle. The image stays exactly the same except for the breath of life.'
+            },
+            {
+                e: '👁️',
+                n: 'Regard Vivant',
+                d: 'Micro-mouvements des yeux seulement',
+                tags: ['réaliste', 'minimal', 'intime'],
+                color: ['#212121', '#c9a961'],
+                p: 'ONLY THE GAZE MOVES. The subject is completely frozen except for micro-movements of the eyes: subtle pupil dilation, tiny involuntary saccades, occasional slow blink, gentle natural eye moisture reflections. The face shape, features, skin, hair, clothes, expression, and posture remain IDENTICAL to the source. No other motion permitted. Absolute identity lock. Photorealistic, hyper-real skin texture preserved exactly. The eyes become alive while everything else stays frozen.'
+            },
+            {
+                e: '💡',
+                n: 'Lumière Vivante',
+                d: 'Seule la lumière change, sujet figé',
+                tags: ['réaliste', 'doux', 'lumineux'],
+                color: ['#fff8e1', '#ffb300'],
+                p: 'ONLY LIGHT MOVES. The subject is 100% frozen — identical in every detail, every pixel, every feature. Only the LIGHTING animates around them: slow natural light fluctuations, subtle shifts in ambient glow, gentle atmospheric haze breathing, micro reflections moving across surfaces. The person does not move at all. Absolute identity preservation. Photorealistic realism. Cinematic light choreography. The subject is a statue of themselves, only the world around them breathes.'
+            },
+            {
+                e: '🌫️',
+                n: 'Ambiance Seule',
+                d: 'Atmosphère anime, sujet intact',
+                tags: ['réaliste', 'doux', 'minimal'],
+                color: ['#455a64', '#b0bec5'],
+                p: 'ONLY ATMOSPHERE MOVES. The subject remains 100% frozen — identical face, features, skin, hair, clothes, expression, posture, proportions. The ONLY animation is atmospheric: drifting fog, floating particles, subtle dust motes, gentle air currents visible in the environment. No subject motion of any kind. Absolute identity lock. Photorealistic realism. Cinematic atmospheric ambiance. The world breathes around a completely still subject.'
+            },
+            {
+                e: '📷',
+                n: 'Caméra Vivante',
+                d: 'Seule la caméra bouge, sujet figé',
+                tags: ['réaliste', 'détaillé', 'dramatique'],
+                color: ['#212121', '#ff5722'],
+                p: 'ONLY CAMERA MOVES. The subject is 100% frozen — identical in every way to the source image. The ONLY motion is subtle cinematographic camera work: very slow dolly-in, gentle parallax shift, small push toward or pull away from the subject, natural handheld micro-shake, soft rack focus between foreground and subject. The person does not move at all. Absolute identity preservation. Photorealistic cinema realism. The camera brings life to a still subject without changing them.'
+            },
+            {
+                e: '🌊',
+                n: 'Micro-Mouvements',
+                d: 'Vie naturelle discrète, identité figée',
+                tags: ['réaliste', 'doux', 'minimal'],
+                color: ['#263238', '#90a4ae'],
+                p: 'ONLY MICRO-LIFE MOVES. The subject is preserved with 100% identity accuracy — face, features, skin, hair, clothes, expression, proportions all IDENTICAL to the source. The ONLY animations are the tiniest signs of life: almost imperceptible breathing, occasional single blink, very subtle weight shift, micro-expression at the corner of the mouth that does NOT change identity. Nothing else. Absolute identity lock. Photorealistic documentary realism. The image is alive but the person is unchanged.'
+            },
+            {
+                e: '🎬',
+                n: 'Cinéma Documentaire Figé',
+                d: 'Réalité brute, sujet identique',
+                tags: ['réaliste', 'naturel', 'minimal'],
+                color: ['#37474f', '#b0bec5'],
+                p: 'DOCUMENTARY FREEZE animation. The subject is completely preserved — identical in every pixel of their being: face, features, skin texture, hair, clothes, expression, posture, proportions. NO modification of the subject whatsoever. Only documentary-level ambient animation: natural light shifts, subtle atmospheric movement, environmental life around the still subject. Cinematic vérité realism. Absolute identity lock. The subject is exactly as in the photograph, only the world moves around them.'
+            },
+            {
+                e: '💧',
+                n: 'Gouttes & Particules',
+                d: 'Seuls les éléments extérieurs bougent',
+                tags: ['réaliste', 'détaillé', 'naturel'],
+                color: ['#0277bd', '#4fc3f7'],
+                p: 'ONLY PARTICLES MOVE. The subject remains 100% frozen — identical face, features, skin, hair, clothes, expression, proportions. The ONLY animation is environmental particles: rain drops falling around them, snow drifting gently, dust motes floating in the light, leaves moving in a light breeze, water ripples in the background. No subject motion at all. Absolute identity lock. Photorealistic realism. Nature animates around a completely still human being.'
+            },
+            {
+                e: '🔥',
+                n: 'Feu & Fumée Seuls',
+                d: 'Feu et fumée animent, sujet figé',
+                tags: ['réaliste', 'chaud', 'dramatique'],
+                color: ['#bf360c', '#ffb300'],
+                p: 'ONLY FIRE AND SMOKE MOVE. The subject is 100% frozen — identical in every way: face, features, skin, hair, clothes, expression, posture, proportions. The ONLY animation is fire and smoke: flames flickering in the background or foreground, smoke drifting slowly through the scene, embers floating in the air, warm light from the fire reflecting subtly on surfaces. No subject motion. Absolute identity preservation. Photorealistic warmth. Cinematic realism with fire animation only.'
+            },
+            {
+                e: '🌅',
+                n: 'Golden Hour Figé',
+                d: 'Lumière dorée animée, sujet immobile',
+                tags: ['réaliste', 'chaud', 'doux'],
+                color: ['#ff9800', '#ffc107'],
+                p: 'ONLY GOLDEN LIGHT MOVES. The subject is completely frozen — identical in every detail: face, features, skin, hair, clothes, expression, proportions. The ONLY animation is golden hour lighting: warm amber glow subtly shifting, sunlight gently varying in intensity, golden particles floating in the air, soft lens flare drifting slowly. No subject motion at all. Absolute identity lock. Photorealistic warmth. Cinematic realism with golden light animation only.'
+            },
+            {
+                e: '🌙',
+                n: 'Nuit Vivante Figée',
+                d: 'Ambiance nocturne seule animée',
+                tags: ['réaliste', 'froid', 'sombre'],
+                color: ['#1a237e', '#90caf9'],
+                p: 'ONLY NIGHT AMBIANCE MOVES. The subject is 100% frozen — identical in every way: face, features, skin, hair, clothes, expression, posture. The ONLY animation is nighttime atmosphere: moonlight subtly shifting, distant light flickering, cold mist drifting slowly, occasional soft lightning flashes far away. No subject motion. Absolute identity lock. Photorealistic nocturnal realism. Cinematic night with subject completely still.'
+            },
+            {
+                e: '🌊',
+                n: 'Brise Marine Figée',
+                d: "Vent léger anime l'environnement",
+                tags: ['réaliste', 'naturel', 'froid'],
+                color: ['#0277bd', '#b3e5fc'],
+                p: "ONLY AMBIENT WIND MOVES. The subject is completely frozen — identical in every way to the source image: face, features, skin, hair, clothes, expression, proportions. The ONLY animation is environmental wind: gentle breeze moving in the background foliage, waves softly lapping in the distance, subtle air currents visible in the environment. NO movement of the subject's hair, clothes, or body. Absolute identity lock. Photorealistic natural realism. The world breathes with the wind while the subject remains perfectly still."
+            },
+            {
+                e: '🏙️',
+                n: 'Ville Vivante Figée',
+                d: 'Vie urbaine animée, sujet figé',
+                tags: ['réaliste', 'urbain', 'détaillé'],
+                color: ['#455a64', '#ff5722'],
+                p: 'ONLY THE CITY MOVES. The subject is 100% frozen — identical in every way: face, features, skin, hair, clothes, expression, posture, proportions. The ONLY animation is urban life around them: distant lights flickering, traffic moving in the background, people walking far away, subtle reflections of the city on glass surfaces. NO movement of the subject whatsoever. Absolute identity lock. Photorealistic urban realism. The city breathes while the subject stays frozen.'
+            },
+            {
+                e: '✨',
+                n: 'Lucioles & Étincelles',
+                d: 'Particules magiques, sujet immobile',
+                tags: ['réaliste', 'doux', 'fantasy'],
+                color: ['#9c27b0', '#ffeb3b'],
+                p: 'ONLY MAGICAL PARTICLES MOVE. The subject is 100% frozen — identical in every detail: face, features, skin, hair, clothes, expression, proportions. The ONLY animation is magical particles: fireflies drifting slowly through the air, golden sparks floating upward, subtle ethereal dust moving through beams of light. No subject motion of any kind. Absolute identity lock. Photorealistic with magical particles animation only. Cinematic atmosphere, frozen subject.'
+            }
+        ]
+    },
     { id: 'cinema', name: '🎬 Cinéma', styles: [
         { e: '🎩', n: 'Film Noir', d: 'Noir et blanc', tags: ['sombre', 'monochrome', 'rétro'], color: ['#1a1a1a', '#000'], p: 'classic 1940s film noir, high contrast black and white' },
         { e: '🌆', n: 'Néo-Noir', d: 'Néon, pluie', tags: ['sombre', 'urbain', 'coloré'], color: ['#1a0a2a', '#ff0044'], p: 'modern neo-noir, rain-soaked night, neon reflections' },
@@ -1758,15 +1890,21 @@ function getCombinedStylePrompt() { return state.selectedStyles.map(s => s.p).jo
    (« dramatic lighting, slow dolly-in ») : elle contredirait la consigne de
    garder l'image identique. v126o — la catégorie 🔒 IDENTITY LOCK rejoint la
    famille : chacun de ses 16 styles prescrit déjà SON éclairage et un
-   mouvement minimal dans son propre prompt. */
+   mouvement minimal dans son propre prompt. v126p — la catégorie 🎞️ MOTION
+   ONLY est une famille à part : le sujet est figé, mais on ne prescrit NI
+   caméra fixe NI dolly-in, car chaque style dit lui-même ce qui bouge
+   (« ONLY CAMERA MOVES » veut son propre dolly-in très lent). */
 function _estFamilleFidelite() { return state.selectedStyles.some(s => s.category === 'fidelite' || s.category === 'identity_lock'); }
+function _estMotionOnly() { return state.selectedStyles.some(s => s.category === 'motion_only'); }
 function _signatureCamera() {
-    return _estFamilleFidelite() ? 'static locked camera, no zoom, no pan, minimal natural motion'
-                        : 'dramatic lighting, slow dolly-in';
+    if (_estFamilleFidelite()) return 'static locked camera, no zoom, no pan, minimal natural motion';
+    if (_estMotionOnly()) return 'subject frozen identical to the source, only the ambient motion described by the style animates the scene';
+    return 'dramatic lighting, slow dolly-in';
 }
 function _signatureCameraVideo() {
-    return _estFamilleFidelite() ? 'static locked camera, content preserved identically frame to frame, minimal natural motion'
-                        : 'dramatic lighting, coherent motion';
+    if (_estFamilleFidelite()) return 'static locked camera, content preserved identically frame to frame, minimal natural motion';
+    if (_estMotionOnly()) return 'subject frozen identical to the source frame to frame, only the ambient motion described by the style animates the scene';
+    return 'dramatic lighting, coherent motion';
 }
 function buildImagePrompt() {
     const parts = ['Animate this image. Subject identical.'];
