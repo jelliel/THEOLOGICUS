@@ -956,3 +956,16 @@ relais, tenter l'URL directe avant d'afficher un résultat vide. Toujours
 rendre la grille et afficher « aucun modèle renvoyé par l'API » si la liste
 est réellement vide ; ne pas coder en dur des modèles qui pourraient ne pas
 être autorisés par la clé.
+
+### Un 429 doit respecter Retry-After, pas une durée codée en dur
+
+Piège vérifié (v126j) : `apiFetch` attendait 15/30/45 secondes quelle que
+soit la valeur envoyée par le fournisseur, puis lançait une requête immédiate
+après le dernier essai. La génération vidéo affichait donc `WARN 429 — 15s`,
+message technique qui ne disait pas que la reprise était automatique.
+
+Règle : lire `Retry-After` comme secondes ou comme date HTTP, attendre ce
+délai, afficher « Limite API — reprise automatique », puis retenter. Au
+dernier essai, retourner la dernière réponse 429 : ne pas envoyer une
+requête supplémentaire sans délai. Tester au minimum 429 + Retry-After court
+→ nouvelle tentative → 200, ainsi que les régressions iframe/UI.
