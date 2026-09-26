@@ -43,7 +43,11 @@ rem Purger dist\THEOLOGICUS avant de le repeupler : les fichiers d un build
 rem precedent y restent sinon, sont compresses dans l installeur et livrent du
 rem contenu PERIME. Vecu : l installeur du 22/09 annoncait 1.0.33 et ne portait
 rem que bible/quran/tafsir/libs, sans biblehb — donc aucun mot a mot hebreu.
-if exist "dist\THEOLOGICUS" rd /s /q "dist\THEOLOGICUS"
+rem PyInstaller purge deja dist\THEOLOGICUS a l'etape [1/5] ("Removing dir") ;
+rem le rd ci-dessous ne sert donc que si l'exe est ABSENT du build. Ne jamais
+rem rd puis copy sans mkdir : un rd reussi rend le copy suivant impossible
+rem ("The system cannot find the path specified") — vecu le 26/09.
+if not exist "dist\THEOLOGICUS" mkdir "dist\THEOLOGICUS"
 copy /y THEOLOGICUS.html dist\THEOLOGICUS\ >nul || goto :err
 rem v33 : corpus decoupes — bible par livre (bible\b*.js), quran par sourate
 rem (quran\q*.js), tafsir par sourate (tafsir\s*.js) + index.js ; les monolithes
