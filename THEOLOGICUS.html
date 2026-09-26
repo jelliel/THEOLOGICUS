@@ -20850,6 +20850,14 @@ function bindEvents() {
   // On ne vérifie la disponibilité qu'UNE fois, au premier chargement.
   const aivideoFrame = $("#aivideo-frame");
   const aivideoIndispo = $("#aivideo-indisponible");
+  // Auto-guérison : au plus une fois, on récupère le fichier en texte et on
+  // l'injecte dans l'iframe via `srcdoc`. Comme ai-video.html est
+  // totalement autonome (CSS/JS inline, aucune ressource relative), il se
+  // rend alors exactement comme par navigation — et le studio apparaît même
+  // si la navigation directe de l'iframe a échoué (origine/chemin). Si le
+  // relais ne sert pas le fichier (404), le fetch échoue et le message de
+  // repli reste affiché : on ne cache jamais une vraie panne.
+  let aivideoTenteSrcdoc = false;
   if (aivideoFrame) {
     aivideoFrame.addEventListener("load", () => {
       const doc = aivideoFrame.contentDocument;
@@ -20873,6 +20881,15 @@ function bindEvents() {
               + " » pour <code>" + url + "</code>. Le fichier <code>ai-video.html</code>"
               + " est-il bien présent à côté de <code>THEOLOGICUS.html</code>,"
               + " et avez-vous redémarré le relais depuis ?";
+          }
+          if (!aivideoTenteSrcdoc) {
+            aivideoTenteSrcdoc = true;
+            fetch("/ai-video.html").then(r => {
+              if (!r.ok) throw new Error("HTTP " + r.status);
+              return r.text();
+            }).then(html => {
+              if (html && html.length > 50000) aivideoFrame.srcdoc = html;
+            }).catch(() => { /* repli conservé */ });
           }
         }
       }
