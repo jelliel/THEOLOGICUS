@@ -876,3 +876,36 @@ THEOLOGICUS n'est plus un seul fichier : le modal AI VIDEO charge
 `ai-video.html`. Oublier de le propager dans `mobile/www`, `dist` et
 `_inst_v102` donne un cadre vide et muet — invisible sur la machine de
 développement. `tools/sync_html.py` propage donc aussi les `COMPAGNONS`.
+
+### Le repli `srcdoc` d'un iframe doit se contrôler AUSSI à l'ouverture du modal, pas seulement sur `load`
+
+Piège vérifié (v126f) : un iframe dont le `src` pointe sur une route qui
+renvoie 404 charge sa page d'erreur TRÈS tôt. Si le `load` listener est posé
+APRÈS un `await` (le binding vit dans une fonction `async`), le chargement
+initial a déjà eu lieu avant que le listener existe → l'évènement `load` est
+manqué, le repli (`srcdoc` depuis un `#b64` embarqué) ne se déclenche jamais,
+et le message d'erreur reste `hidden`. Résultat : cadre vide muet dans l'exe
+packagé, alors que le `.bat` (qui a le fichier séparé) marche.
+
+Règle : le test de repli doit être une fonction idempotente appelée à DEUX
+endroits — (1) sur `load` (l'iframe finit de charger alors que le modal est
+déjà ouvert) et (2) dans le handler d'ouverture du modal (contrôle immédiat,
+car l'échec initial est déjà consommé). Juger sur le TITRE du document
+(`/AI VIDEO/i`), pas sur `body.children.length` (la 404 a plusieurs enfants).
+
+### Un champ « input » sans listener `input`/`change` ne persiste JAMAIS — et le statut reste figé
+
+Piège vérifié (v126g) : un `<input>` dont aucun handler n'écrit dans le
+stockage (ici `localStorage`) garde sa valeur dans le DOM, mais toute
+fonction qui lit depuis le storage renvoie du vide. Conséquence : « Aucune
+clé » même après saisie, valeur perdue au reload, et le statut UI ne se
+rafraîchit que lorsque l'utilisateur déclenche la vérification.
+
+Règle : tout input qui alimente une fonction persistante doit avoir un
+listener `input` qui écrit à chaque frappe. Les handlers de vérification
+doivent lire la valeur COURANTE de l'input (source de vérité) et la
+persister — paré contre les races (paste → clic Vérifier avant que
+l'event `input` n'ait été délivré) et contre les écritures échouées
+(quota, mode privé). Bonus : appeler la fonction de mise-à-jour du
+statut dans le listener `input` rend le statut live, sans attendre le
+clic Vérifier.
