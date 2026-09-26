@@ -23,6 +23,16 @@ except Exception:
 PORT = 8765
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# v126 — fichiers que THEOLOGICUS charge en PLUS de lui-meme. Le relais les
+# cherche dans SERVE_DIR puis, s'il ne les trouve pas, dans le cwd : un
+# lanceur qui demarre le relais depuis un autre dossier (par exemple une
+# copie de la distribution) n'aura ainsi plus d'iframe vide. On limite la
+# recherche au cwd a cette liste explicite — un fichier ordinaire reste
+# servi depuis SERVE_DIR seul, pour ne pas elargir la surface de service.
+COMPAGNONS = {
+    "ai-video.html",   # modal « AI VIDEO » : studio IA tiers, iframe
+}
 ALLOWED_ORIGINS = ['http://localhost', 'http://127.0.0.1', 'file://']
 
 # v117 — sonde d'identité, consommée par app.py AVANT de démarrer un serveur.
@@ -1859,7 +1869,19 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             path = self.path.split('?')[0]
             if path == '/':
                 path = '/THEOLOGICUS.html'
+            # v126 — protection contre la traversee de repertoire : un chemin
+            # statique ne doit jamais remonter au-dessus de SERVE_DIR.
+            if '..' in path.split('/'):
+                self.send_error(400, "Chemin invalide"); return
             file_path = os.path.join(SERVE_DIR, path.lstrip('/'))
+            # v126 : les COMPAGNONS sont des fichiers que THEOLOGICUS charge
+            # en plus de lui-meme (iframe AI VIDEO). Si le relais tourne
+            # depuis un dossier qui ne les contient pas (cwd different),
+            # on les cherche AUSSI dans le cwd, sans elargir aux autres.
+            if not os.path.isfile(file_path) and path.lstrip('/') in COMPAGNONS:
+                candidat = os.path.join(os.getcwd(), path.lstrip('/'))
+                if os.path.isfile(candidat):
+                    file_path = candidat
             if os.path.isfile(file_path):
                 # Déterminer le Content-Type
                 ext = os.path.splitext(file_path)[1].lower()

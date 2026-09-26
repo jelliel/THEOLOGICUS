@@ -20853,9 +20853,29 @@ function bindEvents() {
   if (aivideoFrame) {
     aivideoFrame.addEventListener("load", () => {
       const doc = aivideoFrame.contentDocument;
-      // Un `about:blank` (fichier absent) rend un document sans corps réel.
-      const charge = !!doc && !!doc.body && doc.body.children.length > 0;
-      if (aivideoIndispo) aivideoIndispo.hidden = charge;
+      if (!doc || !doc.body) return;
+      // Le relais, sur 404, renvoie une page « Error response » qui a
+      // PLUSIEURS enfants — donc `children.length > 0` ne distingue pas
+      // une vraie page d'une page d'erreur. On regarde le TITRE du document
+      // : si ce n'est pas celui de ai-video.html, c'est qu'une page d'erreur
+      // ou une redirection s'est glissée, et il faut prévenir.
+      const titre = (doc.title || "").trim();
+      const attendu = "AI VIDEO";
+      const charge = !!titre && titre.toUpperCase().indexOf(attendu) >= 0;
+      if (aivideoIndispo) {
+        aivideoIndispo.hidden = charge;
+        if (!charge) {
+          const url = (aivideoFrame.contentWindow &&
+            aivideoFrame.contentWindow.location.href) || "";
+          const msg = aivideoIndispo.querySelector("div");
+          if (msg) {
+            msg.innerHTML = "Le relais a répondu autre chose que « " + attendu
+              + " » pour <code>" + url + "</code>. Le fichier <code>ai-video.html</code>"
+              + " est-il bien présent à côté de <code>THEOLOGICUS.html</code>,"
+              + " et avez-vous redémarré le relais depuis ?";
+          }
+        }
+      }
     });
     aivideoFrame.addEventListener("error", () => {
       if (aivideoIndispo) aivideoIndispo.hidden = false;
