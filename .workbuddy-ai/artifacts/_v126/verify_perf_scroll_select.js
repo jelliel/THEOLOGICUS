@@ -378,6 +378,22 @@ const INSTRUMENT = () => {
     const peinturePart = tr.span ? +(((paint.ms + comp.ms) / tr.span) * 100).toFixed(1) : 0;
     ligne("part du temps en peinture + composition", peinturePart, "%");
 
+    // ══════════ 3bis. COÛT AU REPOS ══════════
+    /* Les trois cercles décoratifs sont flous (`filter: blur(80px)`) et
+       animés en boucle 20 s, juste SOUS la coque qui porte
+       `backdrop-filter: blur(22px)`. Si le fond bouge, le flou d'arrière-plan
+       doit être recalculé à chaque image — y compris quand l'utilisateur ne
+       fait rien. On mesure donc 2 s d'inactivité totale. */
+    console.log("\n── 3bis. Coût au repos (aucune interaction) ──");
+    const repos = await trace(client, async () => { await page.waitForTimeout(2000); });
+    const gr = (k) => (repos.agg && repos.agg[k]) ? repos.agg[k] : { n: 0, ms: 0 };
+    const reposPaint = gr("Paint"), reposLay = gr("Layout"), reposRec = gr("UpdateLayoutTree").n ? gr("UpdateLayoutTree") : gr("RecalcStyle");
+    ligne("Paint : appels / durée", reposPaint.n + " / " + reposPaint.ms, "ms");
+    ligne("Layout : appels / durée", reposLay.n + " / " + reposLay.ms, "ms");
+    ligne("Recalcul de style : appels / durée", reposRec.n + " / " + reposRec.ms, "ms");
+    const reposPart = repos.span ? +(((reposPaint.ms + reposLay.ms + reposRec.ms) / repos.span) * 100).toFixed(1) : 0;
+    ligne("part du temps en travail de rendu", reposPart, "%");
+
     // ══════════ 4. LA MINIMAP FONCTIONNE TOUJOURS ══════════
     /* La minimap est devenue paresseuse : elle n'est construite qu'à
        l'ouverture, et son surlignage ne tourne plus pendant le défilement.
@@ -541,6 +557,11 @@ const INSTRUMENT = () => {
        message : 47 mesurés sur une conversation de 40. */
     ok("calques GPU promus par will-change sous 10 (éléments uniques)", rw < 10, rw + " calque(s)");
     ok("moins de 40 calques composés au total", (cl.total || 0) < 40, cl.total);
+    /* Garde sur le décor : les trois cercles flous sont animés en boucle
+       sous la coque, qui porte un `backdrop-filter`. Mesuré à 1 % du temps
+       au repos — c'est acceptable, mais si ça dérape, c'est ici que ça se
+       verra. */
+    ok("repos : travail de rendu sous 10 % du temps", reposPart < 10, reposPart + " %");
 
     console.log("\n" + "-".repeat(74));
     const ko = resultats.filter(r => !r[0]).length;

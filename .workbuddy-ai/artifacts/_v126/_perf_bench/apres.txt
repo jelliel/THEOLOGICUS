@@ -18,37 +18,43 @@ BANC PERF — DÉFILEMENT ET SÉLECTION DE CONVERSATION
     raison : Is for the visual viewport.                  2 calque(s)
 
 ── 1. Sélection d'une conversation ──
-  temps jusqu'à affichage                                43 ms
-  durée script                                          9.3 ms
-  durée mise en page                                   19.3 ms
-  durée recalcul de style                              35.8 ms
-  durée totale de tâche                               158.7 ms
-  nombre de mises en page                                17 
+  temps jusqu'à affichage                                51 ms
+  durée script                                          9.7 ms
+  durée mise en page                                   21.2 ms
+  durée recalcul de style                              42.7 ms
+  durée totale de tâche                               177.7 ms
+  nombre de mises en page                                18 
   appels scrollIntoView                                   0 
   appels getBoundingClientRect                            0 
 
 ── 2. Défilement de la conversation ──
   images mesurées                                       119 
   écart médian entre images                            13.3 ms
-  écart p95                                            13.7 ms
-  écart maximal                                        14.6 ms
+  écart p95                                            13.6 ms
+  écart maximal                                        14.1 ms
   images > 32 ms (saccades)                               0 
-  durée mise en page                                     19 ms
-  durée recalcul de style                                29 ms
+  durée mise en page                                   19.3 ms
+  durée recalcul de style                              28.1 ms
   nombre de mises en page                               120 
   appels scrollIntoView                                   0 
   appels getBoundingClientRect                            0 
   événements de scroll reçus                            119 
 
 ── 3. Défilement sous trace CDP (peinture / composition) ──
-  durée couverte par la trace                        1588.6 ms
+  durée couverte par la trace                        1601.4 ms
   Paint : appels / durée                           270 / 47 ms
   CompositeLayers : appels / durée                    0 / 0 ms
-  Layout : appels / durée                        124 / 38.4 ms
-  Recalcul de style : appels / durée             240 / 33.4 ms
+  Layout : appels / durée                        124 / 40.2 ms
+  Recalcul de style : appels / durée             240 / 32.3 ms
   UpdateLayerTree : appels / durée                    0 / 0 ms
-  PrePaint : appels / durée                        120 / 13 ms
-  part du temps en peinture + composition                 3 %
+  PrePaint : appels / durée                      120 / 13.2 ms
+  part du temps en peinture + composition               2.9 %
+
+── 3bis. Coût au repos (aucune interaction) ──
+  Paint : appels / durée                           40 / 2.8 ms
+  Layout : appels / durée                          18 / 6.2 ms
+  Recalcul de style : appels / durée               28 / 9.4 ms
+  part du temps en travail de rendu                     1.1 %
 
 ── 4. La minimap fonctionne toujours ──
   minimap visible au survol                            true 
@@ -82,21 +88,22 @@ BANC PERF — DÉFILEMENT ET SÉLECTION DE CONVERSATION
   [OK]   le défilement ne rejoue pas d'animation sur toute la conversation  -- none
   [OK]   aucun calque GPU permanent par message (will-change)  -- auto
   [OK]   le défilement n'est pas animé par le CSS hérité  -- auto
-  [OK]   sélection : durée de tâche sous 1200 ms  -- 158.7 ms
-  [OK]   sélection : au plus 25 mises en page  -- 17
+  [OK]   sélection : durée de tâche sous 1200 ms  -- 177.7 ms
+  [OK]   sélection : au plus 25 mises en page  -- 18
   [OK]   sélection : aucun scrollIntoView  -- 0
   [OK]   sélection : moins de 100 appels getBoundingClientRect  -- 0
-  [OK]   défilement : écart p95 sous 34 ms  -- 13.7 ms
-  [OK]   défilement : aucune image au-delà de 100 ms  -- 14.6 ms
+  [OK]   défilement : écart p95 sous 34 ms  -- 13.6 ms
+  [OK]   défilement : aucune image au-delà de 100 ms  -- 14.1 ms
   [OK]   défilement : au plus 4 mises en page par image  -- 120 pour 120 images
   [OK]   défilement : aucun scrollIntoView  -- 0
-  [OK]   défilement : durée de mise en page sous 250 ms  -- 19 ms
-  [OK]   défilement : peinture + composition sous 25 % du temps  -- 3 %
+  [OK]   défilement : durée de mise en page sous 250 ms  -- 19.3 ms
+  [OK]   défilement : peinture + composition sous 25 % du temps  -- 2.9 %
   [OK]   défilement : au plus 1 composition par image  -- 0 pour 120 images
   [OK]   calques GPU promus par will-change sous 10 (éléments uniques)  -- 9 calque(s)
   [OK]   moins de 40 calques composés au total  -- 28
+  [OK]   repos : travail de rendu sous 10 % du temps  -- 1.1 %
 
 --------------------------------------------------------------------------
-RESULTAT : 28/28
+RESULTAT : 29/29
 --------------------------------------------------------------------------
-JSON {"sel":{"wall":43,"script":9.3,"layout":19.3,"recalc":35.8,"task":158.7,"layoutCount":17,"si":0,"rect":0,"scroll":3},"sc":{"layoutCount":120,"layout":19,"recalc":29,"script":29.1,"max":14.6,"p95":13.7,"mediane":13.3,"saccades":0,"si":0,"rect":0,"scroll":119},"css":{"scrollBehavior":"auto","willChange":"auto","animationName":"none","nbMessages":40},"calques":{"total":28,"raisons":{"Is for the visual viewport.":2,"Is a scrollable overflow element using accelerated scrolling.":3,"Is the document.rootScroller.":1,"Overlaps other composited content.":13,"Has a trivial 3d transform.":2,"Has a backdrop filter.":3,"Has a will-change: transform compositing hint.":7,"Has an active accelerated transform animation or transition.":5,"Has an active accelerated opacity animation or transition.":2,"Has a will-change: opacity compositing hint.":2}},"trace":{"span":1588.6,"paint":{"n":270,"ms":47},"comp":{"n":0,"ms":0},"layout":{"n":124,"ms":38.4},"recalc":{"n":240,"ms":33.4},"peinturePart":3}}
+JSON {"sel":{"wall":51,"script":9.7,"layout":21.2,"recalc":42.7,"task":177.7,"layoutCount":18,"si":0,"rect":0,"scroll":3},"sc":{"layoutCount":120,"layout":19.3,"recalc":28.1,"script":27.1,"max":14.1,"p95":13.6,"mediane":13.3,"saccades":0,"si":0,"rect":0,"scroll":119},"css":{"scrollBehavior":"auto","willChange":"auto","animationName":"none","nbMessages":40},"calques":{"total":28,"raisons":{"Is for the visual viewport.":2,"Is a scrollable overflow element using accelerated scrolling.":3,"Is the document.rootScroller.":1,"Overlaps other composited content.":13,"Has a trivial 3d transform.":2,"Has a backdrop filter.":3,"Has a will-change: transform compositing hint.":7,"Has an active accelerated transform animation or transition.":5,"Has an active accelerated opacity animation or transition.":2,"Has a will-change: opacity compositing hint.":2}},"trace":{"span":1601.4,"paint":{"n":270,"ms":47},"comp":{"n":0,"ms":0},"layout":{"n":124,"ms":40.2},"recalc":{"n":240,"ms":32.3},"peinturePart":2.9}}
