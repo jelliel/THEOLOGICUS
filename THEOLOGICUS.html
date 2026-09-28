@@ -1343,6 +1343,14 @@ html[data-theme="glass"] {
   --text-primary: #eaf4ff;  --text-secondary: #b7ccdf;  --text-dim: #7e98b2;
   --accent: #4f8ef7;  --accent-dim: rgba(79,142,247,0.12);  --accent-light: #6ff0ff;
   --bg-card-alt: rgba(79,142,247,0.06);  --popup-bg: rgba(10,21,36,0.96);
+  /* v130 — jetons de SURFACE manquants. Ce theme ne redefinissait que les
+     jetons de TEXTE : --bg-card, --chat-user et --chat-assistant restaient
+     donc herites de :root, c'est-a-dire BLANCS, et le texte clair se posait
+     dessus. Mesure avant correctif : 1,11:1 sur les bulles de conversation
+     (regle html[data-theme="glass"] .message.assistant -> var(--chat-assistant))
+     et 1,65:1 sur les entrees du menu « Plus ». Les themes recents v6-* font
+     les deux familles ; ceux-ci avaient ete oublies. */
+  --bg-card: #0e1c30;  --chat-user: rgba(79,142,247,0.16);  --chat-assistant: #0a1524;
 }
 html[data-theme="cyber"] {
 
@@ -1362,6 +1370,11 @@ html[data-theme="cyber"] {
   --text-primary: #e9ffef;  --text-secondary: #a7e6bf;  --text-dim: #63a57b;
   --accent: #4f8ef7;  --accent-dim: rgba(79,142,247,0.12);  --accent-light: #7dffc4;
   --bg-card-alt: rgba(79,142,247,0.06);  --popup-bg: rgba(5,26,15,0.96);
+  /* v130 — memes jetons de surface manquants que dans « glass ». Ici les bulles
+     restaient lisibles (elles prennent --hull, defini), mais #v6-more-menu,
+     #v6-topbar et #v6-palette prennent --bg-card : ils etaient donc BLANCS avec
+     du texte clair. Mesure avant correctif : 1,43:1 sur le menu. */
+  --bg-card: #082413;  --chat-user: rgba(79,142,247,0.16);  --chat-assistant: #051a0f;
 }
 /* Shell tones for light & midnight (their HUD vars are defined further below) */
 html[data-theme="light"] {
@@ -1391,6 +1404,11 @@ html[data-theme="midnight"] {
   --text-primary: #efe9ff;  --text-secondary: #bcb2df;
   --accent: #9b8fff;  --accent-dim: rgba(155,143,255,0.12);  --accent-light: #c3bbff;
   --bg-card-alt: rgba(155,143,255,0.06);  --popup-bg: rgba(13,13,24,0.96);
+  /* v130 — memes jetons de surface manquants. Mesure avant correctif : 1,99:1
+     sur les entrees du menu « Plus » (fond --bg-card herite blanc, texte clair).
+     --chat-assistant reprend la valeur de --hull de ce theme (#131320), deja
+     definie plus bas, pour rester coherent avec la bulle de base. */
+  --bg-card: #0d0d18;  --chat-user: rgba(155,143,255,0.16);  --chat-assistant: #131320;
 }
 
 /* RESET */
@@ -33356,16 +33374,16 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 </script>
 <style id="v129-presets">
 /* v129 — preregleges de performance et fiche GPU.
-   COULEURS : le bloc porte SA PROPRE surface, sombre, au lieu d'emprunter
-   celles de son hote. Raison mesuree : en theme « glass » le bloc de jetons
-   redefinit --text-primary en #eaf4ff (clair) mais NE definit PAS --bg-card ;
-   #v6-more-menu retombe donc sur le #ffffff de :root et affiche du texte clair
-   sur fond blanc (contraste mesure : 1,65:1 pour les .hud-btn du menu, qui
-   souffrent deja du probleme). Avec sa propre surface, le bloc est lisible dans
-   tous les themes et dans les deux hotes, sans toucher au theme de l'app. */
+   COULEURS : le bloc suit la MEME famille de jetons que son hote — surface de
+   carte (--bg-card) et texte primaire (--text-primary). Une premiere version
+   empruntait --popup-bg avec un repli de texte clair : correcte dans les themes
+   sombres, elle devenait BLANCHE en theme clair (--popup-bg vaut blanc la) et
+   posait du texte clair dessus. Mesure : 1:1 en theme « light » et 1,01:1 en
+   « v6-light ». Regle : surface et texte doivent venir de la MEME famille, sinon
+   un theme qui inverse l'un sans l'autre casse le bloc. */
 .v129-bloc {
-  background: var(--popup-bg, rgba(10,21,36,.96));
-  color: var(--text-bright, #eaf4ff);
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #1a1a2e);
   border: 1px solid var(--glass-border, rgba(128,128,128,.35));
   border-radius: 12px; padding: 12px; margin: 6px 0;
 }
@@ -33373,8 +33391,8 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 .v129-preset {
   font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .5px;
   padding: 8px 12px; border-radius: 9px; cursor: pointer; text-align: left;
-  color: inherit; background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.18);
+  color: inherit; background: var(--bg-card-alt, rgba(127,127,127,.10));
+  border: 1px solid var(--glass-border, rgba(127,127,127,.30));
   transition: border-color .15s ease, background .15s ease;
 }
 .v129-preset:hover { border-color: var(--accent, #4f8ef7); }
@@ -33390,8 +33408,12 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 .v129-gpu-l { display: flex; gap: 10px; }
 .v129-gpu-l > span { color: var(--text-dim, #7e98b2); min-width: 96px; flex-shrink: 0; }
 .v129-gpu-l > b { font-weight: 600; word-break: break-word; }
+/* Verdict : --success est defini par :root (#34c759) et redefini en plus sombre
+   par les themes clairs (#1f9d57) — lisible sur les deux fonds. Pour l'echec on
+   prend --danger, PAS --warning : --warning n'existe nulle part, son repli
+   orange (#ff9f0a) ne donne que 2,1:1 sur une carte blanche. */
 .v129-gpu-l > b.ok { color: var(--success, #34c759); }
-.v129-gpu-l > b.ko { color: var(--warning, #ff9f0a); }
+.v129-gpu-l > b.ko { color: var(--danger, #ff453a); }
 .v129-gpu-titre {
   font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
   color: var(--text-dim, #7e98b2); margin: 14px 0 5px;
