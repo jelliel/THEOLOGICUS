@@ -223,6 +223,17 @@ seulement ce qui se réapprend mal.
   `{v:1, mode:'admin', exp:Date.now()+7*86400000, tok}`. **Le jeton mal formé est
   SUPPRIMÉ au démarrage** (`readRemember`), donc l'écran reste : vérifier
   `localStorage.getItem(...)` après chargement avant d'accuser le reste.
+  `theologicus_wizard_skipped='1'` **ne suffit PAS** : l'assistant s'affiche aussi
+  tant qu'aucune identité d'IA n'est configurée. Et pour une CAPTURE, écarter les
+  deux surcouches explicitement — sinon l'image montre la porte, pas l'app.
+- **Une capture « avant/après » doit être vérifiée DIFFÉRENTE.** Deux images
+  committées comme preuve d'un correctif avaient **le même sha1** (3 924 octets,
+  rectangle uni) : la cible était codée en dur dans le banc, et l'app était
+  verrouillée. Comparer les empreintes avant de présenter une preuve visuelle ;
+  deux empreintes égales = la capture a manqué sa cible, pas « aucun effet ».
+  Sur un panneau translaté/animé, capturer la **page entière** :
+  `elementHandle.screenshot()` et `page.screenshot({clip})` se trompent tous deux
+  de cible.
 - **Chromium de Playwright : épingler `executablePath`.** Le paquet installé
   réclame une révision absente (`chromium_headless_shell-1243`) alors que la
   machine en a d'autres ; sans chemin explicite,
