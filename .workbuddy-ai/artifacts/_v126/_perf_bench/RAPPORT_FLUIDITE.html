@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>THEOLOGICUS — fluidité : mesures avant / après</title>
+<style>
+  :root{
+    --bg:#0b0f16; --panel:#131a25; --panel2:#182130; --line:#243044;
+    --txt:#e8eefc; --dim:#8fa3c0; --ok:#3ddc97; --bad:#ff6b81; --acc:#4f8ef7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font-family:"Segoe UI",system-ui,-apple-system,sans-serif;line-height:1.55;
+       padding:28px 22px 46px}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:.2px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:22px}
+  h2{font-size:15px;margin:30px 0 10px;color:var(--acc);
+     text-transform:uppercase;letter-spacing:.8px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;
+        background:var(--panel);border:1px solid var(--line);border-radius:10px;
+        overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:var(--panel2);color:var(--dim);font-weight:600;font-size:11.5px;
+     text-transform:uppercase;letter-spacing:.6px}
+  tr:last-child td{border-bottom:none}
+  td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .avant{color:var(--bad)} .apres{color:var(--ok)}
+  .gain{color:var(--dim);font-size:12.5px}
+  .bar{display:block;height:7px;border-radius:4px;background:var(--line);position:relative;overflow:hidden;min-width:60px}
+  .bar i{position:absolute;inset:0 auto 0 0;border-radius:4px;background:var(--acc)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:6px 0 4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+  .card .k{color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:.6px}
+  .card .v{font-size:26px;font-weight:700;margin-top:3px}
+  .card .d{color:var(--dim);font-size:12px;margin-top:2px}
+  ul{margin:6px 0 0;padding-left:20px;font-size:13.5px}
+  li{margin-bottom:5px}
+  code{background:#1d2637;border:1px solid var(--line);border-radius:4px;
+       padding:1px 5px;font-family:Consolas,monospace;font-size:12.5px;color:#bcd3ff}
+  .note{background:var(--panel);border-left:3px solid var(--acc);border-radius:0 8px 8px 0;
+        padding:11px 14px;font-size:13px;color:var(--dim);margin-top:14px}
+  .verd{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;
+        padding:6px 13px;font-size:12.5px}
+  .pill b{color:var(--ok)}
+  .pill.ko b{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>THEOLOGICUS — fluidité du défilement et de la sélection</h1>
+  <div class="sub">Conversation de 40 messages · Chromium piloté par Playwright · compteurs lus via CDP
+    (<code>Performance.getMetrics</code>, <code>LayerTree</code>, <code>Tracing</code>)</div>
+
+  <div class="cards">
+    <div class="card"><div class="k">Calques GPU</div><div class="v apres">69 → 28</div>
+      <div class="d">dont promus par <code>will-change</code> : 89 → 9</div></div>
+    <div class="card"><div class="k">Sélection : mises en page</div><div class="v apres">100 → 17</div>
+      <div class="d">durée de tâche 245 → 159 ms</div></div>
+    <div class="card"><div class="k">Défilement : <code>scrollIntoView</code></div><div class="v apres">119 → 0</div>
+      <div class="d">sur 120 images de défilement</div></div>
+  </div>
+
+  <h2>Mesures détaillées</h2>
+  <table>
+    <thead><tr><th>Mesure</th><th class="n">Avant</th><th class="n">Après</th><th>Gain</th></tr></thead>
+    <tbody>
+      <tr><td>Calques composés</td><td class="n avant">69</td><td class="n apres">28</td>
+          <td><span class="bar"><i style="width:41%"></i></span><span class="gain">÷ 2,5</span></td></tr>
+      <tr><td>Calques promus par <code>will-change</code></td><td class="n avant">89</td><td class="n apres">9</td>
+          <td><span class="bar"><i style="width:10%"></i></span><span class="gain">÷ 9,9</span></td></tr>
+      <tr><td>Calques maintenus en animation</td><td class="n avant">85</td><td class="n apres">7</td>
+          <td><span class="bar"><i style="width:8%"></i></span><span class="gain">÷ 12,1</span></td></tr>
+      <tr><td><code>will-change</code> calculé sur <code>.message</code></td>
+          <td class="n avant">transform, opacity</td><td class="n apres">auto</td><td class="gain">supprimé</td></tr>
+      <tr><td>Animation calculée sur <code>.message</code></td>
+          <td class="n avant">msgInRight</td><td class="n apres">none</td><td class="gain">opt-in</td></tr>
+      <tr><td>Sélection : mises en page</td><td class="n avant">100</td><td class="n apres">17</td>
+          <td><span class="bar"><i style="width:17%"></i></span><span class="gain">÷ 5,9</span></td></tr>
+      <tr><td>Sélection : durée de tâche</td><td class="n avant">245 ms</td><td class="n apres">159 ms</td>
+          <td><span class="bar"><i style="width:65%"></i></span><span class="gain">÷ 1,5</span></td></tr>
+      <tr><td>Sélection : recalcul de style</td><td class="n avant">81 ms</td><td class="n apres">36 ms</td>
+          <td><span class="bar"><i style="width:44%"></i></span><span class="gain">÷ 2,2</span></td></tr>
+      <tr><td>Sélection : <code>scrollIntoView</code></td><td class="n avant">3</td><td class="n apres">0</td><td class="gain">—</td></tr>
+      <tr><td>Sélection : <code>getBoundingClientRect</code></td><td class="n avant">40</td><td class="n apres">0</td><td class="gain">—</td></tr>
+      <tr><td>Défilement : <code>scrollIntoView</code></td><td class="n avant">119</td><td class="n apres">0</td><td class="gain">—</td></tr>
+      <tr><td>Défilement : recalcul de style</td><td class="n avant">45 ms</td><td class="n apres">29 ms</td>
+          <td><span class="bar"><i style="width:64%"></i></span><span class="gain">÷ 1,6</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Causes corrigées</h2>
+  <ul>
+    <li><code>will-change: transform, opacity</code> posé en permanence sur <code>.message</code> : un calque GPU
+      par message, à vie. <code>LayerTree.compositingReasons</code> le nommait — 47 calques
+      « Has a will-change: transform compositing hint ».</li>
+    <li>Animation d'entrée en <code>fill-mode: both</code> : rejouée sur <b>tous</b> les messages à chaque
+      re-rendu. Devenue opt-in (<code>.msg-enter</code>), posée sur le seul message qui entre.</li>
+    <li>La minimap appelait <code>scrollIntoView</code> à chaque image de défilement, <b>même fermée</b>
+      (<code>mmEntries</code> jamais vidé), et était reconstruite à chaque rendu — un
+      <code>offsetTop</code> par message.</li>
+    <li>Le gestionnaire de défilement n'était pas regroupé : plusieurs événements par image.
+      Désormais un seul <code>requestAnimationFrame</code>, <code>passive: true</code>.</li>
+    <li><code>repositionBubble</code>, branché en phase capture sur <code>window</code>, faisait trois mises en page
+      forcées par image — bulle fermée comprise.</li>
+    <li><code>loadChat</code> rendait la conversation <b>deux fois</b> en cas de migration d'offsets.</li>
+    <li><code>loadArchiveChat</code> relisait <b>toutes</b> les conversations dans IndexedDB à chaque sélection
+      pour reconstruire la liste entière.</li>
+    <li><code>body { scroll-behavior: smooth }</code> : la propriété ne s'hérite pas, mais tout
+      <code>scrollIntoView()</code> sans <code>behavior</code> en héritait et animait le document.</li>
+  </ul>
+
+  <h2>Vérification</h2>
+  <div class="verd">
+    <span class="pill">Banc de fluidité : <b>29/29</b></span>
+    <span class="pill ko">Contrôle négatif (avant) : <b>18/29</b></span>
+    <span class="pill">Figures : <b>27/27</b></span>
+    <span class="pill">Annotation : <b>17/17</b></span>
+    <span class="pill">Dérive d'offset : <b>7/7</b></span>
+    <span class="pill">Syntaxe : <b>59/59 blocs</b></span>
+  </div>
+
+  <div class="note">
+    Le banc contrôle aussi que la <b>minimap fonctionne toujours</b> — c'est le changement le plus risqué :
+    elle s'ouvre au survol, contient 40 entrées, suit le défilement (entrée 0 → 39), se fait défiler
+    elle-même de 442 px pour garder l'entrée active visible, se referme, et ne fait plus aucun travail
+    une fois fermée.<br><br>
+    <b>Hypothèse démentie par la mesure :</b> les trois cercles décoratifs flous
+    (<code>filter: blur(80px)</code>, animés en boucle) sont sous une coque portant
+    <code>backdrop-filter: blur(22px)</code>. Je m'attendais à un re-flou permanent. Mesuré au repos :
+    <b>1 %</b> du temps. Le décor n'a <b>pas</b> été touché.
+  </div>
+
+</div>
+</body>
+</html>
