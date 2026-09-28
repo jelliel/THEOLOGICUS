@@ -159,8 +159,15 @@ const CHAT = "audit-contraste";
     return out;
   }, PANNEAUX) : [];
   const nonMesures = couverture.filter(([, e]) => e !== "mesure");
+  // On imprime AUSSI le cas favorable. « silence = tout va bien » est
+  // exactement l'ambiguite qui a produit les faux « 0 » precedents : un banc
+  // muet ne se distingue pas d'un banc qui n'a rien regarde.
+  if (couverture.length) {
+    console.log(`couverture : ${couverture.length - nonMesures.length}/${couverture.length} panneau(x) mesure(s) — ` +
+      couverture.map(([id, e]) => `${id} (${e})`).join(", "));
+  }
   if (nonMesures.length) {
-    console.log(`couverture : ${nonMesures.length}/${couverture.length} panneau(x) NON MESURE(S) — ` +
+    console.log("             " + `${nonMesures.length} panneau(x) NON MESURE(S) : ` +
       nonMesures.map(([id, e]) => `${id} (${e})`).join(", "));
     console.log("             le compte ci-dessous est une BORNE INFERIEURE, pas un certificat.");
   }
@@ -170,7 +177,7 @@ const CHAT = "audit-contraste";
   // « CONTENEURS is not defined » — et l'echec ressemble a un theme propre,
   // puisque rien ne s'imprime. C'est ce qui a produit un faux « 0 » sur les
   // cinq themes sombres lors du premier essai.
-  const rapport = await page.evaluate(({ seuil, conteneurs }) => {
+  const r = await page.evaluate(({ seuil, conteneurs }) => {
     const lum = (rgb) => {
       const a = rgb.match(/[\d.]+/g).map(Number);
       const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
@@ -190,16 +197,23 @@ const CHAT = "audit-contraste";
       const a = (c.match(/[\d.]+/g) || []).map(Number);
       return [a[0] || 0, a[1] || 0, a[2] || 0];
     };
-    const fondOpaque = (el) => {
+    // La chaine des ancetres a composer : de l'element vers la premiere couche
+    // OPAQUE (incluse). Au-dela, le fond ne se voit plus. Sert aux deux
+    // fonctions ci-dessous, pour qu'elles ne puissent pas diverger.
+    const chaine = (el) => {
       const couches = [];
       let n = el;
       while (n && n !== document.documentElement) {
         const bg = getComputedStyle(n).backgroundColor;
         const a = alpha(bg);
-        if (a > 0.001) couches.push({ t: rgbTriplet(bg), a: Math.min(a, 1) });
+        if (a > 0.001) couches.push({ noeud: n, t: rgbTriplet(bg), a: Math.min(a, 1) });
         if (a >= 0.999) break;
         n = n.parentElement;
       }
+      return couches;
+    };
+    const fondOpaque = (el) => {
+      const couches = chaine(el);
       // Base : le fond du document, blanc par defaut (comportement navigateur).
       let base = [255, 255, 255];
       for (const src of [document.documentElement, document.body]) {
@@ -215,6 +229,77 @@ const CHAT = "audit-contraste";
       }
       return `rgb(${out.map(v => Math.round(v)).join(", ")})`;
     };
+    // ── Fonds en DEGRADE ──────────────────────────────────────────────────
+    // Un fond `background-image` en degrade n'est pas une couleur : le banc le
+    // lisait via backgroundColor, donc comme transparent, et composait sur
+    // blanc. Mesure : `.avatar` (texte #fff, fond linear-gradient(#534ab7,
+    // #7f77dd)) etait annonce a 1,00:1 « blanc sur blanc » alors que le texte
+    // est parfaitement lisible — 6,93:1 sur le stop sombre, 3,76:1 sur le stop
+    // clair. Un FAUX POSITIF, et un piege : le « corriger » en assombrissant le
+    // texte aurait degrade un composant sain.
+    // On ne renonce pas pour autant : un degrade decoratif de faible amplitude
+    // (le voile radial du body, 5 % de teinte ; le degrade de coque
+    // #f7fafd -> #eef3f9) ne change pas le verdict et reste mesurable en
+    // couleur unie. Seuls les degrades a FORTE amplitude sont declares non
+    // mesurables — et comptes comme tels, pour que la couverture soit honnete.
+    // On ne garde que les stops REELLEMENT VISIBLES (alpha >= 0.05). Sans ce
+    // filtre, le voile radial du body — radial-gradient(rgba(0,112,168,0.05),
+    // transparent) — etait lu comme une rampe NOIR -> BLEU : Chromium serialise
+    // `transparent` en `rgba(0, 0, 0, 0)`, donc un stop de luminance nulle, et
+    // l'amplitude calculée valait 3,88. Tout le document devenait « non
+    // mesurable ». Un stop transparent n'apporte aucune couleur : il se compose
+    // avec le fond, il ne le remplace pas.
+    const stopsDe = (img) => {
+      const out = [];
+      const re = /(#[0-9a-f]{3,8}|rgba?\([^)]*\))/gi;
+      let m;
+      while ((m = re.exec(img))) {
+        const s = m[1];
+        if (s[0] === "#") {
+          let h = s.slice(1);
+          if (h.length === 3) h = h.split("").map(c => c + c).join("");
+          if (h.length < 6) continue;
+          const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+          out.push({ c: [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)], a });
+        } else {
+          const v = (s.match(/[\d.]+/g) || []).map(Number);
+          if (v.length < 3) continue;
+          out.push({ c: [v[0], v[1], v[2]], a: v.length >= 4 ? v[3] : 1 });
+        }
+      }
+      return out.filter(s => s.a >= 0.05);
+    };
+    const AMPLITUDE_MINI = 1.5;
+    // Attention : on ne peut PAS reutiliser `chaine()` ici. Elle ne retient que
+    // les noeuds dont `backgroundColor` a un alpha > 0, or c'est exactement le
+    // cas d'un fond en degrade : `background-color` transparent PLUS
+    // `background-image` en degrade. `.avatar` etait donc absent de la chaine
+    // et son degrade jamais inspecte — le garde ne servait a rien. On marche
+    // donc les ancetres nous-memes, en incluant chaque noeud jusqu'au premier
+    // VISUELLEMENT opaque (backgroundColor alpha >= 0,999), celui-ci compris.
+    const degradeFort = (el) => {
+      const sources = [];
+      let n = el;
+      while (n && n !== document.documentElement) {
+        sources.push(n);
+        if (alpha(getComputedStyle(n).backgroundColor) >= 0.999) break;
+        n = n.parentElement;
+      }
+      sources.push(document.documentElement);
+      if (document.body && sources.indexOf(document.body) === -1) sources.push(document.body);
+      for (const m of sources) {
+        if (!m) continue;
+        const img = getComputedStyle(m).backgroundImage;
+        if (!img || img === "none" || img.indexOf("gradient") === -1) continue;
+        const st = stopsDe(img);
+        if (st.length < 2) continue;
+        const ls = st.map(s => lum(`rgb(${s.c.join(",")})`));
+        const amp = (Math.max(...ls) + 0.05) / (Math.min(...ls) + 0.05);
+        if (amp >= AMPLITUDE_MINI) return { noeud: m, image: img.slice(0, 60), amplitude: Math.round(amp * 100) / 100 };
+      }
+      return null;
+    };
+
     const chemin = (el) => {
       const parts = [];
       let n = el;
@@ -232,6 +317,7 @@ const CHAT = "audit-contraste";
     };
 
     const offenders = [];
+    const nonMesurables = [];
     const vus = new Set();
     for (const el of document.querySelectorAll("body *")) {
       // Ne juger que les elements qui portent du texte DIRECTEMENT.
@@ -247,6 +333,20 @@ const CHAT = "audit-contraste";
       const r = el.getBoundingClientRect();
       if (r.width < 8 || r.height < 6) continue;
       if (alpha(cs.color) < 0.5) continue;
+
+      // Fond en degrade a forte amplitude : la mesure en couleur unie serait
+      // FAUSSE (voir degradeFort). On declare l'element non mesurable au lieu
+      // de le compter comme un defaut — et on le dit, pour ne pas transformer
+      // un angle mort en « 0 defaut ».
+      const deg = degradeFort(el);
+      if (deg) {
+        const cle = chemin(el);
+        if (!vus.has("d|" + cle)) {
+          vus.add("d|" + cle);
+          nonMesurables.push({ chemin: cle, texte: texte.slice(0, 42), image: deg.image, amplitude: deg.amplitude });
+        }
+        continue;
+      }
 
       const fond = fondOpaque(el);
       const l1 = lum(cs.color), l2 = lum(fond);
@@ -264,9 +364,10 @@ const CHAT = "audit-contraste";
         ratio: Math.round(ratio * 100) / 100,
       });
     }
-    return offenders.sort((a, b) => a.ratio - b.ratio);
+    return { offenders: offenders.sort((a, b) => a.ratio - b.ratio), nonMesurables };
   }, { seuil: SEUIL, conteneurs: CONTENEURS });
 
+  const rapport = r.offenders;
   console.log(`\nelements sous le seuil : ${rapport.length}`);
   const vus = LIMITE > 0 ? rapport.slice(0, LIMITE) : rapport;
   for (const o of vus) {
@@ -275,6 +376,12 @@ const CHAT = "audit-contraste";
   }
   if (vus.length < rapport.length) {
     console.log(`  … ${rapport.length - vus.length} de plus non affiches (--limite 0 pour tout voir)`);
+  }
+  if (r.nonMesurables.length) {
+    console.log(`\nNON MESURABLES (fond en degrade a forte amplitude) : ${r.nonMesurables.length}`);
+    for (const o of r.nonMesurables) {
+      console.log(`      --  ${o.chemin}   amplitude ${o.amplitude}:1  ${o.image}`);
+    }
   }
 
   await browser.close();

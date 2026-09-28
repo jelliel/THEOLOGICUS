@@ -1578,3 +1578,76 @@ sept thèmes** (`jetons_manquants.js`, code de sortie 0).
 déclare `--void` **deux fois** (lignes 4569 et 4584) : la première ne sert à rien.
 C'est préexistant, invisible, et du même genre que les douze ci-dessus — un jeton
 peut être « défini » et pourtant mort.
+
+## v132 — la coque doit être COMPLÈTE, sinon elle masque le thème
+
+Suite directe du second `:root`. `<style id="v9-palette">` définit sa palette
+**deux fois** : sur `:root` (global) **et** sur `.tpai-shell` (la coque, ligne
+~30125). Un jeton posé sur `.tpai-shell` **masque la valeur héritée pour tous ses
+descendants** : la surcharge `html[data-theme="light"]` — pourtant plus spécifique
+((0,1,1) contre (0,1,0)) — **ne l'atteint jamais**. La spécificité ne sert à rien
+contre un jeton posé plus bas dans l'arbre.
+
+Mesuré sur la coque en thème `light`, avant correctif : `--text` `#e6edf7` (au lieu
+de `#2d4a6b`), `--bg-card` `#121826` (au lieu de `#ffffff`), `--hull` `#121826`,
+`--text-dim` `#8b97ab`, `--cyan` `#4f8ef7`. Toute la sidebar, la barre du haut,
+l'accordéon et les bulles tournaient donc sur la palette **sombre** dans un thème
+**clair**.
+
+**Le piège est le bloc INCOMPLET.** `v6-light` portait déjà le bon correctif
+(`html[data-theme="v6-light"] .tpai-shell`) — mais ce bloc ne déclarait que **15**
+jetons quand celui de v9 en déclare **19**. Les quatre manquants (`--hull`, `--cyan`,
+`--wire`, `--ok`) restaient pris **dans** la coque sur la palette v9 sombre. D'où un
+thème clair à « 12 défauts » alors qu'il avait l'air corrigé : `.suggestion-chip`
+(`background: var(--hull)`, `color: var(--text)`) tombait à **1,22:1** — texte sombre
+sur fond sombre. **Un correctif partiel de ce genre est plus trompeur qu'aucun
+correctif**, parce qu'il fait croire que la famille est traitée.
+
+**Règle : quand on surcharge une coque, aligner la LISTE des jetons sur celle de la
+coque d'origine**, pas seulement les valeurs qu'on avait en tête. Comparer les deux
+blocs jeton par jeton.
+
+### Un panneau peut changer de surface selon le thème
+
+`#references-panel` (fond `rgba(9,21,37,0.97)`) et `#archives-panel`
+(`rgba(7,11,18,.96)`) sont **sombres dans tous les thèmes** : leur texte doit donc
+être **clair dans tous les thèmes**, et non suivre le thème — sinon, en `light`, on
+obtient du texte sombre sur fond sombre (mesuré **1,03:1** sur `.ref-item-title`,
+2,92:1 sur `#ref-total-count`). On leur donne une **palette locale**, comme à la
+coque — pas une couleur par élément.
+
+**Mais vérifier thème par thème :** `html[data-theme="v6-light"] #archives-panel`
+surcharge le fond en **BLANC** (ligne ~32211) — ce panneau est donc clair dans
+**un** thème sur sept. Le jeu sombre global lui donnait `--text-dim: #8b97ab` sur
+blanc, soit **2,95:1** sur ses trois `.btn-ghost`. Il faut une **exception** pour ce
+thème, avec la palette claire. Un fond « toujours sombre » est une hypothèse à
+mesurer, pas une évidence.
+
+### Ne pas « corriger » un composant conforme (`.avatar`)
+
+`.avatar` : `color:#fff` sur `background: linear-gradient(135deg,#534ab7,#7f77dd)`.
+Le banc l'annonçait à **1,00:1** « blanc sur blanc ». **C'était le banc qui avait
+tort** : un fond en dégradé n'est pas dans `backgroundColor`, donc il était lu comme
+transparent et composé sur blanc. Calculé sur les deux stops : **6,93:1** et
+**3,76:1** — conforme. Assombrir le texte aurait **dégradé** un composant sain.
+
+Détail technique complet dans la skill `web-ui-audit-measure` (§5). La règle qui
+compte ici : **quand un relevé accuse un composant, vérifier le relevé avant le
+composant.**
+
+### Résultat mesuré (instrument ÉGAL des deux côtés)
+
+`git show HEAD:THEOLOGICUS.html` servi depuis `C:\tmp\avant_v132` via `BENCH_ROOT`,
+puis le disque. Sept thèmes, seuil 3:1 :
+
+| thème | avant | après |
+|---|---|---|
+| glass / cyber / midnight | 0 | 0 |
+| v6-glass / v6-cyber | 0 | 0 |
+| light | **40** | **0** |
+| v6-light | **11** | **0** |
+
+Couverture : 3/3 panneaux mesurés (`memory-panel`, `references-panel`,
+`archives-panel`) — sans quoi le « 0 » ne voudrait rien dire. Un seul élément
+déclaré **non mesurable** par thème : `.avatar` (fond en dégradé, amplitude 1,84).
+

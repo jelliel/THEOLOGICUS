@@ -90,29 +90,59 @@ par **CONDITION**, exécute, referme.
   `ms-playwright/chromium-1234`. Déverrouillage : `localStorage['theologicus_remember']`
   = SHA-256(`remember:`+`AUTH_HASH`). Poser `theologicus_wizard_skipped='1'` sinon
   l'assistant intercepte les clics.
+- `run_benches.py` prend des **chemins**, pas des noms : `--mpt .workbuddy-ai/artifacts/_v126/verify_x.js`.
+- Un banc doit **imprimer sa couverture même quand tout va bien** : « silence =
+  propre » ne se distingue pas de « banc qui n'a rien regardé ».
 
-## Thèmes / lisibilité (v130–v131)
+## Déploiement (installation réelle)
+
+`maj_installe.py` (`_v126/_align_bench/`, **gitignoré**) tamponne le HTML du dépôt
+dans `C:\Theologicus\.workbuddy-ai\artifacts\_v123\_pub\installe\` — cible des
+raccourcis Bureau et Menu Démarrer. Le dossier `installe/` **n'a pas suivi** le
+déplacement du projet vers `C:\tmp\theoverify`.
+
+- **La version doit MONTER.** Le fichier porte `VERSION` ; il est gitignoré, donc
+  rien ne signale qu'il est resté en arrière. Cas réel : il disait `2.0.214` alors
+  que l'installation était en `2.0.224` → on allait faire **reculer** l'app.
+  Un garde de monotonie refuse maintenant (comparaison **numérique**, pas en
+  chaînes). **Lire le tampon en place avant de choisir le numéro :**
+  `grep -o "STAMPED *= *'[^']*'" installe/THEOLOGICUS.html`.
+- **Vérifier la parité hors tampon** (le tampon fait 9 caractères d'écart) :
+  `STAMPED = '__THEO_VERSION__'` (16) contre `STAMPED = '2.0.225'` (7).
+  Comparer les **sha1 après neutralisation du tampon** — pas les tailles seules.
+- Version en place au 2026-09-28 : **2.0.225**.
+
+## Thèmes / lisibilité (v130–v132)
 
 Sept thèmes : `glass` (défaut), `cyber`, `midnight` (génération ancienne) et
 `v6-glass`, `v6-cyber`, `v6-light` (récente), plus `light`. **Détail des pièges
 dans le skill `theologicus-code-fragilities`** (jetons morts, second `:root`,
-fuite de jeton de surface) et `web-ui-audit-measure` (mesure du contraste).
-Trois règles qui coûtent cher :
+fuite de jeton de surface, coque incomplète) et `web-ui-audit-measure` (mesure du
+contraste, fonds en dégradé). Cinq règles qui coûtent cher :
 
 - **Toute surcharge de thème s'écrit `html[data-theme="…"]`** (0,1,1). En
   `[data-theme="…"]` (0,1,0), le second `:root` de `#v9-palette`, plus bas,
   l'écrase — c'est ce qui rendait `light` et `midnight` illisibles.
 - **Un thème sombre doit redéfinir TOUS les jetons de surface qu'il hérite**,
   pas seulement les jetons de texte (`--glass-bg` manquait aux trois `v6-*`).
+- **Quand on surcharge la coque, aligner la LISTE des jetons sur celle de la
+  coque d'origine.** `#v9-palette` pose sa palette **sur `.tpai-shell`** aussi :
+  un jeton posé là masque la valeur héritée pour tous les descendants, et la
+  spécificité ne sert à rien contre ça. Le bloc `v6-light` n'en portait que 15
+  sur 19 → `.suggestion-chip` à 1,22:1. **Un correctif partiel est plus trompeur
+  qu'aucun correctif.**
 - **Le fond se COMPOSE** (chaîne translucide jusqu'à l'opaque), il ne se prend
   pas « au premier ancêtre opaque » : sinon les surfaces en verre passent le
   seuil. Détecteurs : `jetons_manquants.js`, `fuites_jetons.js`,
   `audit_contraste_theme.js`, `sonde_cascade.js` (bancs `_v126/_presets_bench/`).
+- **Un relevé qui accuse un composant doit être vérifié avant le composant.** Un
+  fond en **dégradé** n'est pas dans `backgroundColor` : `.avatar` (blanc sur
+  `linear-gradient(#534ab7,#7f77dd)`) était annoncé 1,00:1 alors qu'il est à
+  3,76–6,93:1. Le « corriger » aurait dégradé un composant sain.
 
-État mesuré (2026-09-28) : **0** élément sous 3:1 dans les cinq thèmes sombres ;
-`light` 40 et `v6-light` 12 restants, dus à des **fonds sombres codés en dur**
-(`#references-panel`, `#archives-panel`, `#setup-wizard-overlay`, `#auth-overlay`,
-`.suggestion-chip`, `.avatar`, `#tpai-sidebar`). Non corrigés.
+État mesuré (2026-09-28, instrument égal des deux côtés) : **0** élément sous 3:1
+dans **les sept** thèmes. Avant v132 : `light` **40**, `v6-light` **11**. Un seul
+non-mesurable par thème : `.avatar` (dégradé, amplitude 1,84).
 
 ## Divers
 
