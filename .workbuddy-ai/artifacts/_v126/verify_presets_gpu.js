@@ -194,6 +194,50 @@ async function main() {
     ok("la case brute v35 a été retirée", !montage.v35);
     ok("une seule étiquette « Performance »", montage.nbPerformance === 1, montage.labels.join(" | "));
 
+    // ── 1bis. LISIBILITÉ ──────────────────────────────────────────────
+    // Vérifié sur pièce : un jeton unique (--text-primary) donnait du
+    // rgb(230,237,247) sur rgb(255,255,255) dans le menu « Plus » en thème
+    // glass — des libellés invisibles, sans qu'aucune assertion ne bronche.
+    // On mesure donc le rapport de contraste texte/fond effectif.
+    titre("1bis. LISIBILITÉ DES LIBELLÉS");
+    const contrastes = await page.evaluate(() => {
+      const lum = (c) => {
+        const m = c.match(/[\d.]+/g).map(Number);
+        const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+      };
+      const fondEffectif = (el) => {
+        let n = el;
+        while (n && n !== document.documentElement) {
+          const bg = getComputedStyle(n).backgroundColor;
+          const a = bg.match(/[\d.]+/g);
+          if (a && (a.length < 4 || parseFloat(a[3]) > 0.5)) return bg;
+          n = n.parentElement;
+        }
+        return "rgb(255,255,255)";
+      };
+      const mesurer = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const c = getComputedStyle(el).color;
+        const b = fondEffectif(el);
+        const L1 = lum(c), L2 = lum(b);
+        return { texte: c, fond: b,
+                 ratio: +(((Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05)).toFixed(2)) };
+      };
+      return {
+        menu: mesurer("#v6-more-menu .v129-preset"),
+        panneau: mesurer("#v129-panneau .v129-preset"),
+        gpuMenu: mesurer(".v129-gpu-menu .v129-gpu-l > b"),
+      };
+    });
+    // Seuil 3:1 (WCAG AA pour du texte large/gras ; le texte est petit, mais
+    // le défaut mesuré était à 1,1:1 — le seuil détecte le vrai problème).
+    for (const [nom, m] of Object.entries(contrastes)) {
+      ok(`contraste lisible (${nom})`, m && m.ratio >= 3,
+        m ? `${m.ratio}:1 (texte ${m.texte} sur ${m.fond})` : "élément absent");
+    }
+
     // ── 2. FLUIDE ─────────────────────────────────────────────────────
     titre("2. PRÉRÉGLAGE FLUIDE");
     // On part d'un fond explicitement ACTIVÉ pour vérifier qu'il est bien coupé
@@ -268,11 +312,14 @@ async function main() {
     // pas. Annoncer « aucun drapeau » serait faux (on ne SAIT pas), annoncer
     // « hors application » serait faux aussi. On simule ce cas.
     const gpuVieuxExe = await page.evaluate(async () => {
+      const t = (s) => { const n = document.querySelector(s); return n ? n.textContent.trim() : null; };
+      // Sur la copie d'avant la v129, __V129 n'existe pas : on renvoie null pour
+      // que le contrôle négatif produise un échec, pas une exception.
+      if (!window.__V129) return { webview: null, drapeaux: null };
       const vrai = window.pywebview;
       window.pywebview = { api: {} };
       window.__V129.mesurer();
       await new Promise(r => setTimeout(r, 900));
-      const t = (s) => { const n = document.querySelector(s); return n ? n.textContent.trim() : null; };
       const out = { webview: t(".v129-gpu-webview"), drapeaux: t(".v129-gpu-drapeaux") };
       window.pywebview = vrai;
       return out;
@@ -281,7 +328,7 @@ async function main() {
       /mettre a jour/.test(gpuVieuxExe.webview || ""), gpuVieuxExe.webview);
     ok("exe antérieur : drapeaux inconnus, pas « aucun »",
       gpuVieuxExe.drapeaux === "—", gpuVieuxExe.drapeaux);
-    await page.evaluate(() => { window.__V129.mesurer(); });
+    await page.evaluate(() => { if (window.__V129) window.__V129.mesurer(); });
     await page.waitForTimeout(600);
 
     // ── 7. Changement manuel ──────────────────────────────────────────

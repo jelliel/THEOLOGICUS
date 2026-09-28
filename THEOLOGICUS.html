@@ -33355,13 +33355,26 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 })();
 </script>
 <style id="v129-presets">
-/* v129 — preregleges de performance et fiche GPU. */
-.v129-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+/* v129 — preregleges de performance et fiche GPU.
+   COULEURS : le bloc porte SA PROPRE surface, sombre, au lieu d'emprunter
+   celles de son hote. Raison mesuree : en theme « glass » le bloc de jetons
+   redefinit --text-primary en #eaf4ff (clair) mais NE definit PAS --bg-card ;
+   #v6-more-menu retombe donc sur le #ffffff de :root et affiche du texte clair
+   sur fond blanc (contraste mesure : 1,65:1 pour les .hud-btn du menu, qui
+   souffrent deja du probleme). Avec sa propre surface, le bloc est lisible dans
+   tous les themes et dans les deux hotes, sans toucher au theme de l'app. */
+.v129-bloc {
+  background: var(--popup-bg, rgba(10,21,36,.96));
+  color: var(--text-bright, #eaf4ff);
+  border: 1px solid var(--glass-border, rgba(128,128,128,.35));
+  border-radius: 12px; padding: 12px; margin: 6px 0;
+}
+.v129-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 6px; }
 .v129-preset {
   font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .5px;
   padding: 8px 12px; border-radius: 9px; cursor: pointer; text-align: left;
-  border: 1px solid var(--glass-border, rgba(128,128,128,.35));
-  background: var(--bg-card-alt, rgba(128,128,128,.10)); color: var(--text-primary, inherit);
+  color: inherit; background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.18);
   transition: border-color .15s ease, background .15s ease;
 }
 .v129-preset:hover { border-color: var(--accent, #4f8ef7); }
@@ -33375,13 +33388,13 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
 }
 .v129-gpu { font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.75; }
 .v129-gpu-l { display: flex; gap: 10px; }
-.v129-gpu-l > span { color: var(--text-dim, #888); min-width: 96px; flex-shrink: 0; }
+.v129-gpu-l > span { color: var(--text-dim, #7e98b2); min-width: 96px; flex-shrink: 0; }
 .v129-gpu-l > b { font-weight: 600; word-break: break-word; }
 .v129-gpu-l > b.ok { color: var(--success, #34c759); }
 .v129-gpu-l > b.ko { color: var(--warning, #ff9f0a); }
 .v129-gpu-titre {
   font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--text-dim, #888); margin: 14px 0 5px;
+  color: var(--text-dim, #7e98b2); margin: 14px 0 5px;
 }
 /* Prereglage QUALITE : tous les messages s'animent (la v128 n'animait que le
    dernier). Sans effet si html.v35-reduce-fx est actif : ce mode-la ecrase
@@ -33584,6 +33597,15 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
     return boite;
   }
 
+  /* Le bloc porte sa propre surface sombre (voir le CSS) : les libelles sont
+     donc lisibles dans le menu « Plus » comme dans le panneau, quel que soit
+     le theme. */
+  function bloc() {
+    var b = document.createElement('div');
+    b.className = 'v129-bloc';
+    return b;
+  }
+
   function carteGPU() {
     var c = document.createElement('div');
     c.className = 'v129-gpu';
@@ -33700,10 +33722,12 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
       l.className = 'mm-label';
       l.textContent = 'Performance';
       menu.appendChild(l);
-      menu.appendChild(boutons());
+      var blocMenu = bloc();
+      blocMenu.appendChild(boutons());
       var carte = carteGPU();
       carte.classList.add('v129-gpu-menu');
-      menu.appendChild(carte);
+      blocMenu.appendChild(carte);
+      menu.appendChild(blocMenu);
     }
 
     /* Panneau « Personnaliser l'interface » : meme bloc, dans un panneau au
@@ -33717,12 +33741,14 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
       var h = document.createElement('h3');
       h.textContent = 'Performance et GPU';
       panneau.appendChild(h);
-      panneau.appendChild(boutons());
+      var blocPanneau = bloc();
+      blocPanneau.appendChild(boutons());
       var t = document.createElement('div');
       t.className = 'v129-gpu-titre';
       t.textContent = 'Diagnostic GPU';
-      panneau.appendChild(t);
-      panneau.appendChild(carteGPU());
+      blocPanneau.appendChild(t);
+      blocPanneau.appendChild(carteGPU());
+      panneau.appendChild(blocPanneau);
       hote.parentNode.insertBefore(panneau, hote);
     }
 
