@@ -996,6 +996,16 @@
 .fig-tools .ft-color{width:18px;height:18px;border:none;background:none;cursor:pointer;padding:0}
 .fig-tools .ft-wval{font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);width:22px;text-align:right}
 .fig-tools .ft-sep{width:1px;height:14px;background:rgba(255,255,255,.15)}
+/* v127 — remplissage (▨ + ∅) et rotation (↻ + valeur) dans la barre de figure.
+   Le panneau peut passer à la ligne : il est repositionné d'après sa hauteur
+   réelle (voir showFigTools). */
+.fig-tools{flex-wrap:wrap; max-width:min(94vw,370px); row-gap:5px}
+.fig-tools .ft-lab{font-size:11px;color:rgba(234,244,255,.55);line-height:1}
+.fig-tools .ft-fill{width:18px;height:18px;border:none;background:none;cursor:pointer;padding:0}
+.fig-tools .ft-filloff{font-size:11px;color:#eaf4ff;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:0 4px;line-height:14px;cursor:pointer}
+.fig-tools .ft-filloff:hover{border-color:var(--cyan)}
+.fig-tools .ft-filloff.on{color:var(--cyan);border-color:var(--cyan)}
+.fig-tools .ft-rval{font-family:'Orbitron',monospace;font-size:9px;color:var(--cyan);width:28px;text-align:right}
 /* ── Menu déroulant Insert (galerie de formes) — verre dépoli ── */
 #atc-insert-menu{
   position:fixed; z-index:100002; display:none; width:268px; max-height:380px; overflow:auto;
@@ -1020,6 +1030,10 @@
 #atc-insert-menu .im-swatch.on{border-color:#fff; box-shadow:0 0 6px var(--cyan-dim)}
 #atc-insert-menu .im-swatch.custom{background:conic-gradient(#f44336,#ffeb3b,#4caf50,#4f8ef7,#3f51b5,#e91e63,#f44336)}
 #atc-insert-menu .im-swatch.custom input{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%}
+/* v127 — « aucun remplissage » (hachures) et remise à zéro de la rotation */
+#atc-insert-menu .im-swatch.none{background:repeating-linear-gradient(45deg,rgba(255,255,255,.35) 0 3px,transparent 3px 6px);border-color:rgba(255,255,255,.35)}
+#atc-insert-menu .im-rzero{background:transparent;border:1px solid var(--glass-border);color:var(--text-dim);border-radius:6px;cursor:pointer;font-size:11px;line-height:1;padding:2px 5px}
+#atc-insert-menu .im-rzero:hover{color:var(--cyan);border-color:var(--cyan)}
 #atc-insert-menu .im-weight{flex:1; display:flex; align-items:center; gap:6px}
 #atc-insert-menu .im-weight input[type=range]{flex:1; accent-color:var(--cyan); height:3px; min-width:60px}
 #atc-insert-menu .im-wval{width:26px; text-align:right; font-family:'Orbitron',monospace; font-size:10px; color:var(--cyan)}
@@ -18329,7 +18343,10 @@ function exportBuildMsgHTML(m){
   (m.annotations||[]).forEach(a=>{ if(a&&a.text) exportWrap(box, a.text, 'atc-hl'); });
   let shapesHtml=''; let maxH=0;
   (m.shapes||[]).forEach(s=>{ if(!s) return; const x=Number(s.x)||0,y=Number(s.y)||0,w=Number(s.w)||120,h=Number(s.h)||60;
-    shapesHtml+='<div class="exp-fig" style="left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;border-radius:'+exportShapeRadius(s.shape)+';border-color:'+(s.color||'#4f8ef7')+'">'+(typeof escapeHtml==='function'?escapeHtml(s.text||''):(s.text||''))+'</div>';
+    /* v127 — le remplissage suit l'export (l'artwork de la forme, lui, n'est
+       pas redessiné ici : l'export reste une boîte simplifiée, donc la
+       rotation n'y a pas de sens et n'est pas reportée). */
+    shapesHtml+='<div class="exp-fig" style="left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;border-radius:'+exportShapeRadius(s.shape)+';border-color:'+(s.color||'#4f8ef7')+(s.fill?';background:'+s.fill:'')+'">'+(typeof escapeHtml==='function'?escapeHtml(s.text||''):(s.text||''))+'</div>';
     maxH=Math.max(maxH,y+h); });
   if(shapesHtml){ box.style.position='relative'; if(maxH>0) box.style.minHeight=maxH+'px'; box.innerHTML+=shapesHtml; }
   let commentHtml='';
@@ -26656,6 +26673,10 @@ initTafsirVerseTooltip();
     if (m) return m;
     window._atcFigWeight = window._atcFigWeight || 1.2;
     window._atcFigColor = window._atcFigColor || '#4f8ef7';
+    /* v127 — remplissage (« » = contour seul, comportement d'origine) et
+       rotation, mémorisés pour la session comme la couleur et le poids. */
+    if (typeof window._atcFigFill !== 'string') window._atcFigFill = '';
+    if (typeof window._atcFigRot !== 'number') window._atcFigRot = 0;
     m = document.createElement('div');
     m.id = 'atc-insert-menu';
     m._target = null; m._shape = '';
@@ -26669,7 +26690,7 @@ initTafsirVerseTooltip();
     const sw = document.createElement('div'); sw.className = 'im-swatches';
     const COLORS = ['#4f8ef7','#ff96c8','#81e68c','#ffd54f','#ff8a80','#b388ff','#ffffff','#ff7043'];
     COLORS.forEach(function(c){
-      const d = document.createElement('div'); d.className = 'im-swatch'; d.style.background = c; d.dataset.c = c; d.title = c;
+      const d = document.createElement('div'); d.className = 'im-swatch'; d.style.background = c; d.dataset.c = c; d.dataset.role = 'stroke'; d.title = c;
       d.addEventListener('click', function(){ window._atcFigColor = c; markSwatch(); updatePv(); });
       sw.appendChild(d);
     });
@@ -26686,23 +26707,55 @@ initTafsirVerseTooltip();
     const wv = document.createElement('span'); wv.className = 'im-wval'; wv.textContent = window._atcFigWeight.toFixed(1);
     rng.addEventListener('input', function(){ window._atcFigWeight = parseFloat(rng.value); wv.textContent = window._atcFigWeight.toFixed(1); updatePv(); });
     wr.appendChild(rng); wr.appendChild(wv); rowW.appendChild(wr); m.appendChild(rowW);
+    /* v127 — Remplissage : nuancier + « ∅ » (contour seul, défaut). */
+    const rowF = document.createElement('div'); rowF.className = 'im-row';
+    rowF.innerHTML = '<span>Remplir</span>';
+    const swf = document.createElement('div'); swf.className = 'im-swatches';
+    const noneF = document.createElement('div'); noneF.className = 'im-swatch none'; noneF.dataset.c = ''; noneF.dataset.role = 'fill'; noneF.title = 'Aucun remplissage (contour seul)';
+    noneF.addEventListener('click', function(){ window._atcFigFill = ''; markSwatch(); updatePv(); });
+    swf.appendChild(noneF);
+    COLORS.forEach(function(c){
+      const d = document.createElement('div'); d.className = 'im-swatch'; d.style.background = c; d.dataset.c = c; d.dataset.role = 'fill'; d.title = c;
+      d.addEventListener('click', function(){ window._atcFigFill = c; markSwatch(); updatePv(); });
+      swf.appendChild(d);
+    });
+    const custF = document.createElement('div'); custF.className = 'im-swatch custom'; custF.title = 'Couleur de remplissage personnalisée';
+    const cif = document.createElement('input'); cif.type = 'color'; cif.value = window._atcFigFill || '#ffd54f';
+    cif.addEventListener('input', function(){ window._atcFigFill = cif.value; markSwatch(); updatePv(); });
+    custF.appendChild(cif); swf.appendChild(custF);
+    rowF.appendChild(swf); m.appendChild(rowF);
+    /* v127 — Rotation (degrés), pour les figures tracées : flèches, polygones… */
+    const rowR = document.createElement('div'); rowR.className = 'im-row';
+    rowR.innerHTML = '<span>Rotation</span>';
+    const wrr = document.createElement('div'); wrr.className = 'im-weight';
+    const rrng = document.createElement('input'); rrng.type = 'range'; rrng.min = '0'; rrng.max = '359'; rrng.step = '1'; rrng.className = 'im-rrot'; rrng.value = String(window._atcFigRot || 0);
+    const rvv = document.createElement('span'); rvv.className = 'im-wval'; rvv.textContent = (window._atcFigRot || 0) + '°';
+    rrng.addEventListener('input', function(){ window._atcFigRot = parseInt(rrng.value, 10) || 0; rvv.textContent = window._atcFigRot + '°'; updatePv(); });
+    const rzero = document.createElement('button'); rzero.type = 'button'; rzero.className = 'im-rzero'; rzero.textContent = '↺'; rzero.title = 'Remettre la rotation à 0°';
+    rzero.addEventListener('click', function(){ window._atcFigRot = 0; rrng.value = '0'; rvv.textContent = '0°'; updatePv(); });
+    wrr.appendChild(rrng); wrr.appendChild(rvv); wrr.appendChild(rzero); rowR.appendChild(wrr); m.appendChild(rowR);
     function markSwatch(){
       sw.querySelectorAll('.im-swatch').forEach(function(x){ x.classList.toggle('on', x.dataset.c === window._atcFigColor); });
+      swf.querySelectorAll('.im-swatch').forEach(function(x){ x.classList.toggle('on', (x.dataset.c || '') === (window._atcFigFill || '')); });
     }
     function updatePv(){
       const BASIC = ['Rectangle','Carré','Rond','Losange'];
       pvf.innerHTML = '';
-      pvf.style.border = 'none'; pvf.style.borderRadius = '0';
+      pvf.style.border = 'none'; pvf.style.borderRadius = '0'; pvf.style.background = '';
+      const _fill = window._atcFigFill || '';
       if (BASIC.indexOf(m._shape) >= 0) {
         pvf.style.border = (window._atcFigWeight || 1.2) + 'px solid ' + (window._atcFigColor || '#4f8ef7');
         pvf.style.borderRadius = m._shape === 'Rond' ? '50%' : (m._shape === 'Carré' ? '0' : '8px');
+        applyFigBg(pvf, { fill: _fill });
       } else {
         const item = findForme(m._shape);
         if (item) {
           const s = document.createElementNS('http://www.w3.org/2000/svg','svg');
-          s.setAttribute('viewBox','0 0 24 24'); s.setAttribute('preserveAspectRatio','none');
+          s.setAttribute('viewBox','0 0 24 24');
+          s.setAttribute('preserveAspectRatio', figAspect({ rot: window._atcFigRot }));
           s.style.width = '100%'; s.style.height = '100%';
-          s.innerHTML = figSvgInner({ svg: item.svg, color: window._atcFigColor || '#4f8ef7', weight: window._atcFigWeight || 1.2 });
+          s.innerHTML = figSvgInner({ svg: item.svg, color: window._atcFigColor || '#4f8ef7', weight: window._atcFigWeight || 1.2, fill: _fill });
+          applyFigRot(s, { rot: window._atcFigRot });
           pvf.appendChild(s);
         }
       }
@@ -26759,21 +26812,84 @@ initTafsirVerseTooltip();
       if (attrs.indexOf('vector-effect') !== -1) return _m;
       return '<' + tag + ' vector-effect="non-scaling-stroke"' + attrs + end + '>';
     });
-    /* Contour couleur uniquement : aucun remplissage (tout fill -> none) */
-    svgInner = svgInner.replace(/fill=("|')([^"']*)\1/g, 'fill="none"');
+    /* Contour couleur uniquement par défaut : aucun remplissage (tout fill
+       -> none). v127 : si l'utilisateur a choisi une couleur de remplissage,
+       `applyFigPaint` la pose sur les formes FERMÉES seulement. */
+    svgInner = applyFigPaint(svgInner, f);
     return svgInner;
+  }
+  /* ═══ v127 — REMPLISSAGE ET ROTATION DES FIGURES ═══
+     Deux réglages par figure, stockés comme les autres (`f.fill`, `f.rot`)
+     donc sauvegardés avec la conversation.
+
+     REMPLISSAGE : seules les formes FERMÉES peuvent être remplies. Remplir
+     une ligne, un zigzag ou une courbe ouverte ne remplit pas « le trait » :
+     le navigateur relie les extrémités pour fermer le chemin et peint une
+     tache. On remplit donc `polygon`, `rect`, `circle`, `ellipse`, et les
+     `path` dont le `d` se termine par un ordre de fermeture (`Z`), et rien
+     d'autre. Sans couleur choisie, le comportement d'origine est conservé à
+     l'identique (tout `fill` -> `none`). */
+  function _figEstFerme(tag, attrs){
+    const t = String(tag || '').toLowerCase();
+    if (t === 'polygon' || t === 'rect' || t === 'circle' || t === 'ellipse') return true;
+    if (t === 'path') {
+      const m = /(?:^|\s)d\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(attrs || '');
+      const d = m ? (m[1] !== undefined ? m[1] : m[2]) : '';
+      return /z\s*$/i.test(String(d || '').trim());
+    }
+    return false;
+  }
+  function applyFigPaint(svgInner, f){
+    const fill = (f && typeof f.fill === 'string') ? f.fill.trim() : '';
+    const remplit = !!fill && fill !== 'none' && fill !== 'transparent';
+    return String(svgInner || '').replace(/<([a-zA-Z]+)([^>]*?)(\/?)>/g, function(_m, tag, attrs, end){
+      if (/^(svg|defs|g|style)$/.test(tag)) return _m;
+      /* On retire le fill d'origine (les tracés portent fill="none", la pointe
+         de la « Flèche » des Traits portait fill="cur", déjà résolu en
+         couleur) puis on pose celui qu'on veut. */
+      const sansFill = attrs.replace(/\s*fill\s*=\s*(?:"[^"]*"|'[^']*')/g, '');
+      const couleur = (remplit && _figEstFerme(tag, attrs)) ? fill : 'none';
+      return '<' + tag + ' fill="' + couleur + '"' + sansFill + end + '>';
+    });
+  }
+  /* ROTATION : on tourne l'ARTWORK (le <svg>), pas la boîte. La boîte reste
+     droite : glisser-déposer, poignées et étiquette de texte gardent leur
+     géométrie, et la rotation ne dépend pas de la taille.
+     `preserveAspectRatio` passe de "none" (l'artwork est étiré sur la boîte —
+     comportement d'origine) à "xMidYMid meet" dès qu'on tourne : l'étirement
+     s'applique AVANT la rotation, donc une flèche étirée puis tournée de 90°
+     deviendrait courte et énorme. Avec "meet", elle tourne sans se déformer. */
+  function figAspect(f){
+    return (parseFloat(f && f.rot) || 0) ? 'xMidYMid meet' : 'none';
+  }
+  function applyFigRot(svg, f){
+    if (!svg) return;
+    const r = parseFloat(f && f.rot) || 0;
+    svg.style.transformOrigin = '50% 50%';
+    svg.style.transform = r ? 'rotate(' + r + 'deg)' : '';
+  }
+  /* Remplissage des 4 formes « basiques » (Rectangle, Carré, Rond, Losange) :
+     elles sont peintes par la bordure CSS de la boîte, pas par un <svg>. */
+  function applyFigBg(el, f){
+    const fill = (f && typeof f.fill === 'string') ? f.fill.trim() : '';
+    el.style.background = (fill && fill !== 'none') ? fill : '';
   }
   function refreshFigVisual(fb, f){
     const svg = fb.querySelector('svg');
     if (svg) {
       const item = findForme(f.shape);
-      if (item) svg.innerHTML = figSvgInner({ svg: item.svg, color: f.color || '#4f8ef7', weight: f.weight || 1.2 });
+      if (item) {
+        svg.setAttribute('preserveAspectRatio', figAspect(f));
+        svg.innerHTML = figSvgInner({ svg: item.svg, color: f.color || '#4f8ef7', weight: f.weight || 1.2, fill: f.fill });
+        applyFigRot(svg, f);
+      }
     } else {
       const BASIC = ['Rectangle','Carré','Rond','Losange'];
       if (BASIC.indexOf(f.shape) >= 0) {
         fb.style.setProperty('--fc', f.color || '#4f8ef7');
         fb.style.borderColor = f.color || '#4f8ef7';
         fb.style.borderWidth = (f.weight || 1.2) + 'px';
+        applyFigBg(fb, f);
       }
     }
   }
@@ -26798,18 +26914,21 @@ initTafsirVerseTooltip();
     if (BASIC.indexOf(sh) >= 0) {
       el.style.border = wgt + 'px solid ' + (f.color || '#4f8ef7');
       el.style.borderRadius = sh === 'Rond' ? '50%' : (sh === 'Carré' ? '0' : '8px');
+      applyFigBg(el, f);
     } else {
       el.style.border = 'none';
       const item = findForme(sh);
       if (item) {
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', '0 0 24 24');
-        svg.setAttribute('preserveAspectRatio', 'none');
-        svg.innerHTML = figSvgInner({ svg: item.svg, color: f.color || '#4f8ef7', weight: wgt });
+        svg.setAttribute('preserveAspectRatio', figAspect(f));
+        svg.innerHTML = figSvgInner({ svg: item.svg, color: f.color || '#4f8ef7', weight: wgt, fill: f.fill });
+        applyFigRot(svg, f);
         el.appendChild(svg);
       } else {
         el.style.border = wgt + 'px solid ' + (f.color || '#4f8ef7');
         el.style.borderRadius = '8px';
+        applyFigBg(el, f);
       }
     }
     const lab = document.createElement('div'); lab.className = 'fb-label'; lab.textContent = f.text || '';
@@ -26841,13 +26960,16 @@ initTafsirVerseTooltip();
       y = target.clientY - br.top + box.scrollTop;
     }
     const id = 'fg-' + Date.now();
-    const f = { id: id, x: x, y: y, w: w, h: h, shape: item.n, color: color, text: '', svg: item.svg, weight: window._atcFigWeight || 1.2 };
+    const f = { id: id, x: x, y: y, w: w, h: h, shape: item.n, color: color, text: '', svg: item.svg,
+      weight: window._atcFigWeight || 1.2,
+      fill: window._atcFigFill || '',
+      rot: window._atcFigRot || 0 };
     msg.shapes = msg.shapes || [];
     msg.shapes.push(f);
     if (typeof markChatDirty === 'function') markChatDirty();
     atcPersist();
     box.appendChild(buildFigEl(f));
-    toast('✓ Figure insérée (' + item.n + ') · Enregistrée — glissez pour déplacer, poignées ◻ pour redimensionner, double-clic pour le texte', 'success');
+    toast('✓ Figure insérée (' + item.n + ') · glissez pour déplacer, poignées ◻ pour redimensionner, double-clic pour le texte ; cliquez-la pour tourner ↻ et remplir ▨', 'success');
   }
   function persistFig(f, fb){
     f.x = fb.offsetLeft; f.y = fb.offsetTop; f.w = fb.offsetWidth; f.h = fb.offsetHeight;
@@ -26939,6 +27061,35 @@ initTafsirVerseTooltip();
     const wv = document.createElement('span'); wv.className = 'ft-wval'; wv.textContent = (f.weight || 1.2).toFixed(1);
     rng.addEventListener('input', function(){ f.weight = parseFloat(rng.value); refreshFigVisual(fb, f); wv.textContent = f.weight.toFixed(1); atcPersist(); });
     const sep1 = document.createElement('span'); sep1.className = 'ft-sep';
+    /* v127 — REMPLISSAGE de l'intérieur (flèches, polygones, bulles, formes
+       fermées) : une couleur, ou « ∅ » pour revenir au contour seul. */
+    const fillL = document.createElement('span'); fillL.className = 'ft-lab'; fillL.textContent = '▨'; fillL.title = 'Remplissage';
+    const fillOn = function(){ return !!(f.fill && f.fill !== 'none'); };
+    const fill = document.createElement('input'); fill.type = 'color'; fill.className = 'ft-fill';
+    fill.value = fillOn() ? f.fill : '#ffd54f';
+    fill.title = 'Couleur de remplissage (intérieur des flèches et des formes fermées)';
+    const fillOff = document.createElement('button'); fillOff.className = 'ft-filloff' + (fillOn() ? '' : ' on');
+    fillOff.textContent = '∅'; fillOff.title = 'Aucun remplissage (contour seul)';
+    fill.addEventListener('input', function(){ f.fill = fill.value; fillOff.classList.remove('on'); refreshFigVisual(fb, f); atcPersist(); });
+    fillOff.addEventListener('click', function(){ f.fill = ''; fillOff.classList.add('on'); refreshFigVisual(fb, f); atcPersist(); });
+    /* v127 — ROTATION : proposée pour les figures TRACÉES (flèches, polygones,
+       chemins). Les 4 formes « basiques » sont peintes par la bordure CSS de la
+       boîte : les tourner demanderait de faire tourner la boîte elle-même, donc
+       aussi l'étiquette et les poignées — hors sujet ici. */
+    const BASIC = ['Rectangle','Carré','Rond','Losange'];
+    const rotOk = BASIC.indexOf(f.shape || '') < 0;
+    let sepR = null, rot = null, rv = null, rotZero = null;
+    if (rotOk) {
+      sepR = document.createElement('span'); sepR.className = 'ft-sep';
+      const r0 = Math.round(parseFloat(f.rot) || 0);
+      rot = document.createElement('input'); rot.type = 'range'; rot.min = '0'; rot.max = '359'; rot.step = '1';
+      rot.className = 'ft-rot';
+      rot.value = String(r0); rot.title = 'Rotation de la figure (0–359°)';
+      rv = document.createElement('span'); rv.className = 'ft-rval'; rv.textContent = r0 + '°';
+      rot.addEventListener('input', function(){ f.rot = parseInt(rot.value, 10) || 0; rv.textContent = f.rot + '°'; refreshFigVisual(fb, f); atcPersist(); });
+      rotZero = document.createElement('button'); rotZero.textContent = '↺'; rotZero.title = 'Remettre la rotation à 0°';
+      rotZero.addEventListener('click', function(){ f.rot = 0; rot.value = '0'; rv.textContent = '0°'; refreshFigVisual(fb, f); atcPersist(); });
+    }
     const dup = document.createElement('button'); dup.textContent = '⧉'; dup.title = 'Dupliquer la figure';
     const sep2 = document.createElement('span'); sep2.className = 'ft-sep';
     const del = document.createElement('button'); del.textContent = '🗑'; del.title = 'Supprimer la figure';
@@ -26957,10 +27108,19 @@ initTafsirVerseTooltip();
       toast('✓ Figure dupliquée · Enregistrée', 'success');
     });
     del.addEventListener('click', function(){ removeFigure(f.id, ts); });
-    t.appendChild(col); t.appendChild(rng); t.appendChild(wv); t.appendChild(sep1); t.appendChild(dup); t.appendChild(sep2); t.appendChild(del);
+    t.appendChild(col); t.appendChild(rng); t.appendChild(wv); t.appendChild(sep1);
+    t.appendChild(fillL); t.appendChild(fill); t.appendChild(fillOff);
+    if (rotOk) { t.appendChild(sepR); t.appendChild(rot); t.appendChild(rv); t.appendChild(rotZero); }
+    t.appendChild(sep2); t.appendChild(dup); t.appendChild(del);
     fb.parentElement.appendChild(t);
-    t.style.left = Math.max(0, fb.offsetLeft) + 'px';
-    t.style.top = Math.max(0, fb.offsetTop - 42) + 'px';
+    /* v127 — le panneau est plus large qu'avant (remplissage + rotation) et
+       peut passer à la ligne sur écran étroit : on le place d'après sa hauteur
+       RÉELLE et on le ramène dans la largeur du message. */
+    const _par = fb.parentElement;
+    const _th = t.offsetHeight || 34, _tw = t.offsetWidth || 0;
+    const _maxL = Math.max(0, (_par.clientWidth || 9999) - _tw - 4);
+    t.style.left = Math.max(0, Math.min(fb.offsetLeft, _maxL)) + 'px';
+    t.style.top = Math.max(0, fb.offsetTop - _th - 8) + 'px';
     t.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     figToolsEl = t;
   }
