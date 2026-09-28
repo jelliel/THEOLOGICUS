@@ -1,0 +1,39 @@
+Replace the fake before/after screenshots with real ones
+
+The two captures committed in 955a556 as visual proof of the v6-cyber memory
+panel fix were BYTE-IDENTICAL. Same sha1, 3924 bytes, a flat rectangle. They
+proved nothing, and I presented them as evidence.
+
+Three separate reasons, each of which alone was enough to ruin the capture:
+
+1. apercu_refpanel.js hardcoded the capture target. Line 117 read
+   `page.$("#references-panel")` regardless of --panneau, so asking for
+   --panneau memory-panel measured the memory panel but photographed the
+   references panel. Fixed: the capture follows the requested panel, and says
+   so when the panel is missing.
+
+2. The application was still LOCKED. Neither apercu_refpanel.js nor the audit
+   seeded `theologicus_remember`, so #auth-overlay covered the page and the
+   captures came out blank white. Fixed by reproducing the token exactly as the
+   app builds it: sha256hex('remember:' + AUTH_HASH) wrapped in
+   { v:1, mode:'admin', exp, tok }, read from writeRemember() in THEOLOGICUS.html.
+   The setup wizard also has to be dismissed: theologicus_wizard_skipped='1' is
+   not enough, the wizard shows whenever no AI identity is configured.
+
+3. Element and clipped-region screenshots are unreliable on a panel that is
+   translated and animated. `elementHandle.screenshot()` on the translucent
+   panel returned a 1.3 kB uniform rectangle; a clipped page region landed
+   beside the panel. capture_memoire.js now takes the WHOLE viewport, which
+   cannot miss its target.
+
+The panel is at [964,605,300,165] with opacity 1 at capture time in both runs.
+What changes is the panel background: rgba(255,255,255,0.6) -- the white
+--glass-bg inherited from :root -- versus rgba(18,12,28,0.62) after the fix.
+
+The measured ratios were always right (1.24:1 -> 5.69:1, reproduced by two
+independent instruments); it was the picture that was fake. New bench
+sonde_memory_panel.js answers "why is this capture blank" in one run instead of
+three guesses.
+
+Found while checking the audit's own coverage. No application code changed in
+this commit.

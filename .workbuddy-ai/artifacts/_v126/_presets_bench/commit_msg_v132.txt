@@ -1,0 +1,66 @@
+Fix the two light-theme defect families, and correct the bench that hid them
+
+The `light` theme had 40 elements below 3:1 and `v6-light` 11. The root cause
+is deeper than the second `:root`: `#v9-palette` defines its palette twice —
+on `:root` AND on `.tpai-shell`. A token set on the shell shadows the inherited
+value for all its descendants, so the more specific `html[data-theme="light"]`
+override never reaches them. Specificity is powerless against a token set lower
+in the tree. Measured on the shell in `light`: --text #e6edf7 (should be
+#2d4a6b), --bg-card #121826, --hull #121826, --cyan #4f8ef7. The sidebar, the
+top bar, the accordion and the conversation bubbles were all running the DARK
+palette inside a LIGHT theme.
+
+Two families:
+
+- Light-surface components whose text stayed on the dark palette. Fixed by
+  completing the shell override, the method v6-light already used. But
+  v6-light's own block was INCOMPLETE — 15 tokens against v9's 19 — so --hull,
+  --cyan, --wire and --ok stayed dark inside the shell and .suggestion-chip
+  (background var(--hull), color var(--text)) sat at 1.22:1, dark on dark. A
+  partial fix of this family is more misleading than no fix at all: it makes
+  the family look handled.
+
+- Permanently dark panels (#references-panel, #archives-panel) whose text
+  followed the theme. Given a panel-local dark palette, like the shell. Except
+  #archives-panel is forced WHITE in v6-light, so that one theme out of seven
+  needs a light exception — the blanket dark palette had put its three
+  .btn-ghost at 2.95:1.
+
+Also fixes the bench, which was accusing a compliant component. A gradient
+background is not in `backgroundColor`, so .avatar (color #fff on
+linear-gradient(135deg,#534ab7,#7f77dd)) was reported at 1.00:1 "white on
+white" when it actually measures 6.93:1 on the dark stop and 3.76:1 on the
+light one. Darkening its text would have DEGRADED a sound component. Gradient
+backgrounds are now amplitude-tested: near-flat decorative veils (the body
+tint, the shell gradient) remain measurable as a solid colour, while strong
+ramps are declared NOT MEASURABLE and listed explicitly rather than silently
+dropped. Two faults in that guard, both found by reading the output rather than
+the code: Chromium serialises `transparent` as rgba(0,0,0,0), a zero-luminance
+stop, so the body's 5%-tint veil read as a black-to-blue ramp and swallowed the
+whole document; and reusing the composite-background walker was wrong, since it
+only keeps nodes whose backgroundColor has alpha > 0 — exactly what a gradient
+background is not. The gradient scan now has its own walk.
+
+The coverage line now prints in the favourable case too. "Silence means clean"
+is indistinguishable from "the bench looked at nothing", which is the ambiguity
+behind every false zero in this bench.
+
+Measured with the SAME instrument on both sides (HEAD served from
+C:\tmp\avant_v132 via BENCH_ROOT):
+
+  theme                 before  after
+  glass/cyber/midnight       0      0
+  v6-glass/v6-cyber          0      0
+  light                     40      0
+  v6-light                  11      0
+
+Coverage 3/3 panels (memory, references, archives). One non-measurable per
+theme: .avatar, gradient amplitude 1.84. Benches: presets 48/48, smoothness,
+figures, annotations, z-index and style all exit 0.
+
+Deployed as 2.0.225, byte-identical to the repo outside the 9-character stamp
+(sha1 89d66685887bb76b on both sides). The deploy tool had VERSION 2.0.214
+while the installation was already 2.0.224 — an earlier deploy that day was
+never recorded there, so it would have made the app go BACKWARDS in time. It
+now refuses to overwrite when the installed version is not lower, comparing
+numerically rather than as strings.

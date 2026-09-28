@@ -1,0 +1,56 @@
+Fix the light and midnight themes being overridden by the v9 palette
+
+The document contains a second `:root`, inside `<style id="v9-palette">`,
+written for the v9 DARK shell. It declares --text, --text-bright, --cyan,
+--neon, --cyan-dim, --bg-void and --bg-hull. Two theme blocks declared the
+same tokens with the bare `[data-theme="..."]` selector — specificity (0,1,0),
+the same as `:root` — and sit EARLIER in the document, so the v9 palette won.
+
+Naming the winner rather than guessing: sonde_cascade.js lists every rule
+declaring a token that matches <html>, in document order, with its specificity,
+and marks the one that wins. It shows glass, cyber and the v6 themes declaring
+at (0,1,1) and winning; light and midnight at (0,1,0) and losing.
+
+Measured consequences in the light theme: --text was #e6edf7 (off-white)
+instead of #2d4a6b, --text-bright #ffffff, --neon #4f8ef7 instead of #00875a,
+--cyan #4f8ef7 instead of #0070a8. Visible as 1.03:1 on .success-block, 1.08:1
+on the export button label, 2.81:1 on .badge-neon and .status-pill.active.
+In midnight the damage was not legibility but HUE: --cyan and --neon were
+#4f8ef7 (blue) instead of #9b8fff (violet).
+
+Fixed by using `html[data-theme="..."]` — specificity (0,1,1), which is already
+the convention of the glass, cyber, midnight and v6-* blocks.
+
+Also: --success stayed inherited from :root (#34c759) in the light theme, i.e.
+2.22:1 on a white card. v6-light already uses #1f9d57; the two light themes now
+agree.
+
+And .ref-item-icon had no colour of its own, so the glyph inherited the
+browser's default link blue rgb(0,0,238) — 1.95:1 on the dark panel, in every
+theme. It now uses --cyan.
+
+Then a second, wider defect surfaced: --glass-bg is defined in :root as
+rgba(255,255,255,.6), and the three v6 themes defined --glass-border but not
+--glass-bg. Their glass panels — #memory-panel, .navbar-container, the .tpai-*
+shell — were therefore WHITE and translucent under light text. Measured in
+v6-cyber, the user's own theme: 1.24:1 and 1.21:1 on the memory panel. After
+the fix: 5.69:1 and 5.14:1.
+
+fuites_jetons.js now guards that whole class: for each theme it reports surface
+tokens that a DARK theme inherits from the light :root and that are actually
+used as a background somewhere. It reports --glass-bg in v6-glass and v6-cyber,
+and nothing else — the border tokens it first flagged were false positives, and
+the background check is read from `rule.cssText` because `getPropertyValue`
+destroys a var() carried by a shorthand.
+
+Full-DOM audit, elements below 3:1, before -> after:
+  glass 2 -> 0, cyber 2 -> 0, midnight 2 -> 0,
+  v6-glass 5 -> 0, v6-cyber 2 -> 0, light 62 -> 56, v6-light 16 -> 16.
+
+The five dark themes are clean. The light themes still carry hardcoded dark
+backgrounds (#references-panel, #archives-panel, the wizard and auth overlays,
+.suggestion-chip, .avatar, and a literal #eaf2ff on #tpai-arch-new); v6-light
+received a partial `!important` patch for that family, the light theme received
+none. Reported, not touched here.
+
+Benches: presets 48/48, smoothness 29/29, figures 27/27, annotations 17/17.

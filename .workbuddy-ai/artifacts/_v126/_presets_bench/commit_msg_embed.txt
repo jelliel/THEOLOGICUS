@@ -1,0 +1,25 @@
+Refresh the stale AI VIDEO embed in THEOLOGICUS.html
+
+THEOLOGICUS.html carries the AI VIDEO page inline, base64-encoded, in
+`<div id="aivideo-b64" hidden>`. tools/sync_html.py regenerates it from
+ai-video.html.
+
+That regeneration had not been run since 2026-09-26. The commits that changed
+ai-video.html that day (9f623b4 IDENTITY LOCK, 3d24e1d MOTION ONLY) never touched
+THEOLOGICUS.html, so the embedded copy stayed behind.
+
+Measured, decoding both blobs and comparing to the source:
+
+  HEAD blob   : 161661 characters decoded
+  ai-video.html : 194378 characters, sha1 3ec67782ad73
+  refreshed blob: 194378 characters, sha1 3ec67782ad73  <- identical
+
+So the shipped application was serving an AI VIDEO page that predates the
+IDENTITY LOCK and MOTION ONLY style categories -- two features the user asked
+for, present in the source, absent from the app.
+
+Refreshed with the project's own tool (tools/sync_html.py). No hand editing.
+
+Verified: verify_aivideo_ui.js and verify_aivideo_detect.js pass.
+
+Found while working on the v131 theme tokens; unrelated to them.

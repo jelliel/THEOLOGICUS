@@ -1,0 +1,71 @@
+Correct four defects in my own contrast audit, and record the v131 findings
+
+The v131 fixes themselves were committed in 83b68ea and 955a556. This commit is
+about the instrument that measured them, the memory notes, and two skills.
+
+The audit reported "0 elements below 3:1" where there was a defect. I only found
+out by confronting it with a second bench. Four defects, all of which pushed the
+count DOWN:
+
+1. The background was not composited. `fondOpaque()` stopped at the first
+   ancestor with alpha > 0.5 and returned it AS IS, so rgba(255,255,255,0.6) --
+   a mid grey over a dark shell, measured rgb(155,154,158) -- was treated as
+   white. Contrast was over-estimated and every translucent surface passed the
+   threshold: the bench was blind to the --glass-bg bug it existed to measure.
+   Fixed by compositing the whole translucent chain up to the first layer with
+   alpha >= 0.999. This is what finally revealed the four defects in v6-cyber
+   and v6-glass.
+
+2. Node constants do not cross into page.evaluate. `CONTENEURS is not defined`
+   crashed the bench, and the crash looked like a clean theme because nothing
+   was printed. I nearly concluded "0 everywhere". Constants are now passed as
+   arguments.
+
+3. The guard against glyph-less containers was defeated by its own join:
+   map(trim).join(" ") of empty nodes yields "    ", which is truthy. Seventeen
+   containers with no glyph at all passed the filter (light read 56 instead of
+   39). A trailing .trim() fixes it; --conteneurs brings them back for
+   diagnosis.
+
+4. --limite truncated the printout at 30 while the announced total said 56, so
+   a partial list looked complete. Now overridable, with an explicit "N more
+   not shown" line.
+
+An audit also only measures what is RENDERED, and that is worth stating: the
+bench now prints its COVERAGE. #memory-panel is display:none until it carries
+.active and is invisible to the measurement; #references-panel is hidden by
+translateX + opacity:0 and IS measured. The count is a LOWER BOUND, never a
+certificate. Full-screen overlays are no longer opened by default: they cover
+the side panels and change the composited background under them, so one audit
+covers one group of panels.
+
+Final measurement, same instrument on both sides. The "before" HTML is
+`git show 8664c2d:THEOLOGICUS.html`, served from C:\tmp\avant_v131 through
+BENCH_ROOT -- comparing two readings taken with two different instruments is not
+a comparison.
+
+  theme      before  after
+  glass           2      0
+  cyber           2      0
+  midnight        2      0
+  v6-glass        4      0
+  v6-cyber        4      0
+  light          45     40
+  v6-light       12     12
+
+The four in v6-cyber were all in #memory-panel (1.13 to 1.24:1); the two in
+glass were the span.ref-item-icon at 1.95:1. Those are exactly the figures
+claimed in 955a556, now reproduced by the instrument.
+
+Correction to that message: its aggregates came from the previous bench
+(contraste_par_theme.js) and are superseded -- it says v6-glass 5 -> 0 and
+light 62 -> 56, where the corrected instrument gives 4 -> 0 and 45 -> 40. The
+substance of the message (the specific elements and their ratios) is exact.
+
+Not closed, and named as such: the light theme still has 40 elements below 3:1
+(17 in #tpai-sidebar, 5 .v7-card, 4 in .wizard-box, 4 in aside#v8-notes, 1 each
+in #references-panel, #memory-panel, .v129-bloc...), all from hardcoded dark
+backgrounds. v6-light carries a partial !important patch for that family; the
+light theme carries none. Reported, not touched.
+
+Benches: presets 48/48, smoothness 29/29, figures 27/27, annotations 17/17.

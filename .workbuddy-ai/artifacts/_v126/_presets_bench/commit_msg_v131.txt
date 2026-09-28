@@ -1,0 +1,38 @@
+Fix the twelve theme tokens that were referenced but never defined
+
+A `var(--x)` with no fallback makes the whole declaration invalid at
+computed-value time: the property silently falls back to its initial value.
+Twelve tokens were in that state, so every declaration using them had no
+effect at all.
+
+Found only after fixing the instrument. The old sweep read references with
+`getPropertyValue(rule.style[i])`, which is blind to any var() carried by a
+SHORTHAND: the CSSOM decomposes `background` into its longhands and returns ""
+for every one of them, destroying the reference. Measured on `.badge-plasma`,
+whose `background: var(--plasma-dim)` and `color: var(--plasma)` sit in the
+same rule — only the second was seen, so the bench reported three missing
+tokens when there were five. Reading `rule.cssText` keeps the shorthand intact.
+
+The opposite trap came next: scanning the raw file surfaced var() citations
+inside comments (the real use was `var(--app-h, 100vh)`, with a fallback) and
+inside JS template strings. References now come from live rules only, and
+tokens supplied at runtime through setProperty are excluded as out of scope.
+
+Repaired: --gold, --plasma, --plasma-dim, --violet-dim, --text-muted, --bg,
+--bg-dark, --bg-panel (all seven themes), --void, --grid, --plate, --neon-dim
+(the three v6 themes) and --text-code (midnight).
+
+Shared tokens are DERIVED from the active theme's own tokens, so they stay
+correct in all seven themes without being repeated seven times. --gold,
+--plasma and --violet must differ between light and dark, so they are
+overridden in the five dark themes. --violet is new: .badge-violet and
+.orchestrator-badge hardcoded #a78bfa, which measures 2.72:1 on a light
+background.
+
+Measured with contraste_jetons.js, which probes the real classes on a
+var(--bg-card) surface and composites the translucent background chain up to
+the first opaque one. Ten elements were below 3:1 before, six after; zero
+regressions, four repairs. The remaining six are all in the light theme and
+come from the v9 palette overriding it — handled next.
+
+Benches: presets 48/48, smoothness 29/29, figures 27/27, annotations 17/17.
