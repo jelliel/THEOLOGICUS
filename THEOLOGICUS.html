@@ -1229,6 +1229,32 @@
   --chat-user: #e8f0fe;
   --chat-assistant: #ffffff;
 
+  /* v131 — jetons référencés SANS repli et jamais définis.
+     Un `var(--x)` sans valeur de repli rend la déclaration ENTIÈRE invalide :
+     la propriété retombe à sa valeur initiale, silencieusement. Douze jetons
+     étaient dans ce cas, ce qui privait de fond ou de couleur le badge plasma,
+     le badge violet, l'extrait de recherche, l'étoile de notation, le bouton
+     favori, le bouton de format d'export, le curseur de réglage — et, dans les
+     thèmes v6, le code en ligne, les blocs de code, les pastilles d'état et les
+     blocs de succès.
+     Les valeurs ci-dessous sont DÉRIVÉES des jetons du thème actif : elles
+     restent donc justes dans les sept thèmes sans être répétées sept fois.
+     --gold et --plasma, qui doivent différer entre clair et sombre, sont
+     surchargés dans les cinq thèmes sombres. */
+  --text-muted: var(--text-dim);
+  --plasma-dim: rgba(255,107,53,0.12);
+  --violet-dim: rgba(124,58,237,0.14);
+  --bg-panel: var(--bg-card-alt);
+  --bg: var(--hull);
+  --bg-dark: var(--deep);
+  --void: var(--bg-void);
+  --plate: var(--bg-plate);
+  --grid: var(--wire);
+  --neon-dim: var(--accent-soft);
+  --gold: #9a7b1e;          /* or lisible sur fond clair */
+  --plasma: #b4471a;        /* orange plasma lisible sur fond clair */
+  --violet: #6d28d9;        /* violet lisible sur fond clair */
+
   --r: 8px;
   --r-lg: 16px;
   --r-xl: 24px;
@@ -1351,6 +1377,8 @@ html[data-theme="glass"] {
      et 1,65:1 sur les entrees du menu « Plus ». Les themes recents v6-* font
      les deux familles ; ceux-ci avaient ete oublies. */
   --bg-card: #0e1c30;  --chat-user: rgba(79,142,247,0.16);  --chat-assistant: #0a1524;
+  /* v131 — surcharges propres aux thèmes sombres (voir :root). */
+  --gold: #ffd166;  --plasma: #ff8a4c;  --violet: #a78bfa;
 }
 html[data-theme="cyber"] {
 
@@ -1375,6 +1403,8 @@ html[data-theme="cyber"] {
      #v6-topbar et #v6-palette prennent --bg-card : ils etaient donc BLANCS avec
      du texte clair. Mesure avant correctif : 1,43:1 sur le menu. */
   --bg-card: #082413;  --chat-user: rgba(79,142,247,0.16);  --chat-assistant: #051a0f;
+  /* v131 — surcharges propres aux thèmes sombres (voir :root). */
+  --gold: #ffd166;  --plasma: #ff8a4c;  --violet: #a78bfa;
 }
 /* Shell tones for light & midnight (their HUD vars are defined further below) */
 html[data-theme="light"] {
@@ -1409,6 +1439,13 @@ html[data-theme="midnight"] {
      --chat-assistant reprend la valeur de --hull de ce theme (#131320), deja
      definie plus bas, pour rester coherent avec la bulle de base. */
   --bg-card: #0d0d18;  --chat-user: rgba(155,143,255,0.16);  --chat-assistant: #131320;
+  /* v131 — surcharges propres aux thèmes sombres (voir :root).
+     --text-code manquait AUSSI dans ce thème : il ne définissait que les
+     jetons de texte « primaires », pas --text, --text-bright ni --text-code.
+     Le code en ligne héritait donc de la couleur du texte courant au lieu de
+     la teinte d'accent. Valeur = --cyan de ce thème, comme dans les six autres
+     thèmes où --text-code vaut --cyan (ou --neon). */
+  --gold: #ffd166;  --plasma: #ff8a4c;  --violet: #a78bfa;  --text-code: #9b8fff;
 }
 
 /* RESET */
@@ -4212,7 +4249,7 @@ details.studio-adv[open] > summary { margin-bottom: 10px; }
 .badge-violet {
   background: var(--violet-dim);
   border-color: rgba(124,58,237,0.4);
-  color: #a78bfa;
+  color: var(--violet, #a78bfa);
 }
 
 /* ═══ TOAST ═══ */
@@ -5048,7 +5085,7 @@ details.studio-adv[open] > summary { margin-bottom: 10px; }
   border-radius: 3px;
   background: var(--violet-dim);
   border: 1px solid rgba(124,58,237,0.4);
-  color: #a78bfa;
+  color: var(--violet, #a78bfa);
   letter-spacing: 1px;
 }
 
@@ -31822,6 +31859,8 @@ html[data-theme="v6-glass"]{
   --text-primary:#eafaff; --text-secondary:#aacfd9; --border:1px solid rgba(0,229,255,0.18);
   --wire:rgba(0,229,255,0.18); --ok:#34c759; --danger:#ff453a;
   --chat-user:rgba(0,229,255,0.10); --chat-assistant:#0c111d;
+  /* v131 — surcharges propres aux thèmes sombres (voir :root). */
+  --gold:#ffd166; --plasma:#ff8a4c; --violet:#a78bfa;
   --deep:#0c111d; color-scheme:dark;
 }
 html[data-theme="v6-glass"] .tpai-shell{
@@ -31845,6 +31884,8 @@ html[data-theme="v6-cyber"]{
   --text-primary:#fff0f7; --text-secondary:#d9b3cc; --border:1px solid rgba(255,45,149,0.18);
   --wire:rgba(255,45,149,0.18); --ok:#34c759; --danger:#ff453a;
   --chat-user:rgba(255,45,149,0.10); --chat-assistant:#0a0712;
+  /* v131 — surcharges propres aux thèmes sombres (voir :root). */
+  --gold:#ffd166; --plasma:#ff8a4c; --violet:#a78bfa;
   --deep:#0a0712; color-scheme:dark;
 }
 html[data-theme="v6-cyber"] .tpai-shell{
