@@ -56,16 +56,32 @@ if (!fs.existsSync(path.join(RACINE, "THEOLOGICUS.html"))) {
       { role: "assistant", content: "La justification est **déclarative**.", ts: 1790800001000, annotations: [], marks: [] },
     ],
   });
+  // Jeton de deverrouillage, reproduit a l'identique de l'application :
+  //   sha256hex('remember:' + AUTH_HASH), enveloppe dans { v:1, mode, exp, tok }.
+  // Lu dans THEOLOGICUS.html (AUTH_HASH) et dans writeRemember().
+  const AUTH_HASH = "ca9cc135dea09c84e670f62659826f1d9d76a633e421cdc54c67ffa20b3a1a96";
+  const remember = JSON.stringify({
+    v: 1,
+    mode: "admin",
+    exp: Date.now() + 7 * 86400000,
+    tok: require("crypto").createHash("sha256").update("remember:" + AUTH_HASH).digest("hex"),
+  });
+
   await ctx.addInitScript((e) => {
     try { document.cookie = "key_mistral=sk-test-audit; path=/"; } catch (x) {}
     try {
       if (!localStorage.getItem("__apercu_seeded")) {
         localStorage.setItem("theologicus_chat_" + "audit-contraste", e.chat);
         localStorage.setItem("theologicus_currentChatId", "audit-contraste");
+        // DEVERROUILLAGE — sans lui l'app reste derriere #auth-overlay et toute
+        // capture montre la surcouche, pas le panneau. Les images « avant/apres »
+        // sortaient BLANCHES et identiques : elles ne prouvaient rien.
+        localStorage.setItem("theologicus_remember", e.remember);
+        localStorage.setItem("theologicus_wizard_skipped", "1");
         localStorage.setItem("__apercu_seeded", "1");
       }
     } catch (x) {}
-  }, { chat });
+  }, { chat, remember });
   await page.goto(`http://127.0.0.1:${PORT}/THEOLOGICUS.html`, { waitUntil: "domcontentloaded", timeout: 90000 });
   await page.waitForFunction(() => typeof window.loadArchiveChat === "function", null, { timeout: 90000 });
   await page.evaluate((id) => { window.loadArchiveChat(id, -1); }, "audit-contraste");
@@ -114,9 +130,42 @@ if (!fs.existsSync(path.join(RACINE, "THEOLOGICUS.html"))) {
     console.log(`  ${String(m.ratio).padStart(6)}:1  ${m.sel.padEnd(18)} "${m.texte}"  ${m.couleur} sur ${m.fond}`);
   }
 
-  const panneau = await page.$("#references-panel");
-  if (panneau) await panneau.screenshot({ path: path.join(__dirname, SORTIE) });
-  else await page.screenshot({ path: path.join(__dirname, SORTIE) });
+  // Le selecteur etait CODE EN DUR a « #references-panel » : demander
+  // --panneau memory-panel mesurait bien le panneau memoire, mais capturait
+  // TOUJOURS le panneau references. Les deux images « avant/apres » etaient donc
+  // rigoureusement identiques (meme sha1) et ne prouvaient rien — alors qu'elles
+  // etaient commitees comme preuve visuelle. Une capture doit suivre le panneau
+  // demande, sinon elle est un faux temoignage.
+  //
+  // Et on capture une REGION DE LA PAGE, pas l'element : le panneau est
+  // translucide par construction, c'est le composite avec ce qu'il y a derriere
+  // qu'il faut voir. `elementHandle.screenshot()` sur un element translucide
+  // anime rendait un rectangle uni de 1,3 ko — identique avant et apres.
+  const cible = await page.$("#" + PANNEAU);
+  if (!cible) {
+    console.log(`[!] #${PANNEAU} introuvable — capture de la page entiere.`);
+    await page.screenshot({ path: path.join(__dirname, SORTIE) });
+  } else {
+    const boite = await page.evaluate((id) => {
+      const el = document.getElementById(id);
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      // Marge pour voir ce qui entoure le panneau (c'est le fond qui compte).
+      const m = 12;
+      return {
+        x: Math.max(0, r.x - m), y: Math.max(0, r.y - m),
+        width: Math.min(window.innerWidth, r.width + 2 * m),
+        height: Math.min(window.innerHeight, r.height + 2 * m),
+        opacite: cs.opacity, bg: cs.backgroundColor,
+      };
+    }, PANNEAU);
+    console.log(`capture : #${PANNEAU} opacite=${boite.opacite} fond=${boite.bg} ` +
+      `zone ${Math.round(boite.width)}x${Math.round(boite.height)}`);
+    await page.screenshot({
+      path: path.join(__dirname, SORTIE),
+      clip: { x: boite.x, y: boite.y, width: boite.width, height: boite.height },
+    });
+  }
   console.log(`capture écrite : ${path.join(__dirname, SORTIE)}`);
 
   await browser.close();
