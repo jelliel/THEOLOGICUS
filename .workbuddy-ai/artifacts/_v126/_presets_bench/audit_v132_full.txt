@@ -1,0 +1,216 @@
+##### ROOT=C:/tmp/avant_v132
+===== glass =====
+theme effectif : glass   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== cyber =====
+theme effectif : cyber   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== midnight =====
+theme effectif : midnight   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-glass =====
+theme effectif : v6-glass   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-cyber =====
+theme effectif : v6-cyber   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== light =====
+theme effectif : light   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 40
+   1.03:1  div#ref-list > a.ref-item > div.ref-item-content > div.ref-item-title
+           "Lumen Gentium"  rgb(13, 31, 53) sur rgb(16, 28, 43)
+   1.03:1  div#ref-list > a.ref-item.fathers-ref > div.ref-item-content > div.ref-item-title
+           "Les Confessions"  rgb(13, 31, 53) sur rgb(16, 28, 43)
+   1.04:1  div.tpai-main > aside#tpai-sidebar > div#tpai-arch > button#tpai-arch-new
+           "+ Nouvelle conversation"  rgb(234, 242, 255) sur rgb(243, 246, 251)
+   1.04:1  div.wizard-box > div#wizard-step-2 > div.btn-row > button#wizard-step2-next
+           "GÉNÉRER MES AGENTS →"  rgb(234, 242, 255) sur rgb(232, 237, 245)
+   1.07:1  div#chat-wrap > main#chat-container > div.message.assistant > div#mc-1790800001000
+           "La justification est ."  rgb(13, 31, 53) sur rgb(18, 24, 38)
+   1.07:1  aside#v8-notes > h2
+           "Pourquoi cette interface ?"  rgb(13, 31, 53) sur rgb(18, 24, 38)
+   1.07:1  aside#v8-notes > div.note > h4
+           "4 surfaces de navigation"  rgb(13, 31, 53) sur rgb(18, 24, 38)
+   1.09:1  div#chat-wrap > main#chat-container > div.message.user > div#mc-1790800000000
+           "Question sur la justification."  rgb(255, 255, 255) sur rgb(242, 246, 251)
+    1.4:1  div.tpai-accordion > div.tpai-acc-body > div > div
+           "Lecture vocale (TTS)"  rgb(230, 237, 247) sur rgb(198, 202, 206)
+    1.4:1  div.tpai-acc-body > div > div > span
+           "🔊"  rgb(230, 237, 247) sur rgb(198, 202, 206)
+   1.68:1  aside#tpai-sidebar > div.tpai-accordion > button.tpai-acc-head > span.tpai-acc-ico
+           "⚙️"  rgb(182, 193, 209) sur rgb(242, 246, 251)
+   1.68:1  aside#tpai-sidebar > div.tpai-accordion > button.tpai-acc-head > span.tpai-acc-label
+           "PARAMÈTRES"  rgb(182, 193, 209) sur rgb(242, 246, 251)
+   1.79:1  div.tpai-accordion > div.tpai-acc-body > div > label
+           "Langue de lecture des réponses"  rgb(139, 151, 171) sur rgb(198, 202, 206)
+   1.79:1  div.tpai-accordion > div.tpai-acc-body > div > div
+           "Si vous entendez un accent anglais sur du "  rgb(139, 151, 171) sur rgb(198, 202, 206)
+   1.91:1  aside#v8-notes > div.note > p > code
+           ".navbar-container"  rgb(45, 74, 107) sur rgb(17, 26, 42)
+   2.47:1  aside#v8-notes > div.note > p
+           "Actuellement : + + + la sidebar. Trois bar"  rgb(58, 90, 122) sur rgb(18, 24, 38)
+    2.5:1  div#setup-wizard-overlay > div.wizard-box > div#wizard-step-2 > div.wizard-subtitle
+           "Ces informations permettront à THEOLOGICUS"  rgb(122, 154, 184) sur rgb(232, 237, 245)
+    2.5:1  div.wizard-box > div#wizard-step-2 > div.field-group > div.field-hint
+           "Ce nom sera affiché dans l'interface et ut"  rgb(122, 154, 184) sur rgb(232, 237, 245)
+    2.5:1  div.wizard-box > div#wizard-step-2 > div.btn-row > button#wizard-step2-back
+           "← Retour"  rgb(122, 154, 184) sur rgb(232, 237, 245)
+   2.72:1  aside#tpai-sidebar > div#tpai-arch > div#v7-conv-label > span
+           "Conversations"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div#tpai-arch > div#tpai-arch-list > div.archive-empty
+           "Aucune conversation trouvée"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  div.tpai-main > aside#tpai-sidebar > div#v8-refs > div.v7-label
+           "Références"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  div.tpai-main > aside#tpai-sidebar > div#v8-refs > button.v7-card
+           "Vatican II"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div#v8-refs > button.v7-card > span.ic
+           "⛪"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  div.tpai-main > aside#tpai-sidebar > div#v8-corpus > div.v7-label
+           "Corpus"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  div.tpai-main > aside#tpai-sidebar > div#v8-corpus > button.v7-card
+           "Bible"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div#v8-corpus > button.v7-card > span.ic
+           "✝️"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div#v8-corpus > button.v7-card > span.cnt
+           "4,1 Mo"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div.tpai-accordion > button.tpai-acc-head > span.tpai-acc-caret
+           "▾"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div.tpai-accordion > div.tpai-acc-body > button.tpai-sublink
+           "Thèmes"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  div.tpai-accordion > div.tpai-acc-body > button.tpai-sublink > span.tpai-acc-ico
+           "🎨"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  aside#tpai-sidebar > div.tpai-accordion > div.tpai-acc-body > div#tpai-version-row
+           "THEOLOGICUS vdev"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.72:1  main#chat-container > div.message.user > div.msg-meta > span
+           "00:26:40"  rgb(139, 151, 171) sur rgb(242, 246, 251)
+   2.73:1  aside#tpai-sidebar > div#v8-foot > button.chip > span
+           "◈"  rgb(139, 151, 171) sur rgb(243, 246, 251)
+   2.73:1  aside#tpai-sidebar > div#v8-foot > button.chip > b#v8-theme-name
+           "GLASS"  rgb(139, 151, 171) sur rgb(243, 246, 251)
+   2.86:1  div#memory-panel > div#memory-list > div
+           "Aucune mémoire enregistrée"  rgb(122, 154, 184) sur rgb(251, 252, 254)
+   2.92:1  div#references-panel > div.ref-header > span#ref-total-count
+           "35 résultats"  rgb(0, 112, 168) sur rgb(14, 36, 56)
+   2.94:1  div#v6-more-menu > div.mm-label
+           "Configuration"  rgb(122, 154, 184) sur rgb(255, 255, 255)
+   2.94:1  div.v129-bloc > div.v129-gpu.v129-gpu-menu > div.v129-gpu-l > span
+           "Moteur"  rgb(122, 154, 184) sur rgb(255, 255, 255)
+   2.96:1  div#chat-wrap > main#chat-container > div.message.user > div.msg-label
+           "▸ VOUS"  rgba(79, 142, 247, 0.5) sur rgb(242, 246, 251)
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-light =====
+theme effectif : v6-light   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 11
+   1.06:1  div#ref-list > a.ref-item > div.ref-item-content > div.ref-item-title
+           "Lumen Gentium"  rgb(11, 22, 34) sur rgb(16, 28, 43)
+   1.06:1  div#ref-list > a.ref-item.fathers-ref > div.ref-item-content > div.ref-item-title
+           "Les Confessions"  rgb(11, 22, 34) sur rgb(16, 28, 43)
+   1.06:1  div.wizard-box > div#wizard-step-2 > div.btn-row > button#wizard-step2-next
+           "GÉNÉRER MES AGENTS →"  rgb(234, 242, 255) sur rgb(230, 235, 243)
+   1.11:1  div.tpai-main > aside#tpai-sidebar > div#tpai-arch > button#tpai-arch-new
+           "+ Nouvelle conversation"  rgb(234, 242, 255) sur rgb(227, 230, 236)
+   1.22:1  div.suggestions-section > div.suggestions-chips > button.suggestion-chip.chip-scroll > span.chip-text
+           "Quelle est la définition précise de « just"  rgb(28, 42, 58) sur rgb(18, 24, 38)
+   1.22:1  div.suggestions-section > div.suggestions-chips > button.suggestion-chip > span.chip-text
+           "Quelles sont les sources bibliques qui fon"  rgb(28, 42, 58) sur rgb(18, 24, 38)
+   2.41:1  div#references-panel > div.ref-header > span#ref-total-count
+           "35 résultats"  rgb(24, 95, 165) sur rgb(17, 36, 58)
+   2.45:1  div#chat-wrap > main#chat-container > div.message.user > div.msg-label
+           "▸ VOUS"  rgba(79, 142, 247, 0.5) sur rgb(217, 226, 238)
+   2.63:1  div#references-panel > div.ref-header > h3
+           "☷ RÉFÉRENCES"  rgb(24, 95, 165) sur rgb(16, 28, 43)
+   2.63:1  div#references-panel > div#ref-list > a.ref-item > span.ref-item-icon
+           "⌂"  rgb(24, 95, 165) sur rgb(16, 28, 43)
+   2.63:1  div#references-panel > div#ref-list > a.ref-item.fathers-ref > span.ref-item-icon
+           "☻"  rgb(24, 95, 165) sur rgb(16, 28, 43)
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+##### ROOT=C:/tmp/theoverify
+===== glass =====
+theme effectif : glass   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== cyber =====
+theme effectif : cyber   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== midnight =====
+theme effectif : midnight   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-glass =====
+theme effectif : v6-glass   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-cyber =====
+theme effectif : v6-cyber   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== light =====
+theme effectif : light   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
+===== v6-light =====
+theme effectif : v6-light   seuil WCAG retenu : 3:1
+couverture : 3/3 panneau(x) mesure(s) — memory-panel (mesure), references-panel (mesure), archives-panel (mesure)
+
+elements sous le seuil : 0
+
+NON MESURABLES (fond en degrade a forte amplitude) : 1
+      --  div#tpai-shell > header#v6-topbar > div.avatar   amplitude 1.84:1  linear-gradient(135deg, rgb(83, 74, 183), rgb(127, 119, 221)
