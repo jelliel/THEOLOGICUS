@@ -27583,9 +27583,47 @@ const idx = fullM.norm.indexOf(txtM.norm);
     return highlightRangeByTextNodes(range, cls, hlId);
   }
 
+  /* v126m — Contrôle « le cadre est-il bien sur le mot visé ? ».
+     Le surlignage se réapplique après chaque re-rendu. Deux dérives
+     silencieuses pouvaient poser le cadre sur un AUTRE mot :
+       - l'offset `start/end` mémorisé à la sélection dérive dès que le rendu
+         change (section « questions de suivi » retirée, markdown réécrit,
+         message prolongé/régénéré) : `wrapByOffset` réussit alors sur la
+         mauvaise plage — et il a la PRIORITÉ sur la recherche par texte, donc
+         le cadre restait définitivement sur un autre mot ;
+       - un span déjà présent avec le bon `data-hl-id` était réutilisé sans
+         vérifier son contenu, donc un cadre erroné le restait indéfiniment.
+     On compare donc le texte RÉELLEMENT enroulé (concaténation des spans
+     d'un même id, car une sélection à cheval sur du gras donne plusieurs
+     spans) au texte annoté, en comparaison normalisée (accents, casse,
+     espaces et ponctuation ignorés — c'est l'espace de `normalizeMatch`).
+     Le TEXTE ANNOTÉ est la seule vérité : c'est ce que l'utilisateur a
+     sélectionné et voit. Vérifié par `verify_annotations_offset_drift.js`
+     (contrôle négatif : sans ce contrôle, le cadre tombe sur « docétisme »
+     au lieu de « marcionisme »). */
+  function _hlNorm(s){ return normalizeMatch(String(s == null ? '' : s)).norm; }
+  function _hlConcat(box, id){
+    let s = '';
+    box.querySelectorAll('[data-hl-id="' + id + '"]').forEach(function (sp) { s += sp.textContent || ''; });
+    return s;
+  }
+  function _hlUnwrap(box, id){
+    box.querySelectorAll('[data-hl-id="' + id + '"]').forEach(function (sp) {
+      try { if (sp.parentNode) sp.parentNode.replaceChild(document.createTextNode(sp.textContent || ''), sp); }
+      catch (e) {}
+    });
+  }
+  /* Vrai si le texte enroulé correspond au texte annoté. Un `a.text`
+     purement ponctuation n'est pas vérifiable : on ne bloque pas. */
+  function _hlAlign(box, a){
+    const want = _hlNorm(a.text);
+    if (!want) return true;
+    return _hlNorm(_hlConcat(box, a.id)) === want;
+  }
+
   function applyHighlights(){
     const msgs = (typeof state !== 'undefined' && state && state.messages) || [];
-    let totalFound = 0, totalApplied = 0, totalSkipped = 0, totalNoBox = 0, totalNoText = 0, totalOffset = 0;
+    let totalFound = 0, totalApplied = 0, totalSkipped = 0, totalNoBox = 0, totalNoText = 0, totalOffset = 0, totalRealigne = 0;
     msgs.forEach(function(m){
       if (!m.annotations || !Array.isArray(m.annotations)) return;
       const box = document.getElementById('mc-' + m.ts);
@@ -27609,6 +27647,9 @@ const idx = fullM.norm.indexOf(txtM.norm);
         _deja.forEach(function (sp) {
           if (!_bon && String(sp.textContent || '').trim()) _bon = sp;
         });
+        /* v126m — un span deja present n'est REUTILISE que s'il porte bien
+           le texte annote. Sinon le cadre restait sur un autre mot. */
+        if (_bon && !_hlAlign(box, a)) { _hlUnwrap(box, a.id); _bon = null; totalRealigne++; }
         if (_bon) {
           totalSkipped++;
           if (a.w) _bon.classList.add('atc-mot');
@@ -27649,6 +27690,10 @@ const idx = fullM.norm.indexOf(txtM.norm);
               ok = false;
             }
           }
+          /* v126m — l'offset a pu dériver : si le texte enroulé n'est pas
+             celui de l'annotation, on défait et on laisse la recherche par
+             occurrence/texte reposer le cadre au bon endroit. */
+          if (ok && !_hlAlign(box, a)) { _hlUnwrap(box, a.id); ok = false; totalRealigne++; }
           if (ok) totalOffset++;
         }
         // Repli : recherche de texte tolérante (anciennes annotations sans offset
@@ -27666,7 +27711,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
         }
       });
     });
-    console.log('[DIAG] applyHighlights: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' alreadyWrapped=' + totalSkipped + ' noBox=' + totalNoBox + ' noText=' + totalNoText);
+    console.log('[DIAG] applyHighlights: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' alreadyWrapped=' + totalSkipped + ' realigned=' + totalRealigne + ' noBox=' + totalNoBox + ' noText=' + totalNoText);
   }
 
   function applyMarks(){
