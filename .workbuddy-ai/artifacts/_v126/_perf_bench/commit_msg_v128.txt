@@ -1,0 +1,91 @@
+Make conversation switching and scrolling smooth again
+
+The user reported the Windows build as "very laggy" when selecting a
+conversation and when scrolling inside one. Measured with a new bench that
+reads the engine's own counters over CDP (Performance.getMetrics,
+LayerTree, and a Tracing pass), instead of judging by eye.
+
+What the measurements showed, on a 40-message conversation:
+
+  composited layers            69  -> 28
+  layers promoted by will-change 89 ->  9
+  layers kept in an animation  85  ->  7
+  selection: layouts          100  -> 17
+  selection: task duration    245 ms -> 159 ms
+  selection: style recalc      81 ms ->  36 ms
+  selection: scrollIntoView     3  ->  0
+  selection: getBoundingClientRect 40 -> 0
+  scrolling: scrollIntoView   119  ->  0
+  scrolling: style recalc      45 ms -> 29 ms
+
+Causes, in order of measured cost:
+
+1. `.message` carried `will-change: transform, opacity` permanently. CDP
+   LayerTree named it: 47 layers "Has a will-change: transform compositing
+   hint" and 42 "… opacity …" — one GPU layer per message, for life. Every
+   scroll frame had to composite 47 textures.
+   Fixed by removing `will-change` from `.message`.
+
+2. `.message` also carried an entrance animation with `fill-mode: both`, so
+   EVERY re-render replayed it on ALL messages at once — 44 layers in
+   "active accelerated transform animation". Opening a conversation meant
+   animating 40 elements simultaneously.
+   Fixed by making the animation opt-in (`.message.msg-enter`) and applying
+   it only to the message that actually enters.
+
+3. The minimap's scroll handler called `scrollIntoView()` on the active
+   entry on EVERY scroll event: measured 119 calls for 120 frames, and
+   `scrollIntoView` forces a synchronous layout and walks every scrollable
+   ancestor. Worse, `mmEntries` was never cleared, so the cost continued
+   even with the minimap closed, and `renderMessages` rebuilt the minimap
+   on every render (one `offsetTop` read per message).
+   Fixed: the minimap is built only while it is visible; its entries are
+   cleared when hidden; the highlight returns early when nothing changed;
+   and the active entry is kept in view by scrolling the minimap itself
+   with plain arithmetic instead of `scrollIntoView`.
+
+4. The chat scroll handler was not coalesced, so several scroll events per
+   frame each redid updateThumb + showScrollbar + updateMinimapHighlight.
+   Fixed with a single requestAnimationFrame per frame, `passive: true`,
+   and by writing the thumb's height and position only when they change.
+
+5. `repositionBubble` (capture-phase listener on window) called
+   getSelection + getRangeAt(0).getBoundingClientRect on every scroll event
+   of any container, then showBubble re-read offsetWidth/offsetHeight —
+   three forced layouts per frame, with the bubble closed.
+   Fixed with an early return when the bubble is hidden and a rAF throttle.
+
+6. `loadChat` rendered the whole conversation twice when offsets had to be
+   migrated. The migrated offsets live in `state.messages`, and the
+   appliers (`__applyMarks` / `__applyHighlights` / `__applyShapes`) put
+   them on the DOM, so the second full render was ~100 layouts for an
+   identical result.
+
+7. `loadArchiveChat` re-rendered the whole conversation list on every
+   selection — which means re-reading EVERY conversation from IndexedDB,
+   messages included, sorting, and rebuilding the list HTML. Only the
+   active highlight changes. Fixed with a targeted class move (the full
+   render is kept when a search is active, since the snippets must be
+   recomputed).
+
+8. `body { scroll-behavior: smooth }` — the property does not inherit, so
+   it only applied to the document scroller, but every `scrollIntoView()`
+   without an explicit `behavior` inherited it and animated the document,
+   producing extra scroll events. Back to `auto`; the places that want a
+   smooth scroll already pass `{ behavior: 'smooth' }`.
+
+Verification: .workbuddy-ai/artifacts/_v126/verify_perf_scroll_select.js
+28/28. It drives the real paths (loadArchiveChat, a 120-frame scroll burst,
+the minimap hover, the archive list marking) and asserts the computed CSS,
+the layer reasons, the engine counters, and the frame intervals.
+Negative control on the pre-fix revision: 17/28 — the bench fails on it.
+
+It also guards the riskiest change: the minimap still opens on hover, is
+populated, follows the scroll (entry 0 -> 39), scrolls itself to keep the
+active entry visible, closes on mouse-out, and does no work once closed.
+
+Regressions: syntax 59/59 blocks OK, figures 27/27, annotations 17/17 and
+7/7.
+
+Evidence files: .workbuddy-ai/artifacts/_v126/_perf_bench/{avant,apres,
+controle_negatif}.txt

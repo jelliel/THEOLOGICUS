@@ -115,6 +115,126 @@ def wait_up(port: int, timeout: float = 5.0) -> bool:
     return False
 
 
+# v129 — GPU. POURQUOI CE BLOC EXISTE, ET CE QU'IL NE FAIT PAS.
+#
+# D'abord un constat qui evite de chercher au mauvais endroit : pywebview
+# N'DESACTIVE PAS le GPU. Son seul argument Chromium est
+# `--disable-features=ElasticOverscroll` (edgechromium.py) ; aucun
+# `--disable-gpu`, aucun `--disable-gpu-compositing`. Une application WebView2
+# rend donc deja sur le GPU des que le pilote le permet.
+#
+# Ce bloc ne « active » donc pas le GPU : il LEVE LES DERNIERES RESERVES que
+# Chromium pourrait opposer a une carte donnee (liste de blocage des pilotes)
+# et force trois accélérations qui sont actives par defaut sur Windows mais
+# qu'une politique d'entreprise ou un profil de flotte peut avoir coupees.
+#
+# POURQUOI ON INTERCEPTE L'AFFECTATION. pywebview ecrit :
+#     props.AdditionalBrowserArguments = '--disable-features=ElasticOverscroll'
+# C'est une AFFECTATION, pas un ajout. La variable d'environnement documentee
+# par Microsoft (WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) est donc ecrasee et
+# sans effet — verifie. Il faut se placer DANS le setter.
+#
+# Le setter AJOUTE au lieu d'ecraser : les arguments de pywebview
+# (ElasticOverscroll, --allow-file-access-from-files, --remote-debugging-port)
+# restent intacts, et une seconde affectation ne duplique rien.
+#
+# Reglages :
+#   THEOLOGICUS_GPU=0        -> aucun drapeau (retour au comportement d'origine)
+#   THEOLOGICUS_GPU_ARGS=... -> remplace la liste ci-dessous
+DRAPEAUX_GPU = (
+    "--ignore-gpu-blocklist "
+    "--enable-gpu-rasterization "
+    "--enable-zero-copy "
+    "--enable-accelerated-2d-canvas"
+)
+
+
+def _version_webview2() -> str | None:
+    """Version du moteur WebView2 installe, lue dans le registre.
+
+    Utile au diagnostic : « le GPU n'est pas utilise » n'a pas le meme sens
+    selon la version du moteur. Renvoie None si la cle est absente.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return None
+    cle = (r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients"
+           r"\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}")
+    for ruche, chemin in ((winreg.HKEY_LOCAL_MACHINE, cle),
+                          (winreg.HKEY_CURRENT_USER, cle),
+                          (winreg.HKEY_LOCAL_MACHINE,
+                           cle.replace(r"WOW6432Node\\", ""))):
+        try:
+            with winreg.OpenKey(ruche, chemin) as k:
+                valeur, _ = winreg.QueryValueEx(k, "pv")
+                if valeur:
+                    return str(valeur)
+        except OSError:
+            continue
+    return None
+
+
+def activer_drapeaux_gpu() -> str | None:
+    """Ajoute nos drapeaux Chromium a ceux de pywebview.
+
+    Renvoie la liste appliquee, ou None si l'on n'a rien fait. Ne leve jamais :
+    un echec ici ne doit pas empecher l'application de s'ouvrir.
+    """
+    desactive = os.environ.get("THEOLOGICUS_GPU", "1").strip().lower() in (
+        "0", "non", "false", "off", "no")
+
+    try:
+        import webview.platforms.edgechromium as ec
+    except Exception as exc:
+        if not desactive:
+            print(f"[!] GPU : plateforme edgechromium indisponible ({exc})",
+                  file=sys.stderr)
+        return None
+
+    if desactive:
+        # La desactivation doit etre effective MEME si le patch a deja ete pose
+        # dans ce processus : on retire la sous-classe au lieu de la laisser en
+        # place avec ses anciens drapeaux (verifie : sans ce retrait, remettre
+        # THEOLOGICUS_GPU=0 ne retirait rien).
+        base = ec.CoreWebView2CreationProperties
+        if getattr(base, "_theo_gpu", False):
+            ec.CoreWebView2CreationProperties = base._theo_base
+        return None
+
+    drapeaux = os.environ.get("THEOLOGICUS_GPU_ARGS", DRAPEAUX_GPU).strip()
+    if not drapeaux:
+        return None
+
+    # Le premier jeton de la liste sert de sentinelle : si les drapeaux sont
+    # deja la, on n'ajoute rien. On ne peut pas tester "ignore-gpu-blocklist" en
+    # dur, car THEOLOGICUS_GPU_ARGS peut fournir une autre liste.
+    base = ec.CoreWebView2CreationProperties
+
+    # IDEMPOTENCE. Sans ce garde-fou, un second appel EMPILE une sous-classe
+    # sur la precedente : les drapeaux du premier appel restent alors actifs et
+    # la nouvelle liste n'a plus d'effet (verifie). On met donc a jour la liste
+    # portee par la classe deja installee au lieu d'en creer une autre.
+    if getattr(base, "_theo_gpu", False):
+        base._theo_drapeaux = drapeaux
+        return drapeaux
+
+    class _PropsGPU(base):
+        _theo_gpu = True
+        _theo_base = base
+        _theo_drapeaux = drapeaux
+
+        def __setattr__(self, nom, valeur):
+            if nom == "AdditionalBrowserArguments" and isinstance(valeur, str):
+                actifs = _PropsGPU._theo_drapeaux
+                if actifs and actifs.split()[0] not in valeur:
+                    valeur = (valeur + " " + actifs).strip()
+            return super().__setattr__(nom, valeur)
+
+    ec.CoreWebView2CreationProperties = _PropsGPU
+    return drapeaux
+
+
 class DesktopApi:
     """API exposee au JavaScript sous `window.pywebview.api` (v74).
 
@@ -161,6 +281,28 @@ class DesktopApi:
 
         threading.Timer(2.0, fermer).start()
         return {"ok": True, "bytes": len(data), "path": dest}
+
+    def renderer_info(self):
+        """Ce que Python sait du moteur de rendu, pour la fiche « Performances ».
+
+        Le JavaScript lit lui-meme le moteur WebGL (WEBGL_debug_renderer_info).
+        Il ne peut PAS lire les arguments de navigateur ni la version du moteur :
+        ce sont des donnees de processus, pas de page. C'est ce complement que
+        cette methode fournit — les deux moities forment le diagnostic complet.
+        """
+        try:
+            import webview
+            version_pywebview = getattr(webview, "__version__", None)
+        except Exception:
+            version_pywebview = None
+        return {
+            "drapeaux": DRAPEAUX_GPU if os.environ.get(
+                "THEOLOGICUS_GPU", "1").strip().lower() not in
+                ("0", "non", "false", "off", "no") else "",
+            "webview2": _version_webview2(),
+            "pywebview": version_pywebview,
+            "hote": "exe" if getattr(sys, "frozen", False) else "script",
+        }
 
 
 def main() -> int:
@@ -234,6 +376,17 @@ def main() -> int:
         if httpd is not None:
             httpd.shutdown()
         return 1
+
+    # v129 — a poser AVANT create_window : pywebview lit les proprietes au
+    # moment ou il construit le controle WebView2.
+    drapeaux = activer_drapeaux_gpu()
+    if drapeaux:
+        print(f"[OK] Drapeaux GPU transmis a WebView2 : {drapeaux}")
+    else:
+        print("[info] Drapeaux GPU non appliques (THEOLOGICUS_GPU=0 ou echec).")
+    v2 = _version_webview2()
+    if v2:
+        print(f"[info] Moteur WebView2 : {v2}")
 
     # Icône : fichier à côté du script ; en mode exe, pywebview extrait
     # automatiquement l'icône embarquée dans l'exécutable.

@@ -33354,6 +33354,416 @@ html.v35-reduce-fx *, html.v35-reduce-fx *::before, html.v35-reduce-fx *::after 
   }, 250);
 })();
 </script>
+<style id="v129-presets">
+/* v129 — preregleges de performance et fiche GPU. */
+.v129-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.v129-preset {
+  font-family: var(--font-mono, monospace); font-size: 11px; letter-spacing: .5px;
+  padding: 8px 12px; border-radius: 9px; cursor: pointer; text-align: left;
+  border: 1px solid var(--glass-border, rgba(128,128,128,.35));
+  background: var(--bg-card-alt, rgba(128,128,128,.10)); color: var(--text-primary, inherit);
+  transition: border-color .15s ease, background .15s ease;
+}
+.v129-preset:hover { border-color: var(--accent, #4f8ef7); }
+.v129-preset.on {
+  background: var(--accent, #4f8ef7); border-color: var(--accent, #4f8ef7);
+  color: #041018; font-weight: 700;
+}
+.v129-preset .v129-d {
+  display: block; font-family: var(--font-body, sans-serif); font-size: 10px;
+  font-weight: 400; opacity: .78; margin-top: 2px; max-width: 210px; white-space: normal;
+}
+.v129-gpu { font-family: var(--font-mono, monospace); font-size: 11px; line-height: 1.75; }
+.v129-gpu-l { display: flex; gap: 10px; }
+.v129-gpu-l > span { color: var(--text-dim, #888); min-width: 96px; flex-shrink: 0; }
+.v129-gpu-l > b { font-weight: 600; word-break: break-word; }
+.v129-gpu-l > b.ok { color: var(--success, #34c759); }
+.v129-gpu-l > b.ko { color: var(--warning, #ff9f0a); }
+.v129-gpu-titre {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-dim, #888); margin: 14px 0 5px;
+}
+/* Prereglage QUALITE : tous les messages s'animent (la v128 n'animait que le
+   dernier). Sans effet si html.v35-reduce-fx est actif : ce mode-la ecrase
+   toute animation, c'est voulu et les preregleges ne les combinent jamais. */
+html.v129-anim-toutes .message { animation: msgIn .35s cubic-bezier(.34,1.56,.64,1) both; }
+html.v129-anim-toutes .message.user { animation-name: msgInRight; }
+html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
+</style>
+<script id="v129-presets">
+/* THEOLOGICUS v129 — PREREGLAGES DE PERFORMANCE ET DIAGNOSTIC GPU.
+
+   POURQUOI CE BLOC. La v35 n'offrait qu'un interrupteur binaire (« MODE
+   PERFORMANCES ») : tout ou rien. Or les leviers reels sont distincts et le bon
+   reglage depend de la machine :
+     - flou, ombres et animations   -> classe html.v35-reduce-fx ;
+     - image de fond personnalisee  -> calque plein ecran, couteux a composer ;
+     - animation d'entree des messages -> rendue opt-in par la v128.
+   Un prereglage nomme les combine.
+
+   CE QUE CE BLOC N'EST PAS. Il n'invente aucun reglage : il pilote des cles
+   localStorage qui existaient deja, en passant par les memes fonctions que
+   l'interface d'origine (window.__V35.set), pour qu'il n'y ait jamais deux
+   sources de verite.
+
+   DIAGNOSTIC GPU. La carte lit le moteur de rendu REEL par
+   WEBGL_debug_renderer_info : c'est la seule mesure qui distingue un vrai GPU
+   (« ANGLE (AMD, AMD Radeon RX 6600 ... Direct3D11) ») d'un repli logiciel
+   (« SwiftShader »), donc la seule reponse honnete a « est-ce que
+   l'application utilise mon GPU ». Les arguments de navigateur et la version du
+   moteur ne sont PAS lisibles depuis une page : ils viennent de Python par
+   window.pywebview.api.renderer_info() (ajoute en v129 a app.py). Dans un
+   navigateur, la carte le dit au lieu d'afficher du vide. */
+(function () {
+  'use strict';
+
+  var CLE_PRESET = 'theologicus-preset';
+  var CLE_FX = 'theologicus-reduce-fx';
+  var CLE_ANIM = 'theologicus-anim-toutes';
+  var CLE_BG = 'theologicus-bg-enabled';
+  var CLE_BG_AV = 'theologicus-bg-enabled.avant-preset';
+  var CLS_FX = 'v35-reduce-fx';
+  var CLS_ANIM = 'v129-anim-toutes';
+
+  var PRESETS = [
+    { id: 'auto', nom: 'AUTO', desc: 'D\'apres le moteur de rendu', fx: null, bg: null, anim: 0 },
+    { id: 'fluide', nom: 'FLUIDE', desc: 'Ni flou, ni ombre, ni animation, ni image de fond', fx: 1, bg: 0, anim: 0 },
+    { id: 'equilibre', nom: 'EQUILIBRE', desc: 'Effets et fond ; seul le dernier message s\'anime', fx: 0, bg: null, anim: 0 },
+    { id: 'qualite', nom: 'QUALITE', desc: 'Effets et fond ; tous les messages s\'animent', fx: 0, bg: null, anim: 1 }
+  ];
+
+  function lire(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function ecrire(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function effacer(k) { try { localStorage.removeItem(k); } catch (e) {} }
+  function parId(id) {
+    for (var i = 0; i < PRESETS.length; i++) { if (PRESETS[i].id === id) return PRESETS[i]; }
+    return null;
+  }
+
+  var etat = { gpu: null, python: null };
+
+  /* ── leviers unitaires ─────────────────────────────────────────────── */
+
+  function reglerFx(v) {
+    if (window.__V35 && typeof window.__V35.set === 'function') { window.__V35.set(v); return; }
+    ecrire(CLE_FX, v ? '1' : '0');
+    document.documentElement.classList.toggle(CLS_FX, !!v);
+  }
+
+  function reglerAnim(v) {
+    ecrire(CLE_ANIM, v ? '1' : '0');
+    document.documentElement.classList.toggle(CLS_ANIM, !!v);
+  }
+
+  /* L'image de fond est le seul levier que les preregleges ETEIGNENT sans le
+     rallumer eux-memes : couper un fond que l'utilisateur avait choisi serait
+     destructeur. On memorise donc sa valeur avant de la forcer a 0, et on la
+     restaure des qu'un prereglage cesse de l'exiger. */
+  function reglerBg(valeur) {
+    if (valeur === 0) {
+      if (lire(CLE_BG_AV) === null) { ecrire(CLE_BG_AV, lire(CLE_BG) === '0' ? '0' : '1'); }
+      ecrire(CLE_BG, '0');
+    } else {
+      if (lire(CLE_BG_AV) === null) { return; }   /* rien a restaurer */
+      ecrire(CLE_BG, lire(CLE_BG_AV));
+      effacer(CLE_BG_AV);
+    }
+    var actif = lire(CLE_BG) !== '0';
+    var c = document.getElementById('bg-enabled');
+    if (c) { c.checked = actif; }
+    var couche = document.getElementById('custom-bg-layer');
+    if (couche) { couche.classList.toggle('visible', actif); }
+  }
+
+  /* ── resolution d'un prereglage ────────────────────────────────────── */
+
+  function configDe(id) {
+    if (id === 'auto') {
+      var g = etat.gpu;
+      /* Moteur inconnu (mesure pas encore faite) : on ne devine pas, on prend
+         le reglage de l'application. La mesure relancera l'application si
+         besoin — voir le .then() de detecter(). */
+      var faible = g ? (g.logiciel === true || (g.coeurs && g.coeurs <= 4)) : false;
+      return parId(faible ? 'fluide' : 'equilibre');
+    }
+    return parId(id);
+  }
+
+  function appliquer(id) {
+    var cfg = configDe(id);
+    if (!cfg) { return; }
+    if (cfg.fx !== null) { reglerFx(cfg.fx === 1); }
+    reglerAnim(cfg.anim === 1);
+    reglerBg(cfg.bg === 0 ? 0 : null);
+    ecrire(CLE_PRESET, id);
+    rafraichir();
+  }
+
+  function presetCourant() {
+    var id = lire(CLE_PRESET);
+    if (!id) { return 'personnalise'; }
+    var cfg = configDe(id);
+    if (!cfg) { return 'personnalise'; }
+    if (cfg.fx !== null && (lire(CLE_FX) === '1') !== (cfg.fx === 1)) { return 'personnalise'; }
+    if ((lire(CLE_ANIM) === '1') !== (cfg.anim === 1)) { return 'personnalise'; }
+    if (cfg.bg === 0 && lire(CLE_BG) !== '0') { return 'personnalise'; }
+    return id;
+  }
+
+  /* ── mesure ────────────────────────────────────────────────────────── */
+
+  function detecter() {
+    var r = { webgl: false };
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl2') || c.getContext('webgl') ||
+               c.getContext('experimental-webgl');
+      if (gl) {
+        r.webgl = true;
+        r.webgl2 = !!c.getContext('webgl2');
+        var d = gl.getExtension('WEBGL_debug_renderer_info');
+        if (d) {
+          r.constructeur = gl.getParameter(d.UNMASKED_VENDOR_WEBGL);
+          r.moteur = gl.getParameter(d.UNMASKED_RENDERER_WEBGL);
+        }
+        r.renduMasque = gl.getParameter(gl.RENDERER);
+        r.versionGL = gl.getParameter(gl.VERSION);
+        r.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      }
+      r.coeurs = navigator.hardwareConcurrency || null;
+      r.dpr = window.devicePixelRatio || 1;
+    } catch (e) { r.erreur = String(e); }
+    var m = String(r.moteur || '') + ' ' + String(r.renduMasque || '');
+    r.logiciel = /swiftshader|software|llvmpipe|basic render/i.test(m);
+    r.gpuNomme = /ANGLE|Direct3D|D3D11|NVIDIA|AMD|Radeon|Intel|Adreno|Mali|Apple/i.test(m);
+    return r;
+  }
+
+  function complementPython() {
+    return new Promise(function (res) {
+      var api = window.pywebview && window.pywebview.api;
+      if (!api) { res(null); return; }               /* navigateur : pas de pont */
+      /* Pont present mais methode absente = exe anterieur a la v129. On le dit
+         explicitement : annoncer « aucun drapeau » serait faux (on ne sait
+         pas), et « hors application » serait faux aussi. */
+      if (typeof api.renderer_info !== 'function') { res({ absent: true }); return; }
+      var minuteur = setTimeout(function () { res({ absent: true }); }, 4000);
+      function finir(v) { clearTimeout(minuteur); res(v || { absent: true }); }
+      try {
+        var p = api.renderer_info();
+        if (p && typeof p.then === 'function') { p.then(finir, function () { finir(null); }); }
+        else { finir(p); }
+      } catch (e) { finir(null); }
+    });
+  }
+
+  /* ── interface ─────────────────────────────────────────────────────── */
+
+  function boutons() {
+    var boite = document.createElement('div');
+    boite.className = 'v129-presets';
+    PRESETS.forEach(function (p) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'v129-preset';
+      b.setAttribute('data-preset', p.id);
+      b.title = p.desc;
+      var t = document.createElement('span');
+      t.textContent = p.nom;
+      var d = document.createElement('span');
+      d.className = 'v129-d';
+      d.textContent = p.desc;
+      b.appendChild(t);
+      b.appendChild(d);
+      b.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        appliquer(p.id);
+      });
+      boite.appendChild(b);
+    });
+    return boite;
+  }
+
+  function carteGPU() {
+    var c = document.createElement('div');
+    c.className = 'v129-gpu';
+    var lignes = [
+      ['Moteur', 'v129-gpu-moteur'],
+      ['Rendu', 'v129-gpu-rendu'],
+      ['WebGL', 'v129-gpu-webgl'],
+      ['WebView2', 'v129-gpu-webview'],
+      ['Drapeaux GPU', 'v129-gpu-drapeaux']
+    ];
+    lignes.forEach(function (l) {
+      var d = document.createElement('div');
+      d.className = 'v129-gpu-l';
+      var s = document.createElement('span');
+      s.textContent = l[0];
+      var b = document.createElement('b');
+      b.className = l[1];
+      b.textContent = '…';
+      d.appendChild(s);
+      d.appendChild(b);
+      c.appendChild(d);
+    });
+    var r = document.createElement('button');
+    r.type = 'button';
+    r.className = 'tpai-cz-btn v129-gpu-relance';
+    r.textContent = '⟳ RE-MESURER';
+    r.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      mesurer();
+    });
+    c.appendChild(r);
+    return c;
+  }
+
+  function rafraichir() {
+    var actif = presetCourant();
+    Array.prototype.forEach.call(document.querySelectorAll('.v129-preset'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-preset') === actif);
+    });
+  }
+
+  function afficherMesure() {
+    var g = etat.gpu || {};
+    var p = etat.python;          /* null tant que le pont Python n'a rien dit */
+    function poser(sel, texte, classe) {
+      Array.prototype.forEach.call(document.querySelectorAll(sel), function (e) {
+        e.textContent = texte;
+        if (classe) { e.classList.add(classe); }
+      });
+    }
+    poser('.v129-gpu-moteur', g.moteur || g.renduMasque || (g.webgl ? 'inconnu' : 'WebGL indisponible'));
+    var rendu, cls;
+    if (g.logiciel) { rendu = 'LOGICIEL (CPU)'; cls = 'ko'; }
+    else if (g.gpuNomme) { rendu = 'MATERIEL (GPU)'; cls = 'ok'; }
+    else { rendu = 'indetermine'; cls = 'ko'; }
+    poser('.v129-gpu-rendu', rendu, cls);
+    poser('.v129-gpu-webgl',
+          (g.webgl ? (g.webgl2 ? 'WebGL 2' : 'WebGL 1') : 'non') +
+          (g.versionGL ? ' — ' + g.versionGL.replace(/^WebGL\s*/, '') : ''));
+    /* Hors application Windows, le pont est absent : etat.python reste null.
+       On ne doit donc PAS le remplacer par {} — un objet vide est vrai en
+       JavaScript et la fiche annoncait « version inconnue » au lieu de dire
+       qu'elle n'etait pas dans l'application (verifie). */
+    var texte;
+    if (p === null) { texte = 'hors application Windows'; }
+    else if (p.absent) { texte = 'application a mettre a jour'; }
+    else if (p.webview2) { texte = p.webview2 + (p.pywebview ? ' · pywebview ' + p.pywebview : ''); }
+    else { texte = 'version inconnue'; }
+    poser('.v129-gpu-webview', texte);
+    poser('.v129-gpu-drapeaux', (p === null || p.absent) ? '—' : (p.drapeaux || 'aucun'));
+  }
+
+  function mesurer() {
+    etat.gpu = detecter();
+    complementPython().then(function (v) {
+      etat.python = v;
+      afficherMesure();
+      /* Le prereglage AUTO depend de la mesure : on le reapplique des qu'elle
+         arrive, sinon il resterait fige sur le choix par defaut. */
+      if (lire(CLE_PRESET) === 'auto') { appliquer('auto'); }
+    });
+    afficherMesure();
+  }
+
+  /* Les v35 et v39 posent leurs propres interrupteurs DEPUIS UN INTERVALLE.
+     Le retrait doit donc etre REJOUE a chaque passage de monter() : fait une
+     seule fois, il perd la course des que la v39 ajoute son bouton apres nous
+     (verifie : deux etiquettes « Performance » dans le menu, et les deux
+     commandes brutes toujours presentes). */
+  function retirerInterrupteursBruts() {
+    var a = document.getElementById('v39-fx-toggle');
+    if (a) {
+      var lab = a.previousElementSibling;
+      if (lab && lab.classList.contains('mm-label') && /performance/i.test(lab.textContent)) {
+        lab.remove();
+      }
+      a.remove();
+    }
+    var b = document.getElementById('v35-reduce-fx-toggle');
+    if (b) {
+      var rangee = b.closest('.v35-fx-row') || b.parentNode;
+      if (rangee) { rangee.remove(); }
+    }
+  }
+
+  function monter() {
+    retirerInterrupteursBruts();
+
+    /* Menu « Plus » : on remplace l'interrupteur binaire de la v39 pour ne pas
+       avoir deux fois « Performance ». */
+    var menu = document.getElementById('v6-more-menu');
+    if (menu && !menu.querySelector('.v129-presets')) {
+      var l = document.createElement('div');
+      l.className = 'mm-label';
+      l.textContent = 'Performance';
+      menu.appendChild(l);
+      menu.appendChild(boutons());
+      var carte = carteGPU();
+      carte.classList.add('v129-gpu-menu');
+      menu.appendChild(carte);
+    }
+
+    /* Panneau « Personnaliser l'interface » : meme bloc, dans un panneau au
+       style existant. */
+    var actions = document.querySelectorAll('.tpai-cz-actions');
+    var hote = actions.length ? actions[actions.length - 1] : null;
+    if (hote && !document.getElementById('v129-panneau')) {
+      var panneau = document.createElement('div');
+      panneau.className = 'tpai-cz-panel';
+      panneau.id = 'v129-panneau';
+      var h = document.createElement('h3');
+      h.textContent = 'Performance et GPU';
+      panneau.appendChild(h);
+      panneau.appendChild(boutons());
+      var t = document.createElement('div');
+      t.className = 'v129-gpu-titre';
+      t.textContent = 'Diagnostic GPU';
+      panneau.appendChild(t);
+      panneau.appendChild(carteGPU());
+      hote.parentNode.insertBefore(panneau, hote);
+    }
+
+    retirerInterrupteursBruts();
+    rafraichir();
+    afficherMesure();
+  }
+
+  if (lire(CLE_ANIM) === '1') { document.documentElement.classList.add(CLS_ANIM); }
+
+  mesurer();
+  monter();
+  /* Passe RAPIDE au demarrage : les deux hotes (menu « Plus », cree par la v6,
+     et panneau Personnaliser) apparaissent dans les premieres secondes. Puis
+     veille LENTE et peu couteuse : monter() reecrit le texte de la fiche GPU,
+     l'appeler quatre fois par seconde en permanence serait absurde dans une
+     version consacree a la fluidite. La veille lente ne fait plus que retirer
+     les interrupteurs bruts si les v35/v39 les reposent. */
+  var essais = 0;
+  var minuteur = setInterval(function () {
+    essais++;
+    monter();
+    if (essais >= 40) {
+      clearInterval(minuteur);
+      minuteur = setInterval(function () {
+        essais++;
+        retirerInterrupteursBruts();
+        if (essais > 640) { clearInterval(minuteur); }
+      }, 500);
+    }
+  }, 250);
+
+  /* Le pont Python n'est pas pret au chargement du document. */
+  window.addEventListener('pywebviewready', function () { mesurer(); });
+
+  window.__V129 = {
+    appliquer: appliquer, mesurer: mesurer, courant: presetCourant,
+    presets: PRESETS.map(function (p) { return p.id; })
+  };
+})();
+</script>
 <script id="v40-version">
 /* THEOLOGICUS v40 — numéro de version affiché dans PARAMÈTRES.
    Source : window.__APK_VERSION__ (mobile, tamponné par prepare_mobile.py)

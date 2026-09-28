@@ -1,0 +1,35 @@
+Add performance presets and a live GPU readout
+
+The user asked whether the Windows build can use their GPU, and for presets.
+
+On the GPU: pywebview never disables it. Its only Chromium argument is
+--disable-features=ElasticOverscroll (platforms/edgechromium.py), with no
+--disable-gpu and no --disable-gpu-compositing. WebView2 therefore already
+renders on the GPU whenever the driver allows it, and the in-app readout now
+shows the user the measured truth: ANGLE (AMD, AMD Radeon RX 6600 (0x000073FF)
+Direct3D11 vs_5_0 ps_5_0, D3D11).
+
+app.py gains four additive Chromium flags (--ignore-gpu-blocklist,
+--enable-gpu-rasterization, --enable-zero-copy, --enable-accelerated-2d-canvas)
+so a blocklisted or fleet-managed machine is no longer held back. They are
+appended, never assigned: pywebview writes
+props.AdditionalBrowserArguments = '...', so the documented
+WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS environment variable is overwritten and
+useless. THEOLOGICUS_GPU=0 removes them, THEOLOGICUS_GPU_ARGS replaces them,
+and a second call updates the list instead of stacking a subclass. The runtime
+version is read from the registry for diagnosis.
+
+The presets replace the all-or-nothing "MODE PERFORMANCES" switch with four
+named profiles built only from levers that already existed: the
+html.v35-reduce-fx class, the custom background layer, and the message
+entrance animation made opt-in by v128. AUTO resolves from the measured
+renderer. The background image is the one destructive lever, so FLUIDE
+remembers its previous value and the other presets restore it.
+
+Both raw toggles (v35 checkbox, v39 menu button) are removed rather than
+duplicated, and the removal is replayed on every poll because those two
+scripts re-add them from their own intervals.
+
+Verified: 45/45 on verify_presets_gpu.js against 9/43 for the pre-v129 copy
+used as a negative control; no regression on the perf bench (29/29), the
+figure bench (27/27) or the annotation bench (17/17).
