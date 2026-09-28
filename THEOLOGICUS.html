@@ -1429,7 +1429,15 @@ body {
   font-family: var(--font-body);
   background: var(--bg-page);
   color: var(--text-primary);
-  scroll-behavior: smooth;
+  /* v128 — `smooth` était posé ici. Or `scroll-behavior` ne s'hérite pas :
+     la valeur ne concernait donc QUE le défilement du document, mais tout
+     `scrollIntoView()` sans `behavior` explicite (celui du minimap, des
+     fiches de mot, du sélecteur de section) prenait cette valeur et
+     déclenchait un défilement ANIMÉ du document — donc des événements de
+     défilement en plus, donc du travail en plus. On repasse en `auto` : les
+     défilements voulus comme doux demandent explicitement
+     `{ behavior: 'smooth' }`, ce que le code fait déjà là où c'est voulu. */
+  scroll-behavior: auto;
   line-height: 1.6;
 }
 
@@ -1964,11 +1972,22 @@ body {
   border-radius: var(--r-lg);
   line-height: 1.65;
   position: relative;
-  will-change: transform, opacity;
-  animation: msgIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+  /* v128 — plus de `will-change` ni d'animation ici.
+     Mesuré (CDP LayerTree) sur une conversation de 40 messages :
+       calques composés = 69, dont 47 « Has a will-change: transform
+       compositing hint » et 42 « … opacity … ».
+     Autrement dit chaque message gardait son propre calque GPU à vie, et le
+     défilement devait composer 47 textures par image. Et l'animation
+     d'entrée, en `both`, REJOUAIT sur les 40 messages à chaque re-rendu
+     (44 calques « active accelerated transform animation »), donc à chaque
+     sélection de conversation.
+     L'animation devient opt-in (.msg-enter) et n'est posée que sur le
+     message qui entre réellement. */
 }
-.message.user { animation-name: msgInRight; }
-.message.assistant { animation-name: msgInLeft; }
+/* Animation d'entrée : uniquement sur le message qui vient d'arriver. */
+.message.msg-enter { animation: msgIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+.message.msg-enter.user { animation-name: msgInRight; }
+.message.msg-enter.assistant { animation-name: msgInLeft; }
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -11548,7 +11567,8 @@ function extractSuggestionsHtml(raw) {
 // ── Helper: create a streaming message div ──
 function _createStreamDiv() {
   const div = document.createElement('div');
-  div.className = 'message assistant';
+  /* v128 — `msg-enter` : le message qui arrive est le seul à s'animer. */
+  div.className = 'message assistant msg-enter';
   const label = document.createElement('div');
   label.className = 'msg-label';
   label.textContent = '▸ ' + (state.agent ? state.agent.name.toUpperCase() : 'THEOLOGICUS');
@@ -15089,6 +15109,12 @@ function renderMessages(scrollToTop) {
     div.dataset.msgId = msgId;
     c.appendChild(div);
   });
+  /* v128 — une seule animation d'entrée : le dernier message. Avant, tous
+     les messages la rejouaient à chaque re-rendu (mesuré : 44 calques en
+     « active accelerated transform animation »), ce qui faisait ramer
+     l'ouverture d'une conversation. */
+  const _entre = c.querySelectorAll(':scope > .message');
+  if (_entre.length) _entre[_entre.length - 1].classList.add('msg-enter');
   c.scrollTop = scrollToTop ? 0 : c.scrollHeight;
   fitSuggestionChips(c);
   if (typeof window._rebuildMinimap === 'function') window._rebuildMinimap();
@@ -15135,21 +15161,33 @@ function renderMessages(scrollToTop) {
   let hideTimer;
   let mmEntries = [];
 
+  /* v128 — mémorise la dernière valeur écrite. Une écriture de style
+     invalide la mise en page, et la lecture suivante (`clientHeight` au
+     prochain événement) la recalcule : c'était une mise en page forcée par
+     image de défilement. En défilement régulier la hauteur du pouce ne
+     change jamais, et sa position change de quelques pixels seulement. */
+  let _tbH = -1, _tbTop = -1, _tbVis = null;
   function updateThumb() {
     const ch = chatContainer.clientHeight;
     const sh = chatContainer.scrollHeight;
-    if (sh <= ch) { scrollbar.style.display = 'none'; return; }
-    scrollbar.style.display = '';
+    const visible = sh > ch;
+    if (_tbVis !== visible) {
+      _tbVis = visible;
+      scrollbar.style.display = visible ? '' : 'none';
+    }
+    if (!visible) return;
     const ratio = ch / sh;
     const thumbH = Math.max(28, ratio * ch);
     const maxTop = ch - thumbH;
     const scrollRatio = chatContainer.scrollTop / (sh - ch);
-    thumb.style.height = thumbH + 'px';
-    thumb.style.top = (scrollRatio * maxTop) + 'px';
+    const h = Math.round(thumbH);
+    if (h !== _tbH) { _tbH = h; thumb.style.height = h + 'px'; }
+    const t = Math.round(scrollRatio * maxTop);
+    if (t !== _tbTop) { _tbTop = t; thumb.style.top = t + 'px'; }
   }
 
   function showScrollbar() {
-    scrollbar.classList.add('active');
+    if (!scrollbar.classList.contains('active')) scrollbar.classList.add('active');
     clearTimeout(hideTimer);
     hideTimer = setTimeout(() => scrollbar.classList.remove('active'), 1500);
   }
@@ -15327,8 +15365,17 @@ function renderMessages(scrollToTop) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  let _mmActif = null;
   function updateMinimapHighlight() {
     if (!mmEntries.length) return;
+    /* v128 — la minimap n'est visible que pendant un survol de la barre de
+       défilement. Sans cette garde, le travail continuait à CHAQUE
+       événement de défilement, minimap fermée : mesuré 119 appels à
+       `scrollIntoView` pour 120 images de défilement. Or `scrollIntoView`
+       force une mise en page synchrone ET peut faire défiler les ancêtres —
+       sur une app où le document peut lui-même défiler, cela relançait des
+       événements de défilement en boucle. */
+    if (!minimap.classList.contains('visible')) return;
     const containerTop = chatContainer.scrollTop;
     const containerH = chatContainer.clientHeight;
     const triggerPoint = containerTop + containerH * 0.35;
@@ -15336,15 +15383,32 @@ function renderMessages(scrollToTop) {
     for (let i = mmEntries.length - 1; i >= 0; i--) {
       if (mmEntries[i].top <= triggerPoint) { activeEntry = mmEntries[i]; break; }
     }
+    if (activeEntry === _mmActif) return;   // rien n'a changé : aucune écriture DOM
+    _mmActif = activeEntry;
     mmEntries.forEach(e => e.el.classList.toggle('active', e === activeEntry));
-    if (activeEntry?.el) activeEntry.el.scrollIntoView({ block: 'nearest' });
+    /* v128 — on garde l'entrée active visible en faisant défiler la minimap
+       ELLE-MÊME, par arithmétique, au lieu d'appeler `scrollIntoView()`.
+       `scrollIntoView` force une mise en page synchrone ET remonte tous les
+       ancêtres défilants (minimap, panneaux, document) : mesuré 32 appels
+       pour 40 images de défilement, minimap ouverte. Ici : deux mesures de
+       position sans écriture entre elles (donc une seule mise en page), puis
+       une seule écriture, et rien d'autre ne bouge. */
+    if (activeEntry && activeEntry.el) {
+      const eb = activeEntry.el.getBoundingClientRect();
+      const mb = minimap.getBoundingClientRect();
+      if (eb.top < mb.top || eb.bottom > mb.bottom) {
+        minimap.scrollTop += (eb.top - mb.top) - (mb.height - eb.height) / 2;
+      }
+    }
   }
 
   let mmHideTimer;
   function showMinimap() {
+    /* v128 — `visible` est posé AVANT : updateMinimapHighlight s'arrête
+       désormais tant que la minimap n'est pas visible. */
+    minimap.classList.add('visible');
     buildMinimap();
     updateMinimapHighlight();
-    minimap.classList.add('visible');
     clearTimeout(mmHideTimer);
   }
   function hideMinimap() {
@@ -15358,11 +15422,22 @@ function renderMessages(scrollToTop) {
   minimap.addEventListener('mouseleave', hideMinimap);
 
   // ── Scroll sync ──
-  chatContainer.addEventListener('scroll', () => {
-    updateThumb();
-    showScrollbar();
-    updateMinimapHighlight();
-  });
+  /* v128 — regroupé en une seule image. Chromium peut émettre plusieurs
+     événements de défilement par image (défilement utilisateur + défilement
+     programmé) ; chacun refaisait updateThumb + showScrollbar +
+     updateMinimapHighlight, donc plusieurs mises en page forcées par image.
+     `passive: true` : le gestionnaire ne peut plus retarder le défilement. */
+  let _syncRaf = 0;
+  function syncScroll() {
+    if (_syncRaf) return;
+    _syncRaf = requestAnimationFrame(function () {
+      _syncRaf = 0;
+      updateThumb();
+      showScrollbar();
+      updateMinimapHighlight();
+    });
+  }
+  chatContainer.addEventListener('scroll', syncScroll, { passive: true });
   /* La largeur disponible change : il faut re-mesurer le défilement des
      puces de suivi, sinon la course calculée ne correspond plus. */
   let _fitSugTimer = null;
@@ -15419,7 +15494,23 @@ function renderMessages(scrollToTop) {
   }, { passive: false });
 
   updateThumb();
-  window._rebuildMinimap = buildMinimap;
+  /* v128 — `renderMessages` appelle ceci à chaque rendu. Avant, c'était
+     `buildMinimap` directement : chaque rendu lisait donc `offsetTop` sur
+     TOUS les messages (une mise en page forcée par message) pour construire
+     une minimap que personne ne regardait, et laissait `mmEntries` peuplé —
+     ce qui faisait tourner le surlignage de la minimap à chaque image de
+     défilement, minimap fermée. On ne construit que si elle est visible ;
+     sinon on vide les entrées. */
+  window._rebuildMinimap = function () {
+    if (minimap.classList.contains('visible')) {
+      buildMinimap();
+      _mmActif = null;
+      updateMinimapHighlight();
+    } else {
+      mmEntries = [];
+      _mmActif = null;
+    }
+  };
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
@@ -18110,7 +18201,7 @@ async function renderArchives() {
           matchSnippet = `<div class="archive-match">${snippet}</div>`;
         }
       }
-      return `<div class="archive-item${isActive?' active-chat':''}" onclick="loadArchiveChat('${c.id}',${matchMsgIdx})">
+      return `<div class="archive-item${isActive?' active-chat':''}" data-chat-id="${c.id}" onclick="loadArchiveChat('${c.id}',${matchMsgIdx})">
         <span class="archive-item-icon">${isFav?'★':'◈'}</span>
         <div class="archive-item-content">
           <div class="archive-item-title">${escapeHtml(c.title||'Sans titre')}</div>
@@ -18139,7 +18230,22 @@ window.loadArchiveChat = async (id, msgIdx) => {
   try { const p = document.getElementById('archives-panel'); if (p) p.classList.remove('active'); } catch(e) {}
   try { const b = document.getElementById('tpai-arch'); if (b) b.hidden = true; } catch(e) {}
   const chargee = await loadChat(id);
-  await renderArchives();
+  /* v128 — ne PAS re-rendre toute la liste ici. `renderArchives()` relit
+     TOUTES les conversations dans IndexedDB (messages compris), les trie et
+     reconstruit la liste entière : c'est une part majeure du temps de
+     sélection, pour un seul changement visible — la conversation active.
+     Avec une recherche en cours, les extraits surlignés doivent être
+     recalculés, donc on garde le rendu complet dans ce cas seulement. */
+  const _sqListe = archivesSearchQuery || window.archivesSearchQuery;
+  if (_sqListe) {
+    await renderArchives();
+  } else {
+    try {
+      document.querySelectorAll('.archive-item.active-chat').forEach(function (el) { el.classList.remove('active-chat'); });
+      const _cible = document.querySelector('.archive-item[data-chat-id="' + id + '"]');
+      if (_cible) _cible.classList.add('active-chat');
+    } catch (e) { await renderArchives(); }
+  }
   if (!chargee) {
     /* Avant, on annoncait « Conversation chargée » meme quand rien
        n'avait ete trouve : l'utilisateur voyait le toast et un chat vide. */
@@ -18770,7 +18876,24 @@ function sanitizeChatMessages(messages) {
     try { migrated = (typeof window.migrateOffsetsOnce === 'function') ? window.migrateOffsetsOnce(state.messages) : 0; } catch(e) { console.warn('[MIGRATE] erreur', e); }
     if (migrated > 0) {
       try { await saveChat(); } catch(e) {}
-      renderMessages();
+      /* v128 — plus de second renderMessages(). Les offsets migrés vivent
+         dans `state.messages`, et ce sont __applyMarks / __applyHighlights /
+         __applyShapes qui les reportent sur le DOM. Reconstruire toute la
+         conversation pour ça coûtait ~100 mises en page pour un résultat
+         identique à l'écran. Le rendu complet reste le filet si les
+         applicateurs ne sont pas disponibles. */
+      const _repose = (typeof window.__applyMarks === 'function') ||
+                      (typeof window.__applyHighlights === 'function') ||
+                      (typeof window.__applyShapes === 'function');
+      if (_repose) {
+        try {
+          if (window.__applyMarks) window.__applyMarks();
+          if (window.__applyHighlights) window.__applyHighlights();
+          if (window.__applyShapes) window.__applyShapes();
+        } catch(e) { console.warn('[MIGRATE] repose directe impossible, rendu complet', e); renderMessages(); }
+      } else {
+        renderMessages();
+      }
       console.log('[MIGRATE] ' + migrated + ' annotation(s)/surlignage(s) migre(s) avec offset');
     }
     if (wasCleaned) {
@@ -26570,6 +26693,14 @@ initTafsirVerseTooltip();
   document.addEventListener('keydown', function(e){ if (e.key === 'Escape'){ hideBubble(); closeAtcTip(); } });
   function repositionBubble(){
     const s = window._atcSel; if (!s) return;
+    /* v128 — sortie rapide : bulle fermée, il n'y a rien à repositionner.
+       Avant, on appelait getSelection() + getRangeAt(0).getBoundingClientRect()
+       — une mise en page SYNCHRONE — à chaque événement de défilement de
+       n'importe quel conteneur (l'écouteur est en phase capture sur window),
+       puis showBubble() relisait offsetWidth et offsetHeight : trois mises en
+       page forcées par image, bulle fermée comprise. */
+    const b = getBubble();
+    if (!b || !b.style.display || b.style.display === 'none') return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0){ hideBubble(); return; }
     try {
@@ -26578,9 +26709,17 @@ initTafsirVerseTooltip();
     } catch(e){}
     showBubble();
   }
+  /* v128 — une seule exécution par image. En phase capture, un défilement de
+     n'importe quel conteneur déclenche l'écouteur : sans ce regroupement,
+     plusieurs conteneurs qui défilent ensemble multipliaient le travail. */
+  let _rbRaf = 0;
+  function repositionBubbleThrottled(){
+    if (_rbRaf) return;
+    _rbRaf = requestAnimationFrame(function(){ _rbRaf = 0; repositionBubble(); });
+  }
   const cc = document.getElementById('chat-container');
-  cc && cc.addEventListener('scroll', repositionBubble, true);
-  window.addEventListener('scroll', repositionBubble, true);
+  cc && cc.addEventListener('scroll', repositionBubbleThrottled, true);
+  window.addEventListener('scroll', repositionBubbleThrottled, true);
   /* ── Supprimer une annotation (commentaire Add to chat) ── */
   function removeAnnotation(id, ts){
     const msg = (state.messages || []).find(m => m.ts === ts);

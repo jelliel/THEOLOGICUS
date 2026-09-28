@@ -1,0 +1,103 @@
+==========================================================================
+BANC PERF — DÉFILEMENT ET SÉLECTION DE CONVERSATION
+==========================================================================
+  [info] copie servie : C:\tmp\theoverify\.workbuddy-ai\artifacts\_v126\_perf_bench\avant
+
+── État de départ ──
+  messages dans la conversation                          40 
+  scroll-behavior hérité                               auto 
+  will-change sur .message                       transform, opacity 
+  animation sur .message                         msgInRight 
+
+── 0. Calques de composition ──
+  calques composés                                       69 
+    raison : Has a will-change: transform compositing hint.         47 calque(s)
+    raison : Has an active accelerated transform animation or transition.         44 calque(s)
+    raison : Has a will-change: opacity compositing hint.         42 calque(s)
+    raison : Has an active accelerated opacity animation or transition.         41 calque(s)
+    raison : Overlaps other composited content.          14 calque(s)
+    raison : Is a scrollable overflow element using accelerated scrolling.          4 calque(s)
+
+── 1. Sélection d'une conversation ──
+  temps jusqu'à affichage                                50 ms
+  durée script                                           11 ms
+  durée mise en page                                     23 ms
+  durée recalcul de style                              80.8 ms
+  durée totale de tâche                               245.4 ms
+  nombre de mises en page                               100 
+  appels scrollIntoView                                   3 
+  appels getBoundingClientRect                           40 
+
+── 2. Défilement de la conversation ──
+  images mesurées                                       119 
+  écart médian entre images                            13.3 ms
+  écart p95                                            13.7 ms
+  écart maximal                                        14.5 ms
+  images > 32 ms (saccades)                               0 
+  durée mise en page                                   17.8 ms
+  durée recalcul de style                              44.6 ms
+  nombre de mises en page                               120 
+  appels scrollIntoView                                 119 
+  appels getBoundingClientRect                            0 
+  événements de scroll reçus                            134 
+
+── 3. Défilement sous trace CDP (peinture / composition) ──
+  durée couverte par la trace                        1588.8 ms
+  Paint : appels / durée                         390 / 47.5 ms
+  CompositeLayers : appels / durée                    0 / 0 ms
+  Layout : appels / durée                        124 / 38.4 ms
+  Recalcul de style : appels / durée             279 / 48.5 ms
+  UpdateLayerTree : appels / durée                    0 / 0 ms
+  PrePaint : appels / durée                      120 / 14.3 ms
+  part du temps en peinture + composition                 3 %
+
+── 4. La minimap fonctionne toujours ──
+  minimap visible au survol                            true 
+  entrées de minimap                                     40 
+  entrées actives                                         1 
+  [OK]   la minimap s'ouvre au survol de la barre
+  [OK]   la minimap est peuplée  -- 40
+  [OK]   exactement une entrée active  -- 1
+  entrée active en haut / en bas                     0 / 39 
+  appels scrollIntoView (minimap ouverte)                40 
+  [OK]   l'entrée active de la minimap suit le défilement  -- 0 -> 39
+  [ECHEC] la minimap ne force plus de mise en page par image  -- 40 scrollIntoView pour 40 images
+  défilement interne de la minimap                      434 px
+  [OK]   la minimap a suivi l'entrée active (elle a défilé)  -- 434 px
+  minimap visible après sortie de survol              false 
+  appels scrollIntoView (minimap fermée)                 40 
+  [OK]   la minimap se referme quand on la quitte
+  [ECHEC] minimap fermée : plus aucun scrollIntoView pendant le défilement  -- 40
+
+── 5. Marquage de la conversation active ──
+  semis IndexedDB                                        ok 
+  éléments dans la liste                                  6 
+  éléments marqués actifs (A)                    [null,null,null] 
+  [OK]   la liste contient les conversations  -- 6
+  [ECHEC] la conversation chargée est marquée active  -- {"total":6,"actifs":[null,null,null],"cibleActive":false}
+  éléments marqués actifs (B)                    [null,null,null] 
+  [ECHEC] le marquage suit la nouvelle sélection  -- {"total":6,"actifs":[null,null,null],"cibleActive":false}
+
+── Verdict ──
+  [OK]   aucune erreur JavaScript  -- 
+  [ECHEC] le défilement ne rejoue pas d'animation sur toute la conversation  -- msgInRight
+  [ECHEC] aucun calque GPU permanent par message (will-change)  -- transform, opacity
+  [OK]   le défilement n'est pas animé par le CSS hérité  -- auto
+  [OK]   sélection : durée de tâche sous 1200 ms  -- 245.4 ms
+  [ECHEC] sélection : au plus 25 mises en page  -- 100
+  [ECHEC] sélection : aucun scrollIntoView  -- 3
+  [OK]   sélection : moins de 100 appels getBoundingClientRect  -- 40
+  [OK]   défilement : écart p95 sous 34 ms  -- 13.7 ms
+  [OK]   défilement : aucune image au-delà de 100 ms  -- 14.5 ms
+  [OK]   défilement : au plus 4 mises en page par image  -- 120 pour 120 images
+  [ECHEC] défilement : aucun scrollIntoView  -- 119
+  [OK]   défilement : durée de mise en page sous 250 ms  -- 17.8 ms
+  [OK]   défilement : peinture + composition sous 25 % du temps  -- 3 %
+  [OK]   défilement : au plus 1 composition par image  -- 0 pour 120 images
+  [ECHEC] calques GPU promus par will-change sous 10 (éléments uniques)  -- 89 calque(s)
+  [ECHEC] moins de 40 calques composés au total  -- 69
+
+--------------------------------------------------------------------------
+RESULTAT : 17/28
+--------------------------------------------------------------------------
+JSON {"sel":{"wall":50,"script":11,"layout":23,"recalc":80.8,"task":245.4,"layoutCount":100,"si":3,"rect":40,"scroll":6},"sc":{"layoutCount":120,"layout":17.8,"recalc":44.6,"script":48.2,"max":14.5,"p95":13.7,"mediane":13.3,"saccades":0,"si":119,"rect":0,"scroll":134},"css":{"scrollBehavior":"auto","willChange":"transform, opacity","animationName":"msgInRight","nbMessages":40},"calques":{"total":69,"raisons":{"Is for the visual viewport.":2,"Is a scrollable overflow element using accelerated scrolling.":4,"Is the document.rootScroller.":1,"Overlaps other composited content.":14,"Has a trivial 3d transform.":2,"Has a backdrop filter.":3,"Has a will-change: transform compositing hint.":47,"Has an active accelerated transform animation or transition.":44,"Has an active accelerated opacity animation or transition.":41,"Has a will-change: opacity compositing hint.":42}},"trace":{"span":1588.8,"paint":{"n":390,"ms":47.5},"comp":{"n":0,"ms":0},"layout":{"n":124,"ms":38.4},"recalc":{"n":279,"ms":48.5},"peinturePart":3}}
