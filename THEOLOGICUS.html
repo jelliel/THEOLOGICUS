@@ -27414,14 +27414,20 @@ initTafsirVerseTooltip();
       return { norm: norm, map: map };
     }
    /* Position absolue (en caractères de concaténation des nœuds texte) d'un point
-      dans container — même espace que extractWrap. */
-   function locateInBox(container, pos){
+      dans container — même espace que extractWrap.
+      `inclusive` : si vrai (défaut), une position à la FRONTIÈRE entre deux nœuds
+      texte appartient au nœud qui PRÉCÈDE (utile pour la FIN d'une plage).
+      Si faux, elle appartient au nœud qui SUIT (utile pour le DÉBUT d'une plage,
+      car un wrap antérieur a pu scinder un nœud texte juste à cet endroit). */
+   function locateInBox(container, pos, inclusive){
+     if (inclusive === undefined) inclusive = true;
      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
      let acc = 0, n, lastNode = null;
      while ((n = walker.nextNode())) {
        lastNode = n;
        const len = n.nodeValue.length;
-       if (pos <= acc + len) return { node: n, off: pos - acc };
+       const cmp = inclusive ? (pos <= acc + len) : (pos < acc + len);
+       if (cmp) return { node: n, off: pos - acc };
        acc += len;
      }
      if (lastNode) return { node: lastNode, off: lastNode.nodeValue.length };
@@ -27430,8 +27436,8 @@ initTafsirVerseTooltip();
    /* Collage par OFFSET positionnel (robuste : invariant au gras/markdown/mots répétis) */
    function wrapByOffset(container, start, end, hlId, cls){
      if (typeof start !== 'number' || typeof end !== 'number' || end <= start) return false;
-     const a = locateInBox(container, start);
-     const b = locateInBox(container, end);
+     const a = locateInBox(container, start, false);
+     const b = locateInBox(container, end, true);
      return extractWrap(container, a, b, hlId, cls);
    }
    /* Offset positionnel d'une sélection (Range) dans le message rendu.
@@ -27460,17 +27466,17 @@ initTafsirVerseTooltip();
      const fullM = normalizeMatch(full);
      const txtM = normalizeMatch(text.trim());
      if (!txtM.norm) return false;
-     const idx = fullM.norm.indexOf(txtM.norm);
-     if (idx === -1) return false; // texte introuvable -> laissé en orphelin (non supprimé)
-     const startOrig = fullM.map[idx];
-     const e = idx + txtM.norm.length;
-     const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
-     const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
-     return extractWrap(container, a, b, hlId, cls);
-   }
-  /* v86 : entoure la N-ieme occurrence de `text` (0 = premiere).
-     wrapOnce ne savait faire que la premiere : un mot repeté etait
-     toujours annote au meme endroit, le premier. */
+const idx = fullM.norm.indexOf(txtM.norm);
+    if (idx === -1) return false; // texte introuvable -> laissé en orphelin (non supprimé)
+    const startOrig = fullM.map[idx];
+    const e = idx + txtM.norm.length;
+    const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
+    const a = locateInBox(container, startOrig, false), b = locateInBox(container, endOrig, true);
+    return extractWrap(container, a, b, hlId, cls);
+  }
+ /* v86 : entoure la N-ieme occurrence de `text` (0 = premiere).
+    wrapOnce ne savait faire que la premiere : un mot repeté etait
+    toujours annote au meme endroit, le premier. */
   function wrapNth(container, text, nth, hlId, cls){
     if (!text || typeof nth !== 'number') return false;
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
@@ -27487,7 +27493,7 @@ initTafsirVerseTooltip();
     const startOrig = fullM.map[idx];
     const e = idx + txtM.norm.length;
     const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
-    const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
+    const a = locateInBox(container, startOrig, false), b = locateInBox(container, endOrig, true);
     return extractWrap(container, a, b, hlId, cls);
   }
 
@@ -27871,8 +27877,8 @@ initTafsirVerseTooltip();
     const startOrig = fullM.map[idx];
     const e = idx + txtM.norm.length;
     const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
-    const aa = locateInBox(box, startOrig);
-    const bb = locateInBox(box, endOrig);
+    const aa = locateInBox(box, startOrig, false);
+    const bb = locateInBox(box, endOrig, true);
     const range = document.createRange();
     try { range.setStart(aa.node, aa.off); range.setEnd(bb.node, bb.off); } catch(err) { return null; }
     return computeOffsetInBox(box, range);

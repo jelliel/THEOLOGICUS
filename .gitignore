@@ -88,3 +88,7 @@ _bak_*/
 .workbuddy-ai/artifacts/_v126/_keys_bench/
 .workbuddy-ai/artifacts/_v126/_sans_compagnon/
 .workbuddy-ai/artifacts/_v126/_detect_bench/
+
+# Banc d'alignement des annotations (Playwright) : serveur local + fixtures,
+# un run les régénère. Rien à livrer.
+.workbuddy-ai/artifacts/_v126/_align_bench/
