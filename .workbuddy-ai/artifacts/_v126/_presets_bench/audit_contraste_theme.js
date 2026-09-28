@@ -10,7 +10,12 @@
 // calcule est clair alors que le texte est clair, et calcule le rapport WCAG.
 // Un défaut de jeton de thème n'est jamais isolé — il faut la liste.
 //
-// Usage : node audit_contraste_theme.js [--seuil 3] [--port 8860]
+// Usage : node audit_contraste_theme.js [--seuil 3] [--port 8860] [--theme light]
+//
+// Sans --theme, l'audit porte sur le thème persisté dans l'application. Avec,
+// il force l'attribut avant de mesurer — indispensable pour comparer deux
+// thèmes dans la même exécution : sans cela on ne peut auditer que celui que
+// l'application a mémorisé, et les défauts des thèmes clairs restent invisibles.
 
 const path = require("path");
 const http = require("http");
@@ -21,10 +26,12 @@ const PORT = process.argv.includes("--port")
   ? parseInt(process.argv[process.argv.indexOf("--port") + 1], 10) : 8860;
 const SEUIL = process.argv.includes("--seuil")
   ? parseFloat(process.argv[process.argv.indexOf("--seuil") + 1]) : 3;
+const THEME = process.argv.includes("--theme")
+  ? process.argv[process.argv.indexOf("--theme") + 1] : null;
 // QUATRE niveaux : ce dossier est un cran plus bas que les bancs de _v126/.
 // Avec trois niveaux le serveur repond « 404 » en texte et l'attente expire
 // sans indice — piege deja consigne, et pourtant refait ici.
-const RACINE = path.resolve(__dirname, "..", "..", "..", "..");
+const RACINE = process.env.BENCH_ROOT || path.resolve(__dirname, "..", "..", "..", "..");
 if (!fs.existsSync(path.join(RACINE, "THEOLOGICUS.html"))) {
   console.error(`[!] THEOLOGICUS.html introuvable sous ${RACINE} — racine fausse.`);
   process.exit(2);
@@ -79,7 +86,10 @@ const CHAT = "audit-contraste";
   await page.waitForFunction(() => document.querySelectorAll("#chat-container .message").length >= 2,
     null, { timeout: 60000 });
 
-  const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+  const theme = await page.evaluate((th) => {
+    if (th) document.documentElement.setAttribute("data-theme", th);
+    return document.documentElement.getAttribute("data-theme");
+  }, THEME);
   console.log(`theme effectif : ${theme}   seuil WCAG retenu : ${SEUIL}:1`);
 
   // Ouvrir le menu « Plus » et le panneau « Personnaliser » : les defauts se

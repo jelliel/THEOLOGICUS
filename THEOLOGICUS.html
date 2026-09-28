@@ -4555,7 +4555,17 @@ details.studio-adv[open] > summary { margin-bottom: 10px; }
 }
 
 /* ═══ THEME SWITCHER ═══ */
-[data-theme="light"] {
+/* v131 — le sélecteur portait `[data-theme="light"]`, de spécificité (0,1,0).
+   Or le bloc `<style id="v9-palette">`, écrit pour la coque v9 SOMBRE, contient
+   lui aussi un `:root` (0,1,0) plus loin dans le document : à spécificité égale
+   le dernier gagne, donc il écrasait ce thème. Mesuré : --text valait #e6edf7
+   (blanc cassé) au lieu de #2d4a6b, --text-bright #ffffff, --neon #4f8ef7 au
+   lieu de #00875a, --cyan #4f8ef7 au lieu de #0070a8, --cyan-dim idem.
+   Conséquence visible : 1,03:1 sur .success-block, 1,08:1 sur le libellé du
+   bouton d'export, 2,81:1 sur .badge-neon et .status-pill.active.
+   `html[data-theme=…]` porte la spécificité (0,1,1) et gagne — c'est déjà la
+   convention des blocs glass, cyber, midnight et v6-*. */
+html[data-theme="light"] {
   --void: #f0f4f8;
   --deep: #e8edf5;
   --hull: #ffffff;
@@ -4572,13 +4582,21 @@ details.studio-adv[open] > summary { margin-bottom: 10px; }
   --neon: #00875a;
   --neon-dim: rgba(0,135,90,0.1);
   --void: #f2f6fb;
+  /* v131 — --success restait hérité de :root (#34c759), soit 2,22:1 sur une
+     carte blanche : sous le seuil. v6-light utilise déjà #1f9d57 (4,0:1) ;
+     on aligne les deux thèmes clairs. */
+  --success: #1f9d57;
 }
 [data-theme="light"] body {
   background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,112,168,0.05) 0%, transparent 60%);
 }
 [data-theme="light"] body::before { display: none; }
 
-[data-theme="midnight"] {
+/* v131 — même correction que pour « light » ci-dessus : ce bloc était en
+   (0,1,0) et perdait contre le `:root` de #v9-palette. Ici la conséquence
+   n'était pas la lisibilité mais la TEINTE : --cyan et --neon valaient #4f8ef7
+   (bleu) au lieu de #9b8fff (violet), et --cyan-dim celui du bleu. */
+html[data-theme="midnight"] {
   --void: #09090f;
   --deep: #0d0d18;
   --hull: #131320;
@@ -6323,6 +6341,11 @@ body.custom-bg #voice-overlay {
   font-size: 14px;
   flex-shrink: 0;
   margin-top: 2px;
+  /* v131 — sans couleur propre, ce glyphe héritait du bleu de lien par défaut
+     du navigateur (rgb(0,0,238)) : 1,95:1 sur le panneau sombre, dans TOUS les
+     thèmes. Les autres enfants de .ref-item fixent leur couleur ; lui non.
+     --cyan en fait un marqueur de catégorie lisible (5,7:1 ici, 5,4:1 en clair). */
+  color: var(--cyan);
 }
 .ref-item-content {
   flex: 1;
@@ -31855,6 +31878,11 @@ html[data-theme="v6-glass"]{
   --cyan:#00e5ff; --cyan-dim:rgba(0,229,255,0.12); --cyan-glow:rgba(0,229,255,0.45);
   --accent-dim:rgba(0,229,255,0.12); --border-cyan:1px solid rgba(0,229,255,0.35);
   --hull:#101728; --bg-card:#101728; --bg-card-alt:rgba(0,229,255,0.06);
+  /* v131 — --glass-bg manquait : :root définit rgba(255,255,255,.6), donc les
+     panneaux vitrés (#memory-panel, .navbar-container, la coque .tpai-*) étaient
+     BLANCS translucides sous un texte clair. Mesure : 1,27:1 sur #memory-panel.
+     Ce thème définissait --glass-border mais pas --glass-bg. */
+  --glass-bg:rgba(16,23,40,0.62);
   --glass-border:rgba(0,229,255,0.18); --hud-border:1px solid rgba(0,229,255,0.18);
   --text-primary:#eafaff; --text-secondary:#aacfd9; --border:1px solid rgba(0,229,255,0.18);
   --wire:rgba(0,229,255,0.18); --ok:#34c759; --danger:#ff453a;
@@ -31880,6 +31908,9 @@ html[data-theme="v6-cyber"]{
   --cyan:#ff2d95; --cyan-dim:rgba(255,45,149,0.12); --cyan-glow:rgba(255,45,149,0.45);
   --accent-dim:rgba(255,45,149,0.12); --border-cyan:1px solid rgba(255,45,149,0.35);
   --hull:#120c1c; --bg-card:#120c1c; --bg-card-alt:rgba(255,45,149,0.06);
+  /* v131 — --glass-bg manquant (voir v6-glass). Ici #memory-panel mesurait
+     1,37:1 : texte clair rgb(241,212,231) sur blanc translucide. */
+  --glass-bg:rgba(18,12,28,0.62);
   --glass-border:rgba(255,45,149,0.18); --hud-border:1px solid rgba(255,45,149,0.18);
   --text-primary:#fff0f7; --text-secondary:#d9b3cc; --border:1px solid rgba(255,45,149,0.18);
   --wire:rgba(255,45,149,0.18); --ok:#34c759; --danger:#ff453a;
@@ -31925,6 +31956,8 @@ html[data-theme="v6-light"]{
   --cyan:#185fa5; --cyan-dim:rgba(24,95,165,0.12); --cyan-glow:rgba(24,95,165,0.30);
   --accent-dim:rgba(24,95,165,0.12); --border-cyan:1px solid rgba(24,95,165,0.35);
   --hull:#ffffff; --bg-card:#ffffff; --bg-card-alt:rgba(15,30,50,0.05);
+  /* v131 — --glass-bg manquant (voir v6-glass). Valeur claire, comme ce thème. */
+  --glass-bg:rgba(255,255,255,0.72);
   --glass-border:rgba(15,30,50,0.12); --hud-border:1px solid rgba(15,30,50,0.12);
   --text-primary:#0b1622; --text-secondary:#33485e; --border:1px solid rgba(15,30,50,0.12);
   --wire:rgba(15,30,50,0.12); --ok:#1f9d57; --danger:#d23b2e; --gold:#9a7b1e; --success:#1f9d57;
