@@ -91,6 +91,29 @@ par **CONDITION**, exécute, referme.
   = SHA-256(`remember:`+`AUTH_HASH`). Poser `theologicus_wizard_skipped='1'` sinon
   l'assistant intercepte les clics.
 
+## Thèmes / lisibilité (v130–v131)
+
+Sept thèmes : `glass` (défaut), `cyber`, `midnight` (génération ancienne) et
+`v6-glass`, `v6-cyber`, `v6-light` (récente), plus `light`. **Détail des pièges
+dans le skill `theologicus-code-fragilities`** (jetons morts, second `:root`,
+fuite de jeton de surface) et `web-ui-audit-measure` (mesure du contraste).
+Trois règles qui coûtent cher :
+
+- **Toute surcharge de thème s'écrit `html[data-theme="…"]`** (0,1,1). En
+  `[data-theme="…"]` (0,1,0), le second `:root` de `#v9-palette`, plus bas,
+  l'écrase — c'est ce qui rendait `light` et `midnight` illisibles.
+- **Un thème sombre doit redéfinir TOUS les jetons de surface qu'il hérite**,
+  pas seulement les jetons de texte (`--glass-bg` manquait aux trois `v6-*`).
+- **Le fond se COMPOSE** (chaîne translucide jusqu'à l'opaque), il ne se prend
+  pas « au premier ancêtre opaque » : sinon les surfaces en verre passent le
+  seuil. Détecteurs : `jetons_manquants.js`, `fuites_jetons.js`,
+  `audit_contraste_theme.js`, `sonde_cascade.js` (bancs `_v126/_presets_bench/`).
+
+État mesuré (2026-09-28) : **0** élément sous 3:1 dans les cinq thèmes sombres ;
+`light` 40 et `v6-light` 12 restants, dus à des **fonds sombres codés en dur**
+(`#references-panel`, `#archives-panel`, `#setup-wizard-overlay`, `#auth-overlay`,
+`.suggestion-chip`, `.avatar`, `#tpai-sidebar`). Non corrigés.
+
 ## Divers
 
 TTS : sortie unique `ttsEmission()` ; **latin lu en français : voulu, question

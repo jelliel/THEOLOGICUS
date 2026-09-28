@@ -1012,3 +1012,558 @@ directs (clé incluse — IndexedDB/localStorage du navigateur) et mesurer la
 limite réelle. Côté app : lance de relance plus longue que la fenêtre
 d'indisponibilité mesurée, message du fournisseur journalisé, et repli sur un
 autre fournisseur dont la clé est valide (Mistral quota épuisé → Agnes chat).
+
+## v126m — cadres d'annotation : l'offset prime sur le texte, et les bancs mentent
+
+### Les lignes `[DIAG]` sont MASQUÉES par défaut — un banc qui les attend ne prouve rien
+
+Le script `v18-quiet-console` (tout en haut du HTML, ligne ~5) enveloppe
+`console.log/info/debug` et **jette** tout message qui matche `[DIAG]`, `[MIG]`,
+`[SECTION]`, `[TTS]`, sauf si `localStorage.theo_debug === '1'` ou `?debug=1`
+dans l'URL. Mesuré : sans ça, `window.__diagLog` reste bloqué à **2 entrées**
+(les deux premiers `console.log` du document) et **aucune** ligne
+`applyHighlights:` n'apparaît — une assertion « la corruption a pris effet »
+devient insatisfiable sans que rien ne soit cassé. **Tout banc qui veut
+observer `[DIAG]` doit poser `localStorage.setItem('theo_debug','1')` dans son
+`addInitScript`.** Corollaire : `page.on('console')` ne remonte rien non plus
+pour ces lignes.
+
+### L'app RÉÉCRIT son état à la fermeture de page : corrompre son stockage de l'extérieur ne marche pas
+
+`flushChatNow()` (sur `pagehide`/`beforeunload`) sérialise `state.messages` dans
+`localStorage['theologicus_chat_<id>']`, et l'autosave fait de même dans
+IndexedDB. Un banc qui écrit un `start/end` corrompu dans IndexedDB **et**
+localStorage puis recharge voit la corruption **annulée** : l'état en mémoire
+(l'ancien) est réécrit par-dessus au déchargement. Mesure : offset relu **159**,
+et `indexOf("canonique")` dans l'espace des nœuds texte **159** — identiques,
+donc la valeur corrompue n'a jamais été relue. Le banc passait **à tort**.
+Règle : pour tester une dérive d'état, **construire l'anomalie par le chemin
+réel** (sélection souris → bulle → annotation), jamais en bricolant le stockage.
+
+### `loadChat` garde la copie la PLUS RÉCENTE de IndexedDB / localStorage
+
+`loadChat` charge les deux et retient celle dont `updated` est le plus grand
+(`if (lsChat && (!chat || lsChat.updated > chat.updated)) chat = lsChat`). Un
+banc qui « graine » une conversation doit donc écrire la **même** valeur des
+deux côtés, ou **seulement** dans `localStorage` en laissant IndexedDB vide (le
+repli `fallbackId` prend alors le relais). Écrire un seul côté avec un `updated`
+plus petit revient à ne rien écrire.
+
+### Le RACINE d'un banc dépend de sa PROFONDEUR — un 404 silencieux ressemble à un blocage
+
+`path.resolve(__dirname, "..", "..", "..")` n'est la racine du dépôt que pour un
+banc posé dans `.workbuddy-ai/artifacts/_v126/`. Déplacé d'un cran (dans
+`_v126/_align_bench/`), il pointe sur `.workbuddy-ai/` : le serveur répond
+**404** sur `THEOLOGICUS.html`, la page fait **154 octets**,
+`window.renderMessages` n'existe jamais et le banc meurt sur un
+`waitForFunction` à 90 s — lu comme « l'app ne démarre pas ». Contrôle en une
+ligne : `document.documentElement.outerHTML.length` (≈ 1,9 M pour la vraie page,
+~150 pour un 404).
+
+### Annotation « Add to chat » : `occ` est ABSENT, donc l'offset positionnel gagne
+
+`window._atcSel` (créé par `detectSelectionAndShow`) porte
+`{text, range, rect, msgTs, hlId}` — **pas de `occ`**. Or `applyHighlights`
+essaie `wrapNth(text, occ)` **puis** `wrapByOffset(start, end)` **puis**
+`wrapOnce(text)`. Sans `occ`, c'est donc l'**offset** qui décide, et il a la
+priorité sur la recherche par texte. Dès que le rendu diffère de celui capturé à
+la sélection (markdown réécrit, section retirée, réponse prolongée), l'offset
+désigne une AUTRE portion de texte : **le cadre se pose sur un autre mot**, et
+il y restait (le span déjà présent avec le bon `data-hl-id` était réutilisé sans
+vérifier son contenu). Correctif : après chaque pose, comparer le texte
+**réellement enroulé** (concaténation des spans d'un même id, espace
+`normalizeMatch`) au texte annoté ; si ça diffère, dé-wraper et laisser la
+recherche par texte reposer. **Le texte annoté est la seule vérité** : c'est ce
+que l'utilisateur a sélectionné et voit. Banc
+`verify_annotations_offset_drift.js` : 7/7 avec le correctif ; contrôle négatif
+sur la révision d'avant **6/7** — le cadre est sur `docétisme` au lieu de
+`marcionisme` (`[DIAG] … byOffset=1 realigned=0`). Un banc sans contrôle négatif
+qui échoue n'est pas une preuve.
+
+### Le HTML du dépôt porte un TAMPON, et l'app installée sert le fichier à côté de l'exe
+
+`THEOLOGICUS.html` du dépôt contient `var STAMPED = '__THEO_VERSION__'` ; c'est
+`tools/stamp_version.py <dossier> <version>` (appelé par `build_installer.bat`)
+qui remplace le tampon et écrit `version.txt`. Donc : copier le HTML du dépôt tel
+quel dans une app installée **casse l'affichage de version** — il faut
+tamponner. Et `app.py` fait `base = app_dir()` (dossier de l'**exe**) puis
+`os.chdir(base)` : l'app servie lit `THEOLOGICUS.html` **à côté de l'exe**. Un
+correctif purement HTML/JS s'applique donc en remplaçant **ce seul fichier**,
+sans recompilation PyInstaller/Inno — à condition de viser la bonne copie. La
+bonne copie est la **cible du raccourci** : la lire avec `pywin32`
+(`WScript.Shell.CreateShortcut(...).TargetPath`), pas la deviner. Ici le
+raccourci du Bureau et celui du menu Démarrer pointaient tous deux vers
+`…\_v123\_pub\installe\THEOLOGICUS.exe`, alors que
+`%LOCALAPPDATA%\Programs\THEOLOGICUS\` (v2.0.94, 20/09) n'était **plus lancé par
+personne** — c'est pourtant là que j'ai d'abord cherché.
+
+### Lire le tampon de version : il n'est PAS en tête de fichier
+
+Piège mesuré en écrivant `maj_installe.py`. Le `var STAMPED = '…'` de
+`THEOLOGICUS.html` tombe vers la **ligne 33000** d'un fichier de 1,8 Mo / 35 678
+lignes (le script qui l'affiche est tout en bas, près de `cb(STAMPED)`). Un
+`f.read(200000)` pour « lire juste l'en-tête » renvoie donc **toujours**
+`inconnue` — et le script a silencieusement nommé sa sauvegarde
+`THEOLOGICUS.inconnue.html` avant que je le remarque. Lire le fichier entier,
+puis `re.search(r"STAMPED\s*=\s*'([^']*)'", txt)`.
+Corollaire : ne pas déduire la version installée du `version.txt` à côté (il
+peut être en avance sur le HTML si un script a écrit l'un sans l'autre) — lire
+le tampon **dans le HTML**, et vérifier la cible en comparant les deux fichiers
+**hors tampon** (`re.sub(r"STAMPED = '[^']*'", "STAMPED = 'X'", t)` des deux
+côtés) : ici 1 867 336 vs 1 867 345 octets, soit exactement les 9 octets de
+`2.0.206` contre `__THEO_VERSION__`, tout le reste identique.
+
+## v127 — figures : remplir l'intérieur et faire tourner les flèches
+
+Les figures sont des boîtes flottantes `.atc-figbox` construites par
+`buildFigEl(f)` ; l'artwork est un `<svg>` redessiné par `figSvgInner(f)` et
+rafraîchi par `refreshFigVisual(fb, f)` ; la barre d'outils est `showFigTools`.
+L'objet figure porte maintenant `{id,x,y,w,h,shape,color,text,svg,weight,fill,rot}`.
+La palette vient de `window.__FORMES_PALETTE` (catégorie `'Blocs Flèches'`, 8
+items). Quatre contraintes, chacune vérifiée :
+
+- **Ne remplir QUE les formes FERMÉES.** `applyFigPaint(svgInner, f)` réécrit
+  chaque balise pour lui poser un `fill` explicite : la couleur demandée sur les
+  formes fermées, `none` partout ailleurs. Sont fermées `polygon`, `rect`,
+  `circle`, `ellipse`, et un `path` dont le `d` se termine par `Z`. Un `path`
+  ouvert (flèche courbée) doit rester en contour : **le navigateur referme
+  implicitement un chemin qu'on remplit**, donc le remplir peint une **tache**
+  au lieu de la flèche. Le banc asserte les deux cas dans la MÊME figure :
+  `["path:none","polygon:#ffd54f"]`.
+- **Faire tourner l'ARTWORK, pas la boîte.** `applyFigRot(svg, f)` pose
+  `transform: rotate(Ndeg)` sur le `<svg>` (avec `transformOrigin: 50% 50%`),
+  jamais sur `.atc-figbox` : la boîte garde son cadre, ses poignées et son texte
+  droits, et `getBoundingClientRect` reste exploitable. Le banc vérifie que
+  `svg.style.transform === "rotate(45deg)"` **et** `fb.style.transform === ""`.
+- **`preserveAspectRatio` doit suivre la rotation.** Les flèches sont dessinées
+  dans un `viewBox 0 0 24 24` étiré à la boîte (`preserveAspectRatio="none"`),
+  ce qui est voulu pour une flèche longue et fine. Mais une fois tournée de 90°,
+  l'étirement s'applique toujours **selon les axes d'origine** : la flèche
+  devient **courte et énorme**. D'où `figAspect(f)` : `"xMidYMid meet"` dès que
+  `rot != 0`, `"none"` sinon. Le banc asserte le passage
+  (`aspect="none"` → `"xMidYMid meet"`).
+- **Les 4 formes BASIC se remplissent par le FOND, pas par le SVG.**
+  `Rectangle`, `Carré`, `Rond`, `Losange` sont dessinées par la boîte
+  elle-même : leur couleur de remplissage va sur `el.style.background`
+  (`applyFigBg`), et elles sont **exclues de la rotation** (les tourner
+  n'apporte rien). `const BASIC = ['Rectangle','Carré','Rond','Losange']`.
+
+Côté interface : la barre `.fig-tools` peut dépasser la largeur du conteneur
+avec les nouveaux contrôles — d'où `flex-wrap:wrap; max-width:min(94vw,370px)` et
+un repositionnement calculé **après** coup d'après `t.offsetHeight` réel
+(`top = fb.offsetTop - hauteur - 8`), sinon la barre se pose sur la figure.
+Un nuancier `.im-swatch.none` hachuré
+(`repeating-linear-gradient(45deg,…)`) + un bouton `∅` remettent en contour
+seul ; le réglage est mémorisé dans `window._atcFigFill` / `window._atcFigRot`
+pour la figure suivante, exactement comme la couleur et le poids.
+Banc `verify_figures_fill_rotate.js` : **27/27**, par le chemin réel (clic droit
+sur le message → `#atc-insert-menu` → `.im-ico[title=…]` → `.fig-tools`), avec
+persistance vérifiée après `renderMessages(true)`, relecture du
+`localStorage['theologicus_chat_<id>']` et `page.reload()`.
+
+## v128 — fluidité : points chauds de CE monolithe
+
+La méthode de mesure (CDP `Performance`, `LayerTree`, `Tracing`, comptage de
+`scrollIntoView`) est dans le skill `web-ui-audit-measure`, section
+« Mesurer la FLUIDITÉ ». Ici, seulement les endroits de THEOLOGICUS qui
+chauffent, avec le chiffre mesuré avant/après.
+
+- **`.message` portait `will-change: transform, opacity` et une animation
+  d'entrée en `both`.** Sur 40 messages : **69 calques composés**, dont 47
+  « will-change: transform » et 44 « active accelerated transform animation ».
+  Après : **28 calques**, 9 et 7. L'animation est devenue opt-in
+  (`.message.msg-enter`) et n'est posée que sur le dernier message par
+  `renderMessages`, ainsi que sur celui de `_createStreamDiv`. Si tu ajoutes
+  un endroit qui crée un `.message`, ajoute `msg-enter` **seulement** s'il
+  s'agit d'un message qui entre.
+- **`updateMinimapHighlight` appelait `scrollIntoView` à chaque événement de
+  défilement** — mesuré 119 pour 120 images — et `mmEntries` n'était jamais
+  vidé, donc le coût continuait minimap fermée. Trois gardes désormais : la
+  fonction sort si `!minimap.classList.contains('visible')`, elle sort si
+  l'entrée active n'a pas changé, et `window._rebuildMinimap` (appelé par
+  `renderMessages`) ne reconstruit que si la minimap est visible, sinon il vide
+  `mmEntries`. L'entrée active est gardée visible par
+  `minimap.scrollTop += …` et **non** par `scrollIntoView`. Attention :
+  `showMinimap()` doit poser la classe `visible` **avant** de construire.
+- **Le gestionnaire de défilement de `#chat-container`** était enregistré en
+  anonyme, sans `passive`, et refaisait `updateThumb` + `showScrollbar` +
+  `updateMinimapHighlight` à chaque événement. Il est maintenant regroupé en un
+  `requestAnimationFrame` (`syncScroll`). `updateThumb` ne réécrit la hauteur
+  et la position du pouce que si la valeur arrondie change.
+- **`repositionBubble`** est branché en phase **capture sur `window`** : il se
+  déclenche donc pour le défilement de n'importe quel conteneur. Il sort
+  immédiatement si la bulle n'est pas affichée
+  (`!b.style.display || b.style.display === 'none'`) et il est étranglé par
+  `repositionBubbleThrottled`. Sans la garde, trois mises en page forcées par
+  image, bulle fermée comprise.
+- **`loadChat` rendait deux fois** en cas de migration d'offsets. Les offsets
+  migrés vivent dans `state.messages` ; `__applyMarks` / `__applyHighlights` /
+  `__applyShapes` suffisent à les reporter. Le second `renderMessages()` ne
+  reste qu'en filet si ces applicateurs manquent.
+- **`loadArchiveChat` re-rendait toute la liste** des conversations, donc
+  relisait **toutes** les conversations dans IndexedDB (messages compris) et
+  reconstruisait le HTML — pour un seul changement visible. Il déplace
+  maintenant la classe `active-chat` (les items portent `data-chat-id`). Le
+  rendu complet est conservé **si `archivesSearchQuery` est actif**, car les
+  extraits surlignés doivent être recalculés. Sûr même si la liste n'a jamais
+  été rendue : passer sur la vue `archives` appelle `renderArchives()`, qui
+  recalcule `isActive` depuis `state.chatId`.
+- **`body { scroll-behavior: smooth }`** ne concernait que le document
+  (propriété non héritée) mais donnait leur comportement aux `scrollIntoView()`
+  sans `behavior`. Repassé en `auto` ; les défilements voulus doux passent
+  `{behavior:'smooth'}` explicitement.
+- **Non confirmé, ne pas « corriger »** : les trois `.floating-circle`
+  (`filter: blur(80px)`, animés 20 s) sous la coque qui porte
+  `backdrop-filter: blur(22px)`. Hypothèse d'un re-flou permanent **démentie
+  par la mesure** : 1 % du temps au repos, 42 peintures pour 2 s. Laissés tels
+  quels.
+
+---
+
+## v129 — préréglages de performance et fiche GPU
+
+### Le GPU n'est pas à activer : pywebview ne le désactive pas
+
+Vérifié à la lecture de `webview/platforms/edgechromium.py` (dépôt **et** copie
+installée) : le seul argument Chromium transmis est
+`--disable-features=ElasticOverscroll`. Aucun `--disable-gpu`, aucun
+`--disable-gpu-compositing`. Une application WebView2 rend donc **déjà** sur le
+GPU dès que le pilote le permet. Avant de chercher un correctif côté
+application, le lire dans la page :
+
+```js
+var gl = c.getContext('webgl2') || c.getContext('webgl');
+var d = gl.getExtension('WEBGL_debug_renderer_info');
+gl.getParameter(d.UNMASKED_RENDERER_WEBGL)
+// « ANGLE (AMD, AMD Radeon RX 6600 (0x000073FF) Direct3D11 vs_5_0 ps_5_0, D3D11) »
+```
+
+`SwiftShader` / `Software` / `llvmpipe` = repli logiciel ; `ANGLE` / `Direct3D` /
+un nom de constructeur = matériel. Sur ce poste : **matériel**.
+
+Version du moteur WebView2, au registre :
+`HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`
+→ valeur `pv` (lu par `_version_webview2()` dans `app.py`).
+
+### Ajouter des drapeaux Chromium : il faut intercepter une AFFECTATION
+
+pywebview écrit `props.AdditionalBrowserArguments = '…'` — une affectation. La
+variable d'environnement documentée par Microsoft
+(`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`) est donc **écrasée et sans effet**.
+La seule voie propre est de sous-classer `CoreWebView2CreationProperties` et
+d'**ajouter** dans `__setattr__` (voir `activer_drapeaux_gpu()` dans `app.py`).
+Deux pièges, tous deux trouvés par test :
+
+- un second appel **empile** les sous-classes : les drapeaux du premier appel
+  restent actifs et la nouvelle liste n'a plus d'effet. Poser un marqueur
+  (`_theo_gpu`) et mettre à jour la liste portée par la classe existante ;
+- désactiver (`THEOLOGICUS_GPU=0`) ne **retire** rien si le patch a déjà été
+  posé dans le même processus : conserver la classe d'origine (`_theo_base`) et
+  la restaurer.
+
+À appeler **avant** `create_window` : pywebview lit les propriétés au moment où
+il construit le contrôle.
+
+### Les interrupteurs v35/v39 se reposent depuis un intervalle
+
+`v35-reduce-fx-js` et `v39-mobile-fixes` injectent leurs commandes **depuis un
+`setInterval`**. Retirer les commandes brutes une seule fois perd la course dès
+que la v39 ajoute son bouton après nous : deux étiquettes « Performance » et
+deux commandes pour un même réglage (constaté par banc). **Le retrait doit être
+rejoué à chaque passage du monteur.**
+
+### Un objet vide est VRAI en JavaScript
+
+`var p = etat.python || {}` puis `p ? … : 'hors application'` annonçait
+« version inconnue » au lieu de « hors application Windows » : `{}` est vrai.
+Tester `=== null` explicitement. Et distinguer trois cas, pas deux : pas de
+pont du tout (navigateur), pont présent mais **méthode absente** (exe antérieur
+— « application à mettre à jour »), méthode présente. Annoncer « aucun
+drapeau » quand on ne SAIT pas est faux.
+
+### Une interface qui interroge Python doit tolérer l'exe antérieur
+
+`window.pywebview.api.renderer_info()` n'existe que depuis la v129. L'appel se
+fait donc en testant `typeof api.renderer_info === 'function'` **avant**
+d'appeler, et la fiche dit « application à mettre à jour ». Une méthode js_api
+ajoutée côté Python n'existe pas dans l'exe déjà installé — le HTML doit être
+écrit pour les deux.
+
+### Ne pas écrire dans le DOM quatre fois par seconde
+
+Un monteur qui boucle toutes les 250 ms pour attendre un hôte créé par un autre
+script doit **ralentir** une fois monté : passe rapide au démarrage, puis veille
+lente (ici 500 ms, et seulement le retrait des commandes brutes). Réécrire du
+texte 4 fois par seconde en permanence est absurde dans une version consacrée à
+la fluidité.
+
+### Semer une conversation dans un banc : la forme compte
+
+- La conversation stockée n'est **pas** un tableau de messages mais un objet
+  `{id, model, messages, title, updated, fav}`. Semer un tableau nu ne lève
+  **rien** et ne dessine **rien** : 0 message, aucune erreur. Deux tentatives
+  perdues là-dessus.
+- `loadChat(id)` ne dessine rien depuis un semis `localStorage` ; c'est
+  **`loadArchiveChat(id, -1)`** qui rend la conversation.
+- Voir aussi v126m : `loadChat` garde la copie la plus récente d'IndexedDB.
+
+### Un jeton de thème emprunté n'est pas une couleur
+
+Insérer un bloc dans un conteneur inconnu et lui donner
+`color: var(--text-primary)` ne garantit rien : **le jeton dépend du thème, le
+fond dépend du conteneur, et les deux ne sont pas coordonnés.**
+
+Cas mesuré (v129). Le thème `glass` (celui de l'app) redéfinit
+`--text-primary: #eaf4ff` (clair) mais **ne définit pas `--bg-card`** ; or
+`#v6-more-menu` porte `background: var(--bg-card)` et retombe donc sur le
+`#ffffff` de `:root`. Résultat : texte clair sur fond blanc, contraste
+**1,65:1**, libellés invisibles — et **aucune** assertion du banc ne bronchait.
+Les `.hud-btn` du menu souffrent du même défaut (`--text-secondary` = `#b7ccdf`
+sur blanc) : c'est un défaut préexistant du thème, à signaler plutôt qu'à
+corriger au passage.
+
+Règle : **un bloc inséré porte sa propre surface**, sombre, et n'emprunte plus
+rien — ici `background: var(--popup-bg, rgba(10,21,36,.96))` avec
+`color: var(--text-bright, #eaf4ff)`. Mesuré après correction : 16,5:1 dans le
+menu, 18,3:1 dans le panneau, dans les deux hôtes.
+
+Et le corollaire de méthode : **vérifier la lisibilité par une mesure**, jamais
+à l'œil sur une capture. Le banc remonte les ancêtres jusqu'à un fond opaque et
+exige un rapport de contraste ≥ 3:1 :
+
+```js
+const fondEffectif = (el) => {
+  let n = el;
+  while (n && n !== document.documentElement) {
+    const bg = getComputedStyle(n).backgroundColor;
+    const a = bg.match(/[\d.]+/g);
+    if (a && (a.length < 4 || parseFloat(a[3]) > 0.5)) return bg;
+    n = n.parentElement;
+  }
+  return "rgb(255,255,255)";
+};
+```
+
+### Un contrôle négatif doit rendre une LISTE, pas une exception
+
+Si le banc attend un objet global que la copie d'avant ne définit pas
+(`window.__V129`), `waitForFunction` et `page.evaluate` lèvent et le contrôle
+négatif **n'affiche aucun total** — on ne sait pas combien d'assertions ont
+échoué. Envelopper ces attentes dans un `try/catch` et tester
+`if (window.__X)` avant d'appeler. Ici : 48/48 sur le dépôt contre 9/48 sur la
+copie, au lieu d'une trace de pile.
+
+## Lire ce que contient VRAIMENT un exe PyInstaller (v129)
+
+**Un scan binaire ne prouve rien.** Chercher des chaînes dans
+`THEOLOGICUS.exe` (`grep`, `strings`, lecture d'octets) donne des comptes à
+**0** pour du code pourtant présent : PyInstaller **compresse** le script
+principal et le `PYZ`. Mesuré le 28/09 : `ElasticOverscroll`,
+`AdditionalBrowserArguments`, `CoreWebView2CreationProperties` tous à 0 alors
+que le code y était. Cette absence a produit une conclusion fausse
+(« il faut reconstruire l'exe ») et a failli faire refaire une compilation
+inutile — avec un installeur non signé par-dessus l'installation qui marche.
+
+**La bonne méthode : ouvrir l'archive.**
+
+```python
+from PyInstaller.archive.readers import CArchiveReader
+import marshal
+
+arc = CArchiveReader(r"...\THEOLOGICUS.exe")
+print(list(arc.toc))              # ~12 entrees ; le script principal s'appelle "app"
+co = marshal.loads(arc.extract("app"))   # objet code du script principal
+```
+
+Le `PYZ` s'ouvre par `arc.open_embedded_archive("PYZ.pyz")` (≈556 modules ici) ;
+`pyz.toc` liste les modules, `pyz.extract(nom)` rend les octets à démarshaler.
+
+**Comparer deux versions de code** : parcourir récursivement `co_consts` en
+descendant dans les objets code imbriqués, collecter les chaînes, et comparer
+les **ensembles**. Ici `consts(exe) == consts(app.py compilé)` → `True` : la
+preuve que l'exe embarque bien le `app.py` du dépôt.
+
+**Trois pièges de cette inspection, tous rencontrés :**
+
+- **Le marqueur cherché n'est pas là où on le cherche.** Un nom de fonction ou
+  d'attribut est dans `co_names` ; un littéral de chaîne (y compris une clé de
+  dictionnaire, ou `os.environ.get("MA_VARIABLE", …)`) est dans `co_consts`.
+  Chercher `THEOLOGICUS_GPU_ARGS` dans `co_names` a rendu « absent » à tort.
+- **Un filtre de longueur fabrique des absences.** Filtrer les chaînes à plus de
+  12 caractères a exclu `"hote"` (4 caractères) et produit un second « absent »
+  faux. Ne pas filtrer avant d'avoir conclu ; filtrer seulement pour l'affichage.
+- **Le journal de l'application est un canal de preuve.** `app.py` redirige
+  `stdout`/`stderr` vers `THEOLOGICUS.log` **uniquement** en mode figé
+  (`sys.frozen`). Donc toute ligne lue dans ce journal vient d'un **exe**, pas
+  d'un script — et `[OK] Drapeaux GPU transmis a WebView2 : …` est une preuve
+  d'exécution, pas une déduction. Comparer le nombre de lignes avant/après un
+  lancement pour attribuer les nouvelles lignes au bon processus.
+
+**Règle générale** : pour savoir ce qu'un binaire contient, interroger son
+format. Et **quand une observation contredit une inférence, l'observation
+gagne** — les deux lignes du journal étaient déjà là avant que je conclue le
+contraire.
+
+## Jetons de thème : les trois pièges qui rendent un thème illisible (v130)
+
+Ce monolithe a **deux générations de thèmes**. Les anciennes (`glass`, `cyber`,
+`midnight`, définies vers la ligne 1328) et les récentes (`v6-glass`,
+`v6-cyber`, `v6-light`, vers la ligne 31796). L'attribut du document est
+`data-theme="glass"` : **le thème par défaut appartient à la génération
+ancienne**, et c'est là que les défauts se logent.
+
+### 1. `var(--x)` sans repli et sans définition n'est pas une erreur visible
+
+La déclaration **entière** devient invalide à la compilation de la valeur, et la
+propriété retombe **silencieusement** sur sa valeur initiale. Aucune exception,
+aucun message. Mesuré : dans `glass`,
+
+```css
+html[data-theme="glass"] .message.assistant { background: var(--chat-assistant) }
+```
+
+`--chat-assistant` n'étant défini que par les thèmes `v6-*`, la bulle perd son
+fond, devient transparente, et c'est le blanc de
+`.section-chat { background: var(--bg-card) }` qui apparaît — texte clair sur
+blanc, **1,11:1**. Aucune revue de code ne voit ça.
+
+### 2. Un jeton qui vaut la MAUVAISE valeur n'est pas un jeton ABSENT
+
+Chercher les jetons « non définis » rate le cas le plus fréquent : `--bg-card`
+**est** défini (par `:root`, à `#ffffff`) et c'est précisément le problème quand
+le thème est sombre. Il faut lire la **valeur calculée dans le thème actif** :
+
+```js
+document.documentElement.setAttribute("data-theme", th);
+getComputedStyle(document.documentElement).getPropertyValue("--bg-card");
+```
+
+### 3. Une surface et son texte doivent venir de la MÊME famille
+
+Régression que j'ai introduite puis corrigée : donner à un bloc « sa propre
+surface » en empruntant `--popup-bg` avec un repli de texte clair. Correct en
+thème sombre, **faux en thème clair** où `--popup-bg` vaut blanc → texte clair
+sur blanc, mesuré **1:1** en `light`. Prendre `--bg-card` + `--text-primary` :
+tout thème bascule les deux ensemble.
+
+### Les thèmes anciens ne redefinissent que les jetons de TEXTE
+
+C'est la cause de fond. Quand `glass`/`cyber`/`midnight` passent en sombre, ils
+redéfinissent `--text-primary`, `--text-secondary`, `--text-dim`… mais **pas**
+`--bg-card`, `--chat-user`, `--chat-assistant`, qui restent hérités de `:root`
+(blancs). Les thèmes `v6-*` font les deux familles. Correctif appliqué : donner
+aux trois thèmes anciens les jetons de surface, pris dans leur propre palette.
+
+Effet mesuré, éléments sous 3:1 — `glass` **26 → 1**, `cyber` **15 → 1**,
+`midnight` **13 → 1**.
+
+### Lire le thème réellement utilisé, sans le deviner
+
+Le thème est en IndexedDB, dans le profil WebView2 de l'application :
+
+```
+%APPDATA%\pywebview\EBWebView\Default\IndexedDB\http_127.0.0.1_8765.indexeddb.leveldb
+```
+
+**Pas** `%LOCALAPPDATA%\EBWebView`, qui appartient à une autre application.
+On lit la valeur en cherchant `theme` dans les `.ldb`/`.log` (LevelDB) et en
+prenant la chaîne courte qui suit. Résultat ici : `v6-cyber` — donc
+l'utilisateur ne subissait **pas** le défaut, contrairement à ce qu'un
+raisonnement par défaut aurait fait croire.
+
+### Deux installations coexistent
+
+Les raccourcis du Bureau et du menu Démarrer pointent vers
+`C:\Theologicus\.workbuddy-ai\artifacts\_v123\_pub\installe`. Vérification en
+lisant les `.lnk` (les chemins y sont en **UTF-16LE**) — `pywin32`/COM est refusé
+comme LOLBin. `%LOCALAPPDATA%\Programs\THEOLOGICUS` est une installation
+**ancienne** : ne pas la prendre pour la vivante.
+
+### Mesurer le contraste par thème
+
+`contraste_par_theme.js` : pose chaque `data-theme`, ouvre le menu, puis compte
+les éléments dont le texte descend sous 3:1. C'est ce qui a montré les 26/15/13 et
+permis de vérifier l'après. **Ne pas conclure d'un seul thème** : le défaut était
+invisible dans `v6-cyber` et massif dans `glass`.
+
+**Corrigé en v131 — la résolution du fond décrite ci-dessus était FAUSSE.** Le
+fond ne s'obtient pas « en remontant jusqu'au premier opaque » : une couche
+translucide n'est pas un fond. `rgba(255,255,255,0.6)` sur une coque sombre est un
+**gris moyen**, pas du blanc ; la prendre pour opaque **surestime le contraste** et
+fait passer les défauts des surfaces en verre sous le seuil. Il faut **composer
+toute la chaîne translucide** jusqu'à la première couche réellement opaque
+(alpha ≥ 0,999), du bas vers le haut. Détail complet dans le skill
+`web-ui-audit-measure`.
+
+## Un SECOND `:root` peut écraser un thème entier (v131)
+
+Le document contient **deux** `:root` : celui du haut (ligne ~1204, palette
+**claire**) et un second à la ligne ~29999, dans `<style id="v9-palette">`, écrit
+pour la coque **v9 SOMBRE** (il déclare `--text: #e6edf7`, `--text-bright`,
+`--cyan`, `--neon`, `--cyan-dim`, `--bg-void`, `--bg-hull`).
+
+Un bloc de thème écrit `[data-theme="light"] { … }` a la spécificité **(0,1,0)** —
+**la même que `:root`**. À spécificité égale, **le dernier du document gagne**.
+Donc la palette v9 écrasait les thèmes `light` et `midnight`, qui sont déclarés
+AVANT elle. Conséquences mesurées dans `light` : `--text` valait `#e6edf7` (blanc
+cassé) au lieu de `#2d4a6b`, `--neon` `#4f8ef7` au lieu de `#00875a` → **1,03:1**
+sur `.success-block`, **1,08:1** sur le libellé du bouton d'export, **2,81:1** sur
+`.badge-neon`. Dans `midnight` le dégât n'était pas la lisibilité mais la
+**teinte** : `--cyan`/`--neon` bleus au lieu de violets.
+
+**Règle durable : toute surcharge de thème s'écrit `html[data-theme="…"]`** —
+spécificité (0,1,1) — jamais `[data-theme="…"]`. C'est déjà la convention de
+`glass`, `cyber`, `midnight` et des `v6-*`.
+
+Pour nommer le gagnant au lieu de le supposer : `sonde_cascade.js` liste, dans
+l'ordre du document, toutes les règles qui déclarent un jeton sur `<html>`, avec
+leur spécificité et leur feuille, et marque celle qui gagne. Il faut **deux**
+mesures, pas un raisonnement : `getComputedStyle` donne la valeur, lui donne la
+cause.
+
+## Une fuite de jeton de surface casse un thème SOMBRE (v131)
+
+`--glass-bg` est défini dans `:root` en `rgba(255,255,255,.6)` — **blanc**. Les
+trois thèmes `v6-*` définissaient `--glass-border` mais **pas** `--glass-bg`. Leurs
+panneaux de verre (`#memory-panel`, `.navbar-container`, la coque `.tpai-*`)
+étaient donc **blancs et translucides sous un texte clair**. Mesuré dans
+`v6-cyber`, le thème de l'utilisateur : **1,24:1** sur `.memory-header h3` ; après
+correctif **5,69:1**.
+
+**Généralisation : un thème sombre doit redéfinir TOUS les jetons de surface qu'il
+hérite, pas seulement les jetons de texte.** Le détecteur est `fuites_jetons.js` :
+pour chaque thème, il dresse la liste des jetons réellement utilisés comme
+`background` (lue dans `rule.cssText`, **jamais** via `getPropertyValue` — voir le
+piège des abréviations) et signale ceux qu'un thème sombre hérite **clairs**. Il ne
+signale que `--glass-bg`, et c'est le bon verdict.
+
+Attention au faux positif : une **bordure** claire sur fond sombre est légitime.
+Restreindre le test aux jetons employés comme `background`.
+
+## Douze jetons morts : les trouver sans se tromper (v131)
+
+Douze jetons étaient référencés **sans repli** et définis **nulle part** dans les
+sept thèmes : `--text-muted`, `--plasma-dim`, `--violet-dim`, `--bg-panel`, `--bg`,
+`--bg-dark`, `--void`, `--plate`, `--grid`, `--neon-dim`, `--gold`, `--plasma`.
+Chaque déclaration qui les emploie était donc **entièrement invalide**.
+
+Trois précautions, chacune apprise d'un échec :
+
+- **Ne balayer que les règles VIVANTES.** Un balayage du texte brut remonte des
+  citations dans des **commentaires CSS** (`var(--app-h)` alors que l'usage réel est
+  `var(--app-h, 100vh)`, avec repli) et dans des **chaînes de gabarit JS**
+  (`var(--bg-dark)`). Onze faux positifs par thème.
+- **Exclure les jetons fournis à l'exécution** par `setProperty` : ici huit
+  (`--app-h`, `--dur`, `--fc`, `--gl-radius`, `--p`, `--sch-box-border`,
+  `--sch-edge`, `--shift`). Ils n'existent pas dans la feuille, donc « morts » à
+  tort.
+- **Un repli se lit dans `cssText`** : une virgule de premier niveau dans
+  `var(--x, …)` signale le repli. `getPropertyValue` ne le voit pas.
+
+Résultat après correctif : **71 références sans repli, aucun jeton mort dans les
+sept thèmes** (`jetons_manquants.js`, code de sortie 0).
+
+**Déclaration morte DANS une même règle.** Le bloc `html[data-theme="light"]`
+déclare `--void` **deux fois** (lignes 4569 et 4584) : la première ne sert à rien.
+C'est préexistant, invisible, et du même genre que les douze ci-dessus — un jeton
+peut être « défini » et pourtant mort.
