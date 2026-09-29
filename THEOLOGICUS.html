@@ -38264,6 +38264,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       el.classList.add('tj-act');
       toast('✅ Modèle actif : ' + m.label, 'success');
       probeActive();
+      /* v152b — le duel suit : combattant 1 = modèle activé, combattant 2 = suivant */
+      try { if (typeof window.__theoDuelSync === 'function') window.__theoDuelSync(m.value); } catch (e4) {}
     } catch (e) { console.warn('[JAUGE] activate', e); }
   }
 
@@ -38739,8 +38741,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '@media (max-width:760px){#td-res{grid-template-columns:1fr}}' +
     '.td-col{border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:10px;display:flex;flex-direction:column;min-height:150px;overflow:hidden}' +
     '.td-hd{display:flex;gap:8px;align-items:center;padding:8px 10px;font-size:12px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-weight:600;overflow:hidden}' +
-    '.td-hd .td-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.td-hd .td-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:400;opacity:.75}' +
     '.td-time{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.85;font-weight:400;flex:0 0 auto}' +
+    '.td-fix{flex:0 0 auto;padding:2px 7px;font-size:11px}' +
     '.td-body{padding:10px 12px;overflow:auto;flex:1 1 auto;font-size:13px;line-height:1.55}' +
     '.td-body pre{white-space:pre-wrap;word-break:break-word;margin:0}' +
     '.td-ft{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--cyan-dim,rgba(79,142,247,.18));flex:0 0 auto}' +
@@ -38807,12 +38810,12 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         '</div>' +
         '<div id="td-res">' +
           '<div class="td-col">' +
-            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-time"></span></div>' +
+            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-nm"></span><span class="td-time"></span><button class="td-btn td-fix" title="Activer ce modèle comme modèle principal (bascule)">🔧</button></div>' +
             '<div class="td-body"><pre>Choisissez un modèle, posez la question, lancez le duel.</pre></div>' +
             '<div class="td-ft"><button class="td-btn td-keep" disabled>✅ Garder au chat</button><button class="td-btn td-use" disabled>🔧 Continuer avec ce modèle</button></div>' +
           '</div>' +
           '<div class="td-col">' +
-            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-time"></span></div>' +
+            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-nm"></span><span class="td-time"></span><button class="td-btn td-fix" title="Activer ce modèle comme modèle principal (bascule)">🔧</button></div>' +
             '<div class="td-body"><pre>Choisissez un modèle, posez la question, lancez le duel.</pre></div>' +
             '<div class="td-ft"><button class="td-btn td-keep" disabled>✅ Garder au chat</button><button class="td-btn td-use" disabled>🔧 Continuer avec ce modèle</button></div>' +
           '</div>' +
@@ -38823,11 +38826,63 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     document.getElementById('td-close').addEventListener('click', function () { md.classList.remove('open'); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
     document.getElementById('td-go').addEventListener('click', run);
+    var m1e = document.getElementById('td-m1');
+    var m2e = document.getElementById('td-m2');
+    /* v152b — couplage : changer un côté fait prendre à l'autre le modèle
+       SUIVANT de la liste (jamais deux fois le même dans un duel). */
+    wireSync(m1e, m2e);
+    wireSync(m2e, m1e);
+    [m1e, m2e].forEach(function (s) { s.addEventListener('change', refreshNm); });
     document.querySelectorAll('.td-col').forEach(function (col, i) {
       col.querySelector('.td-keep').addEventListener('click', function () { keep(col); });
       col.querySelector('.td-use').addEventListener('click', function () { useModel(col); });
+      col.querySelector('.td-fix').addEventListener('click', function () { activateById((i === 0 ? m1e : m2e).value); });
     });
   }
+
+  /* v152b — le modèle suivant dans la liste sélectionnable (boucle) */
+  function nextOf(value) {
+    var t = selectable();
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].value === value) return t[(i + 1) % t.length].value;
+    }
+    return t.length ? t[0].value : value;
+  }
+
+  var syncing = false;
+  function wireSync(selEl, otherEl) {
+    selEl.addEventListener('change', function () {
+      if (syncing) return;
+      syncing = true;
+      try {
+        otherEl.value = nextOf(selEl.value);
+        refreshNm();
+      } catch (e) {}
+      syncing = false;
+    });
+  }
+
+  function refreshNm() {
+    var m1 = document.getElementById('td-m1');
+    var m2 = document.getElementById('td-m2');
+    var nms = document.querySelectorAll('#td-modal .td-hd .td-nm');
+    if (nms.length === 2 && m1 && m2) {
+      nms[0].textContent = shortName(m1.value);
+      nms[1].textContent = shortName(m2.value);
+    }
+  }
+
+  /* v152b — appelé par la jauge : le modèle activé côté jauge devient le
+     combattant 1, et le combattant 2 prend automatiquement le suivant. */
+  window.__theoDuelSync = function (v) {
+    if (!built) return;
+    var m1 = document.getElementById('td-m1');
+    var m2 = document.getElementById('td-m2');
+    if (!m1 || !m2) return;
+    syncing = true;
+    try { m1.value = v; m2.value = nextOf(v); refreshNm(); } catch (e) {}
+    syncing = false;
+  };
 
   async function runSide(col, value, q, sysPrompt) {
     var stEl = col.querySelector('.td-st');
@@ -38913,19 +38968,26 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     document.getElementById('td-modal').classList.remove('open');
   }
 
+  /* v152b — bascule d'un modèle vers « modèle actif », partagée par les
+     boutons 🔧 des deux panneaux et par « Continuer avec ce modèle ». */
+  function activateById(v) {
+    try {
+      state.model = v;
+      try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: v }).catch(function () {}); } catch (e1) {}
+      try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+      var s1 = document.getElementById('model-select'); if (s1) s1.value = v;
+      var s2 = document.getElementById('model-select-mob'); if (s2) s2.value = v;
+      var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
+      if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+      if (typeof window.__theoProbeActive === 'function') window.__theoProbeActive();
+      toast('🔧 Modèle actif : ' + shortName(v), 'success');
+    } catch (e) { console.warn('[DUEL] activate', e); }
+  }
+
   function useModel(col) {
     var res = col.__res;
     if (!res) return;
-    var v = res.value;
-    state.model = v;
-    try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: v }).catch(function () {}); } catch (e1) {}
-    try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
-    var s1 = document.getElementById('model-select'); if (s1) s1.value = v;
-    var s2 = document.getElementById('model-select-mob'); if (s2) s2.value = v;
-    var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
-    if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
-    if (typeof window.__theoProbeActive === 'function') window.__theoProbeActive();
-    toast('🔧 Modèle actif : ' + shortName(v), 'success');
+    activateById(res.value);
     document.getElementById('td-modal').classList.remove('open');
   }
 
@@ -38936,6 +38998,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var inp = document.getElementById('user-input');
     var qt = document.getElementById('td-q');
     if (inp && inp.value.trim() && !qt.value.trim()) qt.value = inp.value.trim();
+    refreshNm();
     document.getElementById('td-modal').classList.add('open');
   }
 
