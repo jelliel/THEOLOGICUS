@@ -96,3 +96,5 @@ _bak_*/
 # Profil Edge jetable du banc de redimensionnement (v129) : cache navigateur
 # (Crashpad, Breadcrumbs...), Rien à livrer. Un run le régénère.
 .workbuddy-ai/artifacts/_v129/edge_profile/
+# Profil Edge jetable du banc de motion (v130) : idem.
+.workbuddy-ai/artifacts/_v130/edge_profile_motion/
