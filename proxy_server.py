@@ -2318,14 +2318,6 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             # retransmis plus bas par garde-fou si l'amont l'ignore.
             headers['Accept-Encoding'] = 'identity'
 
-            # v147d — attacher les cookies connus pour cet hôte (session,
-            # consentement…). _jar_host = hôte:port du site cible.
-            _jar_host = parsed.netloc
-            with _COOKIE_LOCK:
-                _jar = _COOKIE_JAR.get(_jar_host)
-            if _jar:
-                headers['Cookie'] = '; '.join(k + '=' + v for k, v in sorted(_jar.items()))
-
             # Use http.client for better header control
             parsed = urlparse(target_url)
             is_https = parsed.scheme == 'https'
@@ -2348,6 +2340,16 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             path = parsed.path
             if parsed.query:
                 path += '?' + parsed.query
+
+            # v147d — attacher les cookies connus pour cet hôte (session,
+            # consentement…). _jar_host = hôte:port du site cible.
+            # (FIX 2.0.255 : ce bloc référençait `parsed` avant sa définition
+            # et faisait répondre 500 à TOUT le relais.)
+            _jar_host = parsed.netloc
+            with _COOKIE_LOCK:
+                _jar = _COOKIE_JAR.get(_jar_host)
+            if _jar:
+                headers['Cookie'] = '; '.join(k + '=' + v for k, v in sorted(_jar.items()))
 
             print(f"\033[33m[PROXY] → {target_url}\033[0m")
             print(f"[PROXY] Headers: {list(headers.keys())}")
