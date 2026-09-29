@@ -11997,17 +11997,69 @@ function _streamScrollToBottom(el) {
 }
 
 // ── Debounced streaming renderer ──
-// Avoids re-processing mdToHtml() on every SSE chunk (O(n²) → O(n))
+// v146d — rendu INCRÉMENTAL : le préfixe stable (blocs markdown complets) est
+// rendu UNE fois et conservé ; chaque tick ne re-rend que le bloc en cours.
+// Le coût passe de O(taille message) par tick à O(taille du dernier bloc) —
+// c'est lui qui plafonnait la vitesse sur les longues réponses.
+// Kill-switch : window.__theoStreamIncr = false -> rendu complet (recours).
 function _createStreamRenderer(contentEl, scrollEl, slotEl) {
   let timer = null;
   let pendingText = '';
   let finalRendered = false;
   /* v146c — cadence ADAPTATIVE + chrono fournisseur.
-     lastCost = durée du dernier mdToHtml : si un rendu devient coûteux
+     lastCost = durée du dernier rendu : si un rendu devient coûteux
      (très longue réponse), on espace ; sinon on colle au maximum (50 ms).
-     t0/tFirst/bytes mesurent le délai du 1er mot et le débit réel du
+     t0/tFirst mesurent le délai du 1er mot et le débit réel du
      fournisseur — log console systématique, toast uniquement si lent. */
   let lastCost = 0, t0 = performance.now(), tFirst = 0;
+  let stableTxt = '';   /* texte des blocs stables déjà rendus dans contentEl */
+  let tailDiv = null;   /* conteneur du bloc en cours d'écriture */
+
+  const fencesOdd = s => (s.split('```').length - 1) % 2 === 1;
+
+  function renderFull(txt) {
+    /* Restructure : blocs complets -> stable, reste -> tail.
+       Coupe impossible (pas de \n\n) ou clôture de code impaire -> tout en tail. */
+    const cut = txt.lastIndexOf('\n\n') + 2;
+    let pfx = '', tail = txt;
+    if (cut > 0 && !fencesOdd(txt.slice(0, cut))) {
+      pfx = txt.slice(0, cut); tail = txt.slice(cut);
+    }
+    stableTxt = pfx;
+    if (!tailDiv) { tailDiv = document.createElement('div'); tailDiv.className = 'theo-stream-tail'; }
+    contentEl.innerHTML = pfx ? mdToHtml(pfx) : '';
+    contentEl.appendChild(tailDiv);
+    tailDiv.innerHTML = tail ? mdToHtml(tail) : '';
+  }
+
+  function renderTick(txt) {
+    if (!tailDiv || !txt.startsWith(stableTxt)) { renderFull(txt); return; }
+    const cut = txt.lastIndexOf('\n\n') + 2;
+    if (cut <= stableTxt.length) {
+      /* Aucun nouveau bloc complet : re-rendre le seul bloc en cours. */
+      const tail = txt.slice(stableTxt.length);
+      tailDiv.innerHTML = tail ? mdToHtml(tail) : '';
+      return;
+    }
+    const newPfx = txt.slice(0, cut);
+    if (fencesOdd(newPfx)) {
+      /* Bloc de code ouvert à cheval : tout le reste reste en tail. */
+      const tail = txt.slice(stableTxt.length);
+      tailDiv.innerHTML = tail ? mdToHtml(tail) : '';
+      return;
+    }
+    /* De nouveaux blocs sont complets : les rendre une fois, puis tail. */
+    const delta = newPfx.slice(stableTxt.length);
+    if (delta) {
+      const frag = document.createElement('div');
+      frag.innerHTML = mdToHtml(delta);
+      while (frag.firstChild) contentEl.insertBefore(frag.firstChild, tailDiv);
+    }
+    stableTxt = newPfx;
+    const tail = txt.slice(newPfx.length);
+    tailDiv.innerHTML = tail ? mdToHtml(tail) : '';
+  }
+
   return {
     push(chunk, full) {
       pendingText = full;
@@ -12024,7 +12076,8 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
         timer = setTimeout(() => {
           timer = null;
           const c0 = performance.now();
-          contentEl.innerHTML = mdToHtml(pendingText);
+          if (window.__theoStreamIncr === false) contentEl.innerHTML = mdToHtml(pendingText);
+          else renderTick(pendingText);
           lastCost = performance.now() - c0;
           _streamScrollToBottom(scrollEl);
         }, delay);
@@ -12036,7 +12089,10 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
       if (!finalRendered) {
         finalRendered = true;
         const r = extractSuggestionsHtml(full);
+        /* Rendu FINAL complet : markdown correct (listes, tableaux, code),
+           le conteneur tail est remplacé avec tout le reste. */
         contentEl.innerHTML = mdToHtml(r.body);
+        tailDiv = null; stableTxt = '';
         /* Perf (v145) : les couleurs de versets n'ont pas été posées pendant
            le streaming (observer suspendu) — une seule application ici. */
         try { if (window.theoApplyVerseColors) window.theoApplyVerseColors(contentEl); } catch (e) {}
