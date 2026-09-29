@@ -139,13 +139,33 @@ def wait_up(port: int, timeout: float = 5.0) -> bool:
 # restent intacts, et une seconde affectation ne duplique rien.
 #
 # Reglages :
-#   THEOLOGICUS_GPU=0        -> aucun drapeau (retour au comportement d'origine)
-#   THEOLOGICUS_GPU_ARGS=... -> remplace la liste ci-dessous
+#   THEOLOGICUS_GPU=0            -> aucun drapeau (retour au comportement d'origine)
+#   THEOLOGICUS_GPU_MODE=standard|ultra -> niveau (defaut : ultra)
+#   THEOLOGICUS_GPU_ARGS=...     -> remplace la liste ci-dessous
+#   THEOLOGICUS_GPU_VULKAN=1     -> ajoute --enable-features=Vulkan (ultra uniquement)
+#
+# ULTRA ajoute au standard :
+#   --enable-gpu-compositing  force la composition GPU (deja active par defaut
+#                             sur Windows, mais une politique fleet/entreprise
+#                             peut l'avoir coupee) ;
+#   --disable-gpu-vsync       supprime la synchronisation verticale -> latence
+#                             d'entree plus faible (drag/resize plus "colle" a
+#                             la souris). Risque mineur : leger tearing possible
+#                             et conso GPU un peu plus haute. Revenir a `standard`
+#                             si gene.
 DRAPEAUX_GPU = (
     "--ignore-gpu-blocklist "
     "--enable-gpu-rasterization "
     "--enable-zero-copy "
     "--enable-accelerated-2d-canvas"
+)
+DRAPEAUX_GPU_ULTRA = (
+    "--ignore-gpu-blocklist "
+    "--enable-gpu-rasterization "
+    "--enable-zero-copy "
+    "--enable-accelerated-2d-canvas "
+    "--enable-gpu-compositing "
+    "--disable-gpu-vsync"
 )
 
 
@@ -202,7 +222,17 @@ def activer_drapeaux_gpu() -> str | None:
             ec.CoreWebView2CreationProperties = base._theo_base
         return None
 
-    drapeaux = os.environ.get("THEOLOGICUS_GPU_ARGS", DRAPEAUX_GPU).strip()
+    drapeaux = os.environ.get("THEOLOGICUS_GPU_ARGS")
+    if drapeaux is None:
+        # Par defaut on applique le niveau ULTRA (voir DRAPEAUX_GPU_ULTRA).
+        # `THEOLOGICUS_GPU_MODE=standard` retombe sur le niveau conservateur.
+        mode = os.environ.get("THEOLOGICUS_GPU_MODE", "ultra").strip().lower()
+        drapeaux = (DRAPEAUX_GPU_ULTRA if mode == "ultra" else DRAPEAUX_GPU)
+        if mode == "ultra" and os.environ.get(
+                "THEOLOGICUS_GPU_VULKAN", "0").strip().lower() in (
+                "1", "oui", "true", "on", "yes"):
+            drapeaux = (drapeaux + " --enable-features=Vulkan").strip()
+    drapeaux = drapeaux.strip()
     if not drapeaux:
         return None
 

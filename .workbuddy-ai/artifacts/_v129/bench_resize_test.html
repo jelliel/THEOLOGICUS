@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset=utf-8><style>
+.atc-figbox{position:absolute;box-sizing:border-box;border:2px solid #4f8ef7;
+  contain:layout style;will-change:width,height,left,top;background:rgba(79,142,247,.08)}
+#host{position:relative;width:100vw;height:100vh}
+</style></head><body><div id=host></div><script>
+window.__bench = async function(variant){
+  var host=document.getElementById('host'); host.innerHTML='';
+  var fb=document.createElement('div'); fb.className='atc-figbox';
+  fb.style.left='10px'; fb.style.top='10px';
+  fb.style.width='150px'; fb.style.height='90px';
+  if(variant==='new') fb.classList.add('dragging');
+  host.appendChild(fb);
+  var batches=0, frames=[], last=performance.now(), n=0, done=false;
+  function probe(){ if(done) return; var t=performance.now();
+    frames.push(t-last); last=t; n++; if(n<240) requestAnimationFrame(probe); }
+  requestAnimationFrame(probe);
+  var N=600, _ev=null,_raf=0;
+  function apply(){ _raf=0; var ev=_ev; _ev=null; if(!ev) return;
+    batches++; fb.style.width=(150+ev.x)+'px'; fb.style.height=(90+ev.y)+'px';
+    fb.style.left=(10-ev.x)+'px'; }
+  // envoi espacé de 8,3 ms (~120 Hz)
+  function fire(i){
+    if(i>=N){ done=true; return; }
+    setTimeout(function(){
+      var ev={x:i,y:i};
+      if(variant==='old'){ batches++; fb.style.width=(150+i)+'px';
+        fb.style.height=(90+i)+'px'; fb.style.left=(10-i)+'px'; }
+      else { _ev=ev; if(!_raf) _raf=requestAnimationFrame(apply); }
+      fire(i+1);
+    }, 8.3);
+  }
+  fire(0);
+  // attendre la fin + 400 ms de marge
+  await new Promise(function(res){ var w=setInterval(function(){
+    if(done){ clearInterval(w); setTimeout(res,400); } },50); });
+  var s=frames.slice(1).sort(function(a,b){return a-b;});
+  var med=s[Math.floor(s.length/2)]||0;
+  return JSON.stringify({variant:variant, batches:batches,
+    images:frames.length, median_ms:+med.toFixed(2),
+    fps:+(1000/med).toFixed(1)});
+};
+</script></body></html>

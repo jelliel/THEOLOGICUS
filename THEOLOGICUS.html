@@ -988,6 +988,19 @@
 .atc-figbox .h[data-dir=ne]{top:-5px;right:-5px;cursor:nesw-resize}
 .atc-figbox .h[data-dir=sw]{bottom:-5px;left:-5px;cursor:nesw-resize}
 .atc-figbox .h[data-dir=se]{bottom:-5px;right:-5px;cursor:nwse-resize}
+/* v129 — ANTI-LAG : pendant le deplacement/redimensionnement, on pousse la
+   figure sur sa PROPRE couche GPU (translateZ + will-change) et on isole sa
+   mise en page (contain: layout style). Sans ca, chaque changement de
+   width/height/left/top reflowait tout le message + le chat -> lag puis
+   freeze de l'interface. `contain: layout style` (et non `paint`) evite de
+   rogner les formes SVG affichees en overflow:visible. */
+.atc-figbox.dragging{
+  contain: layout style;
+  will-change: width, height, left, top;
+  transform: translateZ(0);
+  animation: none;
+  z-index: 15;
+}
 /* Barre d'outils flottante au-dessus de la figure sélectionnée */
 .fig-tools{position:absolute;display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:11px;background:rgba(13,22,38,.93);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);border:1px solid rgba(79,142,247,.35);box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:30;animation:atcPop .14s ease;user-select:none}
 .fig-tools button{background:transparent;border:none;color:#eaf4ff;font-size:13px;cursor:pointer;padding:2px 4px;border-radius:6px;line-height:1;transition:.12s}
@@ -27353,7 +27366,16 @@ initTafsirVerseTooltip();
     const dir = hnd ? hnd.dataset.dir : null;
     const sx = e.clientX, sy = e.clientY;
     const ol = fb.offsetLeft, ot = fb.offsetTop, ow = fb.offsetWidth, oh = fb.offsetHeight;
-    function mv(ev){
+    /* v129 — ANTI-LAG : on coalesce les ecritures de style dans UN SEUL
+       requestAnimationFrame. Sans ca, chaque `mousemove` (jusqu'a ~120/s sur
+       souris haute frequence, ou emulation tactile) force un reflow + repaint
+       immediat -> lag, puis freeze de toute l'interface. On ecrira au plus une
+       fois par image affichee. */
+    let _mvEv = null, _mvRaf = 0;
+    function _mvApply(){
+      _mvRaf = 0;
+      const ev = _mvEv; _mvEv = null;
+      if (!ev) return;
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (dir === 'se') {
         fb.style.width = Math.max(46, ow + dx) + 'px'; fb.style.height = Math.max(34, oh + dy) + 'px';
@@ -27370,7 +27392,19 @@ initTafsirVerseTooltip();
         fb.style.left = (ol + dx) + 'px'; fb.style.top = (ot + dy) + 'px';
       }
     }
-    function up(){ document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); persistFig(f, fb); if (fb.classList.contains('sel')) showFigTools(fb, f, ts); }
+    function mv(ev){
+      _mvEv = ev;
+      if (!_mvRaf) _mvRaf = requestAnimationFrame(_mvApply);
+    }
+    function up(){
+      if (_mvRaf) { cancelAnimationFrame(_mvRaf); _mvRaf = 0; _mvApply(); }
+      document.removeEventListener('mousemove', mv);
+      document.removeEventListener('mouseup', up);
+      fb.classList.remove('dragging');
+      persistFig(f, fb);
+      if (fb.classList.contains('sel')) showFigTools(fb, f, ts);
+    }
+    fb.classList.add('dragging');
     document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
     e.preventDefault();
   });
