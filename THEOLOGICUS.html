@@ -38807,6 +38807,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           '<select id="td-m2" class="hud-select"></select>' +
           '<textarea id="td-q" rows="1" placeholder="La question du duel…"></textarea>' +
           '<button id="td-go">⚡ LANCER</button>' +
+          '<button id="td-keep2" class="td-btn" disabled title="Insérer la question et les deux réponses dans la conversation, puis continuer à discuter">✅ Garder les deux</button>' +
         '</div>' +
         '<div id="td-res">' +
           '<div class="td-col">' +
@@ -38838,6 +38839,38 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       col.querySelector('.td-use').addEventListener('click', function () { useModel(col); });
       col.querySelector('.td-fix').addEventListener('click', function () { activateById((i === 0 ? m1e : m2e).value); });
     });
+    document.getElementById('td-keep2').addEventListener('click', keepBoth);
+  }
+
+  /* v152d — insertion dans la conversation : la question d'abord (si elle
+     n'y est pas déjà), puis chaque réponse identifiée par modèle et chrono.
+     La conversation garde ainsi le contexte : on peut continuer à discuter. */
+  function pushQuestionIfNeeded(q) {
+    if (!q) return;
+    var lastU = null;
+    for (var j = state.messages.length - 1; j >= 0; j--) {
+      if (state.messages[j].role === 'user') { lastU = state.messages[j].content; break; }
+    }
+    if (lastU !== q) state.messages.push({ role: 'user', content: q, ts: now() });
+  }
+
+  function pushResponse(res) {
+    if (!res) return;
+    state.messages.push({ role: 'assistant', content: '⚖️ **' + shortName(res.value) + '** · ' + res.secs + ' s\n\n' + res.text, ts: now() });
+  }
+
+  function keepBoth() {
+    var q = document.getElementById('td-q').value.trim();
+    var cols = document.querySelectorAll('.td-col');
+    var any = false;
+    cols.forEach(function (col) { if (col.__res) any = true; });
+    if (!any) return;
+    pushQuestionIfNeeded(q);
+    cols.forEach(function (col) { pushResponse(col.__res); });
+    if (typeof renderMessages === 'function') renderMessages();
+    if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+    toast('✅ Réponses ajoutées à la conversation — continuez !', 'success');
+    document.getElementById('td-modal').classList.remove('open');
   }
 
   /* v152b — le modèle suivant dans la liste sélectionnable (boucle).
@@ -38971,6 +39004,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       col.querySelector('.td-keep').disabled = !r[i];
       col.querySelector('.td-use').disabled = !r[i];
     });
+    document.getElementById('td-keep2').disabled = !(r[0] || r[1]);
     if (r[0] && r[1]) {
       toast('⚖️ Duel terminé — ' + shortName(v1) + ' ' + r[0].secs + ' s vs ' + shortName(v2) + ' ' + r[1].secs + ' s');
     } else if (r[0] || r[1]) {
@@ -38981,7 +39015,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   function keep(col) {
     var res = col.__res;
     if (!res) return;
-    state.messages.push({ role: 'assistant', content: res.text, ts: now() });
+    var q = document.getElementById('td-q').value.trim();
+    pushQuestionIfNeeded(q);
+    pushResponse(res);
     if (typeof renderMessages === 'function') renderMessages();
     if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
     toast('✅ Réponse ajoutée au chat', 'success');
