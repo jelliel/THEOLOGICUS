@@ -26958,7 +26958,11 @@ initTafsirVerseTooltip();
     console.log('[DIAG] highlightSelection: mark added', { id, text: s.text, color, msgTs: s.msgTs, off: off, totalMarks: msg.marks.length });
     if (typeof markChatDirty === 'function') markChatDirty();
     atcPersist();
-    applyMarks();
+    /* v149 — mutations enveloppées : l'observer ne doit pas relancer la
+       passe d'application sur les spans qu'on vient de poser soi-même. */
+    window.__atcApplying = true;
+    try { applyMarks(); } catch (e) {}
+    setTimeout(function(){ window.__atcApplying = false; }, 0);
     toast('✓ Passage surligné · Enregistré', 'success');
   }
 
@@ -28497,6 +28501,11 @@ const idx = fullM.norm.indexOf(txtM.norm);
 
   function applyHighlights(){
     const msgs = (typeof state !== 'undefined' && state && state.messages) || [];
+    /* v149 — garde anti-boucle : un realign (unwrap + re-wrap) par annotation
+       max toutes les 5 s. Sans ça, une annotation dont le texte ne
+       correspond plus au rendu bouclait unwrap/re-wrap toutes les 60 ms —
+       le flicker constaté au surlignage. */
+    const _hlRetry = (applyHighlights._hlRetry = applyHighlights._hlRetry || {});
     let totalFound = 0, totalApplied = 0, totalSkipped = 0, totalNoBox = 0, totalNoText = 0, totalOffset = 0, totalRealigne = 0;
     msgs.forEach(function(m){
       if (!m.annotations || !Array.isArray(m.annotations)) return;
@@ -28523,7 +28532,11 @@ const idx = fullM.norm.indexOf(txtM.norm);
         });
         /* v126m — un span deja present n'est REUTILISE que s'il porte bien
            le texte annote. Sinon le cadre restait sur un autre mot. */
-        if (_bon && !_hlAlign(box, a)) { _hlUnwrap(box, a.id); _bon = null; totalRealigne++; }
+        if (_bon && !_hlAlign(box, a)) {
+          const _now = Date.now();
+          if (_hlRetry[a.id] && _now - _hlRetry[a.id] < 5000) { totalSkipped++; return; }
+          _hlRetry[a.id] = _now; _hlUnwrap(box, a.id); _bon = null; totalRealigne++;
+        }
         if (_bon) {
           totalSkipped++;
           if (a.w) _bon.classList.add('atc-mot');
@@ -28567,7 +28580,11 @@ const idx = fullM.norm.indexOf(txtM.norm);
           /* v126m — l'offset a pu dériver : si le texte enroulé n'est pas
              celui de l'annotation, on défait et on laisse la recherche par
              occurrence/texte reposer le cadre au bon endroit. */
-          if (ok && !_hlAlign(box, a)) { _hlUnwrap(box, a.id); ok = false; totalRealigne++; }
+          if (ok && !_hlAlign(box, a)) {
+            const _now2 = Date.now();
+            if (_hlRetry[a.id] && _now2 - _hlRetry[a.id] < 5000) { _hlUnwrap(box, a.id); totalSkipped++; return; }
+            _hlRetry[a.id] = _now2; _hlUnwrap(box, a.id); ok = false; totalRealigne++;
+          }
           if (ok) totalOffset++;
         }
         // Repli : recherche de texte tolérante (anciennes annotations sans offset
@@ -28615,9 +28632,15 @@ const idx = fullM.norm.indexOf(txtM.norm);
   let _atcMoT = null;
   if (cc) {
     const mo = new MutationObserver(function(){
-      if (window.__atcStreaming) return;
+      /* v149 — ignorer aussi nos PROPREs mutations (unwrap/re-wrap
+         d'applyHighlights) : c'était le flicker du surlignage. */
+      if (window.__atcStreaming || window.__atcApplying) return;
       clearTimeout(_atcMoT);
-      _atcMoT = setTimeout(function(){ applyHighlights(); applyMarks(); applyShapes(); }, 60);
+      _atcMoT = setTimeout(function(){
+        window.__atcApplying = true;
+        try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
+        setTimeout(function(){ window.__atcApplying = false; }, 0);
+      }, 60);
     });
     mo.observe(cc, { childList: true, subtree: true });
   }
@@ -37703,6 +37726,18 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         hideNote();
       })
       .catch(function(err){
+        /* v149 — si la version traduite (translate.goog) échoue (quota,
+           consentement Google…), on retombe sur la page originale. */
+        if (/\.translate\.goog\//i.test(url)) {
+          try {
+            var mt = url.match(/^https:\/\/([^/?#]+)\.translate\.goog([^#]*)/i);
+            if (mt) {
+              var h = mt[1].replace(/--/g, '\u0001').replace(/-/g, '.').replace(/\u0001/g, '-');
+              var orig = 'https://' + h + (mt[2] || '').replace(/([?&])_x_tr_[^=&]*=[^&]*/g, '').replace(/\?&/, '?').replace(/[?&]$/, '');
+              if (orig && orig !== url) { loadReader(orig); return; }
+            }
+          } catch (e2) {}
+        }
         showNote('Lecteur indisponible (' + err.message + ') — ouvrez ↗ dans le navigateur externe.');
       });
   }
