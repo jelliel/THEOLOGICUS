@@ -11976,17 +11976,23 @@ function _createStreamDiv() {
   div.appendChild(content);
   div.appendChild(slot);
   document.getElementById('chat-container').appendChild(div);
-  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  div.scrollIntoView({ behavior: _streamScrollBehavior(), block: 'end' });
   return { div, content, slot };
 }
 
 // ── Throttled scroll helper ──
+// v146 : animations coupées -> défilement INSTANTANÉ. Le « smooth » relançait
+// une animation de scroll à chaque appel pendant tout le streaming (images
+// gaspillées, impression de traînée) ; en instantané le texte suit la frappe.
+function _streamScrollBehavior() {
+  return document.documentElement.getAttribute('data-motion') === 'off' ? 'auto' : 'smooth';
+}
 let _lastStreamScroll = 0;
 function _streamScrollToBottom(el) {
   const now = Date.now();
   if (now - _lastStreamScroll > 200) {
     _lastStreamScroll = now;
-    el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    el.scrollIntoView({ behavior: _streamScrollBehavior(), block: 'end' });
   }
 }
 
@@ -12011,7 +12017,7 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
           timer = null;
           contentEl.innerHTML = mdToHtml(pendingText);
           _streamScrollToBottom(scrollEl);
-        }, 150);
+        }, 80); /* v146 : 80 ms (was 150) — texte affiché ~12x/s au lieu de 6.7x/s */
       }
     },
     finish(full) {
