@@ -1579,6 +1579,9 @@ body {
   will-change:transform, opacity;
 }
 :root[data-motion="off"] #theo-ambient{ display:none; }
+/* Perf (v145) : pendant le streaming, l'aurora plein écran est suspendue —
+   la composition GPU est libérée pour le redessin du message. */
+:root.theo-streaming #theo-ambient{ animation-play-state:paused; }
 :root[data-motion="subtle"] #theo-ambient{ opacity:.16; }
 :root[data-motion="rich"] #theo-ambient{ opacity:.55; }
 @keyframes theoAurora{
@@ -11993,6 +11996,13 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
   return {
     push(chunk, full) {
       pendingText = full;
+      /* Perf (v145) : signale le streaming au CSS (pause du fond ambiant).
+         Nettoyage « homme mort » à 4 s : aucun risque de classe oubliée. */
+      try {
+        document.documentElement.classList.add('theo-streaming');
+        clearTimeout(window.__theoStreamT);
+        window.__theoStreamT = setTimeout(function(){ document.documentElement.classList.remove('theo-streaming'); }, 4000);
+      } catch (e) {}
       if (!timer) {
         timer = setTimeout(() => {
           timer = null;
@@ -12003,10 +12013,14 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
     },
     finish(full) {
       if (timer) { clearTimeout(timer); timer = null; }
+      try { document.documentElement.classList.remove('theo-streaming'); } catch (e) {}
       if (!finalRendered) {
         finalRendered = true;
         const r = extractSuggestionsHtml(full);
         contentEl.innerHTML = mdToHtml(r.body);
+        /* Perf (v145) : les couleurs de versets n'ont pas été posées pendant
+           le streaming (observer suspendu) — une seule application ici. */
+        try { if (window.theoApplyVerseColors) window.theoApplyVerseColors(contentEl); } catch (e) {}
         if (slotEl) { slotEl.innerHTML = r.html; fitSuggestionChips(slotEl); }
         _streamScrollToBottom(scrollEl);
       }
@@ -20187,6 +20201,7 @@ async function continueLastResponse() {
     await saveChat();
     if (_autoContinue) { setTimeout(() => { if (_autoContinue) continueLastResponse(); }, 500); }
   } catch(e) {
+    window.__atcStreaming = false; /* v145 : bug — le drapeau restait true après une erreur API, gelant surlignages et couleurs */
     hideTyping();
     appendApiErrorMessage(e);
   } finally {
@@ -36936,9 +36951,14 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     bar.id = 'theo-progress';
     bar.innerHTML = '<i></i>';
     document.body.appendChild(bar);
-    var fill = bar.firstChild, tick = false, lastP = -1;
+    var fill = bar.firstChild, tick = false, lastP = -1, lastT = 0;
     var update = function(){
       tick = false;
+      /* Perf (v145) : max 10 lectures scrollHeight/s — chaque lecture force
+         un layout, et le streaming scrolle en continu (60 événements/s). */
+      var t = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      if (t - lastT < 100) return;
+      lastT = t;
       var sc = document.getElementById('chat-container');
       if (!sc) return;
       var max = sc.scrollHeight - sc.clientHeight;
@@ -37100,6 +37120,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   /* Application aux nouveaux nœuds (nouveaux messages) — rAF coalescé. */
   var moTick = false;
   new MutationObserver(function(muts){
+    /* Perf (v145) : pendant le streaming, le message est reconstruit toutes les
+       150 ms — réappliquer bordures/fonds à chaque tick écrase le CPU en
+       recalculs de style. On saute, comme l'observer natif des annotations ;
+       les couleurs sont réappliquées une fois au finish() du renderer. */
+    if (window.__atcStreaming) return;
     if (moTick) return; moTick = true;
     var added = [];
     for (var i = 0; i < muts.length; i++) {
