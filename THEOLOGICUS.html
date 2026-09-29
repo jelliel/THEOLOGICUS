@@ -36948,10 +36948,15 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   };
   var vcAppliqueSpan = function(el, c){
     if (c) {
-      el.style.background = hexToRgba(c, .30);
-      el.style.borderBottom = '1px solid ' + hexToRgba(c, .85);
-      el.style.borderRadius = '2px';
-    } else { el.style.background = ''; el.style.borderBottom = ''; el.style.borderRadius = ''; }
+      /* style « marqueur » : fond léger + trait épais sous la référence */
+      el.style.background = hexToRgba(c, .14);
+      el.style.borderBottom = '3px solid ' + hexToRgba(c, .90);
+      el.style.borderRadius = '3px';
+      el.style.padding = '0 2px';
+    } else {
+      el.style.background = ''; el.style.borderBottom = '';
+      el.style.borderRadius = ''; el.style.padding = '';
+    }
   };
   window.theoApplyVerseColors = function(root){
     var map = vcLoad();
