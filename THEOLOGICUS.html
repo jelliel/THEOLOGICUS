@@ -1582,6 +1582,9 @@ body {
 /* Perf (v145) : pendant le streaming, l'aurora plein écran est suspendue —
    la composition GPU est libérée pour le redessin du message. */
 :root.theo-streaming #theo-ambient{ animation-play-state:paused; }
+/* Perf (v146) : les encadrements reconstruits à chaque tick de streaming ne
+   rejouent plus leur entrée 150 fois par réponse. */
+:root.theo-streaming .atc-figbox.m-enter{ animation:none; }
 :root[data-motion="subtle"] #theo-ambient{ opacity:.16; }
 :root[data-motion="rich"] #theo-ambient{ opacity:.55; }
 @keyframes theoAurora{
@@ -12523,7 +12526,9 @@ function initSettingsModal() {
     }
     function apply(){
       var lvl = lsGet(LV);
-      if (!lvl) lvl = mq.matches ? 'off' : 'subtle';
+      /* v146 : défaut = OFF. La vitesse d'écriture prime ; les animations
+         restent disponibles (opt-in) dans Paramètres → Animations. */
+      if (!lvl) lvl = 'off';
       // Un niveau explicite (non « off ») prime sur la préférence système.
       var force = (lsGet(LF) === '1') || (lvl !== 'off');
       document.documentElement.setAttribute('data-motion', lvl);
