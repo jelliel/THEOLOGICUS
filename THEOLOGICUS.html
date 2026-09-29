@@ -1694,6 +1694,11 @@ input[type="checkbox"]:active{ transform:scale(.88); }
 #two-note{ flex:0 0 auto; padding:6px 12px; font-size:12px; color:#7a6244; background:#f8eed8; border-bottom:1px solid rgba(138,109,59,.25); display:none; }
 #two-note.show{ display:block; }
 #two-frame{ flex:1 1 auto; width:100%; border:0; background:#fffdf7; }
+/* v147 — poignée de redimensionnement (coin bas-droite). */
+#theo-web-box{ position:relative; }
+#two-grip{ position:absolute; right:2px; bottom:2px; width:22px; height:22px; cursor:nwse-resize; touch-action:none; z-index:5; opacity:.5; }
+#two-grip::before{ content:''; position:absolute; right:5px; bottom:5px; width:10px; height:10px; border-right:2px solid #8a6d3b; border-bottom:2px solid #8a6d3b; border-radius:0 0 3px 0; }
+#two-grip:hover{ opacity:1; }
 :root[data-motion="off"] #theo-web-box{ animation:none; }
 :root[data-motion="off"] #theo-web-box.closing{ animation:none; }
 
@@ -37340,6 +37345,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         '</div>' +
         '<div id="two-note"></div>' +
         '<iframe id="two-frame" referrerpolicy="no-referrer"></iframe>' +
+        '<div id="two-grip" title="Redimensionner"></div>' +
       '</div>';
     document.body.appendChild(ov);
     box = ov.querySelector('#theo-web-box');
@@ -37375,6 +37381,45 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       if (e.data && e.data.theoWeb === 'nav' && e.data.url) go(String(e.data.url), true);
     });
     frame.addEventListener('load', onFrameLoad);
+
+    /* v147 — restauration de la taille mémorisée. */
+    try {
+      var saved = localStorage.getItem('theologicus_webbox_size');
+      if (saved) {
+        var ms = String(saved).match(/^(\d+)x(\d+)$/);
+        if (ms) {
+          box.style.width = Math.max(420, Math.min(window.innerWidth - 24, parseInt(ms[1], 10))) + 'px';
+          box.style.height = Math.max(320, Math.min(window.innerHeight - 24, parseInt(ms[2], 10))) + 'px';
+          box.style.maxHeight = '96vh';
+        }
+      }
+    } catch (e) {}
+
+    /* v147 — poignée de redimensionnement (coin bas-droite). */
+    var grip = ov.querySelector('#two-grip');
+    grip.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+      var r0 = box.getBoundingClientRect();
+      var sx = e.clientX, sy = e.clientY, sw = r0.width, sh = r0.height;
+      var move = function(ev){
+        var w = Math.max(420, Math.min(window.innerWidth - 24, sw + ev.clientX - sx));
+        var h = Math.max(320, Math.min(window.innerHeight - 24, sh + ev.clientY - sy));
+        box.style.width = w + 'px';
+        box.style.height = h + 'px';
+        box.style.maxHeight = '96vh';
+      };
+      var up = function(){
+        grip.removeEventListener('pointermove', move);
+        grip.removeEventListener('pointerup', up);
+        try {
+          var r1 = box.getBoundingClientRect();
+          localStorage.setItem('theologicus_webbox_size', Math.round(r1.width) + 'x' + Math.round(r1.height));
+        } catch (err) {}
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+    });
   }
 
   function showNote(msg){
