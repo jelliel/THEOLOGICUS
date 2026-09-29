@@ -7651,6 +7651,7 @@ window.__ensureTafsirSurah = function(p){
   <div class="header-controls">
     <select class="hud-select" id="model-select"></select>
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
+    <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <select class="hud-select" id="agent-select">
       <option value="">▸ NO AGENT</option>
     </select>
@@ -38464,6 +38465,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     } catch (e) { console.warn('[JAUGE] badge', e); }
     probingActive = false;
   }
+  /* v152 — le duel met aussi à jour le badge après un changement de modèle */
+  window.__theoProbeActive = probeActive;
 
   /* ── v151e — RE-TEST AUTOMATIQUE : toutes les 60 s tant que le panneau
      est ouvert (désactivable via la case « auto 60s », persistée). Une
@@ -38701,6 +38704,243 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     if (s) s.addEventListener('change', function () { setTimeout(probeActive, 300); });
   });
   scheduleAuto();
+})();
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v152 — DUEL DE MODÈLES ⚖️
+   La même question posée à DEUX modèles en parallèle, réponses
+   streamées côte à côte avec chrono. On garde la réponse préférée au
+   chat, ou on continue la conversation avec le modèle gagnant.
+   Réutilise callLLMStream / mdToHtml / resolveModelConfig — rien de
+   parallèle au pipeline existant. Zéro dépendance nouvelle.
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoDuel) return;
+  window.__theoDuel = true;
+
+  var CSS =
+    '#td-modal{position:fixed;inset:0;z-index:99997;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}' +
+    '#td-modal.open{display:flex}' +
+    '#td-box{width:min(1100px,96vw);max-height:92vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '#td-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px;flex:0 0 auto}' +
+    '#td-head small{font-family:system-ui,sans-serif;font-size:11px;font-weight:400;letter-spacing:0;opacity:.6;margin-left:auto}' +
+    '#td-close{background:transparent;border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:var(--text,#e8eefc);border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;flex:0 0 auto}' +
+    '#td-close:hover{background:var(--cyan-dim,rgba(79,142,247,.12))}' +
+    '#td-ctrl{display:flex;gap:8px;align-items:center;padding:10px 16px;flex-wrap:wrap;flex:0 0 auto}' +
+    '#td-m1,#td-m2{max-width:270px;font-size:12px}' +
+    '#td-vs{opacity:.55;font-weight:700}' +
+    '#td-q{flex:1 1 240px;min-height:38px;max-height:110px;resize:vertical;background:var(--bg-dark,var(--bg,#0d131d));color:var(--text,#e8eefc);border:1px solid var(--cyan-dim,rgba(79,142,247,.3));border-radius:8px;padding:8px;font-family:inherit;font-size:13px}' +
+    '#td-go{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.35));color:var(--text,#e8eefc);border-radius:8px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}' +
+    '#td-go:hover{filter:brightness(1.25)}' +
+    '#td-go:disabled{opacity:.5;cursor:default}' +
+    '#td-res{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:2px 16px 16px;overflow:auto;flex:1 1 auto}' +
+    '@media (max-width:760px){#td-res{grid-template-columns:1fr}}' +
+    '.td-col{border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:10px;display:flex;flex-direction:column;min-height:150px;overflow:hidden}' +
+    '.td-hd{display:flex;gap:8px;align-items:center;padding:8px 10px;font-size:12px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-weight:600;overflow:hidden}' +
+    '.td-hd .td-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.td-time{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.85;font-weight:400;flex:0 0 auto}' +
+    '.td-body{padding:10px 12px;overflow:auto;flex:1 1 auto;font-size:13px;line-height:1.55}' +
+    '.td-body pre{white-space:pre-wrap;word-break:break-word;margin:0}' +
+    '.td-ft{display:flex;gap:8px;padding:8px 10px;border-top:1px solid var(--cyan-dim,rgba(79,142,247,.18));flex:0 0 auto}' +
+    '.td-btn{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:var(--text,#e8eefc);border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer}' +
+    '.td-btn:hover{filter:brightness(1.25)}' +
+    '.td-btn:disabled{opacity:.35;cursor:default}';
+
+  var built = false;
+  var running = false;
+
+  function selectable() {
+    try { return _tousModelesSelectionnables(); } catch (e) { return []; }
+  }
+
+  function shortName(id) {
+    var t = selectable();
+    for (var i = 0; i < t.length; i++) { if (t[i].value === id) return String(t[i].label).split(' — ')[0]; }
+    return String(id);
+  }
+
+  function fillSelect(el, defVal) {
+    el.innerHTML = '';
+    selectable().forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.value; o.textContent = m.label;
+      el.appendChild(o);
+    });
+    if (defVal) { try { el.value = defVal; } catch (e) {} }
+  }
+
+  /* meilleur 🟢 du dernier test de jauge (autre que le modèle 1, avec clé) */
+  function bestGreen(exceptId) {
+    var best = null;
+    try {
+      var c = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null');
+      ((c && c.res) || []).forEach(function (x) {
+        if (x.k !== 0 || x.v === exceptId) return;
+        if (typeof _clePourModele === 'function' && !_clePourModele(x.v)) return;
+        if (!best || (x.ms || 99999) < (best.ms || 99999)) best = x;
+      });
+    } catch (e) {}
+    return best ? best.v : null;
+  }
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.id = 'td-style'; st.textContent = CSS;
+    document.head.appendChild(st);
+    var md = document.createElement('div');
+    md.id = 'td-modal';
+    md.innerHTML =
+      '<div id="td-box">' +
+        '<div id="td-head">⚖️ Duel de modèles<small>la même question, deux réponses en parallèle</small>' +
+          '<button id="td-close" title="Fermer">✕</button>' +
+        '</div>' +
+        '<div id="td-ctrl">' +
+          '<select id="td-m1" class="hud-select"></select>' +
+          '<span id="td-vs">VS</span>' +
+          '<select id="td-m2" class="hud-select"></select>' +
+          '<textarea id="td-q" rows="1" placeholder="La question du duel…"></textarea>' +
+          '<button id="td-go">⚡ LANCER</button>' +
+        '</div>' +
+        '<div id="td-res">' +
+          '<div class="td-col">' +
+            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-time"></span></div>' +
+            '<div class="td-body"><pre>Choisissez un modèle, posez la question, lancez le duel.</pre></div>' +
+            '<div class="td-ft"><button class="td-btn td-keep" disabled>✅ Garder au chat</button><button class="td-btn td-use" disabled>🔧 Continuer avec ce modèle</button></div>' +
+          '</div>' +
+          '<div class="td-col">' +
+            '<div class="td-hd"><span class="td-st">🟠 prêt</span><span class="td-time"></span></div>' +
+            '<div class="td-body"><pre>Choisissez un modèle, posez la question, lancez le duel.</pre></div>' +
+            '<div class="td-ft"><button class="td-btn td-keep" disabled>✅ Garder au chat</button><button class="td-btn td-use" disabled>🔧 Continuer avec ce modèle</button></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('td-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
+    document.getElementById('td-go').addEventListener('click', run);
+    document.querySelectorAll('.td-col').forEach(function (col, i) {
+      col.querySelector('.td-keep').addEventListener('click', function () { keep(col); });
+      col.querySelector('.td-use').addEventListener('click', function () { useModel(col); });
+    });
+  }
+
+  async function runSide(col, value, q, sysPrompt) {
+    var stEl = col.querySelector('.td-st');
+    var body = col.querySelector('.td-body');
+    var time = col.querySelector('.td-time');
+    var cfg = null;
+    try { cfg = resolveModelConfig(value); } catch (e) {}
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      stEl.textContent = '⚪ pas de clé'; time.textContent = '';
+      body.innerHTML = '<pre>Aucune clé configurée pour ce modèle.</pre>';
+      return null;
+    }
+    var t0 = performance.now();
+    var tick = setInterval(function () { time.textContent = ((performance.now() - t0) / 1000).toFixed(1) + ' s'; }, 250);
+    stEl.textContent = '⏳ en cours…';
+    var full = '';
+    var lastR = 0;
+    try {
+      await callLLMStream(cfg, [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: q }
+      ], { temperature: 0.7, max_tokens: 4096 }, function (chunk, all) {
+        full = all;
+        var n = performance.now();
+        if (n - lastR > 150) {
+          lastR = n;
+          body.innerHTML = mdToHtml(full);
+          body.scrollTop = body.scrollHeight;
+        }
+      });
+      clearInterval(tick);
+      body.innerHTML = mdToHtml(full);
+      var secs = Number(((performance.now() - t0) / 1000).toFixed(1));
+      time.textContent = secs + ' s';
+      stEl.textContent = '🟢 terminé';
+      return { text: full, secs: secs, value: value };
+    } catch (e) {
+      clearInterval(tick);
+      stEl.textContent = '🔴 erreur';
+      time.textContent = '';
+      var msg = String((e && e.message) || e).slice(0, 300).replace(/</g, '&lt;');
+      body.innerHTML = '<pre>' + msg + '</pre>';
+      return null;
+    }
+  }
+
+  async function run() {
+    if (running) return;
+    var qEl = document.getElementById('td-q');
+    var q = qEl.value.trim();
+    if (!q) { toast('Pose d\'abord la question du duel', 'error'); return; }
+    running = true;
+    var go = document.getElementById('td-go');
+    go.disabled = true; go.textContent = '⏳ DUEL…';
+    var v1 = document.getElementById('td-m1').value;
+    var v2 = document.getElementById('td-m2').value;
+    var sys = (typeof buildSystemPrompt === 'function') ? buildSystemPrompt() : '';
+    var cols = document.querySelectorAll('.td-col');
+    var p1 = runSide(cols[0], v1, q, sys);
+    var p2 = runSide(cols[1], v2, q, sys);
+    var r = await Promise.all([p1, p2]);
+    go.disabled = false; go.textContent = '⚡ LANCER';
+    running = false;
+    cols.forEach(function (col, i) {
+      col.__res = r[i] || null;
+      col.querySelector('.td-keep').disabled = !r[i];
+      col.querySelector('.td-use').disabled = !r[i];
+    });
+    if (r[0] && r[1]) {
+      toast('⚖️ Duel terminé — ' + shortName(v1) + ' ' + r[0].secs + ' s vs ' + shortName(v2) + ' ' + r[1].secs + ' s');
+    } else if (r[0] || r[1]) {
+      toast('⚖️ Duel terminé — un seul modèle a répondu', 'error');
+    }
+  }
+
+  function keep(col) {
+    var res = col.__res;
+    if (!res) return;
+    state.messages.push({ role: 'assistant', content: res.text, ts: now() });
+    if (typeof renderMessages === 'function') renderMessages();
+    if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+    toast('✅ Réponse ajoutée au chat', 'success');
+    document.getElementById('td-modal').classList.remove('open');
+  }
+
+  function useModel(col) {
+    var res = col.__res;
+    if (!res) return;
+    var v = res.value;
+    state.model = v;
+    try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: v }).catch(function () {}); } catch (e1) {}
+    try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+    var s1 = document.getElementById('model-select'); if (s1) s1.value = v;
+    var s2 = document.getElementById('model-select-mob'); if (s2) s2.value = v;
+    var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
+    if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+    if (typeof window.__theoProbeActive === 'function') window.__theoProbeActive();
+    toast('🔧 Modèle actif : ' + shortName(v), 'success');
+    document.getElementById('td-modal').classList.remove('open');
+  }
+
+  function open() {
+    build();
+    fillSelect(document.getElementById('td-m1'), state.model);
+    fillSelect(document.getElementById('td-m2'), bestGreen(state.model) || 'mistral-small-2506');
+    var inp = document.getElementById('user-input');
+    var qt = document.getElementById('td-q');
+    if (inp && inp.value.trim() && !qt.value.trim()) qt.value = inp.value.trim();
+    document.getElementById('td-modal').classList.add('open');
+  }
+
+  var btn = document.getElementById('open-duel-modal');
+  if (btn) btn.addEventListener('click', open);
 })();
 
 </script>
