@@ -24,6 +24,43 @@ PORT = 8765
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# v147d — POT À COOKIES du relais /proxy/. Les sites servis en mode lecteur
+# n'ont aucun contexte navigateur : sans jar, chaque requête arrive sans
+# session ni consentement et beaucoup répondent « cookies are disabled »,
+# murs de login en boucle, Cloudflare, etc. Le relais garde donc les
+# Set-Cookie par hôte et les renvoie sur les requêtes suivantes.
+# Persistés à côté de l'exe pour survivre au redémarrage.
+# NB : on EXCLUT aussi le header Cookie du navigateur du transfert — sinon
+# les cookies de l'app (origine localhost) fuyaient vers le site cible.
+import threading as _threading
+_COOKIE_JAR = {}
+_COOKIE_LOCK = _threading.Lock()
+
+def _cookie_path():
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), 'theologicus_cookiejar.json')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'theologicus_cookiejar.json')
+
+def _cookie_load():
+    try:
+        with open(_cookie_path(), 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            for k, v in d.items():
+                if isinstance(v, dict):
+                    _COOKIE_JAR[k] = {str(a): str(b) for a, b in v.items()}
+    except Exception:
+        pass
+
+def _cookie_save():
+    try:
+        with open(_cookie_path(), 'w', encoding='utf-8') as f:
+            json.dump(_COOKIE_JAR, f)
+    except Exception:
+        pass
+
+_cookie_load()
+
 # v126 — fichiers que THEOLOGICUS charge en PLUS de lui-meme. Le relais les
 # cherche dans SERVE_DIR puis, s'il ne les trouve pas, dans le cwd : un
 # lanceur qui demarre le relais depuis un autre dossier (par exemple une
@@ -2261,6 +2298,7 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 'host', 'content-length', 'connection', 'keep-alive',
                 'proxy-connection', 'transfer-encoding', 'upgrade',
                 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer',
+                'cookie',  # v147d : remplacé par le pot à cookies du relais (et évite la fuite des cookies localhost vers le site cible)
             }
             for h, val in self.headers.items():
                 if h.lower() in _A_EXCLURE:
@@ -2279,6 +2317,14 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             # l'identité évite la compression ; l'en-tête de réponse est aussi
             # retransmis plus bas par garde-fou si l'amont l'ignore.
             headers['Accept-Encoding'] = 'identity'
+
+            # v147d — attacher les cookies connus pour cet hôte (session,
+            # consentement…). _jar_host = hôte:port du site cible.
+            _jar_host = parsed.netloc
+            with _COOKIE_LOCK:
+                _jar = _COOKIE_JAR.get(_jar_host)
+            if _jar:
+                headers['Cookie'] = '; '.join(k + '=' + v for k, v in sorted(_jar.items()))
 
             # Use http.client for better header control
             parsed = urlparse(target_url)
@@ -2321,6 +2367,29 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(f'Proxy connection error: {str(e)}'.encode())
                 return
+
+            # v147d — stocker les Set-Cookie du site (session, consentement…).
+            try:
+                _sc = resp.msg.get_all('Set-Cookie') or []
+                if _sc:
+                    with _COOKIE_LOCK:
+                        _jar = _COOKIE_JAR.setdefault(_jar_host, {})
+                        _dirty = False
+                        for _c in _sc:
+                            _kv = _c.split(';', 1)[0].strip()
+                            if '=' in _kv:
+                                _n, _v = _kv.split('=', 1)
+                                if _v in ('""', ''):
+                                    if _jar.pop(_n, None) is not None:
+                                        _dirty = True
+                                else:
+                                    if _jar.get(_n) != _v:
+                                        _jar[_n] = _v
+                                        _dirty = True
+                        if _dirty:
+                            _cookie_save()
+            except Exception:
+                pass
 
             # Stream response back
             self.send_response(resp.status)
