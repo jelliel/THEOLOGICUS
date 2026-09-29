@@ -38840,13 +38840,33 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     });
   }
 
-  /* v152b — le modèle suivant dans la liste sélectionnable (boucle) */
-  function nextOf(value) {
+  /* v152b — le modèle suivant dans la liste sélectionnable (boucle).
+     v152c — l'ordre suit le CLASSEMENT DU DERNIER JAUGEAGE : les 🟢 par
+     latence croissante d'abord (donc « suivant du meilleur » = deuxième
+     meilleur), puis les modèles sans donnée dans l'ordre de la liste. */
+  function rankedList() {
     var t = selectable();
-    for (var i = 0; i < t.length; i++) {
-      if (t[i].value === value) return t[(i + 1) % t.length].value;
+    var inList = [];
+    var greens = [];
+    try {
+      var c = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null');
+      ((c && c.res) || []).forEach(function (x) {
+        if (x.k !== 0) return;
+        for (var i = 0; i < t.length; i++) { if (t[i].value === x.v) { greens.push({ v: x.v, ms: x.ms || 99999 }); break; } }
+      });
+    } catch (e) {}
+    greens.sort(function (a, b) { return a.ms - b.ms; });
+    greens.forEach(function (x) { inList.push(x.v); });
+    t.forEach(function (m) { if (inList.indexOf(m.value) < 0) inList.push(m.value); });
+    return inList;
+  }
+
+  function nextOf(value) {
+    var l = rankedList();
+    for (var i = 0; i < l.length; i++) {
+      if (l[i] === value) return l[(i + 1) % l.length].value;
     }
-    return t.length ? t[0].value : value;
+    return l.length ? l[0].value : value;
   }
 
   var syncing = false;
