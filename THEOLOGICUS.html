@@ -38125,6 +38125,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '.tj-row{display:grid;grid-template-columns:26px 1fr 86px;gap:8px;align-items:baseline;padding:7px 8px;border-radius:8px;font-size:12.5px}' +
     '.tj-row:hover{background:var(--cyan-dim,rgba(79,142,247,.07))}' +
     '.tj-row.tj-act{outline:1px solid var(--cyan-dim,rgba(79,142,247,.4))}' +
+    '.tj-row.tj-bad{outline:1px solid rgba(255,90,90,.55)}' +
     '.tj-nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
     '.tj-grp{opacity:.55;font-size:10.5px;font-weight:400;margin-left:6px}' +
     '.tj-ms{text-align:right;font-variant-numeric:tabular-nums;opacity:.9}' +
@@ -38183,7 +38184,18 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       } catch (e3) {}
       msg = String(msg || '').replace(/\s+/g, ' ').trim().slice(0, 160);
       var c = classify(st, msg);
-      c.ms = ms; c.det = msg;
+      /* v151d — Retry-After quand le fournisseur l'envoie (visible en appel
+         direct ; le relais local ne transfère pas cet en-tête, alors le
+         message du serveur reste la source principale). */
+      if (st === 429) {
+        try {
+          var ra = res.headers.get('retry-after') || '';
+          var secs = Number(ra);
+          if (Number.isFinite(secs) && secs > 0) c.det = 'réessayer dans ~' + Math.ceil(secs) + ' s' + (msg ? ' — ' + msg : '');
+          else if (ra) { var when = Date.parse(ra); if (Number.isFinite(when)) c.det = 'réessayer dans ~' + Math.max(1, Math.ceil((when - Date.now()) / 1000)) + ' s' + (msg ? ' — ' + msg : ''); }
+        } catch (eh) {}
+      }
+      c.ms = ms; c.det = c.det || msg;
       return c;
     } catch (e) {
       return { kind: 2, ico: '🔴', lbl: 'Injoignable (réseau / serveur local)', ms: Math.round(performance.now() - t0), det: String((e && e.message) || e).slice(0, 120) };
@@ -38199,9 +38211,33 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     return out;
   }
 
+  /* v151d — clic sur une ligne : le modèle cliqué devient le modèle actif
+     (même persistance que #model-select.onchange : db.settings + saveAppConfig
+     + reconstruction du prompt système). Uniquement pour un modèle joignable
+     (🟢 ou 🟠) — cliquer une ligne 🔴/⚪ ne ferait que reproduire l'erreur. */
+  function activateModel(m, el) {
+    try {
+      if (el.__kind === 3) { toast('Pas de clé configurée pour ' + (m.label || 'ce modèle'), 'error'); return; }
+      if (el.__kind === 2) { toast('Modèle en erreur — choisissez une ligne 🟢 ou 🟠', 'error'); return; }
+      state.model = m.value;
+      try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: state.model }).catch(function () {}); } catch (e1) {}
+      try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+      var sel = document.getElementById('model-select'); if (sel) sel.value = m.value;
+      var selM = document.getElementById('model-select-mob'); if (selM) selM.value = m.value;
+      var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
+      if (sys && typeof buildSystemPrompt === 'function') { sys.content = buildSystemPrompt(); if (typeof saveChat === 'function') saveChat(); }
+      document.querySelectorAll('#tj-list .tj-row').forEach(function (r) { r.classList.remove('tj-act'); });
+      el.classList.add('tj-act');
+      toast('✅ Modèle actif : ' + m.label, 'success');
+    } catch (e) { console.warn('[JAUGE] activate', e); }
+  }
+
   function mkRow(m) {
     var el = document.createElement('div');
     el.className = 'tj-row tj-pend';
+    el.style.cursor = 'pointer';
+    el.title = 'Cliquer pour activer ce modèle';
+    el.addEventListener('click', function () { activateModel(m, el); });
     el.innerHTML = '<span class="tj-ico">⏳</span><span class="tj-nm"></span><span class="tj-ms">…</span>';
     el.querySelector('.tj-nm').textContent = m.label;
     if (m.grp) {
@@ -38214,9 +38250,22 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   function fillRow(row, m, r) {
     row.el.classList.remove('tj-pend');
+    row.el.__kind = r.kind;
     row.el.querySelector('.tj-ico').textContent = r.ico;
-    row.el.querySelector('.tj-ms').textContent = r.kind === 0 ? (r.ms + ' ms') : (r.ms ? r.ms + ' ms' : '');
+    var msEl = row.el.querySelector('.tj-ms');
+    var trend = '';
+    /* v151d — tendance vs test précédent (localStorage) */
+    var prev = prevMap[m.value];
+    if (r.kind === 0 && prev && prev.ms) {
+      var d = r.ms - prev.ms;
+      if (d <= -50) trend = ' ▼';
+      else if (d >= 50) trend = ' ▲';
+      else trend = ' ≈';
+      msEl.title = 'Test précédent : ' + prev.ms + ' ms (' + (d > 0 ? '+' : '') + d + ' ms)';
+    }
+    msEl.textContent = r.kind === 0 ? (r.ms + ' ms' + trend) : (r.ms ? r.ms + ' ms' : '');
     if (m.value === state.model) row.el.classList.add('tj-act');
+    if (window.__theoGaugeBadModel && m.value === window.__theoGaugeBadModel) row.el.classList.add('tj-bad');
     var d = row.el.querySelector('.tj-det');
     if (d) d.remove();
     var txt = (r.kind === 0) ? '' : ((r.lbl || '') + (r.det ? (r.lbl ? ' — ' : '') + r.det : ''));
@@ -38243,11 +38292,21 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     results.forEach(function (x) { box.appendChild(x.row.el); });
   }
 
+  /* v151d — résultats du test précédent (tendances + « dernier test ») */
+  var prevMap = {};
+
   async function runAll() {
     if (running) return;
     running = true;
     var box = document.getElementById('tj-list');
     if (!box) { running = false; return; }
+    prevMap = {};
+    try {
+      var prevCache = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null');
+      if (prevCache && prevCache.res) prevCache.res.forEach(function (x) { prevMap[x.v] = x; });
+      var tl0 = document.getElementById('tj-last');
+      if (tl0 && prevCache && prevCache.ts) tl0.textContent = 'Test précédent : ' + new Date(prevCache.ts).toLocaleTimeString();
+    } catch (e) {}
     var list = buildList();
     box.innerHTML = '';
     var rows = {};
@@ -38272,6 +38331,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       for (var k = 0; k < P; k++) ps.push(worker());
       await Promise.all(ps);
       sortRows(results);
+      /* v151d — persistance pour les tendances du prochain test */
+      try {
+        localStorage.setItem('theologicus_gauge_last', JSON.stringify({
+          ts: Date.now(),
+          res: results.map(function (x) { return { v: x.m.value, k: x.r.kind, ms: x.r.ms }; })
+        }));
+      } catch (e) {}
+      var tl = document.getElementById('tj-last');
+      if (tl) tl.textContent = 'Dernier test : ' + new Date().toLocaleTimeString();
+      window.__theoGaugeBadModel = '';
     } catch (e) { console.warn('[JAUGE]', e); }
     running = false;
   }
@@ -38291,7 +38360,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           '<button id="tj-close" title="Fermer">✕</button>' +
         '</div>' +
         '<div id="tj-list"></div>' +
-        '<div id="tj-foot">Chaque modèle reçoit une requête minimale (1 token). 🟢 disponible · 🟠 joignable mais limité (rate-limit / service) · 🔴 en erreur (clé, quota, id obsolète) · ⚪ sans clé. Le modèle actif est encadré.</div>' +
+        '<div id="tj-foot"><span id="tj-last"></span>Chaque modèle reçoit une requête minimale (1 token). 🟢 disponible · 🟠 joignable mais limité (rate-limit / service) · 🔴 en erreur (clé, quota, id obsolète) · ⚪ sans clé. Le modèle actif est encadré ; ▼▲ = plus rapide / plus lent qu\'au test précédent. Cliquez une ligne 🟢 pour activer ce modèle.</div>' +
       '</div>';
     document.body.appendChild(md);
     md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
@@ -38310,6 +38379,28 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   var btn = document.getElementById('open-gauge-modal');
   if (btn) btn.addEventListener('click', open);
+
+  /* v151d — détection automatique : quand le chat rencontre une erreur API,
+     le modèle fautif est mémorisé (sera encadré en rouge dans la jauge) et
+     un toast invite à ouvrir la jauge. On enveloppe la fonction globale
+     (déclaration top-level d'un script classique => propriété de window). */
+  try {
+    var origErr = window.appendApiErrorMessage;
+    if (typeof origErr === 'function' && !origErr.__theoGaugeHooked) {
+      var hooked = function (err) {
+        try {
+          var mid = (err && err.model) || '';
+          if (mid) {
+            window.__theoGaugeBadModel = mid;
+            toast('📉 Un modèle a échoué — ouvrez JAUGE pour voir l\'état de tous les modèles', 'error');
+          }
+        } catch (e) {}
+        return origErr.apply(this, arguments);
+      };
+      hooked.__theoGaugeHooked = true;
+      window.appendApiErrorMessage = hooked;
+    }
+  } catch (e) {}
 })();
 
 </script>
