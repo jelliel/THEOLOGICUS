@@ -9455,6 +9455,16 @@ window.__ensureTafsirSurah = function(p){
         <div class="field-group">
           <label class="field-label">🎨 Couleurs de versets</label>
           <div class="field-hint">Survolez une référence biblique (ex. Jean 3:16) dans la conversation et choisissez une couleur dans la fiche : la référence est surlignée partout. <b><span id="vmt-reset-nb">0</span> verset(s) coloré(s).</b></div>
+          <div id="vmt-pal-ed" style="display:flex;align-items:center;gap:7px;margin-top:8px;">
+            <input type="color" class="vmt-pal-input" title="Pastille 1" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <input type="color" class="vmt-pal-input" title="Pastille 2" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <input type="color" class="vmt-pal-input" title="Pastille 3" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <input type="color" class="vmt-pal-input" title="Pastille 4" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <input type="color" class="vmt-pal-input" title="Pastille 5" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <input type="color" class="vmt-pal-input" title="Pastille 6" style="width:28px;height:25px;padding:0;border:1px solid rgba(138,109,59,.4);border-radius:6px;background:transparent;cursor:pointer;">
+            <button class="btn" id="vmt-pal-reset" style="margin-left:2px;">Palette par défaut</button>
+          </div>
+          <div class="field-hint" style="margin-top:5px;">Ces 6 pastilles sont celles proposées dans la fiche de verset — modifiables ici à chaud.</div>
           <button class="btn" id="vmt-reset-all" style="margin-top:6px;">Tout effacer</button>
         </div>
       </div><!-- /#settings-panneau-motion -->
@@ -36916,7 +36926,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   /* Couleurs de versets — stockage + application + palette dans la fiche. */
   var CLE_VC = 'theologicus_verse_colors';
-  var PALETTE = ['#f6c445', '#7ac74f', '#4fa3f7', '#f28cb1', '#f2913d', '#b28cf6'];
+  var CLE_VP = 'theologicus_verse_palette';
+  var PALETTE_DEF = ['#f6c445', '#7ac74f', '#4fa3f7', '#f28cb1', '#f2913d', '#b28cf6'];
+  var vcPalette = function(){
+    try {
+      var p = JSON.parse(localStorage.getItem(CLE_VP) || 'null');
+      if (Array.isArray(p) && p.length === 6) return p;
+    } catch(e){}
+    return PALETTE_DEF;
+  };
+  var vcSavePalette = function(p){ try { localStorage.setItem(CLE_VP, JSON.stringify(p)); } catch(e){} };
   var vcLoad = function(){ try { return JSON.parse(localStorage.getItem(CLE_VC) || '{}'); } catch(e){ return {}; } };
   var vcSave = function(m){ try { localStorage.setItem(CLE_VC, JSON.stringify(m)); } catch(e){} };
   var vcKey = function(s){ return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); };
@@ -36944,9 +36963,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   };
   var vcBuildPalette = function(ref){
     var cur = vcLoad()[vcKey(ref)];
+    var PAL = vcPalette();
     var html = '<div id="vmt-colors">';
-    for (var i = 0; i < PALETTE.length; i++)
-      html += '<button type="button" class="vmt-sw' + (cur === PALETTE[i] ? ' on' : '') + '" data-c="' + PALETTE[i] + '" style="background:' + PALETTE[i] + '" title="Colorer ce verset"></button>';
+    for (var i = 0; i < PAL.length; i++)
+      html += '<button type="button" class="vmt-sw' + (cur === PAL[i] ? ' on' : '') + '" data-c="' + PAL[i] + '" style="background:' + PAL[i] + '" title="Colorer ce verset"></button>';
     html += '<button type="button" class="vmt-sw' + (cur ? '' : ' on') + '" data-c="" title="Aucune couleur" style="background:transparent">×</button>';
     html += '<input type="color" class="vmt-perso" value="' + (cur || '#f6c445') + '" title="Couleur personnalisée">';
     html += '</div>';
@@ -37049,6 +37069,29 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       window.theoApplyVerseColors(document);
       if (typeof toast === 'function') toast('Toutes les couleurs de versets ont été effacées', 'info');
     }
+  });
+
+  /* Palette modifiable dans Paramètres → Animations. */
+  var palEd = document.getElementById('vmt-pal-ed');
+  var palSyncInputs = function(){
+    if (!palEd) return;
+    var all = palEd.querySelectorAll('.vmt-pal-input'), p = vcPalette();
+    for (var w = 0; w < all.length && w < p.length; w++) all[w].value = p[w];
+  };
+  palSyncInputs();
+  if (palEd) {
+    palEd.addEventListener('input', function(e){
+      if (!e.target.classList || !e.target.classList.contains('vmt-pal-input')) return;
+      var all = palEd.querySelectorAll('.vmt-pal-input'), arr = [];
+      for (var z = 0; z < all.length; z++) arr.push(all[z].value);
+      vcSavePalette(arr);
+    });
+  }
+  var pr = document.getElementById('vmt-pal-reset');
+  if (pr) pr.addEventListener('click', function(){
+    vcSavePalette(PALETTE_DEF.slice());
+    palSyncInputs();
+    if (typeof toast === 'function') toast('Palette réinitialisée', 'info');
   });
 
   /* État initial. */
