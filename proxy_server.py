@@ -2332,6 +2332,16 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             ce = resp.getheader('Content-Encoding')
             if ce:
                 self.send_header('Content-Encoding', ce)
+            # v147c — exposer la politique d'encadré du site cible : l'overlay
+            # navigateur lit X-Frame-Options / CSP frame-ancestors côté client
+            # pour choisir iframe directe vs mode lecteur SANS deviner.
+            for _ph in ('X-Frame-Options', 'Content-Security-Policy'):
+                _pv = resp.getheader(_ph)
+                if _pv:
+                    self.send_header(_ph, _pv)
+            # Marqueur : signale à l'HTML que ce relais transmet les en-têtes
+            # ci-dessus (les builds antérieurs les laissaient tomber).
+            self.send_header('X-Theo-Relay', '1')
             self.send_header('Cache-Control', 'no-cache')
             self.end_headers()
 

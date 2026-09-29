@@ -37439,7 +37439,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   /* ── Navigation directe (iframe) ── */
   /* Sites connus pour refuser l'iframe (X-Frame-Options) → lecteur direct. */
-  var BLOQUEURS = ['google.com','youtube.com','facebook.com','instagram.com','twitter.com','x.com','amazon.com','wikipedia.org','reddit.com','linkedin.com','tiktok.com','netflix.com'];
+  var BLOQUEURS = ['google.com','youtube.com','facebook.com','instagram.com','twitter.com','x.com','amazon.com','wikipedia.org','reddit.com','linkedin.com','tiktok.com','netflix.com','biblegateway.com'];
   function estBloqueur(u){
     try {
       var h = new URL(u).hostname;
@@ -37491,11 +37491,29 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       setTimeout(function(){ if (!readerMode) loadReader(url); }, 700);
       return;
     }
-    /* d === null : origine croisée (succès OU refus X-Frame-Options) —
-       impossible à distinguer depuis le JS. Indice visible, non bloquant. */
+    /* d === null : origine croisée — succès OU refus X-Frame-Options.
+       On tranche via le relais local, qui expose désormais les en-têtes
+       X-Frame-Options / CSP (marqueur X-Theo-Relay). Si le relais est un
+       exe plus ancien (pas de marqueur), repli heuristique sur le contenu. */
     if (d === null) {
-      showNote('Page vide ou « refuse de se connecter » ? → bouton 📖 pour le mode lecteur.');
-      setTimeout(function(){ if (!readerMode && note.textContent.indexOf('📖') !== -1) hideNote(); }, 8000);
+      var url2 = urlIn.value;
+      if (!url2) return;
+      fetch('/proxy/' + url2, { credentials: 'omit' })
+        .then(function(r){
+          var xfo = r.headers.get('x-frame-options');
+          var csp = r.headers.get('content-security-policy') || '';
+          var marked = !!r.headers.get('x-theo-relay');
+          if (xfo || /frame-ancestors/i.test(csp)) return 'reader';
+          if (!marked) return r.text().then(function(h){ return (h && h.length > 800) ? 'reader' : 'keep'; });
+          return 'keep'; /* relais à jour : sans en-tête bloquant, l'iframe affiche */
+        })
+        .then(function(dec){
+          if (dec === 'reader' && !readerMode && urlIn.value === url2) {
+            showNote('Ce site refuse l\'affichage intégré — mode lecteur…');
+            loadReader(url2);
+          }
+        })
+        .catch(function(){ /* relais indisponible : on garde l'iframe tel quel */ });
     } else {
       hideNote();
     }
