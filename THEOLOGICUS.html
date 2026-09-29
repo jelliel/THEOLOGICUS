@@ -1711,6 +1711,23 @@ input[type="checkbox"]:active{ transform:scale(.88); }
 #two-bm .bmt{ flex:1; color:#3a2a16; }
 #two-bm .bmx{ border:0; background:none; cursor:pointer; color:#a05a2a; }
 #theo-web-box.max{ width:98vw !important; height:96vh !important; max-height:96vh !important; }
+/* v150 — manuscrits & papyri : pastilles + galerie. */
+.theo-mss{ margin-top:8px; padding-top:6px; border-top:1px dashed rgba(138,109,59,.3); display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.theo-mss-t{ font-size:11px; color:#8a6d3b; }
+.theo-mss-chip{ border:1px solid rgba(138,109,59,.45); background:#f8eed8; color:#4a3520; border-radius:999px; padding:2px 10px; font-size:11.5px; cursor:pointer; transition:transform var(--motion-dur) var(--motion-ease); }
+.theo-mss-chip:hover{ background:#f3e7cf; transform:scale(1.05); }
+:root[data-motion="off"] .theo-mss-chip:hover{ transform:none; }
+#theo-ms-modal{ position:fixed; inset:0; z-index:99998; display:none; align-items:center; justify-content:center; background:rgba(30,22,12,.55); backdrop-filter:blur(3px); }
+#theo-ms-modal.open{ display:flex; }
+#theo-ms-box{ width:min(860px,94vw); max-height:88vh; overflow:auto; background:#fdf6e8; border:1px solid rgba(138,109,59,.45); border-radius:14px; box-shadow:0 18px 60px rgba(20,12,4,.45); animation:theoWebIn var(--motion-dur) var(--motion-ease); }
+#theo-ms-head{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:#f3e7cf; border-bottom:1px solid rgba(138,109,59,.35); font-weight:700; color:#4a3520; position:sticky; top:0; z-index:2; }
+#theo-ms-head button{ margin-left:auto; border:1px solid rgba(138,109,59,.4); background:#fbf2df; border-radius:8px; cursor:pointer; padding:4px 9px; color:#4a3520; }
+.theo-ms-card{ padding:12px 14px; border-bottom:1px solid rgba(138,109,59,.2); }
+.theo-ms-card h3{ margin:2px 0 8px; color:#8a5a20; font-size:14.5px; }
+.theo-ms-card img{ max-width:100%; max-height:420px; border-radius:8px; display:block; margin:0 auto 8px; background:#fff; border:1px solid rgba(138,109,59,.3); }
+.theo-ms-card p{ font-size:12.5px; color:#5a4630; margin:6px 0; line-height:1.6; }
+.theo-ms-card a{ color:#8a5a20; font-size:12px; }
+.theo-ms-skel{ height:200px; border-radius:8px; background:currentColor; opacity:.12; animation:theoSkelPulse 1.4s ease-in-out infinite; }
 :root[data-motion="off"] #theo-web-box{ animation:none; }
 :root[data-motion="off"] #theo-web-box.closing{ animation:none; }
 
@@ -37895,6 +37912,157 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     if (tip) { tip.style.display = 'none'; tip.dataset.vref = ''; }
     window.theoChapterOpen(ref);
   }, false);
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v150 — MANUSCRITS & PAPYRUS : détection dans les conversations +
+   pastilles 📜 cliquables + galerie de photos (Wikipédia/Wikimedia).
+   Aucune dépendance : API REST Wikipédia (CORS natif), fr → en.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__theoMss) return; window.__theoMss = true;
+
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Détection des manuscrits cités dans un texte ── */
+  function detect(text){
+    var found = [], seen = {};
+    function push(wiki, label){ if (!seen[wiki]) { seen[wiki] = 1; found.push({ wiki: wiki, label: label }); } }
+    var m;
+    var reShort = /\bP(\d{1,3})\b/g;            /* P52, P66, P75… (casse stricte) */
+    while ((m = reShort.exec(text))) push('Papyrus ' + m[1], 'P' + m[1]);
+    var reLong = /\bpapyrus\s*(\d{1,3})\b/gi;   /* « papyrus 46 » */
+    while ((m = reLong.exec(text))) push('Papyrus ' + m[1], 'Papyrus ' + m[1]);
+    var reCod = /\bcodex\s+([A-Za-zÀ-ÿ]{3,20})/gi;
+    while ((m = reCod.exec(text))) {
+      var nm = m[1].toLowerCase();
+      push('Codex ' + nm.charAt(0).toUpperCase() + nm.slice(1), 'Codex ' + nm.charAt(0).toUpperCase() + nm.slice(1));
+    }
+    if (/mer\s*morte|dead\s*sea|qumr[aâ]n|1QIsa|11QPs/i.test(text)) push('Dead Sea Scrolls', 'Manuscrits de la mer Morte');
+    if (/\bsina[iï]ticus\b/i.test(text)) push('Codex Sinaiticus', 'Codex Sinaiticus');
+    if (/\bvaticanus\b/i.test(text)) push('Codex Vaticanus', 'Codex Vaticanus');
+    if (/\balexandr[iin]us\b/i.test(text)) push('Codex Alexandrinus', 'Codex Alexandrinus');
+    if (/\bbezae\b/i.test(text)) push('Codex Bezae', 'Codex Bezae');
+    if (/\bamiatinus\b/i.test(text)) push('Codex Amiatinus', 'Codex Amiatinus');
+    if (/\bephraemi?\b/i.test(text)) push('Codex Ephraemi', 'Codex Ephraemi Rescriptus');
+    if (/\bbodmer\b/i.test(text)) push('Bodmer Papyri', 'Papyrus Bodmer');
+    if (/\bchester\s*beatty\b/i.test(text)) push('Chester Beatty Papyri', 'Papyri Chester Beatty');
+    if (/\bnash\b/i.test(text)) push('Nash Papyrus', 'Papyrus Nash');
+    if (/\bmagdalen\b/i.test(text)) push('Magdalen papyrus', 'Papyrus Magdalen');
+    if (/\brylands\b/i.test(text)) push('Papyrus 52', 'Papyrus Rylands (P52)');
+    return found;
+  }
+
+  /* ── Pastilles sous les messages qui citent un manuscrit ── */
+  function scan(root){
+    var boxes = (root || document).querySelectorAll('.message-content:not([data-mss-done])');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      b.dataset.mssDone = '1';
+      var found = detect(b.textContent || '');
+      if (!found.length) continue;
+      var row = document.createElement('div');
+      row.className = 'theo-mss';
+      var html = '<span class="theo-mss-t">📜 Manuscrits cités :</span>';
+      found.forEach(function(f){
+        html += '<button type="button" class="theo-mss-chip" data-wiki="' + esc(f.wiki) + '" data-label="' + esc(f.label) + '">🖼 ' + esc(f.label) + '</button>';
+      });
+      row.innerHTML = html;
+      b.appendChild(row);
+    }
+  }
+
+  /* ── Galerie d'images (modal) ── */
+  var msOv, msBody, msTitle;
+
+  function buildMs(){
+    if (msOv) return;
+    msOv = document.createElement('div'); msOv.id = 'theo-ms-modal';
+    msOv.innerHTML = '<div id="theo-ms-box">' +
+      '<div id="theo-ms-head"><span id="theo-ms-title">📜 Manuscrits &amp; papyri</span>' +
+      '<button id="theo-ms-close" title="Fermer (Échap)">✕</button></div>' +
+      '<div id="theo-ms-body"></div></div>';
+    document.body.appendChild(msOv);
+    msBody = msOv.querySelector('#theo-ms-body');
+    msTitle = msOv.querySelector('#theo-ms-title');
+    msOv.querySelector('#theo-ms-close').addEventListener('click', function(){ msOv.classList.remove('open'); });
+    msOv.addEventListener('mousedown', function(e){ if (e.target === msOv) msOv.classList.remove('open'); });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && msOv.classList.contains('open')) { e.stopPropagation(); msOv.classList.remove('open'); }
+    }, true);
+  }
+
+  /* Fiche Wikipédia : fr d'abord, repli en. Renvoie null si introuvable. */
+  function fetchMss(wiki){
+    var langs = ['fr', 'en'];
+    function tryLang(i){
+      if (i >= langs.length) return Promise.resolve(null);
+      return fetch('https://' + langs[i] + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(wiki) + '?redirect=true')
+        .then(function(r){ if (!r.ok) throw new Error('http'); return r.json(); })
+        .then(function(j){
+          if (!j || (!j.thumbnail && !j.originalimage)) return tryLang(i + 1);
+          return j;
+        })
+        .catch(function(){ return tryLang(i + 1); });
+    }
+    return tryLang(0);
+  }
+
+  function openGallery(items){
+    buildMs();
+    msOv.classList.add('open');
+    msTitle.textContent = '📜 Manuscrits & papyri (' + items.length + ')';
+    msBody.innerHTML = '';
+    items.forEach(function(it){
+      var card = document.createElement('div');
+      card.className = 'theo-ms-card';
+      card.innerHTML = '<h3>' + esc(it.label) + '</h3><div class="theo-ms-skel"></div>';
+      msBody.appendChild(card);
+      fetchMss(it.wiki).then(function(j){
+        var sk = card.querySelector('.theo-ms-skel');
+        if (!j) {
+          if (sk) sk.outerHTML = '<p style="color:#a05a2a;font-size:12.5px">Image introuvable pour « ' + esc(it.wiki) + ' ».</p>';
+          return;
+        }
+        var img = (j.originalimage && j.originalimage.source) || (j.thumbnail && j.thumbnail.source) || '';
+        var link = (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) ||
+                   ('https://fr.wikipedia.org/wiki/' + encodeURIComponent(it.wiki));
+        card.innerHTML = '<h3>' + esc(j.title || it.label) + '</h3>' +
+          (img ? '<img src="' + esc(img) + '" alt="' + esc(j.title || it.label) + '" loading="lazy">' : '') +
+          (j.extract ? '<p>' + esc(String(j.extract).slice(0, 400)) + (String(j.extract).length > 400 ? '…' : '') + '</p>' : '') +
+          '<a href="' + esc(link) + '">Ouvrir l\'article complet →</a>';
+      });
+    });
+  }
+
+  /* Clic sur une pastille → galerie de tous les manuscrits du message. */
+  document.addEventListener('click', function(e){
+    var chip = e.target && e.target.closest ? e.target.closest('.theo-mss-chip') : null;
+    if (!chip) return;
+    e.preventDefault(); e.stopPropagation();
+    var row = chip.closest('.theo-mss');
+    var items = [];
+    row.querySelectorAll('.theo-mss-chip').forEach(function(c){
+      items.push({ wiki: c.dataset.wiki, label: c.dataset.label || c.dataset.wiki });
+    });
+    /* Mettre le manuscrit cliqué en premier. */
+    items.sort(function(a, b){ return (a.wiki === chip.dataset.wiki) ? -1 : (b.wiki === chip.dataset.wiki) ? 1 : 0; });
+    openGallery(items);
+  }, false);
+
+  /* ── Observation : nouveaux messages re-rendus ── */
+  var moT = false;
+  new MutationObserver(function(){
+    if (window.__atcStreaming || window.__atcApplying) return;
+    if (moT) return; moT = true;
+    requestAnimationFrame(function(){ moT = false; scan(document.body); });
+  }).observe(document.body, { childList: true, subtree: true });
+  scan(document.body);
 })();
 </script>
 </body>
