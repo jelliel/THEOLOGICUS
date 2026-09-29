@@ -12046,6 +12046,31 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
      t0/tFirst mesurent le délai du 1er mot et le débit réel du
      fournisseur — log console systématique, toast uniquement si lent. */
   let lastCost = 0, t0 = performance.now(), tFirst = 0;
+  /* v151 — chrono VISIBLE : pendant l'écriture, l'étiquette du message
+     affiche « ⏱ 1er mot · vitesse ». Dit noir sur blanc si la lenteur
+     vient du fournisseur IA (car/s bas) ou de l'app (rendu ms haut). */
+  let statsEl = null, statsT = 0;
+  function statsUpdate(finalTxt){
+    try {
+      if (!statsEl) {
+        var lbl = (contentEl.closest && contentEl.closest('.message')) || contentEl.parentElement;
+        var lab = lbl && lbl.querySelector('.msg-label');
+        if (!lab) return;
+        statsEl = document.createElement('span');
+        statsEl.style.fontWeight = '400';
+        statsEl.style.opacity = '.65';
+        statsEl.style.fontSize = '10.5px';
+        statsEl.style.marginLeft = '6px';
+        lab.appendChild(statsEl);
+      }
+      var now = performance.now();
+      var dur = Math.max(0.05, (now - t0) / 1000);
+      var len = (finalTxt != null ? finalTxt : pendingText).length;
+      var rate = Math.round(len / dur);
+      var ttfb = tFirst ? ((tFirst - t0) / 1000).toFixed(1) + ' s' : '…';
+      statsEl.textContent = '⏱ 1er mot ' + ttfb + ' · ' + rate + ' car/s';
+    } catch (e) {}
+  }
   let stableTxt = '';   /* texte des blocs stables déjà rendus dans contentEl */
   let tailDiv = null;   /* conteneur du bloc en cours d'écriture */
 
@@ -12098,6 +12123,8 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
     push(chunk, full) {
       pendingText = full;
       if (!tFirst) tFirst = performance.now();
+      var _pn = performance.now();
+      if (_pn - statsT > 500) { statsT = _pn; statsUpdate(); }
       /* Perf (v145) : signale le streaming au CSS (pause du fond ambiant).
          Nettoyage « homme mort » à 4 s : aucun risque de classe oubliée. */
       try {
@@ -12138,6 +12165,7 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
           const ttfb = tFirst ? (tFirst - t0) / 1000 : -1;
           const dur = Math.max(0.05, (tEnd - t0) / 1000);
           const rate = Math.round((full || '').length / dur);
+          statsUpdate(full);
           console.log('[STREAM] 1er mot: ' + ttfb.toFixed(2) + 's · ' + rate + ' car/s · rendu max ' + Math.round(lastCost) + 'ms');
           if (ttfb > 3 || rate < 120) {
             if (typeof toast === 'function') toast('Réponse lente côté fournisseur IA (1er mot : ' + ttfb.toFixed(1) + ' s, ' + rate + ' car/s) — essayez un modèle plus rapide.', 'info');
