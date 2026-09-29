@@ -7650,6 +7650,7 @@ window.__ensureTafsirSurah = function(p){
 
   <div class="header-controls">
     <select class="hud-select" id="model-select"></select>
+    <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <select class="hud-select" id="agent-select">
       <option value="">▸ NO AGENT</option>
     </select>
@@ -38098,6 +38099,219 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }).observe(document.body, { childList: true, subtree: true });
   scan(document.body);
 })();
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v151c — JAUGE DES MODÈLES 📉
+   Panneau de diagnostic : teste chaque modèle sélectionnable avec un
+   appel minimal (max_tokens:1) et affiche disponibilité, latence et
+   cause d'erreur (clé 401, quota 402, rate-limit 429, id obsolète 404).
+   Zéro dépendance ; n'utilise pas callLLMStream (pas de retry caché :
+   un 429 doit s'afficher tel quel, pas retenter 60 s).
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoGauge) return;
+  window.__theoGauge = true;
+
+  var CSS =
+    '#tj-modal{position:fixed;inset:0;z-index:99998;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}' +
+    '#tj-modal.open{display:flex}' +
+    '#tj-box{width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '#tj-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px;flex:0 0 auto}' +
+    '#tj-sum{margin-left:auto;font-family:system-ui,sans-serif;font-size:12px;font-weight:400;letter-spacing:0;opacity:.95;text-align:right}' +
+    '#tj-retest,#tj-close{background:transparent;border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:var(--text,#e8eefc);border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;flex:0 0 auto}' +
+    '#tj-retest:hover,#tj-close:hover{background:var(--cyan-dim,rgba(79,142,247,.12))}' +
+    '#tj-list{overflow:auto;padding:8px 12px 14px;flex:1 1 auto}' +
+    '.tj-row{display:grid;grid-template-columns:26px 1fr 86px;gap:8px;align-items:baseline;padding:7px 8px;border-radius:8px;font-size:12.5px}' +
+    '.tj-row:hover{background:var(--cyan-dim,rgba(79,142,247,.07))}' +
+    '.tj-row.tj-act{outline:1px solid var(--cyan-dim,rgba(79,142,247,.4))}' +
+    '.tj-nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.tj-grp{opacity:.55;font-size:10.5px;font-weight:400;margin-left:6px}' +
+    '.tj-ms{text-align:right;font-variant-numeric:tabular-nums;opacity:.9}' +
+    '.tj-det{grid-column:2/4;font-size:11px;opacity:.75;margin-top:-3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.tj-pend{opacity:.45}' +
+    '#tj-foot{padding:8px 16px 12px;font-size:10.5px;opacity:.55;flex:0 0 auto}';
+
+  var built = false;
+  var running = false;
+
+  /* Classification HTTP -> {kind: 0 ok, 1 dégradé, 2 erreur, 3 sans clé} */
+  function classify(st, msg) {
+    if (st >= 200 && st < 300) return { kind: 0, ico: '🟢', lbl: 'Disponible' };
+    if (st === 401 || st === 403) return { kind: 2, ico: '🔴', lbl: 'Clé API invalide ou absente' };
+    if (st === 402) return { kind: 2, ico: '🔴', lbl: 'Quota épuisé — crédits du compte terminés' };
+    if (st === 429) return { kind: 1, ico: '🟠', lbl: 'Limite de débit (rate-limit) — modèle joignable, patienter' };
+    if (st === 404) return { kind: 2, ico: '🔴', lbl: 'Modèle inconnu / obsolète (id retiré du fournisseur)' };
+    if (st === 400) return { kind: 2, ico: '🔴', lbl: /model/i.test(msg) ? 'Modèle inconnu pour ce fournisseur' : 'Requête refusée' };
+    if (st >= 500) return { kind: 1, ico: '🟠', lbl: 'Service dégradé (HTTP ' + st + ')' };
+    return { kind: 2, ico: '🔴', lbl: 'Erreur HTTP ' + st };
+  }
+
+  /* Sonde : UN fetch brut, aucun retry (contrairement à fetchLLMResponse
+     qui attend jusqu'à 60 s sur un 429 — ici le statut s'affiche tel quel). */
+  async function probeOne(value) {
+    var cfg;
+    try { cfg = resolveModelConfig(value); } catch (e) {
+      return { kind: 2, ico: '🔴', lbl: 'Config illisible', ms: 0, det: String((e && e.message) || e) };
+    }
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      return { kind: 3, ico: '⚪', lbl: 'Pas de clé configurée pour ce fournisseur', ms: 0, det: '' };
+    }
+    var fmt = cfg.format || 'chat-completions';
+    var init;
+    if (fmt === 'anthropic') {
+      init = { method: 'POST', headers: anthropicHeaders(cfg), body: JSON.stringify({ model: cfg.model, max_tokens: 1, messages: [{ role: 'user', content: 'ok' }] }) };
+    } else if (fmt === 'responses') {
+      init = { method: 'POST', headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: cfg.model, input: [{ role: 'user', content: 'ok' }], max_output_tokens: 1 }) };
+    } else {
+      init = { method: 'POST', headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, temperature: 0 }) };
+    }
+    var t0 = performance.now();
+    try {
+      var res = await fetch(apiEndpoint(cfg.endpoint), init);
+      var ms = Math.round(performance.now() - t0);
+      var st = res.status;
+      if (st >= 200 && st < 300) {
+        try { await res.text(); } catch (e) {}
+        return { kind: 0, ico: '🟢', lbl: 'Disponible', ms: ms, det: '' };
+      }
+      var msg = '';
+      try {
+        var txt = await res.text();
+        try { var j = JSON.parse(txt); msg = (j && j.error && (j.error.message || (typeof j.error === 'string' ? j.error : ''))) || j.message || txt; }
+        catch (e2) { msg = txt; }
+      } catch (e3) {}
+      msg = String(msg || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      var c = classify(st, msg);
+      c.ms = ms; c.det = msg;
+      return c;
+    } catch (e) {
+      return { kind: 2, ico: '🔴', lbl: 'Injoignable (réseau / serveur local)', ms: Math.round(performance.now() - t0), det: String((e && e.message) || e).slice(0, 120) };
+    }
+  }
+
+  function buildList() {
+    var out = [];
+    try { _tousModelesSelectionnables().forEach(function (m) { out.push({ value: m.value, label: m.label, grp: m.groupe }); }); } catch (e) {}
+    (state.customModels || []).forEach(function (cm) {
+      out.push({ value: cm.uid, label: cm.name || cm.model || 'Modèle perso', grp: 'Personnalisé' });
+    });
+    return out;
+  }
+
+  function mkRow(m) {
+    var el = document.createElement('div');
+    el.className = 'tj-row tj-pend';
+    el.innerHTML = '<span class="tj-ico">⏳</span><span class="tj-nm"></span><span class="tj-ms">…</span>';
+    el.querySelector('.tj-nm').textContent = m.label;
+    if (m.grp) {
+      var g = document.createElement('span');
+      g.className = 'tj-grp'; g.textContent = m.grp;
+      el.querySelector('.tj-nm').appendChild(g);
+    }
+    return { el: el };
+  }
+
+  function fillRow(row, m, r) {
+    row.el.classList.remove('tj-pend');
+    row.el.querySelector('.tj-ico').textContent = r.ico;
+    row.el.querySelector('.tj-ms').textContent = r.kind === 0 ? (r.ms + ' ms') : (r.ms ? r.ms + ' ms' : '');
+    if (m.value === state.model) row.el.classList.add('tj-act');
+    var d = row.el.querySelector('.tj-det');
+    if (d) d.remove();
+    var txt = (r.kind === 0) ? '' : ((r.lbl || '') + (r.det ? (r.lbl ? ' — ' : '') + r.det : ''));
+    if (txt) {
+      d = document.createElement('div');
+      d.className = 'tj-det'; d.textContent = txt; d.title = txt;
+      row.el.appendChild(d);
+    }
+  }
+
+  function updSum(done, N, counts) {
+    var el = document.getElementById('tj-sum');
+    if (!el) return;
+    el.textContent = done + '/' + N + ' testés — 🟢 ' + counts[0] + ' · 🟠 ' + counts[1] + ' · 🔴 ' + counts[2] + ' · ⚪ ' + counts[3];
+  }
+
+  function sortRows(results) {
+    var box = document.getElementById('tj-list');
+    if (!box) return;
+    results.sort(function (a, b) {
+      if (a.r.kind !== b.r.kind) return a.r.kind - b.r.kind;
+      return (a.r.ms || 0) - (b.r.ms || 0);
+    });
+    results.forEach(function (x) { box.appendChild(x.row.el); });
+  }
+
+  async function runAll() {
+    if (running) return;
+    running = true;
+    var box = document.getElementById('tj-list');
+    if (!box) { running = false; return; }
+    var list = buildList();
+    box.innerHTML = '';
+    var rows = {};
+    list.forEach(function (m) { rows[m.value] = mkRow(m); box.appendChild(rows[m.value].el); });
+    var N = list.length, done = 0, counts = [0, 0, 0, 0], results = [];
+    updSum(done, N, counts);
+    var i = 0;
+    async function worker() {
+      while (i < N) {
+        var m = list[i++];
+        var r = await probeOne(m.value);
+        results.push({ m: m, r: r, row: rows[m.value] });
+        done++;
+        counts[r.kind === undefined ? 3 : r.kind]++;
+        fillRow(rows[m.value], m, r);
+        updSum(done, N, counts);
+      }
+    }
+    try {
+      var P = Math.min(4, N);
+      var ps = [];
+      for (var k = 0; k < P; k++) ps.push(worker());
+      await Promise.all(ps);
+      sortRows(results);
+    } catch (e) { console.warn('[JAUGE]', e); }
+    running = false;
+  }
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.id = 'tj-style'; st.textContent = CSS;
+    document.head.appendChild(st);
+    var md = document.createElement('div');
+    md.id = 'tj-modal';
+    md.innerHTML =
+      '<div id="tj-box">' +
+        '<div id="tj-head">📉 Jauge des modèles<span id="tj-sum">…</span>' +
+          '<button id="tj-retest" title="Re-tester tous les modèles">↻</button>' +
+          '<button id="tj-close" title="Fermer">✕</button>' +
+        '</div>' +
+        '<div id="tj-list"></div>' +
+        '<div id="tj-foot">Chaque modèle reçoit une requête minimale (1 token). 🟢 disponible · 🟠 joignable mais limité (rate-limit / service) · 🔴 en erreur (clé, quota, id obsolète) · ⚪ sans clé. Le modèle actif est encadré.</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('tj-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.getElementById('tj-retest').addEventListener('click', function () { runAll(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') md.classList.remove('open');
+    });
+  }
+
+  function open() {
+    build();
+    document.getElementById('tj-modal').classList.add('open');
+    runAll();
+  }
+
+  var btn = document.getElementById('open-gauge-modal');
+  if (btn) btn.addEventListener('click', open);
+})();
+
 </script>
 </body>
 </html>
