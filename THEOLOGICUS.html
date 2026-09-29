@@ -9465,6 +9465,18 @@ window.__ensureTafsirSurah = function(p){
             <button class="btn" id="vmt-pal-reset" style="margin-left:2px;">Palette par défaut</button>
           </div>
           <div class="field-hint" style="margin-top:5px;">Ces 6 pastilles sont celles proposées dans la fiche de verset — modifiables ici à chaud.</div>
+          <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+            <label class="field-hint" style="display:flex;align-items:center;gap:8px;margin:0;">Intensité du fond
+              <input type="range" id="vmt-st-bg" min="0" max="60" step="1" style="flex:1;">
+              <b id="vmt-st-bg-v" style="min-width:36px;text-align:right;">14%</b></label>
+            <label class="field-hint" style="display:flex;align-items:center;gap:8px;margin:0;">Épaisseur du trait
+              <input type="range" id="vmt-st-bw" min="0" max="6" step="1" style="flex:1;">
+              <b id="vmt-st-bw-v" style="min-width:36px;text-align:right;">3px</b></label>
+            <label class="field-hint" style="display:flex;align-items:center;gap:8px;margin:0;">Opacité du trait
+              <input type="range" id="vmt-st-bo" min="20" max="100" step="5" style="flex:1;">
+              <b id="vmt-st-bo-v" style="min-width:36px;text-align:right;">90%</b></label>
+            <button class="btn" id="vmt-st-reset" style="margin-top:2px;">Style par défaut</button>
+          </div>
           <button class="btn" id="vmt-reset-all" style="margin-top:6px;">Tout effacer</button>
         </div>
       </div><!-- /#settings-panneau-motion -->
@@ -36946,12 +36958,34 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     if (isNaN(n)) return 'rgba(246,196,69,' + a + ')';
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   };
+  /* Apparence du surlignage — réglable dans Paramètres (fond/trait/radius). */
+  var CLE_VS = 'theologicus_verse_style';
+  var VS_DEF = { bg: 14, bw: 3, bo: 90, r: 3 };
+  var _vs = null;
+  var vcStyle = function(){
+    if (_vs) return _vs;
+    _vs = { bg: VS_DEF.bg, bw: VS_DEF.bw, bo: VS_DEF.bo, r: VS_DEF.r };
+    try {
+      var s = JSON.parse(localStorage.getItem(CLE_VS) || 'null');
+      if (s && typeof s === 'object') {
+        for (var k in VS_DEF) {
+          var v = Number(s[k]);
+          if (isFinite(v)) _vs[k] = v;
+        }
+      }
+    } catch(e){}
+    return _vs;
+  };
+  var vcStyleSave = function(s){
+    _vs = { bg: Number(s.bg), bw: Number(s.bw), bo: Number(s.bo), r: Number(s.r) };
+    try { localStorage.setItem(CLE_VS, JSON.stringify(_vs)); } catch(e){}
+  };
   var vcAppliqueSpan = function(el, c){
     if (c) {
-      /* style « marqueur » : fond léger + trait épais sous la référence */
-      el.style.background = hexToRgba(c, .14);
-      el.style.borderBottom = '3px solid ' + hexToRgba(c, .90);
-      el.style.borderRadius = '3px';
+      var st = vcStyle();
+      el.style.background = hexToRgba(c, st.bg / 100);
+      el.style.borderBottom = st.bw > 0 ? (st.bw + 'px solid ' + hexToRgba(c, st.bo / 100)) : 'none';
+      el.style.borderRadius = st.r + 'px';
       el.style.padding = '0 2px';
     } else {
       el.style.background = ''; el.style.borderBottom = '';
@@ -36987,7 +37021,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   var vcTeinteTip = function(tip){
     var c = vcLoad()[vcKey(tip.dataset.vref)];
     var txt = tip.querySelector('.vmt-txt');
-    if (txt) txt.style.background = c ? hexToRgba(c, .16) : '';
+    if (txt) txt.style.background = c ? hexToRgba(c, Math.max(.05, vcStyle().bg / 100)) : '';
   };
 
   /* Injection de la palette dans la fiche de verset (après le handler natif,
@@ -37097,6 +37131,48 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     vcSavePalette(PALETTE_DEF.slice());
     palSyncInputs();
     if (typeof toast === 'function') toast('Palette réinitialisée', 'info');
+  });
+
+  /* Réglages d'apparence du surlignage — effet live sur tout le document. */
+  var stEd = {
+    bg: document.getElementById('vmt-st-bg'),
+    bw: document.getElementById('vmt-st-bw'),
+    bo: document.getElementById('vmt-st-bo')
+  };
+  var stLab = {
+    bg: document.getElementById('vmt-st-bg-v'),
+    bw: document.getElementById('vmt-st-bw-v'),
+    bo: document.getElementById('vmt-st-bo-v')
+  };
+  var stSync = function(){
+    var s = vcStyle();
+    if (stEd.bg) { stEd.bg.value = s.bg; if (stLab.bg) stLab.bg.textContent = s.bg + '%'; }
+    if (stEd.bw) { stEd.bw.value = s.bw; if (stLab.bw) stLab.bw.textContent = s.bw + 'px'; }
+    if (stEd.bo) { stEd.bo.value = s.bo; if (stLab.bo) stLab.bo.textContent = s.bo + '%'; }
+  };
+  stSync();
+  var stBind = function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', function(){
+      var s = vcStyle();
+      vcStyleSave({
+        bg: stEd.bg ? Number(stEd.bg.value) : s.bg,
+        bw: stEd.bw ? Number(stEd.bw.value) : s.bw,
+        bo: stEd.bo ? Number(stEd.bo.value) : s.bo,
+        r: s.r
+      });
+      stSync();
+      window.theoApplyVerseColors(document);
+    });
+  };
+  stBind('vmt-st-bg'); stBind('vmt-st-bw'); stBind('vmt-st-bo');
+  var sr = document.getElementById('vmt-st-reset');
+  if (sr) sr.addEventListener('click', function(){
+    vcStyleSave({ bg: VS_DEF.bg, bw: VS_DEF.bw, bo: VS_DEF.bo, r: VS_DEF.r });
+    stSync();
+    window.theoApplyVerseColors(document);
+    if (typeof toast === 'function') toast('Style de surlignage réinitialisé', 'info');
   });
 
   /* État initial. */
