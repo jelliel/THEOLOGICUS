@@ -37365,7 +37365,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       if (urlIn.value) loadReader(urlIn.value);
     });
     ov.querySelector('#two-ext').addEventListener('click', function(){
-      if (urlIn.value && window.theroOpenExternal) window.theroOpenExternal(urlIn.value);
+      if (urlIn.value) { try { window.open(urlIn.value, '_blank', 'noopener'); } catch (e) {} }
     });
     urlIn.addEventListener('keydown', function(e){
       if (e.key === 'Enter' && urlIn.value.trim()) go(normalizeUrl(urlIn.value.trim()), true);
@@ -37393,26 +37393,41 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }
 
   /* ── Navigation directe (iframe) ── */
+  /* Sites connus pour refuser l'iframe (X-Frame-Options) → lecteur direct. */
+  var BLOQUEURS = ['google.com','youtube.com','facebook.com','instagram.com','twitter.com','x.com','amazon.com','wikipedia.org','reddit.com','linkedin.com','tiktok.com','netflix.com'];
+  function estBloqueur(u){
+    try {
+      var h = new URL(u).hostname;
+      for (var i = 0; i < BLOQUEURS.length; i++) {
+        var d = BLOQUEURS[i];
+        if (h === d || h === 'www.' + d || h.slice(-(d.length + 1)) === '.' + d) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
   function go(url, push){
     build();
     hideNote();
     readerMode = false;
     urlIn.value = url;
     frame.removeAttribute('srcdoc');
-    frame.src = url;
+    if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
     if (push !== false) {
       hist = hist.slice(0, histPos + 1);
       hist.push(url);
       histPos = hist.length - 1;
     }
-    /* Si la page n'est pas arrivée dans le délai, proposer le lecteur. */
-    if (watchTimer) clearTimeout(watchTimer);
+    if (estBloqueur(url)) { loadReader(url); return; }
+    frame.src = url;
+    /* Garde (fix v147) : basculer en lecteur SEULEMENT si le cadre est
+       resté sur about:blank (échec réel). contentDocument===null est NORMAL
+       pour un site tiers réussi (origine croisée) — ce n'était pas un
+       blocage, l'ancien test cassait les sites qui acceptent l'iframe. */
     watchTimer = setTimeout(function(){
       if (readerMode) return;
-      var d = null;
-      try { d = frame.contentDocument; } catch (err) { d = null; }
-      var empty = !d || (!d.body || d.body.childElementCount === 0 && !String(d.body.textContent || '').trim());
-      if (empty) {
+      var d = undefined;
+      try { d = frame.contentDocument; } catch (err) { d = undefined; }
+      if (d && (!d.body || (d.body.childElementCount === 0 && !String(d.body.textContent || '').trim()))) {
         showNote('Ce site refuse l\'affichage intégré — mode lecteur…');
         loadReader(url);
       }
@@ -37421,14 +37436,21 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   function onFrameLoad(){
     if (readerMode) return;
-    var d = null;
-    try { d = frame.contentDocument; } catch (err) { d = null; }
-    /* about:blank ou document inaccessible = blocage probable (X-Frame-Options/CSP). */
-    if (!d || d.location.href === 'about:blank' || !d.body || (d.body.childElementCount === 0 && !String(d.body.textContent || '').trim())) {
+    if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
+    var d = undefined;
+    try { d = frame.contentDocument; } catch (err) { d = undefined; }
+    if (d && (!d.body || d.body.childElementCount === 0 && !String(d.body.textContent || '').trim())) {
       var url = urlIn.value;
       if (!url) return;
       showNote('Ce site refuse l\'affichage intégré — bascule en mode lecteur…');
       setTimeout(function(){ if (!readerMode) loadReader(url); }, 700);
+      return;
+    }
+    /* d === null : origine croisée (succès OU refus X-Frame-Options) —
+       impossible à distinguer depuis le JS. Indice visible, non bloquant. */
+    if (d === null) {
+      showNote('Page vide ou « refuse de se connecter » ? → bouton 📖 pour le mode lecteur.');
+      setTimeout(function(){ if (!readerMode && note.textContent.indexOf('📖') !== -1) hideNote(); }, 8000);
     } else {
       hideNote();
     }
@@ -37523,14 +37545,21 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         html += '<p id="v' + k + '" style="margin:8px 0' + (cur ? ';background:rgba(246,196,69,.30);border-radius:6px;padding:4px 6px' : '') + '">' +
                 '<sup style="color:#8a6d3b;font-weight:700;margin-right:6px">' + k + '</sup>' + esc(verses[k]) + '</p>';
       });
-      var doc = chapitreDoc();
-      if (!doc) return;
-      doc.open(); doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;background:#fffdf7;color:#2c2014;max-width:720px;margin:0 auto;padding:18px 22px;line-height:1.7">' + html + '</body></html>'); doc.close();
+      /* v147 : rendu via srcdoc (même origine garantie) au lieu de doc.write,
+         qui échouait si le cadre montrait encore un site d'origine croisée. */
+      frame.removeAttribute('src');
+      frame.srcdoc = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;background:#fffdf7;color:#2c2014;max-width:720px;margin:0 auto;padding:18px 22px;line-height:1.7">' + html + '</body></html>';
       hideNote();
       if (vCur !== null) {
-        setTimeout(function(){
-          try { var el = doc.getElementById('v' + vCur); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
-        }, 120);
+        var scroller = function(){
+          try {
+            var doc = frame.contentDocument;
+            var el = doc && doc.getElementById('v' + vCur);
+            if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          } catch (e) {}
+        };
+        frame.addEventListener('load', scroller, { once: true });
+        setTimeout(scroller, 250);
       }
     };
     if (window.__bibleBooks && window.__bibleBooks[String(num)] && window.__bibleBooks[String(num)][ch]) {
