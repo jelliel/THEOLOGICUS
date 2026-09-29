@@ -92,3 +92,7 @@ _bak_*/
 # Banc d'alignement des annotations (Playwright) : serveur local + fixtures,
 # un run les régénère. Rien à livrer.
 .workbuddy-ai/artifacts/_v126/_align_bench/
+
+# Profil Edge jetable du banc de redimensionnement (v129) : cache navigateur
+# (Crashpad, Breadcrumbs...), Rien à livrer. Un run le régénère.
+.workbuddy-ai/artifacts/_v129/edge_profile/
