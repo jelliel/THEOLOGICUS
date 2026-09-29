@@ -12068,7 +12068,11 @@ function _createStreamRenderer(contentEl, scrollEl, slotEl) {
       var len = (finalTxt != null ? finalTxt : pendingText).length;
       var rate = Math.round(len / dur);
       var ttfb = tFirst ? ((tFirst - t0) / 1000).toFixed(1) + ' s' : '…';
-      statsEl.textContent = '⏱ 1er mot ' + ttfb + ' · ' + rate + ' car/s';
+      /* v151 — nom du modèle actif : l'utilisateur voit quel modèle est lent. */
+      var mid = window.__theoActiveModel || '';
+      var md = (typeof MODELS !== 'undefined' && MODELS) ? MODELS.find(function(x){ return x.id === mid; }) : null;
+      var nm = md ? (String(md.name).split(' — ')[1] || String(md.name).replace(/^[^\wÀ-ÿ]+/, '')) : mid;
+      statsEl.textContent = '⏱ 1er mot ' + ttfb + ' · ' + rate + ' car/s · ' + nm;
     } catch (e) {}
   }
   let stableTxt = '';   /* texte des blocs stables déjà rendus dans contentEl */
@@ -12410,6 +12414,8 @@ async function callLLM(cfg, messages, opts) {
 // ── Streaming call — returns via onChunk callback ──
 async function callLLMStream(cfg, messages, opts, onChunk) {
   const fmt = cfg.format || 'chat-completions';
+  /* v151 — le chrono à l'écran peut nommer le modèle actif. */
+  try { window.__theoActiveModel = cfg && cfg.model; } catch (e) {}
   const maxTok = (opts && opts.max_tokens) || 4096;
   const temp = (opts && opts.temperature !== undefined) ? opts.temperature : 0.7;
 
