@@ -12376,7 +12376,9 @@ async function callLLM(cfg, messages, opts) {
       body: JSON.stringify(Object.assign({ model: cfg.model, max_tokens: maxTok, temperature: temp, messages: hist }, sysObj))
     }, cfg.model);
     const data = await readLLMJson(res, cfg.model);
-    return (data.content || []).map(p => p.text || '').join('') || '';
+    const outA = (data.content || []).map(p => p.text || '').join('') || '';
+    try { if (window.__theoCountUsage) window.__theoCountUsage(cfg.model, _theoMsgChars(messages), outA.length, data.usage || null); } catch (e) {}
+    return outA;
   }
 
   if (fmt === 'responses') {
@@ -12398,7 +12400,9 @@ async function callLLM(cfg, messages, opts) {
         for (const c of item.content) { if (c.type === 'output_text') textParts.push(c.text); }
       }
     }
-    return textParts.join('') || '';
+    const outR = textParts.join('') || '';
+    try { if (window.__theoCountUsage) window.__theoCountUsage(cfg.model, _theoMsgChars(messages), outR.length, data.usage || null); } catch (e) {}
+    return outR;
   }
 
   // Chat completions (default)
@@ -12409,7 +12413,20 @@ async function callLLM(cfg, messages, opts) {
     body: JSON.stringify({ model: cfg.model, messages: messages, temperature: temp, max_tokens: maxTok, top_p: 0.95 })
   }, cfg.model);
   const data = await readLLMJson(res, cfg.model);
-  return data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '';
+  const outC = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || '';
+  try { if (window.__theoCountUsage) window.__theoCountUsage(cfg.model, _theoMsgChars(messages), outC.length, data.usage || null); } catch (e) {}
+  return outC;
+}
+
+// v151g — taille cumulée (caractères) des messages envoyés, pour l'estimation
+// de tokens quand le fournisseur ne renvoie pas d'objet `usage`.
+function _theoMsgChars(messages) {
+  let n = 0;
+  (messages || []).forEach(m => {
+    if (typeof m.content === 'string') n += m.content.length;
+    else if (Array.isArray(m.content)) m.content.forEach(p => { n += (p && p.text ? String(p.text).length : 0); });
+  });
+  return n;
 }
 
 // ── Streaming call — returns via onChunk callback ──
@@ -12433,12 +12450,18 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
     if (!res.ok) { await throwApiError(res, cfg.model); }
     const reader = res.body.getReader();
     let full = '';
+    let usage = null;
     await _readSSEStream(reader, (json) => {
+      try {
+        if (json.type === 'message_start' && json.message && json.message.usage) usage = Object.assign({}, usage || {}, { prompt_tokens: json.message.usage.input_tokens });
+        if (json.type === 'message_delta' && json.usage) usage = Object.assign({}, usage || {}, { completion_tokens: json.usage.output_tokens });
+      } catch (e) {}
       if (json.type === 'content_block_delta' && json.delta?.text) {
         full += json.delta.text;
         onChunk(json.delta.text, full);
       }
     });
+    try { if (window.__theoCountUsage) window.__theoCountUsage(cfg.model, _theoMsgChars(messages), full.length, usage); } catch (e) {}
     return full;
   }
 
@@ -12452,13 +12475,16 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
   if (!res.ok) throw new Error(await res.text());
   const reader = res.body.getReader();
   let full = '';
+  let usage = null;
   await _readSSEStream(reader, (json) => {
+    try { if (json.usage) usage = json.usage; } catch (e) {}
     const delta = json.choices?.[0]?.delta?.content;
     if (delta) {
       full += delta;
       onChunk(delta, full);
     }
   });
+  try { if (window.__theoCountUsage) window.__theoCountUsage(cfg.model, _theoMsgChars(messages), full.length, usage); } catch (e) {}
   return full;
 }
 function initSettingsModal() {
@@ -38137,6 +38163,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '.tj-fallback{margin-top:10px}' +
     '.tj-fb-btn{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:var(--text,#e8eefc);border-radius:10px;padding:6px 12px;font-size:12px;cursor:pointer}' +
     '.tj-fb-btn:hover{filter:brightness(1.25)}' +
+    '#tj-usage{flex:0 0 auto;padding:9px 16px 4px;font-size:11.5px;opacity:.9;font-family:system-ui,sans-serif}' +
     '#tj-foot{padding:8px 16px 12px;font-size:10.5px;opacity:.55;flex:0 0 auto}';
 
   var built = false;
@@ -38368,9 +38395,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       '<div id="tj-box">' +
         '<div id="tj-head">📉 Jauge des modèles<span id="tj-sum">…</span>' +
           '<label id="tj-auto-lbl" title="Re-tester automatiquement toutes les 60 s tant que le panneau est ouvert"><input type="checkbox" id="tj-auto"' + (autoEnabled() ? ' checked' : '') + '> auto 60s</label>' +
+          '<label id="tj-auto-lbl" title="En cas d\'erreur API dans le chat : basculer automatiquement sur le meilleur modèle disponible et renvoyer la question (boucle impossible : après un essai, retour au bouton manuel)"><input type="checkbox" id="tj-autofb"' + (autoFbEnabled() ? ' checked' : '') + '> bascule auto</label>' +
           '<button id="tj-retest" title="Re-tester tous les modèles">↻</button>' +
           '<button id="tj-close" title="Fermer">✕</button>' +
         '</div>' +
+        '<div id="tj-usage"></div>' +
         '<div id="tj-list"></div>' +
         '<div id="tj-foot"><span id="tj-last"></span>Chaque modèle reçoit une requête minimale (1 token). 🟢 disponible · 🟠 joignable mais limité (rate-limit / service) · 🔴 en erreur (clé, quota, id obsolète) · ⚪ sans clé. Le modèle actif est encadré ; ▼▲ = plus rapide / plus lent qu\'au test précédent. Cliquez une ligne 🟢 pour activer ce modèle.</div>' +
       '</div>';
@@ -38382,6 +38411,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       try { localStorage.setItem('theologicus_gauge_auto', e.target.checked ? '1' : '0'); } catch (ex) {}
       scheduleAuto();
     });
+    document.getElementById('tj-autofb').addEventListener('change', function (e) {
+      try { localStorage.setItem('theologicus_gauge_autofb', e.target.checked ? '1' : '0'); } catch (ex) {}
+      toast('Bascule automatique : ' + (e.target.checked ? 'activée' : 'désactivée'), 'success');
+    });
+    renderUsage();
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') md.classList.remove('open');
     });
@@ -38453,6 +38487,81 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   var btn = document.getElementById('open-gauge-modal');
   if (btn) btn.addEventListener('click', open);
 
+  /* v151g — COMPTEUR D'USAGE par modèle/jour.
+     Alimenté par window.__theoCountUsage (appelé par callLLMStream et
+     callLLM). Tokens réels si le fournisseur renvoie `usage`, sinon
+     estimation ≈ caractères/4. Conservation 7 jours. */
+  function localDay() {
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function autoFbEnabled() {
+    try { return localStorage.getItem('theologicus_gauge_autofb') !== '0'; } catch (e) { return true; }
+  }
+
+  function countUsage(modelId, inChars, outChars, usage) {
+    try {
+      var log = JSON.parse(localStorage.getItem('theologicus_usage_log') || '{}');
+      var today = localDay();
+      /* purge des jours de plus de 7 jours */
+      Object.keys(log).forEach(function (d) {
+        var ts = Date.parse(d);
+        if (!isFinite(ts) || Date.now() - ts > 8 * 86400000) delete log[d];
+      });
+      var m = log[today] = log[today] || {};
+      m = m[modelId] = m[modelId] || { reqs: 0, inC: 0, outC: 0, tokIn: 0, tokOut: 0 };
+      m.reqs++; m.inC += (inChars || 0); m.outC += (outChars || 0);
+      m.tokIn += (usage && (usage.prompt_tokens || usage.input_tokens)) || 0;
+      m.tokOut += (usage && (usage.completion_tokens || usage.output_tokens)) || 0;
+      localStorage.setItem('theologicus_usage_log', JSON.stringify(log));
+      renderUsage();
+    } catch (e) {}
+  }
+  window.__theoCountUsage = countUsage;
+
+  function shortName(id) {
+    try {
+      var t = _tousModelesSelectionnables();
+      for (var i = 0; i < t.length; i++) {
+        if (t[i].value === id) {
+          var nm = String(t[i].label).split(' — ')[0];
+          return nm.length > 20 ? nm.slice(0, 19) + '…' : nm;
+        }
+      }
+    } catch (e) {}
+    return String(id);
+  }
+
+  function renderUsage() {
+    var el = document.getElementById('tj-usage');
+    if (!el) return;
+    var log = {};
+    try { log = JSON.parse(localStorage.getItem('theologicus_usage_log') || '{}'); } catch (e) {}
+    function tokensOf(m) { return (m.tokIn + m.tokOut) || Math.round(((m.inC || 0) + (m.outC || 0)) / 4); }
+    var e = log[localDay()] || {};
+    var reqs = 0, tok = 0, parts = [];
+    Object.keys(e).forEach(function (k) {
+      var m = e[k];
+      reqs += m.reqs; tok += tokensOf(m);
+      parts.push({ n: k, r: m.reqs });
+    });
+    parts.sort(function (a, b) { return b.r - a.r; });
+    var det = parts.slice(0, 4).map(function (p) { return shortName(p.n) + ' ×' + p.r; }).join(' · ');
+    var req7 = 0, tok7 = 0, now = Date.now();
+    Object.keys(log).forEach(function (d) {
+      var ts = Date.parse(d);
+      if (!isFinite(ts) || now - ts > 8 * 86400000) return;
+      Object.keys(log[d]).forEach(function (k) {
+        req7 += log[d][k].reqs; tok7 += tokensOf(log[d][k]);
+      });
+    });
+    el.textContent = '📊 Aujourd\'hui : ' + reqs + ' requête' + (reqs > 1 ? 's' : '') + ' · ≈' + tok.toLocaleString('fr-FR') + ' tokens' +
+      (det ? ' — ' + det : '') +
+      ' · 7 jours : ' + req7 + ' req · ≈' + tok7.toLocaleString('fr-FR') + ' tokens' +
+      (req7 ? ' (tokens réels quand le fournisseur les envoie, sinon estimation)' : '');
+  }
+
   /* v151f — FAILOVER EN UN CLIC.
      Après une erreur API reprise dans le chat (401/402/403/404/429/5xx),
      un bouton « Basculer sur <meilleur 🟢> et réessayer » est ajouté au
@@ -38488,6 +38597,26 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var failed = (err.model || state.model || '');
     var fb = findFallback(failed);
     if (!fb) return;
+    /* v151g — bascule AUTOMATIQUE (case « bascule auto ») : renvoi direct du
+       texte après 900 ms. Anti-boucle : si le même texte vient d'être
+       auto-basculé il y a moins de 2 min, on retombe sur le bouton manuel. */
+    if (autoFbEnabled()) {
+      var uta = null;
+      for (var j = state.messages.length - 1; j >= 0; j--) {
+        if (state.messages[j].role === 'user') {
+          if (typeof state.messages[j].content === 'string') uta = state.messages[j].content;
+          break;
+        }
+      }
+      var prev = window.__theoFbAuto;
+      var isLoop = prev && prev.text === uta && (Date.now() - prev.ts) < 120000;
+      if (uta && !isLoop) {
+        window.__theoFbAuto = { text: uta, ts: Date.now() };
+        toast('🔄 Bascule automatique vers ' + fallbackLabel(fb.v) + '…');
+        setTimeout(function () { fbRetry(fb.v, null); }, 900);
+        return;
+      }
+    }
     var all = document.querySelectorAll('.message.assistant .message-content');
     var cont = all.length ? all[all.length - 1] : null;
     if (!cont || cont.querySelector('.tj-fallback')) return;
