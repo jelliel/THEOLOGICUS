@@ -38131,6 +38131,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '.tj-ms{text-align:right;font-variant-numeric:tabular-nums;opacity:.9}' +
     '.tj-det{grid-column:2/4;font-size:11px;opacity:.75;margin-top:-3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
     '.tj-pend{opacity:.45}' +
+    '#model-health-badge{font-size:12px;line-height:1;padding:0 10px}' +
+    '#tj-auto-lbl{display:flex;align-items:center;gap:4px;font-family:system-ui,sans-serif;font-size:11px;font-weight:400;letter-spacing:0;opacity:.85;cursor:pointer;flex:0 0 auto}' +
+    '#tj-auto{cursor:pointer;accent-color:var(--cyan,#4f8ef7)}' +
     '#tj-foot{padding:8px 16px 12px;font-size:10.5px;opacity:.55;flex:0 0 auto}';
 
   var built = false;
@@ -38229,6 +38232,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       document.querySelectorAll('#tj-list .tj-row').forEach(function (r) { r.classList.remove('tj-act'); });
       el.classList.add('tj-act');
       toast('✅ Modèle actif : ' + m.label, 'success');
+      probeActive();
     } catch (e) { console.warn('[JAUGE] activate', e); }
   }
 
@@ -38341,6 +38345,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       var tl = document.getElementById('tj-last');
       if (tl) tl.textContent = 'Dernier test : ' + new Date().toLocaleTimeString();
       window.__theoGaugeBadModel = '';
+      /* v151e — le badge reflète le résultat du modèle actif */
+      var act = null;
+      results.forEach(function (x) { if (x.m.value === state.model) act = x; });
+      if (act) updateBadge(act.r.kind, act.r.ms);
     } catch (e) { console.warn('[JAUGE]', e); }
     running = false;
   }
@@ -38356,6 +38364,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     md.innerHTML =
       '<div id="tj-box">' +
         '<div id="tj-head">📉 Jauge des modèles<span id="tj-sum">…</span>' +
+          '<label id="tj-auto-lbl" title="Re-tester automatiquement toutes les 60 s tant que le panneau est ouvert"><input type="checkbox" id="tj-auto"' + (autoEnabled() ? ' checked' : '') + '> auto 60s</label>' +
           '<button id="tj-retest" title="Re-tester tous les modèles">↻</button>' +
           '<button id="tj-close" title="Fermer">✕</button>' +
         '</div>' +
@@ -38366,6 +38375,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
     document.getElementById('tj-close').addEventListener('click', function () { md.classList.remove('open'); });
     document.getElementById('tj-retest').addEventListener('click', function () { runAll(); });
+    document.getElementById('tj-auto').addEventListener('change', function (e) {
+      try { localStorage.setItem('theologicus_gauge_auto', e.target.checked ? '1' : '0'); } catch (ex) {}
+      scheduleAuto();
+    });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') md.classList.remove('open');
     });
@@ -38375,6 +38388,63 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     build();
     document.getElementById('tj-modal').classList.add('open');
     runAll();
+  }
+
+  /* ── v151e — BADGE PERMANENT de l'état du modèle actif ──
+     Petite pastille à côté du sélecteur : 🟢 + latence du dernier sondage
+     du modèle actif (sonde unique max_tokens:1). Clic = ouvrir la jauge. */
+  function ensureBadge() {
+    var b = document.getElementById('model-health-badge');
+    if (b) return b;
+    var anchor = document.getElementById('open-gauge-modal');
+    if (!anchor) return null;
+    b = document.createElement('button');
+    b.id = 'model-health-badge';
+    b.className = 'hud-btn';
+    b.addEventListener('click', open);
+    anchor.parentNode.insertBefore(b, anchor);
+    return b;
+  }
+
+  function updateBadge(kind, ms, modelId) {
+    var b = ensureBadge();
+    if (!b) return;
+    var ico = (kind === 0) ? '🟢' : (kind === 1) ? '🟠' : (kind === 2) ? '🔴' : '⚪';
+    b.textContent = ico + ((kind === 0 && ms) ? ' ' + ms + 'ms' : '');
+    b.title = 'Modèle actif : ' + (modelId || state.model) +
+              ((kind === 0 && ms) ? ' — ' + ms + ' ms' : ' — ' +
+              ((kind === 1) ? 'limité (rate-limit/service)' : (kind === 2) ? 'en erreur' : 'sans clé')) +
+              ' — cliquer pour la jauge complète';
+  }
+
+  var probingActive = false;
+  async function probeActive() {
+    if (probingActive) return;
+    probingActive = true;
+    try {
+      var r = await probeOne(state.model);
+      updateBadge(r.kind, r.ms);
+    } catch (e) { console.warn('[JAUGE] badge', e); }
+    probingActive = false;
+  }
+
+  /* ── v151e — RE-TEST AUTOMATIQUE : toutes les 60 s tant que le panneau
+     est ouvert (désactivable via la case « auto 60s », persistée). Une
+     exécution pendant un stream est évitée pour ne pas additioner de
+     requêtes sur le quota. ── */
+  var autoTimer = null;
+  function scheduleAuto() {
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    var on = true;
+    try { on = localStorage.getItem('theologicus_gauge_auto') !== '0'; } catch (e) {}
+    if (!on) return;
+    autoTimer = setInterval(function () {
+      var md = document.getElementById('tj-modal');
+      if (md && md.classList.contains('open') && !window.__atcStreaming) runAll();
+    }, 60000);
+  }
+  function autoEnabled() {
+    try { return localStorage.getItem('theologicus_gauge_auto') !== '0'; } catch (e) { return true; }
   }
 
   var btn = document.getElementById('open-gauge-modal');
@@ -38392,6 +38462,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           var mid = (err && err.model) || '';
           if (mid) {
             window.__theoGaugeBadModel = mid;
+            try { updateBadge(2, 0, mid); } catch (eb) {}
             toast('📉 Un modèle a échoué — ouvrez JAUGE pour voir l\'état de tous les modèles', 'error');
           }
         } catch (e) {}
@@ -38401,6 +38472,24 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       window.appendApiErrorMessage = hooked;
     }
   } catch (e) {}
+
+  /* ── v151e — init du badge : état du dernier test (sans requête), puis
+     sonde réelle du modèle actif 3 s après le chargement (après restauration
+     de la config), puis rafraîchissement toutes les 5 min (sauf stream). ── */
+  try {
+    var initCache = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null');
+    if (initCache && initCache.res) {
+      initCache.res.forEach(function (x) {
+        if (x.v === state.model) updateBadge(x.k, x.ms);
+      });
+    }
+  } catch (e) {}
+  setTimeout(probeActive, 3000);
+  setInterval(function () { if (!window.__atcStreaming) probeActive(); }, 300000);
+  [document.getElementById('model-select'), document.getElementById('model-select-mob')].forEach(function (s) {
+    if (s) s.addEventListener('change', function () { setTimeout(probeActive, 300); });
+  });
+  scheduleAuto();
 })();
 
 </script>
