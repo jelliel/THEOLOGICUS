@@ -1699,6 +1699,18 @@ input[type="checkbox"]:active{ transform:scale(.88); }
 #two-grip{ position:absolute; right:2px; bottom:2px; width:22px; height:22px; cursor:nwse-resize; touch-action:none; z-index:5; opacity:.5; }
 #two-grip::before{ content:''; position:absolute; right:5px; bottom:5px; width:10px; height:10px; border-right:2px solid #8a6d3b; border-bottom:2px solid #8a6d3b; border-radius:0 0 3px 0; }
 #two-grip:hover{ opacity:1; }
+/* v148 — seconde barre d'outils, favoris, plein écran. */
+#two-bar2{ display:flex; align-items:center; gap:5px; padding:5px 10px; background:#f8eed8; border-bottom:1px solid rgba(138,109,59,.25); flex:0 0 auto; flex-wrap:wrap; }
+#two-bar2 button, #two-bar2 select{ border:1px solid rgba(138,109,59,.4); background:#fbf2df; border-radius:8px; padding:4px 8px; font-size:12px; cursor:pointer; color:#4a3520; }
+#two-bar2 button:hover, #two-bar2 select:hover{ background:#f6e9cd; }
+#two-bar2 button:active{ transform:scale(.94); }
+#two-find{ flex:1 1 110px; min-width:90px; border:1px solid rgba(138,109,59,.4); border-radius:8px; padding:4px 8px; font-size:12px; background:#fffcf4; color:#3a2a16; }
+#two-bm{ position:absolute; top:84px; right:10px; z-index:6; width:min(380px,86%); max-height:50vh; overflow:auto; background:#fffcf4; border:1px solid rgba(138,109,59,.45); border-radius:10px; box-shadow:0 10px 30px rgba(20,12,4,.3); padding:8px; display:none; font-size:13px; }
+#two-bm .bmrow{ display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid rgba(138,109,59,.18); cursor:pointer; border-radius:6px; }
+#two-bm .bmrow:hover{ background:rgba(243,231,207,.7); }
+#two-bm .bmt{ flex:1; color:#3a2a16; }
+#two-bm .bmx{ border:0; background:none; cursor:pointer; color:#a05a2a; }
+#theo-web-box.max{ width:98vw !important; height:96vh !important; max-height:96vh !important; }
 :root[data-motion="off"] #theo-web-box{ animation:none; }
 :root[data-motion="off"] #theo-web-box.closing{ animation:none; }
 
@@ -37318,17 +37330,22 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
 <script>
 /* ═══════════════════════════════════════════════════════════════════
-   THEO WEB OVERLAY — v144
-   Navigateur intégré : liens externes, clic sur un verset -> chapitre
-   lu depuis le corpus local, repli "lecteur" via le relais /proxy/.
+   THEO WEB OVERLAY — v148 « navigateur complet »
+   Liens externes, clic verset -> chapitre local, mode lecteur /proxy/,
+   cookies (jar relais), détection XFO par en-têtes, redimensionnable.
+   v148 ajoute : page d'accueil (recherche web + favoris), traduction
+   Google (🌐, langue au choix), zoom A−/A+/=, recherche dans la page,
+   impression, favoris ⭐/📑, plein écran ⛶.
    ═══════════════════════════════════════════════════════════════════ */
 (function(){
   'use strict';
   if (window.__theoWeb) return; window.__theoWeb = true;
 
-  /* ── Construction du shell (une seule fois) ── */
-  var ov, box, urlIn, note, frame, hist = [], histPos = -1, readerMode = false, watchTimer = null;
+  var ov, box, urlIn, note, frame, findIn, langSel, bmPanel;
+  var hist = [], histPos = -1, readerMode = false, watchTimer = null;
+  var zoomLvl = 1, maxed = false;
 
+  /* ── Construction du shell (une seule fois) ── */
   function build(){
     if (ov) return;
     ov = document.createElement('div'); ov.id = 'theo-web-overlay';
@@ -37338,20 +37355,44 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           '<button id="two-back" title="Précédent">←</button>' +
           '<button id="two-fwd" title="Suivant">→</button>' +
           '<button id="two-rel" title="Recharger">⟳</button>' +
-          '<input id="two-url" type="text" spellcheck="false" placeholder="https://…" />' +
+          '<input id="two-url" type="text" spellcheck="false" placeholder="Recherche web ou adresse…" />' +
           '<button id="two-reader" title="Mode lecteur (via le relais local)">📖</button>' +
           '<button id="two-ext" title="Ouvrir dans le navigateur externe">↗</button>' +
+          '<button id="two-max" title="Plein écran / taille normale">⛶</button>' +
           '<button id="two-close" title="Fermer (Échap)">✕</button>' +
+        '</div>' +
+        '<div id="two-bar2">' +
+          '<button id="two-home" title="Page d\'accueil">⌂</button>' +
+          '<input id="two-find" placeholder="Chercher dans la page…" />' +
+          '<button id="two-zout" title="Zoom arrière">A−</button>' +
+          '<button id="two-zin" title="Zoom avant">A+</button>' +
+          '<button id="two-zreset" title="Zoom normal">=</button>' +
+          '<select id="two-lang" title="Langue de traduction">' +
+            '<option value="fr">Français</option><option value="en">English</option>' +
+            '<option value="es">Español</option><option value="de">Deutsch</option>' +
+            '<option value="it">Italiano</option><option value="pt">Português</option>' +
+            '<option value="nl">Nederlands</option><option value="ar">العربية</option>' +
+            '<option value="he">עברית</option><option value="ru">Русский</option>' +
+            '<option value="zh-CN">中文</option><option value="ja">日本語</option>' +
+          '</select>' +
+          '<button id="two-tr" title="Traduire la page (Google)">🌐</button>' +
+          '<button id="two-print" title="Imprimer (mode lecteur)">🖨</button>' +
+          '<button id="two-bmk" title="Ajouter aux favoris">⭐</button>' +
+          '<button id="two-bmlist" title="Favoris">📑</button>' +
         '</div>' +
         '<div id="two-note"></div>' +
         '<iframe id="two-frame" referrerpolicy="no-referrer"></iframe>' +
         '<div id="two-grip" title="Redimensionner"></div>' +
+        '<div id="two-bm"></div>' +
       '</div>';
     document.body.appendChild(ov);
     box = ov.querySelector('#theo-web-box');
     urlIn = ov.querySelector('#two-url');
     note = ov.querySelector('#two-note');
     frame = ov.querySelector('#two-frame');
+    findIn = ov.querySelector('#two-find');
+    langSel = ov.querySelector('#two-lang');
+    bmPanel = ov.querySelector('#two-bm');
 
     ov.querySelector('#two-close').addEventListener('click', close);
     ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
@@ -37373,12 +37414,43 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     ov.querySelector('#two-ext').addEventListener('click', function(){
       if (urlIn.value) { try { window.open(urlIn.value, '_blank', 'noopener'); } catch (e) {} }
     });
+    ov.querySelector('#two-max').addEventListener('click', toggleMax);
+    ov.querySelector('#two-home').addEventListener('click', showStart);
     urlIn.addEventListener('keydown', function(e){
-      if (e.key === 'Enter' && urlIn.value.trim()) go(normalizeUrl(urlIn.value.trim()), true);
+      if (e.key === 'Enter' && urlIn.value.trim()) go(searchUrl(urlIn.value.trim()), true);
     });
+    findIn.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') findNext();
+    });
+    ov.querySelector('#two-zin').addEventListener('click', function(){ zoomLvl = Math.min(2, +(zoomLvl + 0.1).toFixed(2)); applyZoom(); });
+    ov.querySelector('#two-zout').addEventListener('click', function(){ zoomLvl = Math.max(0.5, +(zoomLvl - 0.1).toFixed(2)); applyZoom(); });
+    ov.querySelector('#two-zreset').addEventListener('click', function(){ zoomLvl = 1; applyZoom(); });
+    try { langSel.value = localStorage.getItem('theologicus_weblang') || 'fr'; } catch (e) {}
+    langSel.addEventListener('change', function(){
+      try { localStorage.setItem('theologicus_weblang', langSel.value); } catch (e) {}
+    });
+    ov.querySelector('#two-tr').addEventListener('click', function(){
+      if (urlIn.value) go(translateUrl(urlIn.value), true);
+    });
+    ov.querySelector('#two-print').addEventListener('click', function(){
+      try {
+        var d = frame.contentDocument;
+        if (d && d.body && d.body.childElementCount > 0) frame.contentWindow.print();
+        else showNote('Impression : disponible en mode lecteur (📖).');
+      } catch (e) { showNote('Impression : disponible en mode lecteur (📖).'); }
+    });
+    ov.querySelector('#two-bmk').addEventListener('click', bmAdd);
+    ov.querySelector('#two-bmlist').addEventListener('click', function(){ bmRender(); bmPanel.style.display = bmPanel.style.display === 'block' ? 'none' : 'block'; });
+    bmPanel.addEventListener('click', bmPanelClick);
+
     /* Les pages distantes peuvent demander une navigation via postMessage. */
     window.addEventListener('message', function(e){
-      if (e.data && e.data.theoWeb === 'nav' && e.data.url) go(String(e.data.url), true);
+      if (!e.data) return;
+      if (e.data.theoWeb === 'nav' && e.data.url) go(String(e.data.url), true);
+      else if (e.data.theoWeb === 'delbm' && e.data.url) {
+        bmSave(bmGet().filter(function(b){ return b.u !== e.data.url; }));
+        showStart();
+      }
     });
     frame.addEventListener('load', onFrameLoad);
 
@@ -37394,6 +37466,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         }
       }
     } catch (e) {}
+    try { zoomLvl = Math.min(2, Math.max(0.5, parseFloat(localStorage.getItem('theologicus_webzoom')) || 1)); } catch (e) { zoomLvl = 1; }
+    applyZoom();
 
     /* v147 — poignée de redimensionnement (coin bas-droite). */
     var grip = ov.querySelector('#two-grip');
@@ -37428,17 +37502,94 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }
   function hideNote(){ note.classList.remove('show'); }
 
-  function normalizeUrl(u){
-    if (/^https?:\/\//i.test(u)) return u;
-    return 'https://' + u;
-  }
   function esc(s){
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  /* ── Navigation directe (iframe) ── */
-  /* Sites connus pour refuser l'iframe (X-Frame-Options) → lecteur direct. */
+  /* Recherche web si ce n'est pas une adresse (DuckDuckGo HTML : lisible en lecteur). */
+  function searchUrl(v){
+    if (/^https?:\/\//i.test(v)) return v;
+    if (v.indexOf(' ') > -1 || v.indexOf('.') === -1) return 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(v);
+    return 'https://' + v;
+  }
+
+  /* Traduction Google : domaine en translate.goog (path préservé). */
+  function translateUrl(u){
+    try {
+      var x = new URL(u);
+      var host = x.hostname.replace(/-/g, '--').replace(/\./g, '-');
+      var lang = (langSel && langSel.value) || 'fr';
+      return 'https://' + host + '.translate.goog' + (x.pathname || '/') + (x.search || '') +
+        '?_x_tr_sl=auto&_x_tr_tl=' + encodeURIComponent(lang) + '&_x_tr_hl=fr&_x_tr_pto=n';
+    } catch (e) { return u; }
+  }
+
+  function applyZoom(){
+    try { frame.style.zoom = zoomLvl; } catch (e) {}
+    try { localStorage.setItem('theologicus_webzoom', String(zoomLvl)); } catch (e) {}
+  }
+
+  function toggleMax(){
+    maxed = !maxed;
+    if (maxed) {
+      box.dataset.pw = box.style.width || '';
+      box.dataset.ph = box.style.height || '';
+      box.classList.add('max');
+      box.style.width = ''; box.style.height = '';
+    } else {
+      box.classList.remove('max');
+      if (box.dataset.pw) box.style.width = box.dataset.pw;
+      if (box.dataset.ph) box.style.height = box.dataset.ph;
+    }
+  }
+
+  /* Recherche dans la page : window.find natif (mode lecteur / srcdoc). */
+  function findNext(){
+    var q = (findIn.value || '').trim();
+    if (!q) return;
+    var ok = false;
+    try { ok = frame.contentWindow.find(q, false, false, true, false, false, false); } catch (e) { ok = false; }
+    if (ok) { hideNote(); }
+    else showNote('« ' + q + ' » introuvable — la recherche demande le mode lecteur (📖).');
+  }
+
+  /* ── Favoris ── */
+  function bmGet(){
+    try { return JSON.parse(localStorage.getItem('theologicus_webbookmarks') || '[]'); } catch (e) { return []; }
+  }
+  function bmSave(a){ try { localStorage.setItem('theologicus_webbookmarks', JSON.stringify(a)); } catch (e) {} }
+  function bmAdd(){
+    var u = urlIn.value;
+    if (!u) return;
+    var a = bmGet();
+    for (var i = 0; i < a.length; i++) if (a[i].u === u) { showNote('Déjà dans les favoris.'); return; }
+    var t = u;
+    try { t = frame.contentDocument.title || u; } catch (e) {}
+    try { t = t || (new URL(u).hostname); } catch (e) {}
+    a.push({ t: String(t).slice(0, 80), u: u });
+    bmSave(a);
+    if (typeof toast === 'function') toast('Favori ajouté', 'success');
+  }
+  function bmRender(){
+    var a = bmGet();
+    if (!a.length) { bmPanel.innerHTML = '<i style="color:#8a7040">Aucun favori — ajoutez la page courante avec ⭐.</i>'; return; }
+    bmPanel.innerHTML = a.map(function(b){
+      return '<div class="bmrow" data-u="' + esc(b.u) + '"><span class="bmt">' + esc(b.t || b.u) + '</span><button class="bmx" data-u="' + esc(b.u) + '" title="Supprimer">✕</button></div>';
+    }).join('');
+  }
+  function bmPanelClick(e){
+    var x = e.target && e.target.closest ? e.target.closest('.bmx') : null;
+    if (x) {
+      bmSave(bmGet().filter(function(b){ return b.u !== x.dataset.u; }));
+      bmRender();
+      return;
+    }
+    var r = e.target && e.target.closest ? e.target.closest('.bmrow') : null;
+    if (r) { bmPanel.style.display = 'none'; go(r.dataset.u, true); }
+  }
+
+  /* ── Sites connus pour refuser l'iframe (X-Frame-Options) → lecteur direct. */
   var BLOQUEURS = ['google.com','youtube.com','facebook.com','instagram.com','twitter.com','x.com','amazon.com','wikipedia.org','reddit.com','linkedin.com','tiktok.com','netflix.com','biblegateway.com'];
   function estBloqueur(u){
     try {
@@ -37450,8 +37601,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     } catch (e) {}
     return false;
   }
+
+  /* ── Navigation directe (iframe) ── */
   function go(url, push){
     build();
+    bmPanel.style.display = 'none';
     hideNote();
     readerMode = false;
     urlIn.value = url;
@@ -37522,6 +37676,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   /* ── Mode lecteur : fetch via le relais local /proxy/ + srcdoc ── */
   function loadReader(url){
     build();
+    bmPanel.style.display = 'none';
     readerMode = true;
     urlIn.value = url;
     if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
@@ -37552,9 +37707,46 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       });
   }
 
+  /* ── Page d'accueil du navigateur (recherche + favoris) ── */
+  function showStart(){
+    build();
+    readerMode = true;
+    if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
+    urlIn.value = '';
+    hideNote();
+    var a = bmGet();
+    var bml = a.length ? a.map(function(b){
+      return '<div class="bmrow" data-u="' + esc(b.u) + '"><span class="bmt">' + esc(b.t || b.u) + '</span><button class="bmx" data-u="' + esc(b.u) + '">✕</button></div>';
+    }).join('') : '<i style="color:#8a7040">Aucun favori — naviguez puis ajoutez des pages avec ⭐.</i>';
+    frame.removeAttribute('src');
+    frame.srcdoc = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+      'body{font-family:Georgia,serif;background:#fffdf7;color:#2c2014;max-width:640px;margin:34px auto;padding:0 20px}' +
+      'h1{text-align:center;font-size:22px;color:#8a5a20;margin:6px 0 2px}h2{font-size:14px;color:#8a5a20;border-bottom:1px dashed rgba(138,109,59,.45);padding-bottom:4px}' +
+      '.s{display:flex;gap:8px;margin:18px 0 26px}.s input{flex:1;border:1px solid rgba(138,109,59,.45);border-radius:10px;padding:10px 14px;font-size:15px;background:#fffcf4;color:#3a2a16}' +
+      '.s button{border:1px solid rgba(138,109,59,.45);background:#f3e7cf;border-radius:10px;padding:10px 16px;cursor:pointer;color:#4a3520;font-family:Georgia,serif}' +
+      '.bmrow{display:flex;align-items:center;gap:8px;padding:7px 6px;border-bottom:1px solid rgba(138,109,59,.18);cursor:pointer}.bmrow:hover{background:rgba(243,231,207,.6)}' +
+      '.bmt{flex:1;font-size:14px}.bmx{border:0;background:none;cursor:pointer;color:#a05a2a;font-size:13px}' +
+      '</style></head><body>' +
+      '<h1>⛵ Navigation</h1>' +
+      '<div class="s"><input id="q" placeholder="Rechercher le web ou saisir une adresse…"><button id="go">Aller</button></div>' +
+      '<h2>Favoris</h2><div id="bmlist">' + bml + '</div>' +
+      '<script>' +
+      'function norm(v){v=v.trim();if(!v)return "";if(/^https?:/i.test(v))return v;if(v.indexOf(" ")>-1||v.indexOf(".")===-1)return "https://html.duckduckgo.com/html/?q="+encodeURIComponent(v);return "https://"+v}' +
+      'function goNow(){var v=document.getElementById("q").value;var u=norm(v);if(u)parent.postMessage({theoWeb:"nav",url:u},"*")}' +
+      'document.getElementById("go").onclick=goNow;' +
+      'document.getElementById("q").addEventListener("keydown",function(e){if(e.key==="Enter")goNow()});' +
+      'document.getElementById("bmlist").addEventListener("click",function(e){' +
+      'var x=e.target&&e.target.closest?e.target.closest(".bmx"):null;' +
+      'if(x){parent.postMessage({theoWeb:"delbm",url:x.dataset.u},"*");return}' +
+      'var r=e.target&&e.target.closest?e.target.closest(".bmrow"):null;' +
+      'if(r)parent.postMessage({theoWeb:"nav",url:r.dataset.u},"*")});' +
+      '<\/script></body></html>';
+  }
+
   /* ── Fermeture (avec l'animation de sortie commune) ── */
   function close(){
     if (!ov) return;
+    bmPanel.style.display = 'none';
     if (window.theoModalOut) { window.theoModalOut(ov); }
     else { ov.classList.remove('open'); }
     setTimeout(function(){
@@ -37570,12 +37762,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     build();
     ov.classList.add('open');
     if (url) go(String(url), true);
+    else showStart();
   };
 
   /* ── Lecture locale d'un chapitre biblique (clic sur un verset) ── */
-  function chapitreDoc(){
-    return frame.contentDocument;
-  }
   window.theoChapterOpen = function(refStr){
     build();
     var ref = String(refStr || '');
@@ -37593,8 +37783,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       return;
     }
     ov.classList.add('open');
+    bmPanel.style.display = 'none';
     urlIn.value = ref;
     readerMode = true; /* pas une vraie page web : on n'attend pas de load d'iframe */
+    if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
     showNote('Chargement de ' + esc(ref) + ' depuis le corpus local…');
     var livrer = function(){
       var book = window.__bibleBooks ? window.__bibleBooks[String(num)] : null;
