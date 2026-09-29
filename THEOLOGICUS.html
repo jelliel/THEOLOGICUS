@@ -38134,6 +38134,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '#model-health-badge{font-size:12px;line-height:1;padding:0 10px}' +
     '#tj-auto-lbl{display:flex;align-items:center;gap:4px;font-family:system-ui,sans-serif;font-size:11px;font-weight:400;letter-spacing:0;opacity:.85;cursor:pointer;flex:0 0 auto}' +
     '#tj-auto{cursor:pointer;accent-color:var(--cyan,#4f8ef7)}' +
+    '.tj-fallback{margin-top:10px}' +
+    '.tj-fb-btn{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:var(--text,#e8eefc);border-radius:10px;padding:6px 12px;font-size:12px;cursor:pointer}' +
+    '.tj-fb-btn:hover{filter:brightness(1.25)}' +
     '#tj-foot{padding:8px 16px 12px;font-size:10.5px;opacity:.55;flex:0 0 auto}';
 
   var built = false;
@@ -38450,6 +38453,83 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   var btn = document.getElementById('open-gauge-modal');
   if (btn) btn.addEventListener('click', open);
 
+  /* v151f — FAILOVER EN UN CLIC.
+     Après une erreur API reprise dans le chat (401/402/403/404/429/5xx),
+     un bouton « Basculer sur <meilleur 🟢> et réessayer » est ajouté au
+     message d'erreur. Le clic change de modèle (même persistance que le
+     sélecteur), retire l'échange échoué (message d'erreur + message user)
+     et repasse par sendMessage() — le pipeline habituel, rien de parallèle. */
+  var TJ_RETRIABLE = [401, 402, 403, 404, 429, 500, 502, 503, 504];
+
+  function findFallback(failedId) {
+    var cache = null;
+    try { cache = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null'); } catch (e) {}
+    if (!cache || !cache.res) return null;
+    var best = null;
+    cache.res.forEach(function (x) {
+      if (x.k !== 0 || x.v === failedId) return;
+      if (typeof _clePourModele === 'function' && !_clePourModele(x.v)) return;
+      if (!best || (x.ms || 99999) < (best.ms || 99999)) best = x;
+    });
+    return best;
+  }
+
+  function fallbackLabel(value) {
+    try {
+      var t = _tousModelesSelectionnables();
+      for (var i = 0; i < t.length; i++) { if (t[i].value === value) return t[i].label; }
+    } catch (e) {}
+    return value;
+  }
+
+  function injectFallback(err) {
+    if (!err) return;
+    if (TJ_RETRIABLE.indexOf(err.status) < 0) return;
+    var failed = (err.model || state.model || '');
+    var fb = findFallback(failed);
+    if (!fb) return;
+    var all = document.querySelectorAll('.message.assistant .message-content');
+    var cont = all.length ? all[all.length - 1] : null;
+    if (!cont || cont.querySelector('.tj-fallback')) return;
+    var box = document.createElement('div');
+    box.className = 'tj-fallback';
+    var btn = document.createElement('button');
+    btn.className = 'tj-fb-btn';
+    btn.textContent = '🔄 Basculer sur ' + fallbackLabel(fb.v) + ' (' + fb.ms + ' ms) et réessayer';
+    btn.addEventListener('click', function () { fbRetry(fb.v, box); });
+    box.appendChild(btn);
+    cont.appendChild(box);
+  }
+
+  function fbRetry(newModel, box) {
+    try {
+      state.model = newModel;
+      try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: newModel }).catch(function () {}); } catch (e1) {}
+      try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+      var sel = document.getElementById('model-select'); if (sel) sel.value = newModel;
+      var selM = document.getElementById('model-select-mob'); if (selM) selM.value = newModel;
+      var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
+      if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+      /* retire le message d'erreur (assistant) puis le message user échoué */
+      for (var i = state.messages.length - 1; i >= 0; i--) {
+        if (state.messages[i].role === 'assistant') { state.messages.splice(i, 1); break; }
+      }
+      var ut = null;
+      for (var j = state.messages.length - 1; j >= 0; j--) {
+        if (state.messages[j].role === 'user') {
+          if (typeof state.messages[j].content === 'string') { ut = state.messages[j].content; state.messages.splice(j, 1); }
+          break;
+        }
+      }
+      if (box && box.parentNode) box.parentNode.removeChild(box);
+      if (typeof renderMessages === 'function') renderMessages();
+      if (typeof saveChat === 'function') { try { saveChat(); } catch (e3) {} }
+      probeActive();
+      toast('🔄 Modèle basculé : ' + fallbackLabel(newModel), 'success');
+      if (ut && typeof sendMessage === 'function') setTimeout(function () { sendMessage(ut); }, 150);
+    } catch (e) { console.warn('[JAUGE] fallback', e); }
+  }
+
   /* v151d — détection automatique : quand le chat rencontre une erreur API,
      le modèle fautif est mémorisé (sera encadré en rouge dans la jauge) et
      un toast invite à ouvrir la jauge. On enveloppe la fonction globale
@@ -38466,7 +38546,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
             toast('📉 Un modèle a échoué — ouvrez JAUGE pour voir l\'état de tous les modèles', 'error');
           }
         } catch (e) {}
-        return origErr.apply(this, arguments);
+        var out = origErr.apply(this, arguments);
+        try { injectFallback(err); } catch (e2) {}
+        return out;
       };
       hooked.__theoGaugeHooked = true;
       window.appendApiErrorMessage = hooked;
