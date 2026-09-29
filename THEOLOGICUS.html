@@ -1674,6 +1674,23 @@ input[type="checkbox"]:active{ transform:scale(.88); }
 #vmt-colors .vmt-sw.on{ border-color:#4a3520; transform:scale(1.15); }
 #vmt-colors .vmt-perso{ width:24px; height:21px; padding:0; border:1px dashed rgba(138,109,59,.6); border-radius:6px; background:transparent; cursor:pointer; }
 
+/* ═══ THEO WEB OVERLAY (navigateur intégré, v144) ═══ */
+#theo-web-overlay{ position:fixed; inset:0; z-index:99999; display:none; align-items:stretch; justify-content:stretch; background:rgba(30,22,12,.55); backdrop-filter:blur(3px); }
+#theo-web-overlay.open{ display:flex; }
+#theo-web-box{ display:flex; flex-direction:column; width:min(920px, 94vw); margin:auto; max-height:88vh; background:#fdf6e8; border:1px solid rgba(138,109,59,.45); border-radius:14px; box-shadow:0 18px 60px rgba(20,12,4,.45); overflow:hidden; animation:theoWebIn var(--motion-dur) var(--motion-ease); }
+@keyframes theoWebIn{ from{ opacity:0; transform:translateY(18px) scale(.98); } to{ opacity:1; transform:none; } }
+#theo-web-box.closing{ animation:theoModalOut 130ms ease forwards; }
+#two-bar{ display:flex; align-items:center; gap:6px; padding:8px 10px; background:#f3e7cf; border-bottom:1px solid rgba(138,109,59,.35); flex:0 0 auto; }
+#two-bar button{ border:1px solid rgba(138,109,59,.4); background:#fbf2df; border-radius:8px; padding:5px 9px; font-size:13px; cursor:pointer; color:#4a3520; transition:transform var(--motion-dur) var(--motion-ease); }
+#two-bar button:hover{ background:#f6e9cd; }
+#two-bar button:active{ transform:scale(.94); }
+#two-url{ flex:1 1 auto; min-width:80px; border:1px solid rgba(138,109,59,.4); border-radius:8px; padding:6px 9px; font-size:12.5px; background:#fffcf4; color:#3a2a16; }
+#two-note{ flex:0 0 auto; padding:6px 12px; font-size:12px; color:#7a6244; background:#f8eed8; border-bottom:1px solid rgba(138,109,59,.25); display:none; }
+#two-note.show{ display:block; }
+#two-frame{ flex:1 1 auto; width:100%; border:0; background:#fffdf7; }
+:root[data-motion="off"] #theo-web-box{ animation:none; }
+:root[data-motion="off"] #theo-web-box.closing{ animation:none; }
+
 /* ═══ ACCESSIBILITY ═══ */
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion-force]) *, html:not([data-motion-force]) *::before, html:not([data-motion-force]) *::after {
@@ -29174,6 +29191,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
       .trim();
     return SCH_BOOKS[key] || null;
   }
+  window.__schResolveBook = schResolveBook; /* v144 : export pour l'overlay navigateur */
   window.fetchVerse = function(refStr){
     refStr = String(refStr).replace(/(\d),(\d)/g, '$1:$2'); // '10,10' -> '10:10'
     var m = refStr.trim().match(/^(?:(\d{1,3})\s+)?([A-Za-z\u00c0-\u00ff]+(?:\s+[A-Za-z\u00c0-\u00ff]+)*)\.?\s+(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$/);
@@ -37177,6 +37195,274 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   /* État initial. */
   window.theoApplyVerseColors(document);
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   THEO WEB OVERLAY — v144
+   Navigateur intégré : liens externes, clic sur un verset -> chapitre
+   lu depuis le corpus local, repli "lecteur" via le relais /proxy/.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__theoWeb) return; window.__theoWeb = true;
+
+  /* ── Construction du shell (une seule fois) ── */
+  var ov, box, urlIn, note, frame, hist = [], histPos = -1, readerMode = false, watchTimer = null;
+
+  function build(){
+    if (ov) return;
+    ov = document.createElement('div'); ov.id = 'theo-web-overlay';
+    ov.innerHTML =
+      '<div id="theo-web-box" role="dialog" aria-modal="true" aria-label="Navigateur intégré">' +
+        '<div id="two-bar">' +
+          '<button id="two-back" title="Précédent">←</button>' +
+          '<button id="two-fwd" title="Suivant">→</button>' +
+          '<button id="two-rel" title="Recharger">⟳</button>' +
+          '<input id="two-url" type="text" spellcheck="false" placeholder="https://…" />' +
+          '<button id="two-reader" title="Mode lecteur (via le relais local)">📖</button>' +
+          '<button id="two-ext" title="Ouvrir dans le navigateur externe">↗</button>' +
+          '<button id="two-close" title="Fermer (Échap)">✕</button>' +
+        '</div>' +
+        '<div id="two-note"></div>' +
+        '<iframe id="two-frame" referrerpolicy="no-referrer"></iframe>' +
+      '</div>';
+    document.body.appendChild(ov);
+    box = ov.querySelector('#theo-web-box');
+    urlIn = ov.querySelector('#two-url');
+    note = ov.querySelector('#two-note');
+    frame = ov.querySelector('#two-frame');
+
+    ov.querySelector('#two-close').addEventListener('click', close);
+    ov.addEventListener('mousedown', function(e){ if (e.target === ov) close(); });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && ov.classList.contains('open')) { e.stopPropagation(); close(); }
+    }, true);
+    ov.querySelector('#two-back').addEventListener('click', function(){
+      if (histPos > 0) { histPos--; go(hist[histPos], false); }
+    });
+    ov.querySelector('#two-fwd').addEventListener('click', function(){
+      if (histPos < hist.length - 1) { histPos++; go(hist[histPos], false); }
+    });
+    ov.querySelector('#two-rel').addEventListener('click', function(){
+      if (urlIn.value) go(urlIn.value, false);
+    });
+    ov.querySelector('#two-reader').addEventListener('click', function(){
+      if (urlIn.value) loadReader(urlIn.value);
+    });
+    ov.querySelector('#two-ext').addEventListener('click', function(){
+      if (urlIn.value && window.theroOpenExternal) window.theroOpenExternal(urlIn.value);
+    });
+    urlIn.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && urlIn.value.trim()) go(normalizeUrl(urlIn.value.trim()), true);
+    });
+    /* Les pages distantes peuvent demander une navigation via postMessage. */
+    window.addEventListener('message', function(e){
+      if (e.data && e.data.theoWeb === 'nav' && e.data.url) go(String(e.data.url), true);
+    });
+    frame.addEventListener('load', onFrameLoad);
+  }
+
+  function showNote(msg){
+    note.textContent = msg;
+    note.classList.add('show');
+  }
+  function hideNote(){ note.classList.remove('show'); }
+
+  function normalizeUrl(u){
+    if (/^https?:\/\//i.test(u)) return u;
+    return 'https://' + u;
+  }
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ── Navigation directe (iframe) ── */
+  function go(url, push){
+    build();
+    hideNote();
+    readerMode = false;
+    urlIn.value = url;
+    frame.removeAttribute('srcdoc');
+    frame.src = url;
+    if (push !== false) {
+      hist = hist.slice(0, histPos + 1);
+      hist.push(url);
+      histPos = hist.length - 1;
+    }
+    /* Si la page n'est pas arrivée dans le délai, proposer le lecteur. */
+    if (watchTimer) clearTimeout(watchTimer);
+    watchTimer = setTimeout(function(){
+      if (readerMode) return;
+      var d = null;
+      try { d = frame.contentDocument; } catch (err) { d = null; }
+      var empty = !d || (!d.body || d.body.childElementCount === 0 && !String(d.body.textContent || '').trim());
+      if (empty) {
+        showNote('Ce site refuse l\'affichage intégré — mode lecteur…');
+        loadReader(url);
+      }
+    }, 4500);
+  }
+
+  function onFrameLoad(){
+    if (readerMode) return;
+    var d = null;
+    try { d = frame.contentDocument; } catch (err) { d = null; }
+    /* about:blank ou document inaccessible = blocage probable (X-Frame-Options/CSP). */
+    if (!d || d.location.href === 'about:blank' || !d.body || (d.body.childElementCount === 0 && !String(d.body.textContent || '').trim())) {
+      var url = urlIn.value;
+      if (!url) return;
+      showNote('Ce site refuse l\'affichage intégré — bascule en mode lecteur…');
+      setTimeout(function(){ if (!readerMode) loadReader(url); }, 700);
+    } else {
+      hideNote();
+    }
+  }
+
+  /* ── Mode lecteur : fetch via le relais local /proxy/ + srcdoc ── */
+  function loadReader(url){
+    build();
+    readerMode = true;
+    urlIn.value = url;
+    if (watchTimer) { clearTimeout(watchTimer); watchTimer = null; }
+    showNote('Chargement en mode lecteur…');
+    fetch('/proxy/' + url, { credentials: 'omit' })
+      .then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(html){
+        /* Retirer les meta CSP du document distant (inertes en srcdoc mais inutiles). */
+        html = html.replace(/<meta[^>]+http-equiv=["']?content-security-policy["']?[^>]*>/gi, '');
+        var base = '<base href="' + esc(url) + '">';
+        var capture = '<script>(function(){' +
+          'document.addEventListener("click",function(e){' +
+          'var a=e.target&&e.target.closest?e.target.closest("a"):null;' +
+          'if(!a)return;var h=a.getAttribute("href")||"";' +
+          'if(!h||h.charAt(0)==="#")return;' +
+          'e.preventDefault();' +
+          'try{parent.postMessage({theoWeb:"nav",url:a.href},"*");}catch(err){}' +
+          '},true);' +
+          '})();<\/script>';
+        frame.removeAttribute('src');
+        frame.srcdoc = '<!DOCTYPE html><html><head>' + base +
+          '<style>body{font-family:Georgia,serif;max-width:760px;margin:24px auto;padding:0 18px;line-height:1.65;color:#2c2014;background:#fffdf7}img{max-width:100%;height:auto}</style>' +
+          '</head><body>' + html + capture + '</body></html>';
+        hideNote();
+      })
+      .catch(function(err){
+        showNote('Lecteur indisponible (' + err.message + ') — ouvrez ↗ dans le navigateur externe.');
+      });
+  }
+
+  /* ── Fermeture (avec l'animation de sortie commune) ── */
+  function close(){
+    if (!ov) return;
+    if (window.theoModalOut) { window.theoModalOut(ov); }
+    else { ov.classList.remove('open'); }
+    setTimeout(function(){
+      ov.classList.remove('open');
+      frame.removeAttribute('src'); frame.removeAttribute('srcdoc');
+      hist = []; histPos = -1; readerMode = false;
+      hideNote();
+    }, window.theoModalOut ? 150 : 0);
+  }
+
+  /* ── API publique ── */
+  window.theoWebOpen = function(url){
+    build();
+    ov.classList.add('open');
+    if (url) go(String(url), true);
+  };
+
+  /* ── Lecture locale d'un chapitre biblique (clic sur un verset) ── */
+  function chapitreDoc(){
+    return frame.contentDocument;
+  }
+  window.theoChapterOpen = function(refStr){
+    build();
+    var ref = String(refStr || '');
+    var m = ref.trim().match(/^(?:(\d{1,3})\s+)?([A-Za-z\u00c0-\u00ff]+(?:\s+[A-Za-z\u00c0-\u00ff]+)*)\.?\s+(\d{1,3})(?:[:,](\d{1,3}))?/);
+    if (!m || !window.__schResolveBook) {
+      window.theoWebOpen('https://www.biblegateway.com/passage/?search=' + encodeURIComponent(ref) + '&version=LSG');
+      return;
+    }
+    var prefix = m[1] ? m[1] + ' ' : '';
+    var num = window.__schResolveBook(prefix + m[2]) || window.__schResolveBook(m[2]);
+    var ch = parseInt(m[3], 10);
+    var vCur = m[4] ? parseInt(m[4], 10) : null;
+    if (!num || typeof window.__ensureBibleBook !== 'function') {
+      window.theoWebOpen('https://www.biblegateway.com/passage/?search=' + encodeURIComponent(ref) + '&version=LSG');
+      return;
+    }
+    ov.classList.add('open');
+    urlIn.value = ref;
+    readerMode = true; /* pas une vraie page web : on n'attend pas de load d'iframe */
+    showNote('Chargement de ' + esc(ref) + ' depuis le corpus local…');
+    var livrer = function(){
+      var book = window.__bibleBooks ? window.__bibleBooks[String(num)] : null;
+      if (!book || !book[ch]) { showNote('Chapitre non disponible localement — ouverture en ligne…'); setTimeout(function(){ window.theoWebOpen('https://www.biblegateway.com/passage/?search=' + encodeURIComponent(ref) + '&version=LSG'); }, 600); return; }
+      var verses = book[ch];
+      var keys = Object.keys(verses).sort(function(a, b){ return parseInt(a, 10) - parseInt(b, 10); });
+      var html = '<h2 style="text-align:center;margin:18px 0 6px">' + esc(ref.replace(/[:,]\s*\d+.*$/, '')) + ' ' + ch + '</h2>' +
+                 '<hr style="border:0;border-top:1px solid rgba(138,109,59,.35);margin:0 0 16px">';
+      keys.forEach(function(k){
+        var cur = (vCur !== null && parseInt(k, 10) === vCur);
+        html += '<p id="v' + k + '" style="margin:8px 0' + (cur ? ';background:rgba(246,196,69,.30);border-radius:6px;padding:4px 6px' : '') + '">' +
+                '<sup style="color:#8a6d3b;font-weight:700;margin-right:6px">' + k + '</sup>' + esc(verses[k]) + '</p>';
+      });
+      var doc = chapitreDoc();
+      if (!doc) return;
+      doc.open(); doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Georgia,serif;background:#fffdf7;color:#2c2014;max-width:720px;margin:0 auto;padding:18px 22px;line-height:1.7">' + html + '</body></html>'); doc.close();
+      hideNote();
+      if (vCur !== null) {
+        setTimeout(function(){
+          try { var el = doc.getElementById('v' + vCur); if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) {}
+        }, 120);
+      }
+    };
+    if (window.__bibleBooks && window.__bibleBooks[String(num)] && window.__bibleBooks[String(num)][ch]) {
+      livrer();
+    } else {
+      window.__ensureBibleBook(String(num));
+      var tries = 0;
+      var iv = setInterval(function(){
+        tries++;
+        var book = window.__bibleBooks ? window.__bibleBooks[String(num)] : null;
+        if ((book && book[ch]) || tries > 40) { clearInterval(iv); livrer(); }
+      }, 150);
+    }
+  };
+
+  /* ── Interception globale des liens externes ── */
+  document.addEventListener('click', function(e){
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!href || href.charAt(0) === '#') return;
+    if (/^(mailto:|tel:|javascript:|biblia:)/i.test(href)) return;
+    var abs;
+    try { abs = new URL(href, location.href); } catch (err) { return; }
+    if (abs.origin === location.origin) return; /* navigation interne : laisser faire */
+    if (!/^https?:$/i.test(abs.protocol)) return;
+    e.preventDefault();
+    window.theoWebOpen(abs.href);
+  }, false);
+
+  /* ── Clic sur un verset (.atc-vref) -> chapitre en overlay ── */
+  document.addEventListener('click', function(e){
+    if (e.defaultPrevented || e.button !== 0) return;
+    var v = e.target && e.target.closest ? e.target.closest('.atc-vref') : null;
+    if (!v) return;
+    var ref = v.dataset && v.dataset.vref;
+    if (!ref) return;
+    e.preventDefault();
+    e.stopPropagation();
+    /* Refermer le mini-tip hover s'il est ouvert sous l'overlay. */
+    var tip = document.getElementById('verse-mini-tip');
+    if (tip) { tip.style.display = 'none'; tip.dataset.vref = ''; }
+    window.theoChapterOpen(ref);
+  }, false);
 })();
 </script>
 </body>
