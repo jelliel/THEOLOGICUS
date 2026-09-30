@@ -41276,6 +41276,19 @@ window.continueTradApart = async function (msgId) {
 
   function figsOf(box) { return box.querySelectorAll('.theo-fig').length; }
 
+  /* v166b — le textContent brut COLLE les blocs (« …Florence » + « Ce grand
+     concile… » → « FlorenceCe ») : les \b des regex dédiées ne matchent plus
+     et le générique capture des mots-collés inexistants (404 Wikipédia).
+     On reconstruit le texte avec un \n entre chaque enfant de bloc. */
+  function boxText(box) {
+    var s = '';
+    box.childNodes.forEach(function (n) {
+      if (n.nodeType === 1 && n.classList && n.classList.contains('theo-toc')) return;
+      s += (n.textContent || '') + '\n';
+    });
+    return s || (box.textContent || '');
+  }
+
   function processBox(box) {
     if (box.dataset.figGenDone) return;
     box.dataset.figGenDone = '1';
@@ -41286,7 +41299,7 @@ window.continueTradApart = async function (msgId) {
     var have = box.querySelectorAll('.theo-fig').length;
     var slots = 2 - have;
     if (slots <= 0) return;
-    var cands = candidates(box.textContent || '');
+    var cands = candidates(boxText(box));
     if (!cands.length) return;
     var c = cget();
     var launched = 0;
