@@ -40845,5 +40845,227 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v161 (2.0.287) — ENRICHISSEMENT VISUEL UNIVERSEL
+   Étend v160 (manuscrits) à TOUT sujet : stèles, sites archéologiques,
+   manuscrits coraniques, lieux, personnes, édifices.
+   ── Détection ──
+   1. Dictionnaire de sites/objets (Jéricho, Qumrân, Palmyre, Ninive,
+      Ougarit, Oxyrhynchus, Nag Hammadi…) — titres fr puis en.
+   2. Motifs spécialisés : stèle de X, Coran de Sanaa / Coran bleu.
+   3. Nom propre générique : 2+ mots capitalisés (particules de/du/el/
+      Ben… tolérées) ou mot composé Cap-Cap (Saint-Sépulcre).
+   ── Garde-fous ──
+   • Max 2 fiches par message (manuscrits v160 incluses).
+   • Cache partagé avec v160 (theologicus_mssfig_v1) + cache NÉGATIF
+     {neg:1} : une page sans image n'est jamais re-cherchée.
+   • Budget session : 80 requêtes max (anti-tempête au chargement d'une
+     longue conversation).
+   • Stoplist des suites thématiques sans image (Fils de Dieu,
+     Royaume de Dieu, Saint-Esprit…).
+   • Respect du toggle 🖼 de v160.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoFigGen) return; window.__theoFigGen = true;
+
+  var CKEY = 'theologicus_mssfig_v1';
+  var TKEY = 'theologicus_mssfig_on';
+  var BUDGET = 80;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function cget() { try { return JSON.parse(localStorage.getItem(CKEY) || '{}'); } catch (e) { return {}; } }
+  function cset(c) { try { localStorage.setItem(CKEY, JSON.stringify(c)); } catch (e) {} }
+  function isOn() { try { return localStorage.getItem(TKEY) !== '0'; } catch (e) { return true; } }
+
+  /* essaie plusieurs titres (fr puis en) via l'API REST Wikipédia */
+  function fetchTries(titles) {
+    function tryIdx(i) {
+      if (i >= titles.length) return Promise.resolve(null);
+      var t = titles[i];
+      var lang = /Stèle |de |du /.test(t) ? 'fr' : (i < titles.length ? (/[àâçéèêëîïôûü]/.test(t) ? 'fr' : 'en') : 'en');
+      return fetch('https://' + lang + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(t) + '?redirect=true')
+        .then(function (r) { if (!r.ok) throw new Error('http'); return r.json(); })
+        .then(function (j) {
+          if (!j || (!j.thumbnail && !j.originalimage)) return tryIdx(i + 1);
+          return {
+            img: (j.originalimage && j.originalimage.source) || (j.thumbnail && j.thumbnail.source) || '',
+            title: j.title || t,
+            extract: j.extract || '',
+            link: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) ||
+                  ('https://' + lang + '.wikipedia.org/wiki/' + encodeURIComponent(t))
+          };
+        })
+        .catch(function () { return tryIdx(i + 1); });
+    }
+    return tryIdx(0);
+  }
+
+  /* ── dictionnaire sites / objets ── */
+  var SITES = [
+    [/qumr[aâ]n/i, ['Qumrân', 'Qumran']],
+    [/jéricho|jericho/i, ['Jéricho', 'Jericho']],
+    [/massada|masada/i, ['Massada', 'Masada']],
+    [/p[ée]tra/i, ['Pétra', 'Petra']],
+    [/palmyre/i, ['Palmyre', 'Palmyra']],
+    [/oxyrhynch(os|us)/i, ['Oxyrhynchus']],
+    [/nag\s*hammadi/i, ['Nag Hammadi']],
+    [/ninive|nineveh/i, ['Ninive', 'Nineveh']],
+    [/babylone|babylon/i, ['Babylone', 'Babylon']],
+    [/ougarit/i, ['Ougarit', 'Ugarit']],
+    [/\bebla\b/i, ['Ebla']],
+    [/herculanum|herculaneum/i, ['Herculanum', 'Herculaneum']],
+    [/d[ôo]me\s+du\s+rocher/i, ['Dôme du Rocher', 'Dome of the Rock']],
+    [/saint[- ]s[ée]pulcre|hol[- ]sepulchre/i, ['Saint-Sépulcre', 'Church of the Holy Sepulchre']],
+    [/geniza|gueniza/i, ['Geniza du Caire', 'Cairo Geniza']],
+    [/mur\s+(?:des\s+)?(?:lamentations|occidental)/i, ['Mur des Lamentations', 'Western Wall']]
+  ];
+  var STOP = {
+    'nouveau testament': 1, 'ancien testament': 1, 'fils de dieu': 1, 'fils de l homme': 1,
+    'royaume de dieu': 1, 'royaume des cieux': 1, 'parole de dieu': 1, 'saint esprit': 1,
+    'saint-esprit': 1, 'sainte ecriture': 1, 'ecriture sainte': 1, 'vielle alliance': 1,
+    'vieille alliance': 1, 'nouvelle alliance': 1, 'seigneur jesus': 1, 'jesus christ': 1,
+    'dieu tout-puissant': 1, 'sainte vierge': 1, 'vierge marie': 1, 'jour du jugement': 1,
+    'eglise catholique': 1, 'eglise orthodoxe': 1, 'grande commission': 1, 'sainte trinite': 1,
+    'sainte cene': 1, 'derniere cene': 1, 'table des matieres': 1
+  };
+
+  /* ── extraction des candidats ── */
+  function candidates(text) {
+    var out = [], seen = {};
+    function push(titles, label) {
+      var key = titles[0].toLowerCase();
+      if (seen[key]) return;
+      seen[key] = 1;
+      out.push({ titles: titles, label: label || titles[0] });
+    }
+    var i, m;
+    for (i = 0; i < SITES.length; i++) if (SITES[i][0].test(text)) push(SITES[i][1]);
+    if (/sanaa|san'\u2019?a\u0304?'|\u1E63an'\u0101'/i.test(text)) push(['Sanaa manuscript', 'Codex Sanʿāʾ'], 'Manuscrits de Sanaa');
+    if (/coran\s+bleu|blue\s+quran/i.test(text)) push(['Blue Quran', 'Coran bleu'], 'Coran bleu');
+    var reSte = /st[èe]les?\s+(?:de\s+|d[ue]\s+)?([A-ZÉÈÀ][\wà-öø-ÿ'’-]+(?:\s+[A-ZÉÈÀ][\wà-öø-ÿ'’-]+)?)/g;
+    while ((m = reSte.exec(text))) {
+      var nm = m[1].replace(/\s+$/, '');
+      push(['Stèle de ' + nm, nm + ' Stele', 'Mesha Stele'.indexOf(nm) === 0 ? 'Mesha Stele' : nm + ' inscription'], 'Stèle de ' + nm);
+    }
+    /* noms propres génériques : 2+ mots capitalisés (particules tolérées) */
+    var WORD = "[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'’-]{2,}";
+    var PART = "(?:(?:d'|l'|de|du|des|la|le|les|el|al|Ben|bin|Abu|as|at|an)[ '’-]{1,2})?";
+    var reGen = new RegExp("\\b" + WORD + "(?:[ '’-]+" + PART + WORD + ")+", "g");
+    var reH = /\b[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+-[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ]+\b/g;
+    var raw = [];
+    while ((m = reGen.exec(text))) raw.push(m[0]);
+    while ((m = reH.exec(text))) raw.push(m[0]);
+    raw.forEach(function (ph) {
+      var key = ph.toLowerCase().replace(/['’]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (STOP[key]) return;
+      if (key.length < 9) return;               /* trop court = bruit */
+      var words = key.split(' ');
+      if (words.length > 5) return;             /* phrase, pas un nom */
+      /* au moins un mot de 4+ lettres */
+      if (!words.some(function (w) { return w.replace(/[^a-zà-öø-ÿ]/g, '').length >= 4; })) return;
+      push([ph]);
+    });
+    return out;
+  }
+
+  /* ── fig (classes CSS de v160 réutilisées) ── */
+  function buildFig(data, label) {
+    var fig = document.createElement('div');
+    fig.className = 'theo-fig';
+    fig.dataset.wiki = String(data.link).slice(-60);
+    fig.innerHTML =
+      '<a class="theo-fig-img" href="' + esc(data.link) + '" target="_blank" rel="noopener">' +
+      '<img src="' + esc(data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy"></a>' +
+      '<div class="theo-fig-txt">' +
+      '<div class="theo-fig-t">' + esc(data.title || label) + '</div>' +
+      (data.extract ? '<div class="theo-fig-x">' + esc(String(data.extract).slice(0, 170)) + (String(data.extract).length > 170 ? '…' : '') + '</div>' : '') +
+      '<a class="theo-fig-l" href="' + esc(data.link) + '" target="_blank" rel="noopener">Article Wikipédia →</a></div>';
+    return fig;
+  }
+
+  var inFlight = 0, budget = BUDGET;
+  var queue = [];
+  function pump() {
+    while (inFlight < 2 && queue.length && budget > 0) {
+      var job = queue.shift();
+      budget--;
+      inFlight++;
+      (function (job) {
+        fetchTries(job.titles).then(function (data) {
+          inFlight--;
+          var c = cget();
+          c[job.titles[0].toLowerCase()] = data || { neg: 1 };
+          cset(c);
+          if (data && data.img && job.box.isConnected) insertFig(job.box, data, job.label);
+          pump();
+        });
+      })(job);
+    }
+  }
+
+  function insertFig(box, data, label) {
+    var key = String(data.link).slice(-60);
+    if (box.querySelector('.theo-fig[data-wiki="' + esc(key) + '"]')) return;
+    var fig = buildFig(data, label);
+    var row = box.querySelector('.theo-mss');
+    if (row) row.parentNode.insertBefore(fig, row); else box.appendChild(fig);
+  }
+
+  function processBox(box) {
+    if (box.dataset.figGenDone) return;
+    box.dataset.figGenDone = '1';
+    if (!isOn()) return;
+    if ((box.textContent || '').length < 60) return;
+    var have = box.querySelectorAll('.theo-fig').length;
+    var slots = 2 - have;
+    if (slots <= 0) return;
+    var cands = candidates(box.textContent || '');
+    if (!cands.length) return;
+    var c = cget();
+    var launched = 0;
+    for (var i = 0; i < cands.length && launched < slots; i++) {
+      var key = cands[i].titles[0].toLowerCase();
+      var hit = c[key];
+      if (hit && hit.neg) continue;
+      if (hit && hit.img) { insertFig(box, hit, cands[i].label); continue; }
+      queue.push({ titles: cands[i].titles, label: cands[i].label, box: box });
+      launched++;
+    }
+    pump();
+  }
+
+  function scanAll(root) {
+    (root || document).querySelectorAll('.message-content:not([data-fig-gen-done])').forEach(processBox);
+  }
+  var mo = new MutationObserver(function (muts) {
+    for (var i = 0; i < muts.length; i++) {
+      var added = muts[i].addedNodes;
+      for (var k = 0; k < added.length; k++) {
+        var nd = added[k];
+        if (nd.nodeType !== 1) continue;
+        if (nd.classList && nd.classList.contains('message-content')) processBox(nd);
+        else if (nd.querySelectorAll) scanAll(nd);
+      }
+    }
+  });
+  function start() {
+    scanAll(document);
+    mo.observe(document.body, { childList: true, subtree: true });
+    /* retarde le scan initial après celui de v160 (fiches manuscrits comptées) */
+    setTimeout(function () {
+      document.querySelectorAll('.message-content[data-fig-gen-done]').forEach(function (b) { delete b.dataset.figGenDone; });
+      scanAll(document);
+    }, 2500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+</script>
 </body>
 </html>
