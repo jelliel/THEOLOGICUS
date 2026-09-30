@@ -40623,10 +40623,13 @@ window.continueTradApart = async function (msgId) {
   var panel = document.createElement('div'); panel.id = 'v159-media-panel';
   var lbl = document.createElement('div'); lbl.className = 'v159-lbl'; lbl.textContent = 'Média';
   panel.appendChild(lbl);
+  wrap.appendChild(btn);
+  /* v159b — ordre critique : insérer le wrap AVANT de déplacer studio,
+     sinon insertBefore(wrap, studio) échoue (studio n'est plus enfant de
+     controls) et les deux boutons restent détachés du DOM. */
+  controls.insertBefore(wrap, studio);
   panel.appendChild(studio);
   panel.appendChild(aivideo);
-  wrap.appendChild(btn);
-  controls.insertBefore(wrap, studio); /* studio est encore enfant de controls */
   document.body.appendChild(panel);
 
   function place() {
