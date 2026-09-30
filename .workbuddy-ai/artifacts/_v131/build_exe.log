@@ -1,0 +1,122 @@
+143 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+144 INFO: Python: 3.12.10
+171 INFO: Platform: Windows-11-10.0.26200-SP0
+171 INFO: Python environment: C:\Users\toshr\AppData\Local\Programs\Python\Python312
+172 INFO: wrote C:\tmp\theoverify\THEOLOGICUS.spec
+101 WARNING: Failed to collect submodules for 'webview.platforms.android' because importing 'webview.platforms.android' raised: ModuleNotFoundError: No module named 'android.activity'
+4729 INFO: Module search paths (PYTHONPATH):
+['C:\\tmp\\theoverify',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\WorkBuddyAI\\resources\\app.asar.unpacked\\cli\\vendor\\shim',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\python312.zip',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\DLLs',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\Lib',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312',
+ 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\toshr\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\pythonwin',
+ 'C:\\tmp\\theoverify']
+5186 INFO: Appending 'binaries' from .spec
+5193 INFO: Appending 'datas' from .spec
+5205 INFO: checking Analysis
+5205 INFO: Building Analysis because Analysis-00.toc is non existent
+5205 INFO: Looking for Python shared library...
+5205 INFO: Using Python shared library: C:\Users\toshr\AppData\Local\Programs\Python\Python312\python312.dll
+5205 INFO: Running Analysis Analysis-00.toc
+5205 INFO: Target bytecode optimization level: 0
+5205 INFO: Initializing module dependency graph...
+5208 INFO: Initializing module graph hook caches...
+5234 INFO: Analyzing modules for base_library.zip ...
+6394 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6752 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+6943 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+8030 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+9683 INFO: Caching module dependency graph...
+9735 INFO: Analyzing C:\tmp\theoverify\app.py
+10451 INFO: Processing standard module hook 'hook-webview.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\webview\\__pyinstaller'
+10535 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+10619 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+11435 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+11526 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+11768 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+12230 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+12242 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+12244 INFO: SetuptoolsInfo: initializing cached setuptools info...
+13587 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13726 INFO: Processing standard module hook 'hook-clr.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\pythonnet\\_pyinstaller'
+13808 INFO: Processing standard module hook 'hook-clr_loader.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+13911 INFO: Processing standard module hook 'hook-pycparser.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+14073 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+14086 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14155 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+14159 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14159 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+14169 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14170 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+14326 INFO: Processing standard module hook 'hook-_osx_support.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+14341 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14452 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+14454 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14462 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14462 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+14963 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+14964 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+15506 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+15506 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+16101 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+16176 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+17250 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+17580 INFO: Analyzing hidden import 'webview.__pyinstaller'
+17581 INFO: Analyzing hidden import 'webview.__pyinstaller.hook-webview'
+17600 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+17600 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+17624 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+17647 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+17647 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+17675 INFO: Processing standard module hook 'hook-win32ctypes.core.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks'
+19001 INFO: Analyzing hidden import 'webview._version'
+19002 INFO: Analyzing hidden import 'pythonnet._pyinstaller'
+19003 INFO: Analyzing hidden import 'pythonnet._pyinstaller.hook-clr'
+19005 INFO: Processing module hooks (post-graph stage)...
+19005 WARNING: Hidden import "pycparser.lextab" not found!
+19005 WARNING: Hidden import "pycparser.yacctab" not found!
+19135 INFO: Performing binary vs. data reclassification (223 entries)
+19254 INFO: Looking for ctypes DLLs
+19318 INFO: Analyzing run-time hooks ...
+19321 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+19324 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+19326 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+19329 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\PyInstaller\\hooks\\rthooks'
+19331 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\toshr\\AppData\\Roaming\\Python\\Python312\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+19347 INFO: Creating base_library.zip...
+19371 INFO: Looking for dynamic libraries
+Could not find an up-to-date installation of `packaging`. License expressions might not be validated. To enforce validation, please install `packaging>=24.2`.
+19951 INFO: Extra DLL search directories (AddDllDirectory): []
+19951 INFO: Extra DLL search directories (PATH): []
+20478 INFO: Warnings written to C:\tmp\theoverify\build\THEOLOGICUS\warn-THEOLOGICUS.txt
+20541 INFO: Graph cross-reference written to C:\tmp\theoverify\build\THEOLOGICUS\xref-THEOLOGICUS.html
+20581 INFO: checking PYZ
+20581 INFO: Building PYZ because PYZ-00.toc is non existent
+20581 INFO: Building PYZ (ZlibArchive) C:\tmp\theoverify\build\THEOLOGICUS\PYZ-00.pyz
+21205 INFO: Building PYZ (ZlibArchive) C:\tmp\theoverify\build\THEOLOGICUS\PYZ-00.pyz completed successfully.
+21221 INFO: checking PKG
+21221 INFO: Building PKG because PKG-00.toc is non existent
+21221 INFO: Building PKG (CArchive) THEOLOGICUS.pkg
+21241 INFO: Building PKG (CArchive) THEOLOGICUS.pkg completed successfully.
+21242 INFO: Bootloader C:\Users\toshr\AppData\Roaming\Python\Python312\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+21242 INFO: checking EXE
+21242 INFO: Building EXE because EXE-00.toc is non existent
+21243 INFO: Building EXE from EXE-00.toc
+21243 INFO: Copying bootloader EXE to C:\tmp\theoverify\build\THEOLOGICUS\THEOLOGICUS.exe
+21248 INFO: Copying icon to EXE
+21251 INFO: Copying 0 resources to EXE
+21251 INFO: Embedding manifest in EXE
+21254 INFO: Appending PKG archive to EXE
+21259 INFO: Fixing EXE headers
+21339 INFO: Building EXE from EXE-00.toc completed successfully.
+21343 INFO: checking COLLECT
+21343 INFO: Building COLLECT because COLLECT-00.toc is non existent
+21343 INFO: Building COLLECT COLLECT-00.toc
+21602 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+21608 INFO: Build complete! The results are available in: C:\tmp\theoverify\dist

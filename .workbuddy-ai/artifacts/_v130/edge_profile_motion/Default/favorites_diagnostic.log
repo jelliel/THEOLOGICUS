@@ -1,0 +1,26 @@
+2026-09-29 04:49:27.248: [INFO] CurrentProfilePath: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v130\edge_profile_motion\Default
+2026-09-29 04:49:27.248: [INFO] Profiles total count: 1
+2026-09-29 04:49:27.248: [INFO] Profile: name=Profile 1 path=C:\tmp\theoverify\.workbuddy-ai\artifacts\_v130\edge_profile_motion\Default lastActive=null
+2026-09-29 04:49:27.248: [INFO] LastUsedProfileDir: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v130\edge_profile_motion\Default
+2026-09-29 04:49:27.248: [INFO] VisibilityChanged: 0
+2026-09-29 04:49:27.259: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.260: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.262: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.264: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.264: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.265: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.266: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.267: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.268: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.269: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:27.281: [INFO] OnDoneLoading sync enabled: 0
+2026-09-29 04:49:27.281: [INFO] BookmarkModelLoaded, ids_reassigned: 0
+2026-09-29 04:49:27.281: [INFO] BookmarksLoadDropped droppedNodes=0
+2026-09-29 04:49:27.281: [INFO] BookmarksSnapshot Startup total=0 bar=0 other=0 mobile=0 showBar=0 showBarNTP=1
+2026-09-29 04:49:27.286: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:29.254: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:49:29.257: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:49:29.259: [INFO] Primary account changed.
+2026-09-29 04:49:29.259: [INFO] OnPrimaryAccountChanged PrimaryAccountChangeEvent::Type::kSet
+2026-09-29 04:49:29.267: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:49:29.280: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3

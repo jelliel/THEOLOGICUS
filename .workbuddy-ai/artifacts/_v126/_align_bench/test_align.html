@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>test align</title>
+<style>
+  body { background: #1a1a1a; color: #eee; font-family: monospace; padding: 20px; }
+  #mc { background: #2a2a2a; padding: 16px; border-radius: 8px; margin: 12px 0; max-width: 900px; }
+  .atc-hl { background: #ffd54f; color: #000; padding: 1px 2px; border-radius: 2px; }
+  pre { background: #000; padding: 12px; border-radius: 4px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h2>Test align</h2>
+<div id="mc"></div>
+<pre id="out"></pre>
+
+<script>
+// — Markdown minimal (juste listes numérotées et gras) —
+function mdToHtml(t) {
+  let s = t.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // **bold**
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // *italic*
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  // Listes numérotées : groupe les lignes "^\d+\.\s" consécutives
+  const lines = s.split('\n');
+  const out = [];
+  let inList = false;
+  for (const line of lines) {
+    const m = line.match(/^(\d+)\.\s+(.*)/);
+    if (m) {
+      if (!inList) { out.push('<ol>'); inList = true; }
+      out.push('<li>' + m[2] + '</li>');
+    } else {
+      if (inList) { out.push('</ol>'); inList = false; }
+      out.push(line);
+    }
+  }
+  if (inList) out.push('</ol>');
+  return out.join('\n');
+}
+
+// — Helpers de highlight (extraits du TEST HTML, lignes 22456–22566) —
+const _mkColor = {};
+function normalizeMatch(str) {
+  const NF = (str || '').normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  let norm = '', map = [];
+  for (let i = 0; i < NF.length; i++) {
+    const ch = NF[i];
+    if (/\s/.test(ch)) continue;
+    if (/[a-z0-9]/.test(ch)) { norm += ch; map.push(i); }
+  }
+  return { norm, map };
+}
+function locateInBox(container, pos, inclusive) {
+  if (inclusive === undefined) inclusive = true;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  let acc = 0, n, lastNode = null;
+  while ((n = walker.nextNode())) {
+    lastNode = n;
+    const len = n.nodeValue.length;
+    const cmp = inclusive ? (pos <= acc + len) : (pos < acc + len);
+    if (cmp) return { node: n, off: pos - acc };
+    acc += len;
+  }
+  if (lastNode) return { node: lastNode, off: lastNode.nodeValue.length };
+  return { node: container, off: 0 };
+}
+function computeOffsetInBox(box, range) {
+  const pre = document.createRange();
+  pre.selectNodeContents(box);
+  try { pre.setEnd(range.startContainer, range.startOffset); } catch(e) { return null; }
+  const post = document.createRange();
+  post.selectNodeContents(box);
+  try { post.setEnd(range.endContainer, range.endOffset); } catch(e) { return null; }
+  const start = pre.toString().length;
+  const end = post.toString().length;
+  if (end <= start) return null;
+  return { start, end };
+}
+function highlightRangeByTextNodes(range, cls, hlId) {
+  if (!range) return false;
+  const sc = range.startContainer, ec = range.endContainer;
+  if (sc.nodeType === 3 && sc === ec) {
+    try {
+      const span = document.createElement('span');
+      span.className = cls || 'atc-hl';
+      span.dataset.hlId = hlId;
+      range.surroundContents(span);
+      return true;
+    } catch(e) { return false; }
+  }
+  const root = (range.commonAncestorContainer.nodeType === 3)
+    ? range.commonAncestorContainer.parentNode
+    : range.commonAncestorContainer;
+  console.log('[DIAG] wrapMulti root=' + root.tagName + ' start=' + sc.nodeValue + '@' + range.startOffset + ' end=' + ec.nodeValue + '@' + range.endOffset);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) {
+    const inInt = range.intersectsNode(n);
+    const hasContent = !!(n.nodeValue && n.nodeValue.trim());
+    console.log('[DIAG]  text="' + JSON.stringify(n.nodeValue).slice(0, 30) + '" len=' + n.nodeValue.length + ' intersect=' + inInt + ' hasContent=' + hasContent);
+    if (n.nodeValue && n.nodeValue.trim() && inInt) nodes.push(n);
+  }
+  console.log('[DIAG] wrapMulti nodes.length=' + nodes.length);
+  if (!nodes.length) return false;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const node = nodes[i];
+    const r = document.createRange();
+    if (node === sc) r.setStart(node, range.startOffset); else r.setStart(node, 0);
+    if (node === ec) r.setEnd(node, range.endOffset); else r.setEnd(node, node.nodeValue.length);
+    console.log('[DIAG]  wrap i=' + i + ' node="' + JSON.stringify(node.nodeValue).slice(0, 30) + '" start=' + r.startOffset + ' end=' + r.endOffset);
+    try {
+      const span = document.createElement('span');
+      span.className = cls || 'atc-hl';
+      span.dataset.hlId = hlId;
+      r.surroundContents(span);
+      console.log('[DIAG]   -> wrapped OK; new HTML slice=' + JSON.stringify(root.innerHTML).slice(0, 200));
+    } catch(e) { console.log('[DIAG]   -> wrap FAILED: ' + e.message); }
+  }
+  return true;
+}
+function extractWrap(container, a, b, hlId, cls) {
+  const range = document.createRange();
+  try { range.setStart(a.node, a.off); range.setEnd(b.node, b.off); }
+  catch(e) { return false; }
+  return highlightRangeByTextNodes(range, cls, hlId);
+}
+function wrapByOffset(container, start, end, hlId, cls) {
+  if (typeof start !== 'number' || typeof end !== 'number' || end <= start) return false;
+  const a = locateInBox(container, start, false);
+  const b = locateInBox(container, end, true);
+  return extractWrap(container, a, b, hlId, cls);
+}
+function wrapOnce(container, text, hlId, cls) {
+  if (!text) return false;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  const nodes = []; let full = '';
+  let n;
+  while ((n = walker.nextNode())) { nodes.push(n); full += n.nodeValue; }
+  const fullM = normalizeMatch(full);
+  const txtM = normalizeMatch(text.trim());
+  if (!txtM.norm) return false;
+  const idx = fullM.norm.indexOf(txtM.norm);
+  if (idx === -1) return false;
+  const startOrig = fullM.map[idx];
+  const e = idx + txtM.norm.length;
+  const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
+  const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
+  return extractWrap(container, a, b, hlId, cls);
+}
+function wrapNth(container, text, nth, hlId, cls) {
+  if (!text || typeof nth !== 'number') return false;
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null);
+  const nodes = []; let full = ''; let n;
+  while ((n = walker.nextNode())) { nodes.push(n); full += n.nodeValue; }
+  const fullM = normalizeMatch(full);
+  const txtM = normalizeMatch(String(text).trim());
+  if (!txtM.norm) return false;
+  let idx = -1;
+  for (let k = 0; k <= nth; k++) {
+    idx = fullM.norm.indexOf(txtM.norm, idx + 1);
+    if (idx === -1) return false;
+  }
+  const startOrig = fullM.map[idx];
+  const e = idx + txtM.norm.length;
+  const endOrig = (e - 1 >= 0) ? fullM.map[e - 1] + 1 : fullM.map[idx];
+  const a = locateInBox(container, startOrig), b = locateInBox(container, endOrig);
+  return extractWrap(container, a, b, hlId, cls);
+}
+function applyHighlights(box, annotations) {
+  for (const a of annotations) {
+    if (!a || !a.text) continue;
+    if (a.text.indexOf('<') !== -1) continue;
+    const _deja = box.querySelectorAll('[data-hl-id="' + a.id + '"]');
+    let _bon = null;
+    if (_deja.length === 1 && String(_deja[0].textContent || '').trim()) _bon = _deja[0];
+    if (_bon) continue;
+    _deja.forEach(sp => {
+      try { if (sp.parentNode) sp.parentNode.replaceChild(document.createTextNode(sp.textContent || ''), sp); }
+      catch (e) {}
+    });
+    let ok = false;
+    if (typeof a.occ === 'number' && a.occ >= 0) {
+      ok = wrapNth(box, a.text, a.occ, a.id, 'atc-hl');
+    }
+    if (!ok && typeof a.start === 'number' && typeof a.end === 'number') {
+      ok = wrapByOffset(box, a.start, a.end, a.id, 'atc-hl');
+      if (ok) {
+        const _sp = box.querySelector('[data-hl-id="' + a.id + '"]');
+        if (_sp && _sp.querySelector('button,a,img,input,video,select,textarea,canvas')) {
+          const _wrapped = _sp.textContent;
+          if (_sp.parentNode) _sp.parentNode.replaceChild(document.createTextNode(_wrapped), _sp);
+          ok = false;
+        }
+      }
+    }
+    if (!ok) ok = wrapOnce(box, a.text, a.id, 'atc-hl');
+    if (!ok) console.log('FAIL', a.id, a.text);
+  }
+}
+
+// — Test runner —
+function makeRange(box, target) {
+  const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+  let full = ''; const nodes = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    nodes.push({ node: n, start: full.length });
+    full += n.nodeValue;
+  }
+  const idx = full.indexOf(target);
+  if (idx === -1) throw new Error('target not found: ' + target);
+  let startNode = null, startOff = 0, endNode = null, endOff = 0;
+  for (const { node, start } of nodes) {
+    const end = start + node.nodeValue.length;
+    if (!startNode && idx >= start && idx < end) {
+      startNode = node; startOff = idx - start;
+    }
+    if (!endNode && (idx + target.length) > start && (idx + target.length) <= end) {
+      endNode = node; endOff = (idx + target.length) - start;
+    }
+  }
+  const r = document.createRange();
+  r.setStart(startNode, startOff);
+  r.setEnd(endNode, endOff);
+  return r;
+}
+
+window.runTest = function () {
+  const md = [
+    "Non, Tertullien n'a jamais écrit que le Livre d'Hénoc fut retiré *à cause des propriétés d'un Messie déjà venu*.",
+    "En revanche :",
+    "",
+    "1. Il cite Hénoc comme témoignage non **canonique** mais utile pour réfuter les hérésies (docét**isme**, marcion**isme**).",
+    "2. Il **ne** justifie pas **son** exclusion du canon, **contrairement** à **Athanase** ou Épiphan**e**.",
+    "3. La formulation que vous citez ressemble à une **interprétation ultérieure** (peut-être médiévale) de sa pensée.",
+  ].join('\n');
+  const mc = document.getElementById('mc');
+  mc.innerHTML = mdToHtml(md);
+  const ann = [];
+
+  function addAnnotation(target) {
+    const range = makeRange(mc, target);
+    const off = computeOffsetInBox(mc, range);
+    const id = 'hl-' + Math.random().toString(36).slice(2, 8);
+    highlightRangeByTextNodes(range, 'atc-hl', id);
+    const spansAfter = mc.querySelectorAll(`[data-hl-id="${id}"]`).length;
+    ann.push({ id, text: target, start: off.start, end: off.end, spansAfter });
+  }
+
+  // Étape 1 : annote "canonique"
+  addAnnotation('canonique');
+  // Étape 2 : annote "marcionisme"
+  addAnnotation('marcionisme');
+  // Étape 3 : annote "interprétation ultérieure"
+  addAnnotation('interprétation ultérieure');
+
+  // Snapshot après wrap initial (immediate)
+  const after1 = Array.from(mc.querySelectorAll('.atc-hl')).map(s => ({
+    id: s.dataset.hlId, text: (s.textContent || '').trim(), parent: s.parentNode.tagName,
+  }));
+
+  // Print box text + offsets
+  const boxText = mc.textContent;
+  const debugLines = [
+    `boxText length = ${boxText.length}`,
+    `boxText.indexOf("canonique") = ${boxText.indexOf('canonique')}`,
+    `boxText.indexOf("marcionisme") = ${boxText.indexOf('marcionisme')}`,
+    `boxText.indexOf("interprétation ultérieure") = ${boxText.indexOf('interprétation ultérieure')}`,
+  ];
+  for (const a of ann) {
+    debugLines.push(`ann ${a.id} text="${a.text}"  off=${a.start}..${a.end}  spansAfterAdd=${a.spansAfter}`);
+  }
+
+  // Étape 4 : re-render = recréer la box from scratch puis réappliquer les annotations
+  const htmlBefore = mc.innerHTML;
+  mc.innerHTML = '';
+  mc.innerHTML = htmlBefore;
+  applyHighlights(mc, ann);
+
+  // Vérification finale
+  const after2All = Array.from(mc.querySelectorAll('.atc-hl')).map(s => ({
+    id: s.dataset.hlId, text: (s.textContent || '').trim(), parent: s.parentNode.tagName,
+  }));
+  // Regroupe par id : on attend que la concaténation des spans d'un même id = a.text
+  const after2 = Object.values(after2All.reduce((acc, s) => {
+    if (!acc[s.id]) acc[s.id] = { id: s.id, text: '' };
+    acc[s.id].text += s.text;
+    return acc;
+  }, {}));
+  const htmlAfter = mc.innerHTML;
+  const textAfter = mc.textContent;
+
+  // Rapport
+  const report = [];
+  for (const a of ann) {
+    const expected = a.text.trim();
+    const found = after2.find(x => x.id === a.id);
+    const ok = found && found.text.trim() === expected;
+    report.push({
+      id: a.id,
+      expected,
+      storedStart: a.start,
+      storedEnd: a.end,
+      found: found ? found.text : null,
+      ok,
+    });
+  }
+  document.getElementById('out').textContent = JSON.stringify({ debugLines, after1, after2, report, htmlAfterLen: htmlAfter.length, textAfterLen: textAfter.length, htmlAfterSnippet: htmlAfter.slice(0, 1500) }, null, 2);
+  window.__report = report;
+  window.__after2 = after2;
+  window.__debug = debugLines;
+  window.__htmlAfter = htmlAfter;
+};
+window.runTest();
+</script>
+</body>
+</html>

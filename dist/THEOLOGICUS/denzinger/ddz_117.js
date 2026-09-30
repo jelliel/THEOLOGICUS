@@ -1,0 +1,2 @@
+window.__denzingerWorks = window.__denzingerWorks || {};
+window.__denzingerWorks["dz_117"] = {"id":"dz_117","a":"Denzinger (1819-1883) — 11e éd., Bannwart S.J., 1911","t":"GREGORIUS XTI 1831-1*46","u":"https://archive.org/details/enchiridionsymbo01denz","c":[{"t":"GREGORIUS XTI 1831-1*46","s":[{"t":"GREGORIUS XTI 1831-1*46","p":["[Declarationes circa responsum PII VIII A. Ad dubia episcopi Vivariensis:","1. «An praefatum iudicium Sanctis^mi telligendum sit, ut verba ipsius sonant, et"]}]}]};

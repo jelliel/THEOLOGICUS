@@ -1,0 +1,14 @@
+[18:17:49] THEOLOGICUS — service Supertonic 3
+[18:17:49] modele   : C:\Users\toshr\.cache\supertonic3\onnx
+[18:17:49] voix     : F1, F2, F3, F4, F5, M1, M2, M3, M4, M5
+[18:17:49] langues  : 32 (fr, el, ar, en, de, es, it, pt, ru…)
+[18:17:49] cache    : C:\tmp\theoverify\tools\.supertonic_cache
+[18:17:49] chargement du modele ONNX (C:\Users\toshr\.cache\supertonic3\onnx)…
+
+=== demarrage supertonic ===
+Using CPU for inference
+[18:17:51] modele charge en 1.7 s — 44100 Hz
+[18:17:51] prechauffage fait en 0.9 s — le premier vrai segment sera rapide
+[18:17:51] a l'ecoute sur http://127.0.0.1:8091  (Ctrl+C pour arreter)
+[18:17:51]   depuis un autre appareil : http://192.168.100.71:8091
+[18:17:51]   depuis un autre appareil : http://169.254.83.107:8091

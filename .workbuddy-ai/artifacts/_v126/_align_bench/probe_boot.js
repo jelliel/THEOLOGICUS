@@ -1,0 +1,22 @@
+const path=require("path"),http=require("http"),fs=require("fs"),{chromium}=require("playwright");
+const PORT=8801, RACINE=path.resolve(__dirname,"..","..","..","..");
+const PW=process.env.PW_DIR||"C:/Users/toshr/AppData/Local/ms-playwright";
+(async()=>{
+  const s=http.createServer((req,res)=>{let p=decodeURIComponent(req.url.split("?")[0]);if(p==="/")p="/THEOLOGICUS.html";const fp=path.join(RACINE,p.replace(/^\/+/,""));if(fs.existsSync(fp)&&fs.statSync(fp).isFile()){res.writeHead(200,{"Content-Type":p.endsWith(".html")?"text/html; charset=utf-8":"application/octet-stream","Cache-Control":"no-store"});fs.createReadStream(fp).pipe(res);}else{res.writeHead(404);res.end("404");}});
+  await new Promise(r=>s.listen(PORT,"127.0.0.1",r));
+  const b=await chromium.launch({executablePath:path.join(PW,"chromium-1234","chrome-win64","chrome.exe"),args:["--no-sandbox"]});
+  const c=await b.newContext({viewport:{width:1440,height:900}});
+  const pg=await c.newPage();
+  const errs=[]; pg.on("pageerror",e=>errs.push(String(e)));
+  pg.on("console",m=>{const t=m.text(); if(/DIAG|applyHighlights/.test(t)) console.log("  [c] "+t.slice(0,160));});
+  await c.addInitScript(()=>{ try{document.cookie="key_mistral=sk-test; path=/";}catch(e){} try{window.__diagLog=[];const _cl=console.log.bind(console);console.log=function(){try{window.__diagLog.push(Array.prototype.map.call(arguments,String).join(' '));}catch(e){} return _cl.apply(null,arguments);};}catch(e){} });
+  await pg.goto(`http://127.0.0.1:${PORT}/THEOLOGICUS.html`,{waitUntil:"domcontentloaded",timeout:90000});
+  await pg.waitForTimeout(6000);
+  console.log("title:", await pg.title());
+  console.log("html len:", await pg.evaluate(()=>document.documentElement.outerHTML.length));
+  console.log("has renderMessages:", await pg.evaluate(()=>typeof window.renderMessages));
+  console.log("has __diagLog:", await pg.evaluate(()=>Array.isArray(window.__diagLog)?(window.__diagLog.length):"no"));
+  console.log("diagLog sample:", await pg.evaluate(()=>(window.__diagLog||[]).slice(0,5)));
+  console.log("pageerrors:", errs.slice(0,5));
+  await b.close(); s.close();
+})();

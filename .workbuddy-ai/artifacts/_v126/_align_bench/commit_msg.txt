@@ -1,0 +1,18 @@
+Fix annotation highlight misalignment on word boundaries
+
+Commented passages were highlighted one word off when a previous
+annotation had split a text node (e.g. "marcion**isme**" rendered as
+two nodes). locateInBox() treated a position sitting exactly on the
+boundary between two text nodes as belonging to the PRECEDING node,
+so wrapByOffset() wrapped the tail of the previous node and produced
+an empty span, shifting every later highlight.
+
+locateInBox() now takes an "inclusive" flag: the END of a range stays
+on the preceding node (inclusive), the START moves to the following
+node (exclusive). All four call sites (wrapByOffset, wrapOnce, wrapNth,
+_offsetForText) pass the correct mode.
+
+Verified with a Playwright bench reproducing the screenshot scenario
+(3 annotations on a numbered list, full innerHTML re-render):
+3/3 spans land on the exact selected words, and locateInBox passes
+7/7 boundary cases.

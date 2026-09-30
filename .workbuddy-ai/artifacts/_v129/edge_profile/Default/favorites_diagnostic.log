@@ -1,0 +1,54 @@
+2026-09-29 04:17:29.726: [INFO] CurrentProfilePath: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default
+2026-09-29 04:17:29.726: [INFO] Profiles total count: 1
+2026-09-29 04:17:29.726: [INFO] Profile: name=Profile 1 path=C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default lastActive=null
+2026-09-29 04:17:29.726: [INFO] LastUsedProfileDir: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default
+2026-09-29 04:17:29.726: [INFO] VisibilityChanged: 0
+2026-09-29 04:17:29.738: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.739: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.739: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.740: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.740: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.741: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.741: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.742: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.743: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.743: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:29.754: [INFO] OnDoneLoading sync enabled: 0
+2026-09-29 04:17:29.754: [INFO] BookmarkModelLoaded, ids_reassigned: 0
+2026-09-29 04:17:29.754: [INFO] BookmarksLoadDropped droppedNodes=0
+2026-09-29 04:17:29.754: [INFO] BookmarksSnapshot Startup total=0 bar=0 other=0 mobile=0 showBar=0 showBarNTP=1
+2026-09-29 04:17:29.756: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:31.032: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 0
+2026-09-29 04:17:31.035: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:17:31.037: [INFO] Primary account changed.
+2026-09-29 04:17:31.037: [INFO] OnPrimaryAccountChanged PrimaryAccountChangeEvent::Type::kSet
+2026-09-29 04:17:31.045: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:17:31.059: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.241: [INFO] CurrentProfilePath: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default
+2026-09-29 04:18:03.241: [INFO] Profiles total count: 1
+2026-09-29 04:18:03.241: [INFO] Profile: name=Profile 1 path=C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default lastActive=null
+2026-09-29 04:18:03.241: [INFO] LastUsedProfileDir: C:\tmp\theoverify\.workbuddy-ai\artifacts\_v129\edge_profile\Default
+2026-09-29 04:18:03.241: [INFO] VisibilityChanged: 0
+2026-09-29 04:18:03.259: [INFO] OnDoneLoading sync enabled: 0
+2026-09-29 04:18:03.259: [INFO] BookmarkModelLoaded, ids_reassigned: 0
+2026-09-29 04:18:03.259: [INFO] BookmarksLoadDropped droppedNodes=0
+2026-09-29 04:18:03.259: [INFO] BookmarksSnapshot Startup total=0 bar=0 other=0 mobile=0 showBar=0 showBarNTP=1
+2026-09-29 04:18:03.270: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.285: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.796: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.797: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.799: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.800: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.802: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.803: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 3
+2026-09-29 04:18:03.804: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:03.806: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:04.892: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:04.896: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:05.470: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:06.420: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 5
+2026-09-29 04:18:06.422: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 6
+2026-09-29 04:18:06.431: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 6
+2026-09-29 04:18:09.027: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 6
+2026-09-29 04:18:09.029: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 6
+2026-09-29 04:18:09.243: [INFO] RecordSyncInitDuration has_sync_been_enabled: 0 state: 6

@@ -1,0 +1,45 @@
+Fill the inside of figure shapes with a color, and rotate the arrows
+
+The "Blocs Fleches" palette could only place a shape in outline; the user
+asked to be able to rotate the arrows and to fill their interior with
+colors.
+
+Fill
+- applyFigPaint() rewrites the generated SVG so that every element carries
+  an explicit fill attribute: the requested color on closed shapes, "none"
+  everywhere else.
+- Only CLOSED shapes are filled (polygon, rect, circle, ellipse, or a path
+  whose d ends with Z). An open path is left in outline on purpose: the
+  browser implicitly closes it when painting, so filling a curved arrow
+  would draw a blob instead of the arrow.
+- For the BASIC shapes (Rectangle, Carre, Rond, Losange) the color is
+  applied to the box background, which is how those shapes are drawn.
+- A hatched "none" swatch and an empty-set button restore the outline.
+
+Rotation
+- applyFigRot() rotates the artwork (the <svg>), not the box, so the
+  bounding box, the drag handles and the text stay upright.
+- When the figure is rotated, preserveAspectRatio switches from "none" to
+  "xMidYMid meet": otherwise a stretched arrow turned 90 degrees becomes
+  short and fat, because the viewBox keeps being stretched along the
+  original axes.
+- Rotation is offered only for the arrow/path shapes; the four BASIC
+  shapes are regular enough that rotating them adds nothing.
+
+Controls
+- The figure toolbar gains a fill color input, an empty-set button, a
+  0-359 degree slider with its readout and a reset, and wraps onto a
+  second row instead of overflowing, with its position clamped inside the
+  container.
+- The insertion menu gains a "Remplir" row (hatched none + the eight
+  colors + a custom picker) and a "Rotation" row, both previewed live on
+  the sample figure and applied to the next inserted figure.
+- The export keeps the fill (background on the exported box); the
+  rotation is not reported, since the export redraws a simplified box.
+
+Verification: .workbuddy-ai/artifacts/_v126/verify_figures_fill_rotate.js
+27/27, driving the real path (right-click on the message, insertion menu,
+palette, figure toolbar) and checking the default outline, the fill, the
+rotation, the aspect-ratio switch, the open-curve case, persistence through
+re-render, localStorage and a page reload, and the menu presets.
+Regressions: syntax 59/59 blocks OK, annotation benches 17/17 and 7/7.
