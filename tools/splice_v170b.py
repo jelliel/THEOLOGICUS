@@ -97,6 +97,7 @@ MODULE = r'''<script id="v170-ta-sujets">
                        : 'Filtrer par doctrine, témoin, argument ou mot du texte…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
+    load();   /* charge le corpus de la vue si absent */
     render();
   }
 
