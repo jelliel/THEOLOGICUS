@@ -41029,7 +41029,18 @@ window.continueTradApart = async function (msgId) {
           var c = cget();
           c[job.titles[0].toLowerCase()] = data || { neg: 1 };
           cset(c);
-          if (data && data.img && job.box.isConnected) insertFig(job.box, data, job.label);
+          /* v161c — le DOM a pu être reconstruit pendant le fetch :
+             on retire la marque des messages contenant le mot-clé puis
+             on re-scanne, l'insertion se fera depuis le cache. */
+          if (data && data.img && isOn()) {
+            var kw = (job.label || job.titles[0]).split(/[\s'’-]+/).filter(function (w) { return w.length > 3; }).pop() || '';
+            if (kw) {
+              document.querySelectorAll('.message-content[data-fig-gen-done]').forEach(function (b) {
+                if ((b.textContent || '').indexOf(kw) >= 0) delete b.dataset.figGenDone;
+              });
+            }
+            scanAll(document);
+          }
           pump();
         });
       })(job);
