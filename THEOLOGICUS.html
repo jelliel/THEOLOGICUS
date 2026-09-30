@@ -41450,5 +41450,324 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v167 (2.0.301) — PÈRES & HOMÉLIES PAR VERSET
+   1) Bouton "☻ Pères & homélies" dans la fiche de verset (#verse-mini-tip).
+   2) Index versets→Pères construit en tâche de fond au démarrage :
+      on scanne les 120 œuvres du corpus fathers à la recherche des
+      références bibliques (Mt 5:3, 1 Cor. 12:3, John 3:16…), on stocke
+      {b:c:v} → [{w, st, sn}] et on met le tout en cache IndexedDB
+      (app_config / v167_fathers_idx).
+   3) Panneau de résultats groupé HOMÉLIES (titre d'œuvre contenant
+      "homil"/"sermon") / COMMENTAIRES, repli : versets du même chapitre.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV167) return; window.__theoV167 = true;
+
+  var IDX_ID = 'v167_fathers_idx';
+  var state = { idx: null, ready: false, building: false, done: 0, total: 0 };
+
+  /* ── CSS ── */
+  var st = document.createElement('style');
+  st.textContent =
+    '#v167-row{margin-top:7px;padding-top:6px;border-top:1px dashed rgba(138,109,59,.45);display:flex;align-items:center;gap:6px}' +
+    '#v167-btn{background:rgba(201,162,39,.14);color:#e8c65a;border:1px solid rgba(201,162,39,.5);padding:4px 10px;font-weight:800;font-size:11px;border-radius:6px;cursor:pointer}' +
+    '#v167-btn:hover{filter:brightness(1.3)}' +
+    '#v167-count{font-size:10px;color:#8a5a20;font-weight:700}' +
+    '#v167-pat{position:fixed;inset:0;z-index:130000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.62);backdrop-filter:blur(4px)}' +
+    '#v167-pat.open{display:flex}' +
+    '#v167-box{width:min(680px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(201,162,39,.4);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);overflow:hidden}' +
+    '#v167-head{padding:12px 16px;font-weight:900;color:#e8c65a;border-bottom:1px solid rgba(201,162,39,.25);display:flex;justify-content:space-between;align-items:center;gap:8px}' +
+    '#v167-close{background:none;border:none;color:#e8c65a;font-size:16px;cursor:pointer;padding:2px 6px}' +
+    '#v167-status{padding:8px 16px;font-size:11px;color:var(--text-dim,#8aa);}' +
+    '#v167-body{overflow:auto;padding:6px 16px 16px;font-size:12.5px;line-height:1.55}' +
+    '.v167-grp{font-size:10px;letter-spacing:2px;font-weight:900;color:#e8c65a;margin:12px 0 4px;text-transform:uppercase}' +
+    '.v167-item{border-left:3px solid rgba(201,162,39,.4);padding:6px 10px;margin:6px 0;background:rgba(255,255,255,.03);border-radius:0 8px 8px 0}' +
+    '.v167-au{font-weight:800;color:var(--text,#dbe6f4)}' +
+    '.v167-ti{color:var(--text-dim,#8aa);font-size:11px}' +
+    '.v167-sn{color:var(--text,#dbe6f4);opacity:.85;margin-top:3px}' +
+    '.v167-lk{font-size:10.5px;color:var(--cyan,#4f8ef7);text-decoration:none}' +
+    '.v167-lk:hover{text-decoration:underline}';
+  document.head.appendChild(st);
+
+  /* ── résolution des noms de livres (corpus anglais newadvent) ── */
+  var BOOKS = {
+    genesis:1, gen:1, exodus:2, ex:2, exod:2, leviticus:3, lev:3, numbers:4, num:4,
+    deuteronomy:5, deut:5, joshua:6, josh:6, jos:6, judges:7, judg:7, ruth:8,
+    ezra:15, esdras:15, nehemiah:16, nehem:16, esther:17, job:18,
+    psalm:19, psalms:19, ps:19, psa:19, proverbs:20, prov:20, ecclesiastes:21, eccl:21,
+    isaiah:23, isa:23, jeremiah:24, jer:24, jeremias:24, lamentations:25, lam:25,
+    ezekiel:26, ezek:26, daniel:27, dan:27, hosea:28, osee:28, hos:28, joel:29,
+    amos:30, jonah:32, jon:32, micah:33, mic:33, nahum:34, nah:34, habakkuk:35, hab:35,
+    zephaniah:36, sophonias:36, zeph:36, haggai:37, aggeus:37, hag:37, zechariah:38,
+    zacharias:38, zech:38, malachi:39, malachias:39, mal:39,
+    matthew:40, matt:40, mt:40, mark:41, mk:41, luke:42, luk:42, lk:42, john:43, jn:43,
+    acts:44, romans:45, rom:45, galatians:48, gal:48, ephesians:49, eph:49,
+    philippians:50, phil:50, colossians:51, col:51, titus:56, tit:56, philemon:57,
+    philem:57, hebrews:58, heb:58, james:59, jas:59, jude:65,
+    revelation:66, apocalypse:66, rev:66, apoc:66,
+    canticles:22, canticle:22, cant:22, wisdom:0, wis:0, sirach:0, sir:0,
+    ecclesiasticus:0, baruch:0, tobit:0, judith:0, maccabees:0, machabees:0,
+    samuel:0, kings:0, chronicles:0, corinthians:0, thessalonians:0, timothy:0, peter:0
+  };
+  var SPLIT = { samuel:[9,10], kings:[11,12], chronicles:[13,14], corinthians:[46,47],
+    thessalonians:[52,53], timothy:[54,55], peter:[60,61] };
+  function resBook(pre, name) {
+    name = String(name || '').toLowerCase().replace(/\./g, '');
+    var base = BOOKS[name];
+    if (base === undefined) return null;
+    var p = pre ? parseInt(pre, 10) : 0;
+    if (base === 0) {
+      var arr = SPLIT[name];
+      if (!arr || !p || !arr[p - 1]) return null;
+      return arr[p - 1];
+    }
+    if ((name === 'john' || name === 'jn') && p) return 61 + p;
+    if (p && base >= 9) return null;
+    return base;
+  }
+  var VRE = /\b([1-4])?\s{0,2}([A-Za-z]{2,15})\.?\s+(\d{1,3})\s*[.:,]\s*(\d{1,3})\b/g;
+  /* 1 Jean etc. : le préfixe romain colle souvent ("I John 3:16") */
+  var VRE_ROMAN = /\b(I{1,3}|IV)\s{0,2}([A-Za-z]{2,15})\.?\s+(\d{1,3})\s*[.:,]\s*(\d{1,3})\b/g;
+
+  function isHomily(title) { return /homil|hom[eé]li|sermon/i.test(title || ''); }
+
+  /* ── construction de l'index ── */
+  function idbGet(id) {
+    return new Promise(function (res) {
+      try {
+        if (typeof db === 'undefined') return res(null);
+        db.get('app_config', id).then(function (r) { res(r || null); }).catch(function () { res(null); });
+      } catch (e) { res(null); }
+    });
+  }
+  function idbPut(id, data) {
+    try {
+      if (typeof db === 'undefined') return;
+      db.put('app_config', { id: id, v: 1671, idx: data });
+    } catch (e) {}
+  }
+
+  function scanWork(id, work, idx) {
+    var meta = (window.__fathersIndex || {})[id] || {};
+    var hom = isHomily(meta.t);
+    (work.c || []).forEach(function (chap, ci) {
+      (chap.s || []).forEach(function (sec, si) {
+        (sec.p || []).forEach(function (p) {
+          VRE.lastIndex = 0;
+          var m;
+          while ((m = VRE.exec(p))) {
+            var b = resBook(m[1], m[2]);
+            if (!b) continue;
+            push(idx, b + ':' + m[3] + ':' + m[4], { w: id, h: hom ? 1 : 0, st: sec.t || '', sn: p.slice(0, 220) });
+          }
+          VRE_ROMAN.lastIndex = 0;
+          while ((m = VRE_ROMAN.exec(p))) {
+            var rp = ({ I: 1, II: 2, III: 3, IV: 4 })[m[1]] || 0;
+            var b2 = resBook(rp ? String(rp) : null, m[2]);
+            if (b2) push(idx, b2 + ':' + m[3] + ':' + m[4], { w: id, h: hom ? 1 : 0, st: sec.t || '', sn: p.slice(0, 220) });
+          }
+        });
+      });
+    });
+  }
+  function push(idx, key, entry) {
+    (idx[key] = idx[key] || []).push(entry);
+    if (idx[key].length > 12) idx[key].length = 12; /* plafond par verset */
+  }
+
+  function build() {
+    if (state.building || state.ready) return Promise.resolve();
+    state.building = true; state.done = 0;
+    var ids = Object.keys(window.__fathersIndex || {});
+    if (!ids.length) {
+      return (typeof theoCorpusMeta === 'function' ? theoCorpusMeta('fathers') : Promise.resolve(false))
+        .then(function (ok) {
+          state.building = false;
+          if (ok) return build();
+          state.ready = false;
+        });
+    }
+    state.total = ids.length;
+    var idx = {};
+    function step() {
+      var next = ids.shift();
+      if (!next) {
+        state.idx = idx; state.ready = true; state.building = false;
+        idbPut(IDX_ID, idx);
+        refreshTip();
+        if (panelOpen()) renderPanel();
+        return;
+      }
+      var doneCb = function () {
+        state.done++;
+        if (panelOpen()) renderPanel();
+        setTimeout(step, 16);
+      };
+      if (window.__fathersWorks && window.__fathersWorks[next]) {
+        scanWork(next, window.__fathersWorks[next], idx); doneCb();
+      } else {
+        theoCorpusWork('fathers', next).then(function (ok) {
+          if (ok) scanWork(next, window.__fathersWorks[next], idx);
+          doneCb();
+        });
+      }
+    }
+    step();
+  }
+
+  function ensureIndex() {
+    if (state.ready) return Promise.resolve();
+    if (state.load) return state.load;
+    state.load = idbGet(IDX_ID).then(function (rec) {
+      if (rec && rec.idx) {
+        state.idx = rec.idx; state.ready = true;
+        refreshTip();
+        if (panelOpen()) renderPanel();
+        return;
+      }
+      build();
+    });
+    return state.load;
+  }
+
+  /* ── recherche ── */
+  function parseRef(refStr) {
+    refStr = String(refStr || '').replace(/(\d),(\d)/g, '$1:$2').trim();
+    var m = refStr.match(/^(?:(\d{1,3})\s+)?([A-Za-z\u00c0-\u00ff]+(?:\s+[A-Za-z\u00c0-\u00ff]+)*)\.?\s+(\d{1,3})(?::(\d{1,3}))?(?:\s*-\s*(\d{1,3}))?$/);
+    if (!m) return null;
+    var num = null;
+    try { num = window.__schResolveBook ? (window.__schResolveBook(m[1] ? m[1] + ' ' + m[2] : m[2]) || window.__schResolveBook(m[2])) : null; } catch (e) {}
+    if (!num) return null;
+    return { b: num, c: m[3], v1: parseInt(m[4] || '1', 10), v2: parseInt(m[5] || m[4] || '1', 10) };
+  }
+  function lookup(ref) {
+    if (!state.idx || !ref) return { exact: [], near: [] };
+    var exact = [], near = [];
+    for (var v = ref.v1; v <= ref.v2; v++) {
+      var e = state.idx[ref.b + ':' + ref.c + ':' + v];
+      if (e) exact = exact.concat(e);
+    }
+    if (!exact.length) {
+      var pref = ref.b + ':' + ref.c + ':';
+      Object.keys(state.idx).forEach(function (k) {
+        if (k.indexOf(pref) === 0) near = near.concat(state.idx[k]);
+      });
+    }
+    return { exact: exact.slice(0, 24), near: near.slice(0, 12) };
+  }
+
+  /* ── panneau ── */
+  var curRef = null, curRefStr = '';
+  function panelOpen() { var p = document.getElementById('v167-pat'); return p && p.classList.contains('open'); }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function openPanel(refStr) {
+    var p = document.getElementById('v167-pat');
+    if (!p) {
+      p = document.createElement('div');
+      p.id = 'v167-pat';
+      p.innerHTML = '<div id="v167-box"><div id="v167-head"><span id="v167-title">☻ Pères de l\'Église</span><button id="v167-close" aria-label="Fermer">✕</button></div><div id="v167-status"></div><div id="v167-body"></div></div>';
+      document.body.appendChild(p);
+      p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+      p.querySelector('#v167-close').addEventListener('click', function () { p.classList.remove('open'); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
+      });
+    }
+    curRefStr = refStr || curRefStr;
+    curRef = parseRef(curRefStr);
+    p.querySelector('#v167-title').textContent = '☻ Pères de l\'Église — ' + (curRefStr || '?');
+    p.classList.add('open');
+    ensureIndex();
+    renderPanel();
+  }
+  function itemHtml(e) {
+    var meta = (window.__fathersIndex || {})[e.w] || {};
+    var url = 'https://www.newadvent.org/fathers/' + e.w + '.htm';
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(meta.a || 'Père de l\'Église') + '</span> ' +
+      '<span class="v167-ti">— ' + esc(meta.t || '') + (e.st ? ' · ' + esc(e.st.slice(0, 80)) : '') + '</span>' +
+      '<div class="v167-sn">' + esc(e.sn || '') + '…</div>' +
+      '<a class="v167-lk" href="' + url + '" target="_blank" rel="noopener">newadvent.org ↗</a></div>';
+  }
+  function renderPanel() {
+    var p = document.getElementById('v167-pat');
+    if (!p || !panelOpen()) return;
+    var body = p.querySelector('#v167-body');
+    var stat = p.querySelector('#v167-status');
+    if (!state.ready) {
+      stat.textContent = state.building
+        ? 'Indexation des Pères en cours… ' + state.done + ' / ' + state.total + ' œuvres'
+        : 'Index non disponible.';
+      body.innerHTML = '';
+      return;
+    }
+    stat.textContent = '';
+    var res = lookup(curRef);
+    var h = '';
+    if (res.exact.length) {
+      var hom = res.exact.filter(function (e) { return e.h; });
+      var com = res.exact.filter(function (e) { return !e.h; });
+      if (hom.length) h += '<div class="v167-grp">§ Homélies (' + hom.length + ')</div>' + hom.map(itemHtml).join('');
+      if (com.length) h += '<div class="v167-grp">§ Commentaires (' + com.length + ')</div>' + com.map(itemHtml).join('');
+    } else if (res.near.length) {
+      h += '<div class="v167-grp">Pas de passage sur ce verset précis — même chapitre :</div>' + res.near.map(itemHtml).join('');
+    } else {
+      h += '<div style="opacity:.7;padding:20px 0">Aucun passage patristique indexé pour cette référence. Les 120 œuvres du corpus sont couvertes — essaie un verset voisin.</div>';
+    }
+    body.innerHTML = h;
+  }
+
+  /* ── injection du bouton dans la fiche de verset ── */
+  function refreshTip() {
+    var tip = document.getElementById('verse-mini-tip');
+    if (!tip || tip.style.display === 'none') return;
+    var refEl = tip.querySelector('.vmt-ref');
+    if (!refEl) return;
+    var refStr = tip.dataset.vref || (refEl.textContent || '').replace(/^▶\s*/, '').replace(/\s*\([^)]*versets?\)$/i, '').trim();
+    if (!refStr || !parseRef(refStr)) return;
+    var row = tip.querySelector('#v167-row');
+    if (!row) {
+      row = document.createElement('div');
+      row.id = 'v167-row';
+      row.innerHTML = '<button id="v167-btn">☻ Pères & homélies</button><span id="v167-count"></span>';
+      tip.appendChild(row);
+      row.querySelector('#v167-btn').addEventListener('click', function () {
+        openPanel(row.dataset.ref || refStr);
+      });
+    }
+    row.dataset.ref = refStr;
+    var cnt = row.querySelector('#v167-count');
+    if (cnt) {
+      if (state.ready) {
+        var r = parseRef(refStr);
+        var n = 0;
+        if (r) for (var v = r.v1; v <= r.v2; v++) n += ((state.idx || {})[r.b + ':' + r.c + ':' + v] || []).length;
+        cnt.textContent = n ? n + ' passage(s)' : 'aucun passage indexé';
+      } else if (state.building) {
+        cnt.textContent = 'indexation ' + state.done + '/' + state.total + '…';
+      } else {
+        cnt.textContent = '';
+      }
+    }
+  }
+  /* throttle : le DOM de l'app mute en continu, un debounce ne partirait jamais */
+  var lastRun = 0, pending = null;
+  function queueTip() {
+    var now = Date.now();
+    if (now - lastRun >= 400) { lastRun = now; refreshTip(); }
+    else if (!pending) {
+      pending = setTimeout(function () { pending = null; lastRun = Date.now(); refreshTip(); }, 400 - (now - lastRun));
+    }
+  }
+  new MutationObserver(queueTip).observe(document.body, { childList: true, subtree: true });
+
+  /* ── démarrage : construction en tâche de fond après 8 s ── */
+  setTimeout(ensureIndex, 8000);
+})();
+
+</script>
 </body>
 </html>
