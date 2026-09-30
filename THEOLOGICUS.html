@@ -39600,29 +39600,35 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       }
       if (lastU !== q) state.messages.push({ role: 'user', content: q, ts: now() });
     }
-    /* v153d — UNE seule message avec les sections « 🌍 **Tradition** » :
-       le relayout horizontal (renderMessages hook) en fera des colonnes. */
+    /* v153d — UNE seule message avec les sections « ### 🌍 Tradition » :
+       les titres markdown deviennent des blocs <h3> réels, que le relayout
+       horizontal (hook renderMessages) regroupe en colonnes. */
     var parts = [];
     document.querySelectorAll('.tt-col').forEach(function (col) {
       if (which && which !== col.dataset.tid) return;
       var res = col.__res;
       if (!res) return;
-      parts.push('🌍 **' + res.n + '**\n\n' + res.text);
+      parts.push('### 🌍 ' + res.n + '\n\n' + res.text);
     });
     if (parts.length) state.messages.push({ role: 'assistant', content: parts.join('\n\n'), ts: now() });
     if (typeof renderMessages === 'function') renderMessages();
     if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+    return parts.length;
   }
 
   function keepAll() {
-    pushAll(null);
-    toast('✅ Les cinq traditions ajoutées à la conversation', 'success');
+    var n = 0;
+    try { n = pushAll(null); } catch (e) { toast('❌ Garder tout : ' + (e && e.message || e), 'error'); return; }
+    if (!n) { toast('Aucune réponse à garder — lance d\'abord la question', 'error'); return; }
+    toast('✅ ' + n + ' traditions ajoutées à la conversation', 'success');
     document.getElementById('tt-modal').classList.remove('open');
   }
 
   function keepOne(col) {
     if (!col.__res) return;
-    pushAll(col.dataset.tid);
+    var n = 0;
+    try { n = pushAll(col.dataset.tid); } catch (e) { toast('❌ Garder : ' + (e && e.message || e), 'error'); return; }
+    if (!n) { toast('Aucune réponse à garder', 'error'); return; }
     toast('✅ Réponse ajoutée à la conversation', 'success');
   }
 
