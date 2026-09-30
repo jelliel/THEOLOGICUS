@@ -41734,8 +41734,8 @@ window.continueTradApart = async function (msgId) {
   }
   function lookupTA(ref) {
     var tidx = TA && TA.idx ? TA.idx : null;
-    if (!tidx || !ref) return { exact: [], near: [] };
-    var exact = [], near = [];
+    if (!tidx || !ref) return { exact: [], near: [], book: [] };
+    var exact = [], near = [], book = [];
     for (var v = ref.v1; v <= ref.v2; v++) {
       var e = tidx[ref.b + ':' + ref.c + ':' + v];
       if (e) exact = exact.concat(e);
@@ -41743,8 +41743,14 @@ window.continueTradApart = async function (msgId) {
     if (!exact.length) {
       var pref = ref.b + ':' + ref.c + ':';
       Object.keys(tidx).forEach(function (k) { if (k.indexOf(pref) === 0) near = near.concat(tidx[k]); });
+      /* v168b — repli même livre : couverture encore clairsemée, mieux vaut
+         une citation du même évangile que rien */
+      if (!near.length) {
+        var bpref = ref.b + ':';
+        Object.keys(tidx).forEach(function (k) { if (k.indexOf(bpref) === 0) book = book.concat(tidx[k]); });
+      }
     }
-    return { exact: exact.slice(0, 10), near: near.slice(0, 6) };
+    return { exact: exact.slice(0, 10), near: near.slice(0, 6), book: book.slice(0, 4) };
   }
   function taHtml(e) {
     return '<div class="v167-item">' +
@@ -41789,6 +41795,7 @@ window.continueTradApart = async function (msgId) {
       var th = '';
       if (t.exact.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (' + t.exact.length + ')</div>' + t.exact.map(taHtml).join('');
       else if (t.near.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même chapitre)</div>' + t.near.map(taHtml).join('');
+      else if (t.book && t.book.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même livre)</div>' + t.book.map(taHtml).join('');
       tsec.innerHTML = th;
     });
   }
