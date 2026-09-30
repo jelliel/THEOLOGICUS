@@ -40478,5 +40478,111 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v158 (2.0.282) — RÉGLAGE « Aa » (taille de lecture) + HARMONISATION MODALES
+   1. Bouton "Aa" dans le header-right : popover − / valeur / + /
+      Réinitialiser. Plage 12–20 px, pas de 1, persistée
+      (localStorage theologicus_read_size), appliquée à la variable
+      --theo-read-size consommée par .message-content.
+   2. Palette unifiée des 8 modales d'atelier : même scrim (rgba .62 +
+      blur 4px), même rayon/ombre de boîte, survol homogène des boutons
+      de fermeture — les accents (or Lectio, bleu) restent identitaires.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV158) return; window.__theoV158 = true;
+
+  /* ── CSS ── */
+  var st = document.createElement('style');
+  st.id = 'v158-css';
+  st.textContent =
+    /* taille de lecture pilotée par variable */
+    '.message-content{font-size:var(--theo-read-size,15px)}' +
+    /* bouton + popover Aa */
+    '#v158-aa-wrap{position:relative;flex:0 0 auto}' +
+    '#v158-aa-btn{font-family:Georgia,serif;font-weight:700;letter-spacing:0}' +
+    '#v158-aa-panel{position:fixed;min-width:210px;padding:12px 14px;display:none;flex-direction:column;gap:10px;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000}' +
+    '#v158-aa-panel.open{display:flex}' +
+    '#v158-aa-panel .v158-t{font-size:9px;letter-spacing:2px;text-transform:uppercase;opacity:.55;font-family:var(--font-mono,monospace)}' +
+    '#v158-aa-row{display:flex;align-items:center;gap:8px}' +
+    '#v158-aa-row .v158-btn{width:34px;height:34px;border-radius:8px;border:1px solid rgba(79,142,247,.35);background:rgba(79,142,247,.10);color:inherit;font-size:16px;font-weight:700;cursor:pointer;flex:0 0 auto}' +
+    '#v158-aa-row .v158-btn:hover{filter:brightness(1.35)}' +
+    '#v158-aa-val{flex:1;text-align:center;font-size:15px;font-variant-numeric:tabular-nums;opacity:.95}' +
+    '#v158-aa-reset{border:1px solid rgba(255,255,255,.15);background:transparent;color:inherit;border-radius:8px;padding:6px 10px;font-size:11px;cursor:pointer;opacity:.8}' +
+    '#v158-aa-reset:hover{filter:brightness(1.35)}' +
+    /* harmonisation des 8 modales d'atelier : scrim + boîte + fermeture */
+    '#tj-modal,#td-modal,#tt-modal,#th-modal,#tl-modal,#ts-modal,#theo-lex-modal,#theo-chr-modal{background:rgba(2,6,12,.62);backdrop-filter:blur(4px)}' +
+    '#tj-box,#td-box,#tt-box,#th-box,#tl-box,#ts-box,#theo-lex-box,#theo-chr-box{border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55)}' +
+    '#tj-close:hover,#td-close:hover,#tt-close:hover,#th-close:hover,#tl-close:hover,#ts-close:hover,#theo-lex-close:hover,#theo-chr-close:hover{filter:brightness(1.35)}';
+  document.head.appendChild(st);
+
+  /* ── état persistant ── */
+  var KEY = 'theologicus_read_size';
+  var size = 15;
+  try { size = parseInt(localStorage.getItem(KEY), 10) || 15; } catch (e) {}
+  size = Math.min(20, Math.max(12, size));
+  function apply() {
+    document.documentElement.style.setProperty('--theo-read-size', size + 'px');
+    var v = document.getElementById('v158-aa-val');
+    if (v) v.textContent = size + ' px';
+  }
+
+  /* ── UI : bouton dans header-right + popover dans body ── */
+  var wordBtn = document.getElementById('export-word-btn');
+  var right = document.querySelector('.header-right');
+  if (!right) return;
+  var wrap = document.createElement('div'); wrap.id = 'v158-aa-wrap';
+  var btn = document.createElement('button');
+  btn.className = 'hud-btn'; btn.id = 'v158-aa-btn'; btn.type = 'button';
+  btn.title = 'Taille de lecture des conversations'; btn.innerHTML = 'Aa';
+  wrap.appendChild(btn);
+  right.insertBefore(wrap, wordBtn || right.firstChild);
+
+  var panel = document.createElement('div'); panel.id = 'v158-aa-panel';
+  panel.innerHTML =
+    '<div class="v158-t">Taille de lecture</div>' +
+    '<div id="v158-aa-row">' +
+    '  <button type="button" class="v158-btn" id="v158-aa-minus" aria-label="Réduire la taille de lecture">−</button>' +
+    '  <span id="v158-aa-val">15 px</span>' +
+    '  <button type="button" class="v158-btn" id="v158-aa-plus" aria-label="Augmenter la taille de lecture">+</button>' +
+    '</div>' +
+    '<button type="button" id="v158-aa-reset">Réinitialiser (15 px)</button>';
+  document.body.appendChild(panel);
+
+  function place() {
+    var r = btn.getBoundingClientRect();
+    var lw = 210, left = r.right - lw;
+    if (left < 10) left = 10;
+    panel.style.left = left + 'px';
+    panel.style.top = (r.bottom + 8) + 'px';
+  }
+  function closeP() { panel.classList.remove('open'); }
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var o = panel.classList.toggle('open');
+    if (o) place();
+  });
+  panel.addEventListener('click', function (e) { e.stopPropagation(); });
+  document.addEventListener('click', function (e) {
+    if (!wrap.contains(e.target) && !panel.contains(e.target)) closeP();
+  });
+  window.addEventListener('scroll', closeP, true);
+  window.addEventListener('resize', closeP);
+
+  document.getElementById('v158-aa-minus').addEventListener('click', function () {
+    size = Math.max(12, size - 1); try { localStorage.setItem(KEY, size); } catch (e) {} apply();
+  });
+  document.getElementById('v158-aa-plus').addEventListener('click', function () {
+    size = Math.min(20, size + 1); try { localStorage.setItem(KEY, size); } catch (e) {} apply();
+  });
+  document.getElementById('v158-aa-reset').addEventListener('click', function () {
+    size = 15; try { localStorage.setItem(KEY, size); } catch (e) {} apply();
+  });
+
+  apply();
+})();
+
+</script>
 </body>
 </html>
