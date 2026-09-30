@@ -40704,7 +40704,14 @@ window.continueTradApart = async function (msgId) {
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function cget() { try { return JSON.parse(localStorage.getItem(CKEY) || '{}'); } catch (e) { return {}; } }
-  function cset(c) { try { localStorage.setItem(CKEY, JSON.stringify(c)); } catch (e) {} }
+  function cset(c) {
+    try {
+      /* v164 — purge : le cache ne dépasse pas ~450 entrées */
+      var ks = Object.keys(c);
+      if (ks.length > 500) ks.slice(0, ks.length - 450).forEach(function (k) { delete c[k]; });
+      localStorage.setItem(CKEY, JSON.stringify(c));
+    } catch (e) {}
+  }
   function isOn() { try { return localStorage.getItem(TKEY) !== '0'; } catch (e) { return true; } }
 
   /* ── API REST Wikipédia fr→en (identique au module v150) ── */
@@ -40879,7 +40886,14 @@ window.continueTradApart = async function (msgId) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
   function cget() { try { return JSON.parse(localStorage.getItem(CKEY) || '{}'); } catch (e) { return {}; } }
-  function cset(c) { try { localStorage.setItem(CKEY, JSON.stringify(c)); } catch (e) {} }
+  function cset(c) {
+    try {
+      /* v164 — purge : le cache ne dépasse pas ~450 entrées */
+      var ks = Object.keys(c);
+      if (ks.length > 500) ks.slice(0, ks.length - 450).forEach(function (k) { delete c[k]; });
+      localStorage.setItem(CKEY, JSON.stringify(c));
+    } catch (e) {}
+  }
   function isOn() { try { return localStorage.getItem(TKEY) !== '0'; } catch (e) { return true; } }
 
   /* essaie plusieurs titres (fr puis en) via l'API REST Wikipédia */
@@ -40978,6 +40992,56 @@ window.continueTradApart = async function (msgId) {
     [/vatican\s+(?:ii|2)\b/i, ['Second Vatican Council', 'Second concile œcuménique du Vatican']],
     [/vatican\s+(?:i|1)\b/i, ['First Vatican Council', 'Premier concile œcuménique du Vatican']]
   ];
+  /* v164 — ordres religieux, événements majeurs, lieux chrétiens, livres bibliques */
+  var V164 = [
+    /* ordres religieux */
+    [/b[ée]n[ée]dictins?|ordre\s+de\s+saint\s+b[ée]no[îi]t/i, ['Order of Saint Benedict', 'Ordre de Saint-Benoît']],
+    [/franciscains?|fr[èe]res?\s+mineurs/i, ['Franciscan', 'Ordre franciscain']],
+    [/j[ée]suites?|compagnie\s+de\s+j[ée]sus/i, ['Society of Jesus', 'Compagnie de Jésus']],
+    [/dominicains?|ordre\s+des\s+pr[êe]cheurs/i, ['Dominican Order', 'Ordre des Prêcheurs']],
+    [/cisterciens?|trappistes?/i, ['Cistercians', 'Cisterciens']],
+    [/carm[ée]lites?|carmes?\b/i, ['Carmelites', 'Carmes']],
+    [/clarisses?/i, ['Poor Clares', 'Clarisses']],
+    [/chartreux/i, ['Carthusians', 'Chartreux']],
+    [/augustiniens?/i, ['Augustinians', 'Augustiniens']],
+    [/saliens?\s+(?:de\s+)?don\s+bosco|salesiens?/i, ['Salesians of Don Bosco', 'Salésiens de Don Bosco']],
+    [/capucins?/i, ['Capuchin Friars Minor', 'Capucins']],
+    /* événements majeurs */
+    [/schisme\s+(?:de\s+)?(?:1054|d['’]?orient|entre\s+orient\s+et\s+occident)/i, ['East–West Schism', 'Schisme de 1054']],
+    [/croisades?/i, ['Crusades', 'Croisades']],
+    [/inquisition/i, ['Inquisition']],
+    [/iconoclasme|querelle\s+des\s+images/i, ['Byzantine Iconoclasm', 'Iconoclasme']],
+    [/r[ée]forme\s+protestante|naissance\s+du\s+protestantisme/i, ['Reformation', 'Réforme protestante']],
+    [/contre[- ]r[ée]forme|r[ée]forme\s+catholique/i, ['Counter-Reformation', 'Contre-Réforme']],
+    /* lieux chrétiens majeurs */
+    [/basilique\s+saint-pierre/i, ['St. Peter\'s Basilica', 'Basilique Saint-Pierre']],
+    [/notre-dame\s+de\s+paris/i, ['Notre-Dame de Paris']],
+    [/cath[ée]drale\s+de\s+chartres|\bchartres\b/i, ['Chartres Cathedral', 'Cathédrale de Chartres']],
+    [/mont-saint-michel|mont\s+saint\s+michel/i, ['Mont-Saint-Michel Abbey', 'Abbaye du Mont-Saint-Michel']],
+    [/sainte-sophie|hagia\s+sophia/i, ['Hagia Sophia', 'Sainte-Sophie']],
+    [/saint-jean\s+de\s+latran|archibasilique/i, ['Archbasilica of Saint John Lateran', 'Basilique Saint-Jean-de-Latran']],
+    [/mosa[ïi]ques?\s+de\s+ravenne|\bravenne\b/i, ['Ravenna', 'Ravenne']],
+    [/basilique\s+de\s+la\s+nativit[ée]/i, ['Church of the Nativity', 'Basilique de la Nativité']],
+    [/abbaye\s+de\s+cluny|\bcluny\b/i, ['Cluny Abbey', 'Abbaye de Cluny']],
+    [/\bcit[ée]aux\b/i, ['Cîteaux Abbey', 'Abbaye de Cîteaux']],
+    [/\blourdes\b/i, ['Lourdes']],
+    [/fatima|f[áa]tima\b/i, ['Sanctuary of Fátima', 'Sanctuaire de Fátima']],
+    /* livres bibliques */
+    [/\bgen[èe]se\b/i, ['Book of Genesis', 'Livre de la Genèse']],
+    [/\bexode\b/i, ['Book of Exodus', 'Livre de l\'Exode']],
+    [/\bpsaumes?\b/i, ['Psalms', 'Livre des Psaumes']],
+    [/\bisa[ïi]e\b/i, ['Book of Isaiah', 'Livre d\'Isaïe']],
+    [/\bj[ée]r[ée]mie\b/i, ['Jeremiah', 'Livre de Jérémie']],
+    [/\bd[ée]ut[ée]ronome\b/i, ['Book of Deuteronomy', 'Deutéronome']],
+    [/\bdaniel\b/i, ['Book of Daniel', 'Livre de Daniel']],
+    [/[ée]vangile\s+selon\s+(?:saint\s+)?matthieu/i, ['Gospel of Matthew', 'Évangile selon Matthieu']],
+    [/[ée]vangile\s+selon\s+(?:saint\s+)?marc\b/i, ['Gospel of Mark', 'Évangile selon Marc']],
+    [/[ée]vangile\s+selon\s+(?:saint\s+)?luc\b/i, ['Gospel of Luke', 'Évangile selon Luc']],
+    [/[ée]vangile\s+selon\s+(?:saint\s+)?jean\b/i, ['Gospel of John', 'Évangile selon Jean']],
+    [/\bactes\s+des\s+ap[ôo]tres\b/i, ['Acts of the Apostles', 'Actes des Apôtres']],
+    [/[ée]p[îi]tre\s+aux\s+romains/i, ['Epistle to the Romans', 'Épître aux Romains']],
+    [/\bapocalypse\b/i, ['Book of Revelation', 'Apocalypse']]
+  ];
   var STOP = {
     'nouveau testament': 1, 'ancien testament': 1, 'fils de dieu': 1, 'fils de l homme': 1,
     'royaume de dieu': 1, 'royaume des cieux': 1, 'parole de dieu': 1, 'saint esprit': 1,
@@ -41053,6 +41117,15 @@ window.continueTradApart = async function (msgId) {
     [/codex\s+l[ée]ningradensis|codex\s+de\s+l[ée]ningrad/i, ['Leningrad Codex', 'Codex de Leningrad']],
     [/code\s+d['’]hammurabi/i, ['Code of Hammurabi', 'Code d\'Hammurabi']],
     [/rouleau\s+de\s+cuivre/i, ['Copper Scroll', 'Rouleau de cuivre']],
+    /* v164 — papes */
+    [/pape\s+fran[çc]ois|fran[çc]ois\s+(?:1er|premier)\b/i, ['Pope Francis', 'François (pape)']],
+    [/jean-paul\s+(?:ii\b|2\b)|jean\s+paul\s+(?:ii|2)\b/i, ['Pope John Paul II', 'Jean-Paul II']],
+    [/jean\s+xxiii\b/i, ['Pope John XXIII', 'Jean XXIII']],
+    [/paul\s+vi\b/i, ['Pope Paul VI', 'Paul VI']],
+    [/pie\s+xii\b/i, ['Pope Pius XII', 'Pie XII']],
+    [/pie\s+ix\b/i, ['Pope Pius IX', 'Pie IX']],
+    [/l[ée]on\s+xiv\b/i, ['Pope Leo XIV', 'Léon XIV']],
+    [/pierre\s+l['’]?ap[ôo]tre|simon\s+pierre\b/i, ['Saint Peter', 'Pierre (apôtre)']],
   ];
 
   /* ── extraction des candidats ── */
@@ -41069,6 +41142,7 @@ window.continueTradApart = async function (msgId) {
     for (i = 0; i < SITES.length; i++) if (SITES[i][0].test(text)) push(SITES[i][1]);
     for (i = 0; i < THEMES.length; i++) if (THEMES[i][0].test(text)) push(THEMES[i][1]);
     for (i = 0; i < CONCILES.length; i++) if (CONCILES[i][0].test(text)) push(CONCILES[i][1]);
+    for (i = 0; i < V164.length; i++) if (V164[i][0].test(text)) push(V164[i][1]);
     var reCcl = /conciles?\s+(?:œcum[ée]nique\s+)?(?:de|d['’])\s+([A-ZÉÈÀ][\wà-öø-ÿ'’-]+(?:\s+[A-ZÉÈÀ][\wà-öø-ÿ'’-]+)?)/g;
     while ((m = reCcl.exec(text))) {
       var cn = m[1].replace(/\s+$/, '');
@@ -41156,6 +41230,12 @@ window.continueTradApart = async function (msgId) {
     if (box.querySelectorAll('.theo-fig').length >= 2) return; /* plafond strict */
     var key = String(data.link).slice(-60);
     if (box.querySelector('.theo-fig[data-wiki="' + esc(key) + '"]')) return;
+    /* v164 — anti-doublon conversation : une seule fiche par sujet */
+    var dup = false;
+    document.querySelectorAll('.theo-fig[data-wiki="' + esc(key) + '"]').forEach(function (f) {
+      if (f.closest('.message-content') !== box) dup = true;
+    });
+    if (dup) return;
     var fig = buildFig(data, label);
     var row = box.querySelector('.theo-mss');
     if (row) row.parentNode.insertBefore(fig, row); else box.appendChild(fig);
