@@ -41720,21 +41720,26 @@ window.continueTradApart = async function (msgId) {
     body.innerHTML = h;
   }
 
-  /* ── injection du bouton dans la fiche de verset ── */
-  function refreshTip() {
-    var tip = document.getElementById('verse-mini-tip');
-    if (!tip || tip.style.display === 'none') return;
-    var refEl = tip.querySelector('.vmt-ref');
-    if (!refEl) return;
-    var refStr = tip.dataset.vref || (refEl.textContent || '').replace(/^▶\s*/, '').replace(/\s*\([^)]*versets?\)$/i, '').trim();
-    if (!refStr || !parseRef(refStr)) return;
-    var row = tip.querySelector('#v167-row');
+  /* ── injection du bouton dans les fiches de verset ── */
+  /* v167b — deux panneaux affichent un verset : #verse-mini-tip (refs dans
+     les annotations) ET #bible-verse-tip (refs a.bible-ref de la conversation
+     — LE panneau que l'utilisateur voit). Injecter dans les deux. */
+  var lastBibleRef = '';
+  document.addEventListener('mouseover', function (e) {
+    var el = e.target.closest ? e.target.closest('a.bible-ref, span.bible-ref') : null;
+    if (!el) return;
+    lastBibleRef = (el.textContent || '').trim();
+  }, true);
+
+  function mountRow(host, refStr) {
+    var row = host.querySelector('#v167-row');
     if (!row) {
       row = document.createElement('div');
       row.id = 'v167-row';
       row.innerHTML = '<button id="v167-btn">☻ Pères & homélies</button><span id="v167-count"></span>';
-      tip.appendChild(row);
-      row.querySelector('#v167-btn').addEventListener('click', function () {
+      host.appendChild(row);
+      row.querySelector('#v167-btn').addEventListener('click', function (ev) {
+        ev.stopPropagation();
         openPanel(row.dataset.ref || refStr);
       });
     }
@@ -41750,6 +41755,37 @@ window.continueTradApart = async function (msgId) {
         cnt.textContent = 'indexation ' + state.done + '/' + state.total + '…';
       } else {
         cnt.textContent = '';
+      }
+    }
+  }
+  function refreshTip() {
+    /* 1) fiche des annotations */
+    var tip = document.getElementById('verse-mini-tip');
+    if (tip && tip.style.display !== 'none') {
+      var refEl = tip.querySelector('.vmt-ref');
+      if (refEl) {
+        var refStr = tip.dataset.vref || (refEl.textContent || '').replace(/^▶\s*/, '').replace(/\s*\([^)]*versets?\)$/i, '').trim();
+        if (refStr && parseRef(refStr)) mountRow(tip, refStr);
+      }
+    }
+    /* 2) LA fiche de verset de la conversation (a.bible-ref) */
+    var bt = document.getElementById('bible-verse-tip');
+    if (bt && bt.style.display !== 'none' && bt.style.opacity !== '0') {
+      var hasVerse = bt.querySelector('.bv-line') || bt.querySelector('#hb-slot') ||
+                     bt.querySelector('span[style*="#7fdfff"]');
+      if (hasVerse) {
+        var bref = lastBibleRef;
+        if (!bref) {
+          var hd = bt.querySelector('div');
+          if (hd) bref = (hd.textContent || '').split('—').pop().trim();
+        }
+        if (bref && parseRef(bref)) {
+          /* pointer-events:auto : sans lui le panneau est purement visuel
+             et le bouton reste incliquable ; le mouseout existant referme
+             le panneau quand la souris le quitte vraiment. */
+          if (bt.style.pointerEvents !== 'auto') bt.style.pointerEvents = 'auto';
+          mountRow(bt, bref);
+        }
       }
     }
   }
