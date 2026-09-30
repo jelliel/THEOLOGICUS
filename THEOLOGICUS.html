@@ -41335,12 +41335,17 @@ window.continueTradApart = async function (msgId) {
   topBtn.setAttribute('aria-label', 'Retour en haut');
   document.body.appendChild(topBtn);
   function bindTop() {
-    var c = document.getElementById('chat-container');
-    if (!c) return false;
-    c.addEventListener('scroll', function () {
-      topBtn.classList.toggle('show', c.scrollTop > 600);
-    }, { passive: true });
-    topBtn.addEventListener('click', function () { c.scrollTo({ top: 0, behavior: 'smooth' }); });
+    /* v165d — capture au niveau document : les events scroll ne bubbent
+       pas mais atteignent le document en phase capture — fonctionne
+       quel que soit l'élément réellement scrollable de l'app. */
+    document.addEventListener('scroll', function () {
+      var c = document.getElementById('chat-container');
+      if (c) topBtn.classList.toggle('show', c.scrollTop > 600);
+    }, { passive: true, capture: true });
+    topBtn.addEventListener('click', function () {
+      var c = document.getElementById('chat-container');
+      if (c) c.scrollTo({ top: 0, behavior: 'smooth' });
+    });
     return true;
   }
   if (!bindTop()) document.addEventListener('DOMContentLoaded', bindTop);
