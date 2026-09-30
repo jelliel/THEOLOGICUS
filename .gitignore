@@ -98,3 +98,6 @@ _bak_*/
 .workbuddy-ai/artifacts/_v129/edge_profile/
 # Profil Edge jetable du banc de motion (v130) : idem.
 .workbuddy-ai/artifacts/_v130/edge_profile_motion/
+
+# données runtime locales
+theologicus_cookiejar.json
