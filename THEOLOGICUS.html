@@ -41489,7 +41489,9 @@ window.continueTradApart = async function (msgId) {
     '.v167-ti{color:var(--text-dim,#8aa);font-size:11px}' +
     '.v167-sn{color:var(--text,#dbe6f4);opacity:.85;margin-top:3px}' +
     '.v167-lk{font-size:10.5px;color:var(--cyan,#4f8ef7);text-decoration:none}' +
-    '.v167-lk:hover{text-decoration:underline}';
+    '.v167-lk:hover{text-decoration:underline}' +
+    '.v167-tr{background:rgba(79,142,247,.12);color:var(--cyan,#4f8ef7);border:1px solid rgba(79,142,247,.4);border-radius:5px;font-size:10px;font-weight:800;padding:2px 7px;cursor:pointer;margin-right:5px}' +
+    '.v167-tr:hover{filter:brightness(1.3)}';
   document.head.appendChild(st);
 
   /* ── résolution des noms de livres (corpus anglais newadvent) ── */
@@ -41672,6 +41674,35 @@ window.continueTradApart = async function (msgId) {
       document.body.appendChild(p);
       p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
       p.querySelector('#v167-close').addEventListener('click', function () { p.classList.remove('open'); });
+      /* v168 — traduction LibreTranslate des extraits anglais (bouton 🌐 FR) */
+      p.querySelector('#v167-body').addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
+        if (!b) return;
+        ev.preventDefault();
+        if (b.dataset.busy) return;
+        var sn = b.dataset.sn || '';
+        if (!(window.__LT && window.__LT.resolve)) {
+          b.outerHTML = '<div class="v167-sn" style="opacity:.6">LibreTranslate indisponible dans ce contexte.</div>';
+          return;
+        }
+        b.dataset.busy = '1';
+        b.textContent = '⏳ traduction…';
+        window.__LT.resolve().then(function (ep) {
+          if (!ep) throw new Error('no-server');
+          return fetch(ep + '/translate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ q: sn, source: 'en', target: 'fr', format: 'text' })
+          }).then(function (r) { return r.json(); });
+        }).then(function (d) {
+          var t = d && d.translatedText;
+          b.outerHTML = t ? '<div class="v167-sn" style="color:#7fdfff">🇫🇷 ' + esc(t) + '</div>'
+                          : '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>';
+        }).catch(function () {
+          b.textContent = '🌐 FR'; delete b.dataset.busy;
+          var stat = document.getElementById('v167-status');
+          if (stat) stat.textContent = 'LibreTranslate introuvable — lance « py tools\\start_libretranslate.py » (port 5000) ou règle une URL via le bouton 🌐 du chat.';
+        });
+      });
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
       });
@@ -41690,7 +41721,37 @@ window.continueTradApart = async function (msgId) {
       '<span class="v167-au">' + esc(meta.a || 'Père de l\'Église') + '</span> ' +
       '<span class="v167-ti">— ' + esc(meta.t || '') + (e.st ? ' · ' + esc(e.st.slice(0, 80)) : '') + '</span>' +
       '<div class="v167-sn">' + esc(e.sn || '') + '…</div>' +
+      '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
       '<a class="v167-lk" href="' + url + '" target="_blank" rel="noopener">newadvent.org ↗</a></div>';
+  }
+  /* v168 — corpus FR de traditionapostolique.fr (tradition/ta.json) */
+  var TA = null;
+  function loadTA() {
+    if (TA !== null) return Promise.resolve(TA);
+    return fetch('tradition/ta.json').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { TA = (j && j.idx) ? j : false; return TA; })
+      .catch(function () { TA = false; return TA; });
+  }
+  function lookupTA(ref) {
+    var tidx = TA && TA.idx ? TA.idx : null;
+    if (!tidx || !ref) return { exact: [], near: [] };
+    var exact = [], near = [];
+    for (var v = ref.v1; v <= ref.v2; v++) {
+      var e = tidx[ref.b + ':' + ref.c + ':' + v];
+      if (e) exact = exact.concat(e);
+    }
+    if (!exact.length) {
+      var pref = ref.b + ':' + ref.c + ':';
+      Object.keys(tidx).forEach(function (k) { if (k.indexOf(pref) === 0) near = near.concat(tidx[k]); });
+    }
+    return { exact: exact.slice(0, 10), near: near.slice(0, 6) };
+  }
+  function taHtml(e) {
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(e.a || '') + '</span>' +
+      '<span class="v167-ti">— ' + esc(e.w || '') + (e.ch ? ' · ' + esc(String(e.ch).slice(0, 40)) : '') + '</span>' +
+      '<div class="v167-sn">' + esc(e.q || '') + '</div>' +
+      '<a class="v167-lk" href="' + esc(e.su || '') + '" target="_blank" rel="noopener">traditionapostolique.fr ↗</a></div>';
   }
   function renderPanel() {
     var p = document.getElementById('v167-pat');
@@ -41718,6 +41779,18 @@ window.continueTradApart = async function (msgId) {
       h += '<div style="opacity:.7;padding:20px 0">Aucun passage patristique indexé pour cette référence. Les 120 œuvres du corpus sont couvertes — essaie un verset voisin.</div>';
     }
     body.innerHTML = h;
+    /* v168 — citations FR de traditionapostolique.fr (section asynchrone) */
+    body.insertAdjacentHTML('beforeend', '<div id="v167-ta"></div>');
+    loadTA().then(function (ta) {
+      var tsec = document.getElementById('v167-ta');
+      if (!tsec || !panelOpen()) return;
+      if (!ta) { tsec.remove(); return; }
+      var t = lookupTA(curRef);
+      var th = '';
+      if (t.exact.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (' + t.exact.length + ')</div>' + t.exact.map(taHtml).join('');
+      else if (t.near.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même chapitre)</div>' + t.near.map(taHtml).join('');
+      tsec.innerHTML = th;
+    });
   }
 
   /* ── injection du bouton dans les fiches de verset ── */
