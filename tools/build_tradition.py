@@ -16,6 +16,7 @@ from pathlib import Path
 
 BASE = 'https://traditionapostolique.fr'
 OUT = Path(__file__).resolve().parent.parent / 'tradition' / 'ta.json'
+OUT_SUJETS = Path(__file__).resolve().parent.parent / 'tradition' / 'ta_sujets.json'
 CACHE = Path(__file__).resolve().parent.parent / 'tradition' / 'cache'
 DELAY = 2.5   # v169 : le site limite le débit après plusieurs crawls rapprochés
 
@@ -139,6 +140,7 @@ def main():
                                 if '/sujets/' in u and u.count('/') >= 4))
     print('pages sujets :', len(sujets))
     idx = {}
+    topics = []   # v170 : TOUTES les citations par sujet (rubrique « SUJETS » de l'app)
     ok = 0
     for n, url in enumerate(sujets, 1):
         h = fetch(url, cache=not refresh)
@@ -165,6 +167,15 @@ def main():
                 chap = clean(mch.group(1)).lstrip(', ').strip() if mch else ''
                 quotes.append({'pos': m_sec.start(2) + m_chunk.start(), 'author': author,
                                'work': work, 'work_url': work_url, 'chap': chap, 'quote': quote})
+        # v170 — rubrique SUJETS : toutes les citations, même sans ref de verset
+        if quotes:
+            topics.append({
+                'slug': url.rsplit('/', 1)[-1], 't': sujet, 'su': url,
+                'qs': [{'a': q['author'], 'w': q['work'], 'wu': q['work_url'],
+                        'ch': q['chap'],
+                        'q': q['quote'][:900] + ('…' if len(q['quote']) > 900 else '')}
+                       for q in quotes]
+            })
         if not quotes:
             continue
         # texte lisible de la page, dans l'ordre
@@ -205,6 +216,11 @@ def main():
             'sujets': ok, 'entries': sum(len(v) for v in idx.values()), 'idx': idx}
     OUT.write_text(json.dumps(meta, ensure_ascii=False), encoding='utf-8')
     print('écrit', OUT, '—', ok, 'sujets,', meta['entries'], 'entrées,', len(idx), 'versets')
+    meta2 = {'v': 1, 'source': 'traditionapostolique.fr', 'built': time.strftime('%Y-%m-%d'),
+             'topics': topics}
+    OUT_SUJETS.write_text(json.dumps(meta2, ensure_ascii=False), encoding='utf-8')
+    print('écrit', OUT_SUJETS, '—', len(topics), 'sujets,',
+          sum(len(t['qs']) for t in topics), 'citations')
 
 if __name__ == '__main__':
     main()
