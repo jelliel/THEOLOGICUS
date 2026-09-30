@@ -40438,5 +40438,44 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v157 (2.0.280) — TYPOGRAPHIE DES LONGUES LECTURES
+   D'après les règles UX du skill ui-ux-pro-max :
+   • Line Height (Medium) : 1.5–1.75 pour le corps de texte → 1.68 retenu.
+   • Base lisible : corps 14px → 15px sur les messages (compromis densité).
+   • Césure française : hyphens:auto (html lang="fr" déjà présent) — les
+     coupures de mots longs gagnent leur trait d'union au lieu de casser
+     net via overflow-wrap:anywhere.
+   • Rythme vertical : marges de paragraphes et de titres regularisées.
+   • Homogénéité : corps de lecture des modales alignés (homélie 13→14,
+     lectio 13.5→14, recherche 12.5→13).
+   On ne touche PAS à la largeur des bulles : l'app impose
+   `max-width:100% !important` (choix de design, tableaux pleine largeur).
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV157) return; window.__theoV157 = true;
+  var st = document.createElement('style');
+  st.id = 'v157-typo-css';
+  st.textContent =
+    /* corps de lecture des messages */
+    '.message-content{font-size:15px;line-height:1.68}' +
+    /* césure française des blocs de texte */
+    '.message-content p,.message-content li,.message-content blockquote{hyphens:auto;-webkit-hyphens:auto}' +
+    /* rythme vertical des paragraphes et titres */
+    '.message-content p{margin:.55em 0}' +
+    '.message-content h2{margin:18px 0 8px}' +
+    '.message-content h3,.message-content h4{margin:14px 0 6px}' +
+    /* listes : respiration régulière */
+    '.message-content li{margin:.3em 0}' +
+    /* corps des modales de lecture, alignés */
+    '#th-body{font-size:14px !important}' +
+    '#tl-stage{font-size:14px !important}' +
+    '#ts-res{font-size:13px !important}';
+  document.head.appendChild(st);
+})();
+
+</script>
 </body>
 </html>
