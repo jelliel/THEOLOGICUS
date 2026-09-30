@@ -74,7 +74,12 @@ BOOKS = {
 SPLIT = {'samuel':[9,10],'rois':[11,12],'chroniques':[13,14],'corinthiens':[46,47],
          'thessaloniciens':[52,53],'timothee':[54,55],'pierre':[60,61],'maccabees':[0]}
 
-NAMES = '|'.join(sorted((k for k in BOOKS if len(k) > 2), key=len, reverse=True))
+# v169 : inclure les abréviations de 2 lettres (Mt, Jn, Lc, Co, Ep...) —
+# c'est CE QUE LE SITE UTILISE (« 1 Co 3, 11-15 », « Mt 5, 25-26 », « Jn 6,
+# 32-71 ») ; le filtre len>2 les excluait et perdait la majorité des refs.
+# Le risque de faux positif est faible : le motif exige un n° de chapitre
+# + verset juste derrière (ex. « am 5, 2 » est le seul cas ambigu plausible).
+NAMES = '|'.join(sorted((k for k in BOOKS if len(k) >= 2), key=len, reverse=True))
 REF_RE = re.compile(
     r'\b((?:[1-4]\s*|I{1,3}\s*|IV\s*)?(?:' + NAMES + r'))\s+(\d{1,3})\s*[,;:]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?',
     re.IGNORECASE)
@@ -111,7 +116,10 @@ def verse_keys(b, c, v1, v2):
     v2 = int(v2) if v2 else v1
     if v2 < v1:
         v1, v2 = v2, v1
-    return ['%s:%s:%d' % (b, c, v) for v in range(v1, min(v2, v1 + 9) + 1)]
+    # v169 : plafond relevé à 45 — le site cite des plages réelles comme
+    # « Jn 6, 32-71 » (discours eucharistique, 40 versets) que le plafond
+    # de 9 tronquait injustement.
+    return ['%s:%s:%d' % (b, c, v) for v in range(v1, min(v2, v1 + 45) + 1)]
 
 def main():
     refresh = '--refresh' in sys.argv
