@@ -38856,7 +38856,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   function pushResponse(res) {
     if (!res) return;
-    state.messages.push({ role: 'assistant', content: '⚖️ **' + shortName(res.value) + '** · ' + res.secs + ' s\n\n' + res.text, ts: now() });
+    state.messages.push({ role: 'assistant', content: '#### ⚖️ ' + shortName(res.value) + ' · ' + res.secs + ' s\n\n' + res.text, ts: now() });
   }
 
   function keepBoth() {
@@ -39501,6 +39501,12 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         '<div class="tt-ft"><button class="tt-btn tt-k" disabled>✅ Garder</button></div>' +
         '</div>';
     }).join('');
+    /* v153f — colonne 🧭 Synthèse comparée : compare les réponses obtenues */
+    cols += '<div class="tt-col" data-tid="synthese">' +
+      '<div class="tt-hd"><span>🧭 Synthèse comparée</span><span class="tt-st">🟠 prêt</span></div>' +
+      '<div class="tt-body"><pre>Générez les réponses, puis cliquez 🧭 Générer : une synthèse comparative (convergences, divergences, pistes de dialogue) sera produite.</pre></div>' +
+      '<div class="tt-ft"><button class="tt-btn tt-gen">🧭 Générer</button><button class="tt-btn tt-k" disabled>✅ Garder</button></div>' +
+      '</div>';
     var md = document.createElement('div');
     md.id = 'tt-modal';
     md.innerHTML = '<div id="tt-box">' +
@@ -39522,6 +39528,60 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     document.getElementById('tt-go').addEventListener('click', run);
     document.getElementById('tt-keepall').addEventListener('click', keepAll);
     document.querySelectorAll('.tt-col').forEach(function (col) { col.querySelector('.tt-k').addEventListener('click', function () { keepOne(col); }); });
+    var scol = document.querySelector('.tt-col[data-tid="synthese"]');
+    if (scol) scol.querySelector('.tt-gen').addEventListener('click', genSynthese);
+  }
+
+  /* v153f — 🧭 SYNTHÈSE COMPARÉE : un théologien comparatiste neutre lit la
+     question et les réponses obtenues, et produit convergences, divergences,
+     apports spécifiques et pistes de dialogue. Stream dans la 6e colonne. */
+  async function genSynthese() {
+    if (running) return;
+    var col = document.querySelector('.tt-col[data-tid="synthese"]');
+    var q = document.getElementById('tt-q').value.trim();
+    var parts = [];
+    document.querySelectorAll('.tt-col').forEach(function (c) {
+      if (c.dataset.tid === 'synthese' || !c.__res) return;
+      parts.push('— ' + c.__res.n + ' :\n' + c.__res.text);
+    });
+    if (!parts.length) { toast('Générez d\'abord au moins une tradition', 'error'); return; }
+    running = true;
+    var go = document.getElementById('tt-go');
+    go.disabled = true;
+    col.querySelector('.tt-gen').disabled = true;
+    var cfg = null;
+    try { cfg = resolveModelConfig(state.model); } catch (e) {}
+    var stEl = col.querySelector('.tt-st');
+    var body = col.querySelector('.tt-body');
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      stEl.textContent = '⚪ pas de clé';
+      go.disabled = false;
+      running = false;
+      return;
+    }
+    var sys = 'Tu es un théologien comparatiste rigoureux et parfaitement neutre. On te donne une question et les réponses de cinq traditions chrétiennes, islamiques et juives. Produis une synthèse comparative structurée : **Convergences** · **Divergences majeures** · **Apports spécifiques de chaque tradition** · **Pistes de dialogue**. Reprends les sources citées. Maximum 300 mots. En français. Ne prends parti pour aucune tradition.';
+    var msgs = [{ role: 'system', content: sys }, { role: 'user', content: 'Question : ' + q + '\n\nRéponses des traditions :\n\n' + parts.join('\n\n') }];
+    stEl.textContent = '⏳ synthèse…';
+    var full = '';
+    try {
+      await callLLMStream(cfg, msgs, { temperature: 0.5, max_tokens: 1500 }, function (chunk, all) {
+        full = all;
+        if (!col.__pending) {
+          col.__pending = true;
+          setTimeout(function () { col.__pending = false; body.innerHTML = mdToHtml(full); }, 200);
+        }
+      });
+      body.innerHTML = mdToHtml(full);
+      stEl.textContent = '🟢 ok';
+      col.__res = { text: full, tid: 'synthese', n: '🧭 Synthèse comparée' };
+      col.querySelector('.tt-k').disabled = false;
+      document.getElementById('tt-keepall').disabled = false;
+    } catch (e) {
+      stEl.textContent = '🔴 erreur';
+      body.innerHTML = '<pre>' + String((e && e.message) || e).slice(0, 200).replace(/</g, '&lt;') + '</pre>';
+    }
+    go.disabled = false;
+    running = false;
   }
 
   async function runCol(col, t, q) {
@@ -39553,7 +39613,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       });
       body.innerHTML = mdToHtml(full);
       stEl.textContent = '🟢 ok';
-      return { text: full, tid: t.id, n: t.n };
+      return { text: full, tid: t.id, n: '🌍 ' + t.n };
     } catch (e) {
       stEl.textContent = '🔴 erreur';
       var msg = String((e && e.message) || e).slice(0, 200).replace(/</g, '&lt;');
@@ -39608,7 +39668,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       if (which && which !== col.dataset.tid) return;
       var res = col.__res;
       if (!res) return;
-      parts.push('### 🌍 ' + res.n + '\n\n' + res.text);
+      parts.push('### ' + res.n + '\n\n' + res.text);
     });
     if (parts.length) state.messages.push({ role: 'assistant', content: parts.join('\n\n'), ts: now() });
     if (typeof renderMessages === 'function') renderMessages();
@@ -39652,7 +39712,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var groups = [], cur = null;
     kids.forEach(function (k) {
       var t = (k.textContent || '').trim();
-      if (t.indexOf('🌍 ') === 0) { cur = [k]; groups.push(cur); }
+      if (t.indexOf('🌍 ') === 0 || t.indexOf('🧭 ') === 0) { cur = [k]; groups.push(cur); }
       else if (cur) cur.push(k);
     });
     if (groups.length < 2) return;
