@@ -16,19 +16,30 @@ from pathlib import Path
 
 BASE = 'https://traditionapostolique.fr'
 OUT = Path(__file__).resolve().parent.parent / 'tradition' / 'ta.json'
-DELAY = 0.4
+CACHE = Path(__file__).resolve().parent.parent / 'tradition' / 'cache'
+DELAY = 2.5   # v169 : le site limite le débit après plusieurs crawls rapprochés
 
-def fetch(url, retries=2):
+def fetch(url, retries=3, cache=True):
+    """v169 : cache disque — une page déjà récupérée n'est JAMAIS re-téléchargée
+    (les crawls répétés déclenchent le rate-limit du site). --refresh pour ignorer."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r'[^a-z0-9-]', '_', url.rsplit('/', 2)[-2] + '_' + url.rstrip('/').rsplit('/', 1)[-1])[:80]
+    cf = CACHE / (slug + '.html')
+    if cache and cf.exists() and cf.stat().st_size > 500:
+        return cf.read_text(encoding='utf-8', errors='replace')
     for i in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'THEOLOGICUS-corpus-builder/1.0 (offline patristic index)'})
             with urllib.request.urlopen(req, timeout=30) as r:
-                return r.read().decode('utf-8', 'replace')
+                txt = r.read().decode('utf-8', 'replace')
+            cf.write_text(txt, encoding='utf-8')
+            time.sleep(DELAY)
+            return txt
         except Exception as e:
             if i == retries:
                 print('  !! échec', url, e)
                 return None
-            time.sleep(1.5)
+            time.sleep(2 + 3 * i)   # backoff progressif
 
 def clean(s):
     s = re.sub(r'<!--\[?-?\d*--?>|<!--]--?>|<!---->', '', s)
@@ -103,9 +114,10 @@ def verse_keys(b, c, v1, v2):
     return ['%s:%s:%d' % (b, c, v) for v in range(v1, min(v2, v1 + 9) + 1)]
 
 def main():
+    refresh = '--refresh' in sys.argv
     # la page /sujets liste TOUS les sujets (le sitemap peut être tronqué
     # si le site limite le débit après plusieurs passages)
-    idx_page = fetch(BASE + '/sujets')
+    idx_page = fetch(BASE + '/sujets', cache=not refresh)
     if not idx_page:
         sys.exit('index /sujets inaccessible')
     sujets = sorted(set(
@@ -113,7 +125,7 @@ def main():
         for m in re.finditer(r'href="(/sujets/[a-z0-9-]+)"', idx_page)
     ))
     if len(sujets) < 100:
-        sm = fetch(BASE + '/sitemap.xml')
+        sm = fetch(BASE + '/sitemap.xml', cache=not refresh)
         if sm:
             sujets = sorted(set(u for u in re.findall(r'<loc>([^<]+)</loc>', sm)
                                 if '/sujets/' in u and u.count('/') >= 4))
@@ -121,10 +133,9 @@ def main():
     idx = {}
     ok = 0
     for n, url in enumerate(sujets, 1):
-        h = fetch(url)
+        h = fetch(url, cache=not refresh)
         if not h:
             continue
-        time.sleep(DELAY)
         m_title = re.search(r'<h1[^>]*>(.*?)</h1>', h, re.S)
         sujet = clean(m_title.group(1)) if m_title else url.rsplit('/', 1)[-1]
         # citations dans l'ordre de la page, avec leur position

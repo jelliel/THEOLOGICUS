@@ -538,7 +538,7 @@
     pop.style.cssText = 'position:fixed;z-index:100001;left:50%;top:16%;transform:translateX(-50%);width:min(430px,94vw);background:rgba(8,12,18,0.98);border:1px solid #f5c542;border-radius:12px;padding:14px;color:#fdf3d0;font:13px Consolas,Monaco,monospace;box-shadow:0 0 24px rgba(245,197,66,.4);';
     var saved = lsGet(LS_KEY) || '';
     pop.innerHTML = '<div style="font-size:11px;color:#f5c542;margin-bottom:8px;letter-spacing:1px;text-transform:uppercase;">⚙️ Serveur LibreTranslate</div>'
-      + '<div style="opacity:.85;font-size:11px;margin-bottom:8px;line-height:1.5;">Sur le PC : <b>py tools\\start_libretranslate.py</b><br>— ou une URL compatible (ex. https://libretranslate.com) :</div>'
+      + '<div style="opacity:.85;font-size:11px;margin-bottom:8px;line-height:1.5;">Sur le PC : bouton <b>▶ DÉMARRER</b> dans PARAMÈTRES → « 🌐 Traduction locale ».<br>— ou une URL compatible (ex. https://libretranslate.com) :</div>'
       + '<input id="lt-url" placeholder="http://192.168.1.50:5000" value="' + esc(saved).replace(/"/g,'&quot;') + '" style="width:100%;box-sizing:border-box;background:#0d1626;color:#eaf4ff;border:1px solid rgba(245,197,66,.4);border-radius:8px;padding:8px;font:12px Consolas,monospace;margin-bottom:8px;" />'
       + '<div style="display:flex;gap:8px;">'
       + '<button id="lt-test" style="flex:1;background:#1c3a78;color:#d6e4ff;border:1px solid #3d6fd8;padding:8px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px;">Tester</button>'
@@ -41674,20 +41674,18 @@ window.continueTradApart = async function (msgId) {
       document.body.appendChild(p);
       p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
       p.querySelector('#v167-close').addEventListener('click', function () { p.classList.remove('open'); });
-      /* v168 — traduction LibreTranslate des extraits anglais (bouton 🌐 FR) */
-      p.querySelector('#v167-body').addEventListener('click', function (ev) {
-        var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
-        if (!b) return;
-        ev.preventDefault();
-        if (b.dataset.busy) return;
-        var sn = b.dataset.sn || '';
+      /* v168/v169 — traduction LibreTranslate des extraits anglais (bouton 🌐 FR)
+         v169 : si le serveur est arrêté, bouton « ▶ Démarrer » INLINE
+         (endpoints /libretranslate/* du proxy exe, cf. module v59) +
+         auto-traduction dès que les modèles sont chargés. */
+      function translateSnippet(sn, b) {
         if (!(window.__LT && window.__LT.resolve)) {
           b.outerHTML = '<div class="v167-sn" style="opacity:.6">LibreTranslate indisponible dans ce contexte.</div>';
-          return;
+          return Promise.resolve();
         }
         b.dataset.busy = '1';
         b.textContent = '⏳ traduction…';
-        window.__LT.resolve().then(function (ep) {
+        return window.__LT.resolve().then(function (ep) {
           if (!ep) throw new Error('no-server');
           return fetch(ep + '/translate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -41697,11 +41695,64 @@ window.continueTradApart = async function (msgId) {
           var t = d && d.translatedText;
           b.outerHTML = t ? '<div class="v167-sn" style="color:#7fdfff">🇫🇷 ' + esc(t) + '</div>'
                           : '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>';
-        }).catch(function () {
-          b.textContent = '🌐 FR'; delete b.dataset.busy;
-          var stat = document.getElementById('v167-status');
-          if (stat) stat.textContent = 'LibreTranslate introuvable — lance « py tools\\start_libretranslate.py » (port 5000) ou règle une URL via le bouton 🌐 du chat.';
         });
+      }
+      /* v169 — propose de démarrer le serveur LOCALEMENT, dans le panneau */
+      function offerLtStart(stat, sn, b) {
+        b.textContent = '🌐 FR'; delete b.dataset.busy;
+        if (!stat) return;
+        stat.innerHTML = 'LibreTranslate est arrêté. <button type="button" id="v167-ltstart">▶ Démarrer LibreTranslate</button>'
+          + ' <span style="opacity:.6">— ou PARAMÈTRES → « 🌐 Traduction locale », ou bouton 🌐 du chat pour une URL distante.</span>';
+        var sb = document.getElementById('v167-ltstart');
+        if (!sb || sb.dataset.wired) return;
+        sb.dataset.wired = '1';
+        sb.addEventListener('click', function () {
+          sb.disabled = true;
+          sb.textContent = '⏳ démarrage… les modèles chargent (jusqu\'à ~1 min)';
+          var tries = 0;
+          function poll() {
+            tries++;
+            var done = false;
+            fetch('/libretranslate/status').then(function (r) { return r.json(); }).then(function (st) {
+              if (st && st.installed === false && !st.installing) {
+                /* pas installé : lancer l'installation via le proxy */
+                sb.textContent = '⬇️ installation de LibreTranslate (plusieurs minutes)…';
+                fetch('/libretranslate/install', { method: 'POST' }).catch(function () {});
+                setTimeout(poll, 5000);
+                return;
+              }
+              if (st && (st.ready || st.running)) { done = true; }
+              else if (tries < 40) { setTimeout(poll, 3000); return; }
+              if (done) {
+                /* serveur en ligne : (re)traduire l'extrait demandé */
+                translateSnippet(sn, b).then(function () {
+                  if (stat) stat.textContent = '';
+                  if (b.parentNode === null) { /* déjà remplacé : rien */ }
+                }).catch(function () {
+                  sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate';
+                });
+              } else {
+                sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate';
+                if (stat && st && st.last_error) stat.textContent = '⚠ ' + st.last_error;
+              }
+            }).catch(function () {
+              /* hors exe (pas de proxy) : réessayer un moment puis abandonner */
+              if (tries < 10) { setTimeout(poll, 3000); return; }
+              sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate';
+            });
+          }
+          fetch('/libretranslate/start', { method: 'POST' }).catch(function () {});
+          setTimeout(poll, 3000);
+        });
+      }
+      p.querySelector('#v167-body').addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
+        if (!b) return;
+        ev.preventDefault();
+        if (b.dataset.busy) return;
+        var sn = b.dataset.sn || '';
+        var stat = document.getElementById('v167-status');
+        translateSnippet(sn, b).catch(function () { offerLtStart(stat, sn, b); });
       });
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
