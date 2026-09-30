@@ -40934,6 +40934,33 @@ window.continueTradApart = async function (msgId) {
     'sainte cene': 1, 'derniere cene': 1, 'table des matieres': 1
   };
 
+  /* ── personnes majeures (titre fr souvent ≠ titre en) ── */
+  var PERSONNES = [
+    [/augustin\s+d['’]hippone/i, ['Augustine of Hippo', 'Augustin d\'Hippone']],
+    [/thomas\s+d['’]aquin/i, ['Thomas Aquinas', 'Thomas d\'Aquin']],
+    [/tertullien/i, ['Tertullian', 'Tertullien']],
+    [/orig[èe]ne/i, ['Origen', 'Origène']],
+    [/athanase/i, ['Athanasius', 'Athanase d\'Alexandrie']],
+    [/chrysostome/i, ['John Chrysostom', 'Jean Chrysostome']],
+    [/basile\s+de\s+c[ée]sar[ée]e/i, ['Basil of Caesarea', 'Basile de Césarée']],
+    [/gr[ée]goire\s+de\s+nysse/i, ['Gregory of Nyssa', 'Grégoire de Nysse']],
+    [/gr[ée]goire\s+de\s+nazianze/i, ['Gregory of Nazianzus', 'Grégoire de Nazianze']],
+    [/ephrem|[ée]phrem\s+le\s+syrien/i, ['Ephrem the Syrian', 'Éphrem le Syrien']],
+    [/avicenne|ibn\s+sina/i, ['Avicenna', 'Avicenne']],
+    [/al[- ]ghazali|algazel/i, ['Al-Ghazali']],
+    [/averro[èe]s|ibn\s+rushd/i, ['Averroes', 'Averroès']],
+    [/ma[ïi]monide/i, ['Maimonides', 'Maïmonide']],
+    [/\brachi\b/i, ['Rashi', 'Rachi']],
+    [/martin\s+luther/i, ['Martin Luther']],
+    [/jean\s+calvin/i, ['John Calvin', 'Jean Calvin']],
+    [/th[ée]r[èe]se\s+d['’]avila/i, ['Teresa of [Áá]vila', 'Thérèse d\'Avila']],
+    [/francois\s+d['’]assise|francois\s+d[\u2019']assise/i, ['Francis of Assisi', 'François d\'Assise']],
+    [/benoit\s+xvi|pape\s+benoit/i, ['Pope Benedict XVI']],
+    [/bouddha/i, ['Gautama Buddha', 'Bouddha']],
+    [/mahomet|muhammad/i, ['Muhammad', 'Mahomet']],
+    [/conseil\s+de\s+nicee?|concile\s+de\s+nic[ée]e/i, ['First Council of Nicaea', 'Premier concile de Nicée']]
+  ];
+
   /* ── extraction des candidats ── */
   function candidates(text) {
     var out = [], seen = {};
@@ -40944,6 +40971,7 @@ window.continueTradApart = async function (msgId) {
       out.push({ titles: titles, label: label || titles[0] });
     }
     var i, m;
+    for (i = 0; i < PERSONNES.length; i++) if (PERSONNES[i][0].test(text)) push(PERSONNES[i][1]);
     for (i = 0; i < SITES.length; i++) if (SITES[i][0].test(text)) push(SITES[i][1]);
     if (/sanaa|san'\u2019?a\u0304?'|\u1E63an'\u0101'/i.test(text)) push(['Sanaa manuscript', 'Codex Sanʿāʾ'], 'Manuscrits de Sanaa');
     if (/coran\s+bleu|blue\s+quran/i.test(text)) push(['Blue Quran', 'Coran bleu'], 'Coran bleu');
@@ -41032,7 +41060,9 @@ window.continueTradApart = async function (msgId) {
       var key = cands[i].titles[0].toLowerCase();
       var hit = c[key];
       if (hit && hit.neg) continue;
+      if (hit && hit.pend) continue;      /* fetch déjà en cours */
       if (hit && hit.img) { insertFig(box, hit, cands[i].label); continue; }
+      c[key] = { pend: 1 }; cset(c);      /* verrou avant le fetch */
       queue.push({ titles: cands[i].titles, label: cands[i].label, box: box });
       launched++;
     }
