@@ -7653,6 +7653,9 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
+    <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
+    <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
+    <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
     <select class="hud-select" id="agent-select">
       <option value="">▸ NO AGENT</option>
     </select>
@@ -7673,6 +7676,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-data-modal">⬡ DATA</button>
     <button class="hud-btn" id="compress-context-btn" title="Compresser le contexte : l'historique devient un résumé dense (irréversible)">🗜 COMPRESSER</button>
     <button class="hud-btn" id="open-stats-modal" title="Statistiques d'usage">📊 STATS</button>
+    <button class="hud-btn" id="export-word-btn" title="Exporter la conversation en document Word (.doc)">📄 WORD</button>
     <button class="hud-btn" id="open-settings-modal">⚙ PARAMÈTRES</button>
     </div>
     </header>
@@ -39759,6 +39763,463 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
   var btn = document.getElementById('open-trad-modal');
   if (btn) btn.addEventListener('click', open);
+})();
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v154 — QUATRE MODULES THEOLOGIQUES
+   A. 📖 Homélies & prêches structurés   B. 🧘 Lectio Divina guidée
+   C. 🔎 Recherche sémantique des archives  D. 📄 Export conversation Word
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ══════ A. HOMÉLIE ══════ */
+(function () {
+  'use strict';
+  if (window.__theoHom) return;
+  window.__theoHom = true;
+
+  var STYLES = ['Catholique', 'Orthodoxe', 'Protestant', 'Œcuménique'];
+
+  var CSS =
+    '#th-modal{position:fixed;inset:0;z-index:99996;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}' +
+    '#th-modal.open{display:flex}' +
+    '#th-box{width:min(880px,94vw);max-height:90vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '.th-x{background:transparent;border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:inherit;border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;flex:0 0 auto}' +
+    '#th-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px}' +
+    '#th-ctrl{display:flex;gap:8px;align-items:center;padding:10px 16px;flex-wrap:wrap}' +
+    '#th-pass{flex:1 1 240px;min-height:38px;max-height:90px;resize:vertical;background:var(--bg-dark,var(--bg,#0d131d));color:var(--text,#e8eefc);border:1px solid var(--cyan-dim,rgba(79,142,247,.3));border-radius:8px;padding:8px;font-family:inherit;font-size:13px}' +
+    '#th-style{max-width:170px;font-size:12px}' +
+    '#th-go{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.35));color:inherit;border-radius:8px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}' +
+    '#th-go:disabled{opacity:.5;cursor:default}' +
+    '#th-body{overflow:auto;padding:4px 16px 12px;flex:1 1 auto;font-size:13px;line-height:1.6}' +
+    '#th-body pre{white-space:pre-wrap;word-break:break-word;margin:0}' +
+    '#th-ft{display:flex;gap:8px;padding:8px 16px 12px;border-top:1px solid var(--cyan-dim,rgba(79,142,247,.15));flex:0 0 auto}' +
+    '.th-btn{background:var(--cyan-dim,rgba(79,142,247,.1));border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:inherit;border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer}' +
+    '.th-btn:hover{filter:brightness(1.25)}' +
+    '.th-btn:disabled{opacity:.35;cursor:default}';
+
+  var built = false;
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.textContent = CSS;
+    document.head.appendChild(st);
+    var opts = STYLES.map(function (s) { return '<option>' + s + '</option>'; }).join('');
+    var md = document.createElement('div');
+    md.id = 'th-modal';
+    md.innerHTML =
+      '<div id="th-box">' +
+        '<div id="th-head">📖 Homélie & prêche<button class="th-x" id="th-close">✕</button></div>' +
+        '<div id="th-ctrl">' +
+          '<textarea id="th-pass" rows="1" placeholder="Passage biblique (ex. Jean 15,1-8) ou thème (ex. la miséricorde)…"></textarea>' +
+          '<select id="th-style" class="hud-select">' + opts + '</select>' +
+          '<button id="th-go">✍️ RÉDIGER</button>' +
+        '</div>' +
+        '<div id="th-body"><pre>Choisissez un passage ou un thème, une tradition, puis rédigez.</pre></div>' +
+        '<div id="th-ft">' +
+          '<button class="th-btn" id="th-keep" disabled>✅ Garder au chat</button>' +
+          '<button class="th-btn" id="th-copy" disabled>📋 Copier</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('th-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
+    document.getElementById('th-go').addEventListener('click', run);
+    document.getElementById('th-keep').addEventListener('click', keep);
+    document.getElementById('th-copy').addEventListener('click', copy);
+  }
+
+  async function run() {
+    var pass = document.getElementById('th-pass').value.trim();
+    if (!pass) { toast('Donnez un passage ou un thème', 'error'); return; }
+    var style = document.getElementById('th-style').value;
+    var go = document.getElementById('th-go');
+    go.disabled = true; go.textContent = '⏳ RÉDACTION…';
+    var cfg = null;
+    try { cfg = resolveModelConfig(state.model); } catch (e) {}
+    var body = document.getElementById('th-body');
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      body.innerHTML = '<pre>Aucune clé API configurée.</pre>';
+      go.disabled = false; go.textContent = '✍️ RÉDIGER';
+      return;
+    }
+    var sys = 'Tu es un prédicateur expérimenté de tradition ' + style + '. Rédige une prédication complète, fidèle à cette tradition, sur le passage ou thème donné. Structure imposée avec titres markdown (## ) : Contexte exégétique · Plan de la prédication (3 parties titrées) · Application pour aujourd\'hui · Prière de clôture. Citations bibliques précises (livre chapitre,verset). 600 à 800 mots. Français vivant et concret.';
+    var full = '';
+    try {
+      await callLLMStream(cfg, [{ role: 'system', content: sys }, { role: 'user', content: pass }], { temperature: 0.7, max_tokens: 2500 }, function (chunk, all) {
+        full = all;
+        body.innerHTML = mdToHtml(full);
+        body.scrollTop = body.scrollHeight;
+      });
+      body.innerHTML = mdToHtml(full);
+      window.__theoHomText = full;
+      document.getElementById('th-keep').disabled = false;
+      document.getElementById('th-copy').disabled = false;
+    } catch (e) {
+      body.innerHTML = '<pre>' + String((e && e.message) || e).slice(0, 300).replace(/</g, '&lt;') + '</pre>';
+    }
+    go.disabled = false; go.textContent = '✍️ RÉDIGER';
+  }
+
+  function keep() {
+    var txt = window.__theoHomText;
+    if (!txt) return;
+    var pass = document.getElementById('th-pass').value.trim();
+    state.messages.push({ role: 'assistant', content: '#### 📖 Homélie — ' + (pass || 'sans titre') + '\n\n' + txt, ts: now() });
+    if (typeof renderMessages === 'function') renderMessages();
+    if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+    toast('✅ Homélie ajoutée à la conversation', 'success');
+    document.getElementById('th-modal').classList.remove('open');
+  }
+
+  function copy() {
+    var txt = window.__theoHomText || '';
+    try { navigator.clipboard.writeText(txt); toast('📋 Copié dans le presse-papiers', 'success'); }
+    catch (e) { toast('Copie impossible', 'error'); }
+  }
+
+  function open() {
+    build();
+    var inp = document.getElementById('user-input');
+    var p = document.getElementById('th-pass');
+    if (inp && inp.value.trim() && !p.value.trim()) p.value = inp.value.trim();
+    document.getElementById('th-modal').classList.add('open');
+  }
+
+  var btn = document.getElementById('open-homelie-modal');
+  if (btn) btn.addEventListener('click', open);
+})();
+
+/* ══════ B. LECTIO DIVINA ══════ */
+(function () {
+  'use strict';
+  if (window.__theoLect) return;
+  window.__theoLect = true;
+
+  var STEPS = ['🕯️ 1. Lectio — lire', '🕯️ 2. Meditatio — méditer', '🕯️ 3. Oratio — prier', '🕯️ 4. Contemplatio — contempler', '🕯️ 5. Actio — agir'];
+
+  var CSS =
+    '#tl-modal{position:fixed;inset:0;z-index:99996;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}' +
+    '#tl-modal.open{display:flex}' +
+    '#tl-box{width:min(760px,94vw);max-height:90vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid rgba(201,162,39,.3);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '#tl-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(201,162,39,.2);font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px}' +
+    '#tl-close{margin-left:auto;background:transparent;border:1px solid rgba(201,162,39,.3);color:inherit;border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer}' +
+    '#tl-ctrl{display:flex;gap:8px;align-items:center;padding:10px 16px;flex-wrap:wrap}' +
+    '#tl-pass{flex:1 1 240px;min-height:38px;max-height:90px;resize:vertical;background:var(--bg-dark,var(--bg,#0d131d));color:var(--text,#e8eefc);border:1px solid rgba(201,162,39,.35);border-radius:8px;padding:8px;font-family:inherit;font-size:13px}' +
+    '#tl-go{background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.4);color:inherit;border-radius:8px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer}' +
+    '#tl-go:disabled{opacity:.5;cursor:default}' +
+    '#tl-stage{overflow:auto;padding:10px 18px;flex:1 1 auto;font-size:13.5px;line-height:1.7}' +
+    '#tl-stage pre{white-space:pre-wrap;word-break:break-word;margin:0}' +
+    '#tl-nav{display:flex;gap:8px;align-items:center;padding:8px 16px 12px;border-top:1px solid rgba(201,162,39,.2);flex:0 0 auto;flex-wrap:wrap}' +
+    '.tl-btn{background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.35);color:inherit;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer}' +
+    '.tl-btn:hover{filter:brightness(1.25)}' +
+    '.tl-btn:disabled{opacity:.35;cursor:default}' +
+    '#tl-steps{font-size:11px;opacity:.7;margin-left:auto}';
+
+  var built = false;
+  var sections = [];
+  var cur = 0;
+  var raw = '';
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.textContent = CSS;
+    document.head.appendChild(st);
+    var md = document.createElement('div');
+    md.id = 'tl-modal';
+    md.innerHTML =
+      '<div id="tl-box">' +
+        '<div id="tl-head">🧘 Lectio Divina guidée<button id="tl-close" title="Fermer (Échap)">✕</button></div>' +
+        '<div id="tl-ctrl">' +
+          '<textarea id="tl-pass" rows="1" placeholder="Passage à prier (ex. Psaume 23 ; Jean 20,1-9)…"></textarea>' +
+          '<button id="tl-go">🕯️ COMMENCER</button>' +
+        '</div>' +
+        '<div id="tl-stage"><pre>Le parcours vous guidera en 5 étapes : Lectio, Meditatio, Oratio, Contemplatio, Actio.</pre></div>' +
+        '<div id="tl-nav">' +
+          '<button class="tl-btn" id="tl-prev" disabled>◀ Précédent</button>' +
+          '<button class="tl-btn" id="tl-next" disabled>Suivant ▶</button>' +
+          '<span id="tl-steps"></span>' +
+          '<button class="tl-btn" id="tl-keep" disabled>✅ Garder au chat</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('tl-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
+    document.getElementById('tl-go').addEventListener('click', run);
+    document.getElementById('tl-prev').addEventListener('click', function () { show(cur - 1); });
+    document.getElementById('tl-next').addEventListener('click', function () { show(cur + 1); });
+    document.getElementById('tl-keep').addEventListener('click', keep);
+  }
+
+  function splitSections(text) {
+    /* découpe le markdown sur les titres « ## » */
+    var lines = String(text || '').split('\n');
+    var secs = [], curS = null;
+    lines.forEach(function (l) {
+      if (/^#{1,3}\s/.test(l)) { curS = { title: l.replace(/^#{1,3}\s*/, ''), body: [] }; secs.push(curS); }
+      else if (curS) curS.body.push(l);
+    });
+    return secs.filter(function (s) { return s.body.join('').trim(); });
+  }
+
+  async function run() {
+    var pass = document.getElementById('tl-pass').value.trim();
+    if (!pass) { toast('Donnez un passage à prier', 'error'); return; }
+    var go = document.getElementById('tl-go');
+    go.disabled = true; go.textContent = '⏳ PRÉPARATION…';
+    var cfg = null;
+    try { cfg = resolveModelConfig(state.model); } catch (e) {}
+    var stage = document.getElementById('tl-stage');
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      stage.innerHTML = '<pre>Aucune clé API configurée.</pre>';
+      go.disabled = false; go.textContent = '🕯️ COMMENCER';
+      return;
+    }
+    var sys = 'Tu guides une Lectio Divina sur le passage donné. Produis EXACTEMENT 5 sections avec titres markdown ## : ' + STEPS.map(function (s) { return s; }).join(' ; ') + '. ' +
+      'Section 1 : cite le passage (ou son début), situe le contexte, invite à une lecture attentive et lente. ' +
+      'Section 2 : trois questions de méditation personnelle. ' +
+      'Section 3 : une prière inspirée du passage (je-tu avec Dieu). ' +
+      'Section 4 : invitation au silence et à la présence, en peu de mots. ' +
+      'Section 5 : un engagement concret et simple pour la journée. Français chaleureux et sobre.';
+    var full = '';
+    try {
+      await callLLMStream(cfg, [{ role: 'system', content: sys }, { role: 'user', content: pass }], { temperature: 0.6, max_tokens: 2000 }, function (chunk, all) {
+        full = all;
+        stage.innerHTML = mdToHtml(full);
+      });
+      raw = full;
+      sections = splitSections(full);
+      cur = 0;
+      if (sections.length >= 2) { show(0); document.getElementById('tl-keep').disabled = false; }
+      else { stage.innerHTML = mdToHtml(full); document.getElementById('tl-keep').disabled = false; }
+    } catch (e) {
+      stage.innerHTML = '<pre>' + String((e && e.message) || e).slice(0, 300).replace(/</g, '&lt;') + '</pre>';
+    }
+    go.disabled = false; go.textContent = '🕯️ COMMENCER';
+  }
+
+  function show(i) {
+    if (i < 0 || i >= sections.length) return;
+    cur = i;
+    var s = sections[i];
+    document.getElementById('tl-stage').innerHTML = mdToHtml('## ' + s.title + '\n\n' + s.body.join('\n'));
+    document.getElementById('tl-prev').disabled = (i === 0);
+    document.getElementById('tl-next').disabled = (i >= sections.length - 1);
+    document.getElementById('tl-steps').textContent = 'Étape ' + (i + 1) + '/' + sections.length;
+  }
+
+  function keep() {
+    if (!raw) return;
+    var pass = document.getElementById('tl-pass').value.trim();
+    state.messages.push({ role: 'assistant', content: '#### 🧘 Lectio Divina — ' + (pass || 'parcours') + '\n\n' + raw, ts: now() });
+    if (typeof renderMessages === 'function') renderMessages();
+    if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+    toast('✅ Parcours ajouté à la conversation', 'success');
+  }
+
+  function open() {
+    build();
+    var inp = document.getElementById('user-input');
+    var p = document.getElementById('tl-pass');
+    if (inp && inp.value.trim() && !p.value.trim()) p.value = inp.value.trim();
+    document.getElementById('tl-modal').classList.add('open');
+  }
+
+  var btn = document.getElementById('open-lectio-modal');
+  if (btn) btn.addEventListener('click', open);
+})();
+
+/* ══════ C. RECHERCHE SÉMANTIQUE DES ARCHIVES ══════ */
+(function () {
+  'use strict';
+  if (window.__theoSem) return;
+  window.__theoSem = true;
+
+  var IDX_KEY = 'theologicus_semidx_v1';
+
+  var CSS =
+    '#ts-modal{position:fixed;inset:0;z-index:99996;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}' +
+    '#ts-modal.open{display:flex}' +
+    '#ts-box{width:min(720px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '#ts-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px}' +
+    '#ts-close{margin-left:auto;background:transparent;border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:inherit;border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer}' +
+    '#ts-ctrl{display:flex;gap:8px;padding:10px 16px}' +
+    '#ts-q{flex:1 1 200px;min-height:36px;max-height:70px;resize:vertical;background:var(--bg-dark,var(--bg,#0d131d));color:var(--text,#e8eefc);border:1px solid var(--cyan-dim,rgba(79,142,247,.3));border-radius:8px;padding:8px;font-family:inherit;font-size:13px}' +
+    '#ts-go{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.35));color:inherit;border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}' +
+    '#ts-go:disabled{opacity:.5;cursor:default}' +
+    '#ts-res{overflow:auto;padding:6px 16px 16px;flex:1 1 auto;font-size:12.5px}' +
+    '.ts-hit{border:1px solid var(--cyan-dim,rgba(79,142,247,.2));border-radius:10px;padding:9px 11px;margin-bottom:8px}' +
+    '.ts-hit-h{display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px}' +
+    '.ts-hit-pct{margin-left:auto;font-size:11px;color:var(--cyan,#4f8ef7);font-variant-numeric:tabular-nums}' +
+    '.ts-hit-x{font-size:12px;opacity:.8;margin:5px 0 7px;line-height:1.5}' +
+    '.ts-btn{background:var(--cyan-dim,rgba(79,142,247,.1));border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:inherit;border-radius:8px;padding:4px 10px;font-size:11.5px;cursor:pointer}' +
+    '#ts-note{padding:0 16px 10px;font-size:10.5px;opacity:.55}';
+
+  var built = false;
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.textContent = CSS;
+    document.head.appendChild(st);
+    var md = document.createElement('div');
+    md.id = 'ts-modal';
+    md.innerHTML =
+      '<div id="ts-box">' +
+        '<div id="ts-head">🔎 Recherche sémantique des archives<button id="ts-close" title="Fermer (Échap)">✕</button></div>' +
+        '<div id="ts-ctrl">' +
+          '<textarea id="ts-q" rows="1" placeholder="Décrivez ce que vous cherchez : « cette fois où on parlait du libre arbitre chez Augustin »…"></textarea>' +
+          '<button id="ts-go">🔎 CHERCHER</button>' +
+        '</div>' +
+        '<div id="ts-res"><div style="opacity:.6;padding:8px 0">Décrivez le souvenir en langage naturel — la recherche comprend le sens, pas seulement les mots.</div></div>' +
+        '<div id="ts-note">Recherche par similarité d\'embeddings (modèle mistral-embed, votre clé Mistral). Les conversations sont indexées localement, une seule fois chacune.</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('ts-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
+    document.getElementById('ts-go').addEventListener('click', search);
+    document.getElementById('ts-res').addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('.ts-open') : null;
+      if (!b) return;
+      try { localStorage.setItem('theologicus_currentChatId', b.dataset.id); } catch (e2) {}
+      location.reload();
+    });
+  }
+
+  function hashStr(s) {
+    var h = 5381;
+    s = String(s || '');
+    for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; }
+    return String(h);
+  }
+
+  function chatDoc(c) {
+    var msgs = (c.messages || []).filter(function (m) { return m.role !== 'system'; });
+    var txt = msgs.map(function (m) { return typeof m.content === 'string' ? m.content : ''; }).join('\n').slice(0, 4000);
+    var fu = msgs.find(function (m) { return m.role === 'user'; });
+    var title = (fu && typeof fu.content === 'string' ? fu.content : 'Conversation').slice(0, 70);
+    return { id: c.id, title: title, text: txt };
+  }
+
+  async function embed(inputs) {
+    var key = cleanApiKey(state.keys.mistral || state.apiKey || '');
+    if (!key) throw new Error('Aucune clé Mistral — la recherche sémantique utilise mistral-embed');
+    var res = await fetch(apiEndpoint('https://api.mistral.ai/v1/embeddings'), {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'mistral-embed', input: inputs })
+    });
+    if (!res.ok) {
+      var t = '';
+      try { t = (await res.text()).slice(0, 120); } catch (e) {}
+      throw new Error('Embeddings HTTP ' + res.status + ' ' + t);
+    }
+    var j = await res.json();
+    return (j.data || []).map(function (d) { return d.embedding; });
+  }
+
+  function cos(a, b) {
+    var s = 0, na = 0, nb = 0;
+    for (var i = 0; i < a.length; i++) { s += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+    return s / (Math.sqrt(na) * Math.sqrt(nb) || 1);
+  }
+
+  async function search() {
+    var q = document.getElementById('ts-q').value.trim();
+    var resEl = document.getElementById('ts-res');
+    var go = document.getElementById('ts-go');
+    if (!q) return;
+    go.disabled = true; go.textContent = '⏳…';
+    resEl.innerHTML = '<div style="opacity:.6;padding:8px 0">Indexation et recherche en cours…</div>';
+    try {
+      var chats = (await db.getAll('chats')) || [];
+      var docs = chats.map(chatDoc).filter(function (d) { return d.text.length > 40; });
+      docs.sort(function (a, b) { return 0; });
+      /* les plus récents d'abord si trop nombreux */
+      if (docs.length > 40) docs = docs.slice(0, 40);
+      if (!docs.length) { resEl.innerHTML = '<div style="opacity:.6;padding:8px 0">Aucune archive à indexer.</div>'; go.disabled = false; go.textContent = '🔎 CHERCHER'; return; }
+      var idx = {};
+      try { idx = JSON.parse(localStorage.getItem(IDX_KEY) || '{}'); } catch (e) {}
+      var todo = docs.filter(function (d) { var e = idx[d.id]; return !e || e.h !== hashStr(d.text); });
+      if (todo.length) {
+        for (var i = 0; i < todo.length; i += 16) {
+          var batch = todo.slice(i, i + 16);
+          var vecs = await embed(batch.map(function (d) { return d.text; }));
+          batch.forEach(function (d, k) { idx[d.id] = { h: hashStr(d.text), v: vecs[k].map(function (x) { return Math.round(x * 1000) / 1000; }) }; });
+        }
+        try { localStorage.setItem(IDX_KEY, JSON.stringify(idx)); } catch (e2) {}
+      }
+      var qv = (await embed([q]))[0];
+      var scored = docs.map(function (d) {
+        var e = idx[d.id];
+        return { d: d, s: e ? cos(qv, e.v) : -1 };
+      }).filter(function (x) { return x.s > 0; }).sort(function (a, b) { return b.s - a.s; }).slice(0, 6);
+      if (!scored.length) { resEl.innerHTML = '<div style="opacity:.6;padding:8px 0">Aucun souvenir proche trouvé.</div>'; go.disabled = false; go.textContent = '🔎 CHERCHER'; return; }
+      var html = '';
+      scored.forEach(function (x) {
+        html += '<div class="ts-hit">' +
+          '<div class="ts-hit-h">💬 ' + String(x.d.title).replace(/</g, '&lt;') + '<span class="ts-hit-pct">' + Math.round(x.s * 100) + '%</span></div>' +
+          '<div class="ts-hit-x">' + String(x.d.text).replace(/</g, '&lt;').slice(0, 220) + '…</div>' +
+          '<button class="ts-btn ts-open" data-id="' + String(x.d.id).replace(/"/g, '') + '">📂 Ouvrir cette conversation</button></div>';
+      });
+      resEl.innerHTML = html;
+    } catch (e) {
+      resEl.innerHTML = '<div style="color:#e07070;padding:8px 0">❌ ' + String((e && e.message) || e).replace(/</g, '&lt;') + '</div>';
+    }
+    go.disabled = false; go.textContent = '🔎 CHERCHER';
+  }
+
+  function open() {
+    build();
+    document.getElementById('ts-modal').classList.add('open');
+  }
+
+  var btn = document.getElementById('open-semsearch-modal');
+  if (btn) btn.addEventListener('click', open);
+})();
+
+/* ══════ D. EXPORT CONVERSATION WORD ══════ */
+(function () {
+  'use strict';
+  if (window.__theoDocx) return;
+  window.__theoDocx = true;
+
+  function exportWord() {
+    var msgs = (state.messages || []).filter(function (m) { return m.role !== 'system'; });
+    if (!msgs.length) { toast('Rien à exporter — la conversation est vide', 'error'); return; }
+    var html = '<h1 style="text-align:center">THEOLOGICUS</h1>' +
+      '<p style="text-align:center;color:#666">' + new Date().toLocaleString('fr-FR') + '</p><hr>';
+    msgs.forEach(function (m) {
+      var who = m.role === 'user' ? 'VOUS' : (state.agent && state.agent.name ? String(state.agent.name).toUpperCase() : 'THEOLOGICUS');
+      var c = typeof m.content === 'string' ? m.content : '[pièce jointe — contenu non textuel]';
+      html += '<h2 style="color:#1a3a6b">' + who + '</h2>' + mdToHtml(c) + '<hr>';
+    });
+    var doc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="utf-8">' +
+      '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->' +
+      '<style>body{font-family:Georgia,\'Times New Roman\',serif;font-size:11pt;line-height:1.5}h1{font-size:20pt;color:#0d1f35}h2{font-size:13pt;color:#1a3a6b;border-bottom:1px solid #ddd;padding-bottom:3px}h3{font-size:12pt}blockquote{border-left:3px solid #ccc;margin-left:6px;padding-left:12px;color:#444}hr{border:none;border-top:1px solid #ddd}table{border-collapse:collapse}td,th{border:1px solid #999;padding:6px;vertical-align:top}</style>' +
+      '</head><body>' + html + '</body></html>';
+    var blob = new Blob(['\ufeff', doc], { type: 'application/msword' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'THEOLOGICUS-conversation-' + new Date().toISOString().slice(0, 10) + '.doc';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    toast('📄 Document Word généré — regardez vos téléchargements', 'success');
+  }
+
+  var btn = document.getElementById('export-word-btn');
+  if (btn) btn.addEventListener('click', exportWord);
 })();
 
 </script>
