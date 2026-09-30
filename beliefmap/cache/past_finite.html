@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1 user-scalable=yes">
+        <title>Logically, must past events be finite in number?</title>
+            <meta name="description" content="Clarifying the question: Is it philosophically impossible for an an actual infinity (ℵ0) of events to occur? Does reason alone allow us to conclude the past is...">
+        <meta property="og:title" content="Logically, must past events be finite in number?">
+        <meta property="og:description" content="Clarifying the question: Is it philosophically impossible for an an actual infinity (ℵ0) of events to occur? Does reason alone allow us to conclude the past is...">
+        <meta property="og:image" content="https://beliefmap.org/uploads/finite-past-events.svg">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="Logically, must past events be finite in number?">
+        <meta name="twitter:description" content="Clarifying the question: Is it philosophically impossible for an an actual infinity (ℵ0) of events to occur? Does reason alone allow us to conclude the past is...">
+        <meta name="twitter:image" content="https://beliefmap.org/uploads/finite-past-events.svg">
+        <link rel="canonical" href="https://beliefmap.org/past/finite">
+        <link rel="preload" as="style" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/app-BvRk9kiK.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/app-BvRk9kiK.js" data-navigate-track="reload"></script>    <link rel="preload" as="style" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" data-navigate-track="reload"></script>            <link rel="preload" as="style" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" data-navigate-track="reload" />            <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f1624">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicons/favicon-32x32.png">
+            <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CLNSLM00DV"></script>
+    <script>
+        window.BELIEFMAP_GA_ID = 'G-CLNSLM00DV';
+
+        // Secondary client shield for automated scrapers & test runners
+        if (navigator.webdriver || window.__nightmare || window.callPhantom || window._phantom) {
+            window['ga-disable-G-CLNSLM00DV'] = true;
+        }
+
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-CLNSLM00DV');
+
+        window.trackPageView = function(url, title) {
+            if (typeof gtag === 'function' && !window['ga-disable-G-CLNSLM00DV']) {
+                gtag('event', 'page_view', {
+                    page_title: title || document.title,
+                    page_location: window.location.href,
+                    page_path: url || (window.location.pathname + window.location.search + window.location.hash),
+                });
+            }
+        };
+    </script>
+    <link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" /><script type="module" src="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" data-navigate-track="reload"></script>        </head>
+<body class="site-view-classic site-view-atlas">
+        <nav class="site-view-switcher" aria-label="Choose site view" data-search-index="false">
+        <a href="https://beliefmap.org/past/finite?view=atlas" data-site-view="atlas" class="is-active" aria-current="page">
+            <span aria-hidden="true">◇</span> Atlas
+        </a>
+        <a href="https://beliefmap.org/past/finite?view=classic" data-site-view="classic" class="">
+            Classic
+        </a>
+    </nav>
+    <div id="site-wrapper">
+        <div id="left-pane" class="arguments-page-sidebar">
+    <nav class="sidebar-nav sidebar" data-search-index="false">
+        <a href="/" class="brand arguments-page-brand">
+            <object type="image/svg+xml" data="/images/Belief-Map-Logo.svg" aria-label="BeliefMap logo text with a compass design"></object>
+        </a>
+        <ul id="beliefmap-tree" class="menu"></ul>
+    </nav>
+    <div class="tree-search-dock">
+        <form action="/search-results/" class="search-form" method="get" data-search-index="false" role="search">
+            <label class="sr-only" for="tipue_search_input">Search the BeliefMap tree</label>
+            <input type="search" class="form-control" placeholder="Search the argument tree..." id="tipue_search_input" name="q" autocomplete="off" aria-controls="beliefmap-tree" aria-describedby="tree-search-status">
+            <button class="tree-search-clear" type="button" aria-label="Clear tree search" hidden>&times;</button>
+        </form>
+        <p id="tree-search-status" class="tree-search-status" role="status" aria-live="polite"></p>
+    </div>
+</div>
+<button class="tree-panel-toggle" type="button" aria-label="Collapse argument tree" aria-controls="left-pane" aria-expanded="true">
+    <span class="tree-panel-toggle__chevron" aria-hidden="true"></span>
+</button>
+        <main id="right-pane" class="ajax-wrap">
+            <div id="scroll-marker" style="position: absolute; top: 100vh;"></div>
+<article class="classic-argument-page" data-editor-page="170">
+    <header
+        id="atlas-question-top"
+        class="classic-atlas-hero atlas-hero atlas-hero-v2"
+         data-atlas-hero     >
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--green" aria-hidden="true"></div>
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--red" aria-hidden="true"></div>
+        
+        <div class="classic-atlas-hero__content">
+            <nav class="classic-atlas-breadcrumbs" aria-label="Breadcrumb">
+                <a href="/?view=atlas">BeliefMap</a>
+                <span aria-hidden="true">/</span>
+                <span>Atlas view</span>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Current question</span>
+            </nav>
+
+            <p class="classic-atlas-eyebrow"><span></span> A live question · two directions · no dead ends</p>
+            <h1 data-classic-question-title data-edit-page-field="title">Logically, must past events be finite in number?</h1>
+            <p class="classic-atlas-hero__lede">
+                Open the strongest case, cross-examine every claim, and follow each reply until the reasoning reaches bedrock.
+            </p>
+
+                            <a class="classic-atlas-start-link" href="#orientation">
+                    Read the question briefing <span aria-hidden="true">↓</span>
+                </a>
+                    </div>
+
+                    <div class="atlas-hero-routes" aria-label="Choose a direction into the debate">
+                                    <div class="atlas-hero-routes__theme-art">
+                        <span
+            class="argument-art-stage argument-art-stage--ink atlas-hero-routes__theme-stage"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/finite-past-events.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+        </span>
+                        </div>
+                                                <div class="atlas-hero-routes__heading">
+                    <span>Choose a direction</span>
+                    <small>Both paths stay open</small>
+                </div>
+                <div class="atlas-hero-routes__grid is-single">
+                                            <a class="atlas-hero-route atlas-hero-route--yes" href="#impossible" data-atlas-route="yes">
+                            <span>Supporting route</span>
+                            <strong>02</strong>
+                            <small>reasons mapped</small>
+                            <b>Explore support <i aria-hidden="true">↙</i></b>
+                        </a>
+                                                        </div>
+                <div class="atlas-hero-routes__scale" aria-hidden="true">
+                    <span style="--support-share: 100%"></span>
+                </div>
+            </div>
+            </header>
+
+            <section class="atlas-orientation" id="orientation" aria-labelledby="orientation-title">
+            <div class="atlas-orientation__heading">
+                <p>Before you begin</p>
+                <h2 id="orientation-title">Orient yourself to the question</h2>
+            </div>
+            <div class="atlas-orientation__cards">
+                                    <details
+                        class="atlas-orientation-card"
+                        id="question"
+                        data-editor-block="1038"
+                        data-editor-block-group="intro"
+                         open                     >
+                        <summary>
+                            <span>01</span>
+                            <strong data-edit-block-field="heading">Clarifying the question</strong>
+                            <i aria-hidden="true"></i>
+                        </summary>
+                        <div class="atlas-orientation-prose">
+                            <div data-edit-block-field="raw_expanded"><p>Is it philosophically <em>impossible</em> for an an actual infinity (ℵ0) of events to occur? Does reason alone allow us to conclude the past is finite in duration?</p>
+<p><strong>Actual infinity</strong> = def. A completed infinity. A collection of definite and discrete members whose number is greater than any natural number. (In set theory, completed sets like {0, 1, 2, 3…} and {0, 2, 4, 8…} are actually infinite.)<sup>1</sup></p>
+
+</div>
+                                                            <details class="atlas-orientation-sources">
+                                    <summary>Sources and notes</summary>
+                                    <div data-edit-block-field="raw_footnotes"><ol>
+<li>The actual infinity is contrasted with the potential infinity.</li>
+</ol>
+<blockquote>
+<p><strong>William Lane Craig &amp; James Sinclair</strong>: “Cantor called the potential infinite a “variable finite” and attached the sign ∞ (called a lemniscate) to it; this signified that it was an “improper infinite” (Cantor 1915, pp. 55–6). The actual infinite he pronounced the “true infinite” and assigned the symbol ℵ0 (aleph zero) to it. This represented the number of all the numbers in the series 1, 2, 3, . . . and was the first infinite or transfinite number, coming after all the finite numbers. According to Cantor, a collection or set is infinite when a part of it is equivalent to the whole (Cantor 1915, p. 108). Utilizing this notion of the actual infinite, Cantor was able to develop a whole system of transfinite arithmetic.” <ref>[<em>The Blackwell Companion to Natural Theology</em> (Blackwell, 2009), 104.]</ref></p>
+</blockquote>
+
+</div>
+                                </details>
+                                                    </div>
+                    </details>
+                                    <details
+                        class="atlas-orientation-card"
+                        id="experts"
+                        data-editor-block="1039"
+                        data-editor-block-group="intro"
+                                            >
+                        <summary>
+                            <span>02</span>
+                            <strong data-edit-block-field="heading">Experts often say yes</strong>
+                            <i aria-hidden="true"></i>
+                        </summary>
+                        <div class="atlas-orientation-prose">
+                            <div data-edit-block-field="raw_expanded"><ul>
+<li><strong>Rudgar Vaas</strong>: “Because we are able to assign a symbol to represent ‘infinity’ and can manipulate such a symbol according to specified rules, one might assume that corresponding infinite entities (e.g. particles or universes) exist. But the actual (i.e. realized in contrast to potential or conceptual) physical (in contrast to the mathematical) infinite has been criticized vehemently being not constructible, implying contradictions etc. … If this would be correct it should also apply to an infinite past. <ref>[“Time before Time.” arxiv.org/pdf/physics/0408111 (2004), 9.]</ref></li>
+<li><strong>George Ellis, Uli Kirchner, &amp; William Stoeger</strong>: “Can there be an infinite set…? We suggest that, on the basis of well-known philosophical arguments, the answer is No. <ref>[“Multiverses and Physical Cosmology.” arXiv:astro-ph/0305292 v3 (2003), 14.]</ref></li>
+</ul>
+
+</div>
+                                                    </div>
+                    </details>
+                                            </div>
+        </section>
+    
+<div class="arguments-page" data-editor-page="170">
+            <div class="classic-question-keeper atlas-question-waypoint" data-classic-question-keeper data-search-index="false" aria-label="Question navigation">
+            <nav class="atlas-question-trail" aria-label="Question path">
+                <button class="atlas-question-trail__handle" type="button" aria-expanded="false" aria-controls="atlas-question-trail-popover" aria-label="Show question path">
+                    <span class="atlas-question-trail__branch" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="atlas-question-trail__count" data-atlas-question-trail-count>0</span>
+                </button>
+                <div class="atlas-question-trail__popover" id="atlas-question-trail-popover">
+                    <span class="atlas-question-trail__eyebrow">Argument path</span>
+                    <ol data-atlas-question-trail></ol>
+                </div>
+            </nav>
+            <div class="atlas-question-waypoint__current">
+                <a class="classic-question-keeper__question" href="#atlas-question-top" aria-current="page" aria-label="Return to the current question: Logically, must past events be finite in number?">Logically, must past events be finite in number?</a>
+                <nav class="atlas-question-waypoint__stances" aria-label="Jump to an argument section">
+                                            <a href="#atlas-stance-section-yes" data-atlas-stance="yes" class="is-active"  aria-current="location"  aria-label="Jump to the Yes section">Yes</a>
+                                                        </nav>
+            </div>
+        </div>
+    
+    
+    
+            <div id="atlas-stance-section-yes" class="green points-preface-div classic-section-divider is-affirming" data-atlas-stance-section="yes">
+            <span class="classic-section-divider__stance">Yes</span>
+            <span class="classic-section-divider__context">
+                <small>Reasons affirming the proposition</small>
+                <strong>Logically, must past events be finite in number?</strong>
+            </span>
+        </div>
+                    <ul>
+                <li class="point-li active obscured" data-editor-block="1040" data-editor-block-group="yes" data-editor-block-anchor="impossible" data-editor-can-move-up="false" data-editor-can-move-down="true" data-editor-has-response="true" data-editor-has-footnotes="true">
+                    <h2 class="accordion-header green" id="impossible" data-editorial-relation="" data-edit-block-field="heading">Infinities can&#039;t exist in the world</h2>
+                    <div class="bubble-container">
+                        <div class="back-decor green"></div>
+                                                    <section class="bubble opener green has-atlas-art">
+                                                                    <a
+            href="/infinity/impossible"
+            aria-label="Explore Argument illustration"
+            class="argument-art-stage argument-art-stage--ink argument-art-stage--linked atlas-bubble-art"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/hilberts-infinite-hotel.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+            <span class="argument-art-link-cue" aria-hidden="true">
+                <span>Explore article</span><i>↗</i>
+            </span>
+        </a>
+                                                                    <div data-edit-block-field="raw_expanded"><p>In general, an actual infinity cannot exist or be instantiated in the mind-independent world.</p>
+<evid>
+<p><a href="/infinity/impossible">This page</a> analyzes two arguments…</p>
+<ul>
+<li><a href="/infinity/impossible#contradictions">Infinity yields logical impossibilities</a>, as in the Grim Reaper paradox. Infinity minus infinity can also be shown to result in contradictory answers.</li>
+<li><a href="/infinity/impossible#absurdities">Infinity yields metaphysical impossibilities</a>, like Hilbert's infinite-room hotel, or paradoxes of the serrated continuum.</li>
+</ul>
+</evid>
+<p>The inability for actual infinities to be instantiated suggests the past is <em>finite</em> because an <em>infinite</em> past would require the instantiation of an infinite number of past events.<sup>1</sup>  As confessed by one atheist specialist on the topic:</p>
+<blockquote><b>Graham Oppy</b>: “…an infinite number of events stretching back into the past would form an actually infinite set… I am happy to grant that an infinite temporal regress is an actual infinite.” <ref>[<i>Arguing about Gods</i> (Cambridge, 2006), 141-142.]</ref></blockquote>
+
+</div>
+                                                                    <div class="bubble response red" data-edit-block-field="raw_response"><p><strong>No</strong>,</p>
+<ul>
+<li><a href="/infinity/impossible#set-theory-consistent">Infinity is consistent in Set Theory</a>, and that's enough to demonstrate its metaphysical possibility.</li>
+</ul>
+<p><strong>So?</strong> Couldn't it simply be that…</p>
+<ul>
+<li>Presentism is true. If it is, past events no longer exist and so there really is no presently instantiated actual infinity. (But see reply).<sup>1</sup></li>
+</ul>
+
+</div>
+                                                                                                    <div class="footnotes" data-edit-block-field="raw_footnotes"><ol>
+<li>Even on presentism, there &quot;have been&quot; an actually infinite number of events. Some critics say this response implies the future is then <em>also</em> actually infinite (which might be an undesirable result), because by way of parallel reasoning there &quot;will be&quot; an actual infinity number of events. However, this assumption is misplacedl there will <em>never</em> be an actual infinity of future events. Rather, the series of events will go <em>toward</em> infinity as a limit. This is part an parcel with presentism where an actual and potential infinity are distinguished.</li>
+</ol>
+
+</div>
+                                                            </section>
+                                            </div>
+                </li>
+            </ul>
+                    <ul>
+                <li class="point-li active obscured" data-editor-block="1041" data-editor-block-group="yes" data-editor-block-anchor="unconstructible" data-editor-can-move-up="true" data-editor-can-move-down="false" data-editor-has-response="true" data-editor-has-footnotes="true">
+                    <h2 class="accordion-header green" id="unconstructible" data-editorial-relation="" data-edit-block-field="heading">Infinities can&#039;t be formed by addition</h2>
+                    <div class="bubble-container">
+                        <div class="back-decor green"></div>
+                                                    <section class="bubble opener green has-atlas-art">
+                                                                    <span
+            class="argument-art-stage argument-art-stage--ink atlas-bubble-art"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/tree-rings-infinity.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+        </span>
+                                                                    <div data-edit-block-field="raw_expanded"><p><strong>A collection formed by successive-addition cannot be infinite</strong>.<sup>1</sup></p>
+<evid>
+<p><strong>After all:</strong></p>
+<ul>
+<li>Any finite quantity plus another finite quantity is always a finite quantity.</li>
+</ul>
+</evid>
+<p>This is relevant because the temporal series of events in the past is a collection formed by successive addition.</p>
+
+</div>
+                                                                    <div class="bubble response red" data-edit-block-field="raw_response"><p><strong>So?</strong> Plausibly…</p>
+<ul>
+<li>Past events have <em>always</em> been infinite in number?</li>
+<li>Past events are not successive-additions?<sup>2</sup></li>
+</ul>
+
+</div>
+                                                                                                    <div class="footnotes" data-edit-block-field="raw_footnotes"><ol>
+<li>If an infinite number of hours can be “achieved,” then someone can have a infinitieth birthday. Absurdities and internal contradictions abound.</li>
+</ol>
+<blockquote>
+<p>• <strong>Ellis, Kirchner, &amp; Stoeger</strong>: “The arguments against an infinite past time are strong – it’s simply not constructible in terms of events or instants of time, besides being conceptually indefinite” <ref>[G.F.R. Ellis, U. Kirchner, and W.R. Stoeger, “Multiverse and Physical Cosmology,” <em>Monthly Notices of the Royal Astronomical Society</em>, Vol. 347, Is. 3, (2004): 14.]</ref></p>
+</blockquote>
+<ol start="2">
+<li>For example:</li>
+</ol>
+<blockquote>
+<p>• <strong>Graham Oppy</strong>: “...if one supposes that time has the structure of the real numbers and if one also supposes that there are continuous processes in time, then one will deny that past events form a series, and one will also deny that the collection of past events fall under a relation of successive addition. … time is modelled by the real numbers in so many of our most successful scientific theories,…” <ref>[<em>Arguing about Gods</em> (Cambridge, 2009), 142-143 (Oppy said this also in 2006)]</ref></p>
+</blockquote>
+
+</div>
+                                                            </section>
+                                            </div>
+                </li>
+            </ul>
+                    
+    </div>
+</article>
+        </main>
+    </div>
+    <script defer src="https://unpkg.com/rxjs@^7/dist/bundles/rxjs.umd.min.js"></script>
+    <script defer src="/js/slide-element.min.js"></script>
+    <script defer src="/js/nav.js?v=1788717090"></script>
+    <script defer src="/js/section-animations.js"></script>
+            </body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1 user-scalable=yes">
+        <title>How to use inductive / Bayesian reasoning (Simplified)</title>
+            <meta name="description" content="Intro to Bayesian Epistemology / Inference: THREE KINDS OF REASONING
+Abductive reasoning is reasoning or inferring to the best explanation. It takes a pool of c...">
+        <meta property="og:title" content="How to use inductive / Bayesian reasoning (Simplified)">
+        <meta property="og:description" content="Intro to Bayesian Epistemology / Inference: THREE KINDS OF REASONING
+Abductive reasoning is reasoning or inferring to the best explanation. It takes a pool of c...">
+        <meta property="og:image" content="https://beliefmap.org/uploads/bayesian-reasoning.svg">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="How to use inductive / Bayesian reasoning (Simplified)">
+        <meta name="twitter:description" content="Intro to Bayesian Epistemology / Inference: THREE KINDS OF REASONING
+Abductive reasoning is reasoning or inferring to the best explanation. It takes a pool of c...">
+        <meta name="twitter:image" content="https://beliefmap.org/uploads/bayesian-reasoning.svg">
+        <link rel="canonical" href="https://beliefmap.org/bayesian-reasoning">
+        <link rel="preload" as="style" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/app-BvRk9kiK.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/app-BvRk9kiK.js" data-navigate-track="reload"></script>    <link rel="preload" as="style" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" data-navigate-track="reload"></script>            <link rel="preload" as="style" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" data-navigate-track="reload" />            <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f1624">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicons/favicon-32x32.png">
+            <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CLNSLM00DV"></script>
+    <script>
+        window.BELIEFMAP_GA_ID = 'G-CLNSLM00DV';
+
+        // Secondary client shield for automated scrapers & test runners
+        if (navigator.webdriver || window.__nightmare || window.callPhantom || window._phantom) {
+            window['ga-disable-G-CLNSLM00DV'] = true;
+        }
+
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-CLNSLM00DV');
+
+        window.trackPageView = function(url, title) {
+            if (typeof gtag === 'function' && !window['ga-disable-G-CLNSLM00DV']) {
+                gtag('event', 'page_view', {
+                    page_title: title || document.title,
+                    page_location: window.location.href,
+                    page_path: url || (window.location.pathname + window.location.search + window.location.hash),
+                });
+            }
+        };
+    </script>
+    <link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" /><script type="module" src="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" data-navigate-track="reload"></script>        </head>
+<body class="site-view-classic site-view-atlas">
+        <nav class="site-view-switcher" aria-label="Choose site view" data-search-index="false">
+        <a href="https://beliefmap.org/bayesian-reasoning?view=atlas" data-site-view="atlas" class="is-active" aria-current="page">
+            <span aria-hidden="true">◇</span> Atlas
+        </a>
+        <a href="https://beliefmap.org/bayesian-reasoning?view=classic" data-site-view="classic" class="">
+            Classic
+        </a>
+    </nav>
+    <div id="site-wrapper">
+        <div id="left-pane" class="arguments-page-sidebar">
+    <nav class="sidebar-nav sidebar" data-search-index="false">
+        <a href="/" class="brand arguments-page-brand">
+            <object type="image/svg+xml" data="/images/Belief-Map-Logo.svg" aria-label="BeliefMap logo text with a compass design"></object>
+        </a>
+        <ul id="beliefmap-tree" class="menu"></ul>
+    </nav>
+    <div class="tree-search-dock">
+        <form action="/search-results/" class="search-form" method="get" data-search-index="false" role="search">
+            <label class="sr-only" for="tipue_search_input">Search the BeliefMap tree</label>
+            <input type="search" class="form-control" placeholder="Search the argument tree..." id="tipue_search_input" name="q" autocomplete="off" aria-controls="beliefmap-tree" aria-describedby="tree-search-status">
+            <button class="tree-search-clear" type="button" aria-label="Clear tree search" hidden>&times;</button>
+        </form>
+        <p id="tree-search-status" class="tree-search-status" role="status" aria-live="polite"></p>
+    </div>
+</div>
+<button class="tree-panel-toggle" type="button" aria-label="Collapse argument tree" aria-controls="left-pane" aria-expanded="true">
+    <span class="tree-panel-toggle__chevron" aria-hidden="true"></span>
+</button>
+        <main id="right-pane" class="ajax-wrap">
+            <div id="scroll-marker" style="position: absolute; top: 100vh;"></div>
+<article class="classic-argument-page" data-editor-page="1156">
+    <header
+        id="atlas-question-top"
+        class="classic-atlas-hero atlas-hero atlas-hero-v2"
+         data-atlas-hero     >
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--green" aria-hidden="true"></div>
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--red" aria-hidden="true"></div>
+        
+        <div class="classic-atlas-hero__content">
+            <nav class="classic-atlas-breadcrumbs" aria-label="Breadcrumb">
+                <a href="/?view=atlas">BeliefMap</a>
+                <span aria-hidden="true">/</span>
+                <span>Atlas view</span>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Current question</span>
+            </nav>
+
+            <p class="classic-atlas-eyebrow"><span></span> A live question · two directions · no dead ends</p>
+            <h1 data-classic-question-title data-edit-page-field="title">How to use inductive / Bayesian reasoning (Simplified)</h1>
+            <p class="classic-atlas-hero__lede">
+                Open the strongest case, cross-examine every claim, and follow each reply until the reasoning reaches bedrock.
+            </p>
+
+                            <a class="classic-atlas-start-link" href="#orientation">
+                    Read the question briefing <span aria-hidden="true">↓</span>
+                </a>
+                    </div>
+
+                    <div class="atlas-hero-routes" aria-label="Choose a direction into the debate">
+                                    <div class="atlas-hero-routes__theme-art">
+                        <span
+            class="argument-art-stage argument-art-stage--ink atlas-hero-routes__theme-stage"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/bayesian-reasoning.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+        </span>
+                        </div>
+                                                <div class="atlas-hero-routes__heading">
+                    <span>Choose a direction</span>
+                    <small>Both paths stay open</small>
+                </div>
+                <div class="atlas-hero-routes__grid is-single">
+                                                        </div>
+                <div class="atlas-hero-routes__scale" aria-hidden="true">
+                    <span style="--support-share: 50%"></span>
+                </div>
+            </div>
+            </header>
+
+            <section class="atlas-orientation" id="orientation" aria-labelledby="orientation-title">
+            <div class="atlas-orientation__heading">
+                <p>Before you begin</p>
+                <h2 id="orientation-title">Orient yourself to the question</h2>
+            </div>
+            <div class="atlas-orientation__cards">
+                                    <details
+                        class="atlas-orientation-card"
+                        id="bayesian"
+                        data-editor-block="3714"
+                        data-editor-block-group="intro"
+                         open                     >
+                        <summary>
+                            <span>01</span>
+                            <strong data-edit-block-field="heading">Intro to Bayesian Epistemology / Inference</strong>
+                            <i aria-hidden="true"></i>
+                        </summary>
+                        <div class="atlas-orientation-prose">
+                            <div data-edit-block-field="raw_expanded"><p>THREE KINDS OF REASONING<br />
+<u><strong>Abductive reasoning</strong></u> is reasoning or inferring to the best explanation. It takes a pool of competing explanations for some data, and in order to adjucate between them it asks about their relative simplicity, plausibility, explanatory power, explanatory scope, and so forth.</p>
+<p><u><em>Deductive reasoning</em></u> is the process of inferring a conclusion from premises. (For example: 1. If something begins to exist, it has a cause.  2. The Universe began to exist. 3. Therefore, the Universe has a cause. The form of this argument, using variables to stand in for the propositions, looks like this: 1. If p then q, 2. p, 3. therefore q.) And we can use truth tables and truth trees to prove this argument form is formally “valid,” meaning that <em>if</em> you accept the premises, you are <em>logically required</em> to accept the conclusion. For more complex arguments, we can use “rules of inference” to prove it even more efficiently. Learning and using these rules to form valid proofs is what students learn in classes on logic.</p>
+<p><u><em>Inductive reasoning</em></u>, by contrast, only gets us probablities. It is “confirmation” or evidence-focused reasoning.</p>
+<p><em>Bayesian Inference</em> is the standard formalized way to use inductive reasoning.</p>
+<blockquote>
+<ul>
+<li><strong>Stanford Encyclopedia of Philosophy</strong>: In the past decade, Bayesian confirmation theory has firmly established itself as the dominant view on confirmation;<sup>2</sup></li>
+</ul>
+</blockquote>
+<p>Instead of using rules of inference, as in deductive logic, it asks you to assign specific probabilities to claims representing your confidence level, i.e. your “credence values.” These values have to cohere, so the probability of any claim and its negation have to add up to 1. So, for example, you may think the proposition &lt; God exists &gt; has a .99 likelihood of being true, and if so Bayesianism says you are rationally required then to think &lt; God does NOT exist &gt; has the exact inverse likelihood of being true, namely a .01 likelihood. In ways like this, Bayesianism takes your credences and leverages probability theory to make sure “they dance in accordance with the probability calculus,” especially as you acquire new evidence and update your credences in response to the new evidence. If you violate the calculus, then you will fall prey to so-called “Dutch Book” betting arguments, which are pragmatic self-defeat tests that demonstrate your irrationality.<sup>1</sup></p>
+<p>Thankfully, the core lessons from Bayesianism are easy to encapsulate and so this introduction does not need to be long. These lessons end up being largely identical to the theoretical virtues in abductive reasoning, listed above.</p>
+<hr />
+<p>TWO ILLUSTRATIONS OF BAYESIAN INFERENCE</p>
+<p>For a very simple controlled example, suppose you have two jars with 100 balls in each:</p>
+<br>
+<p><img src="/uploads/bayesian-jar-balls.svg" alt="" /></p>
+<ul>
+<li>Jar #1 has 99 white balls and one 1 black ball.</li>
+<li>Jar #2 has 99 black balls and 1 white ball</li>
+</ul>
+<p>With the jars sealed and looking identical on the surface, you may start off being agnostic about which jar is which as you look at both of them. But if you are allowed to blindly draw a ball from one of them and the ball you pull out happens to be black, that may not prove you drew from Jar #2, but it certanily fits <em>better</em> on the hypothesis that you did. (It was the one with 99 black balls, after all). That means your drawing a black ball is <em>evidence</em> that you drew from Jar #2. But now suppose Jar #2 actually had 50 white balls and 50 black balls. Is that still evidence that you drew from Jar #2? Of course it is, because that is still better than Jar #1 which only has one black ball. Even if Jar#2 only had 2 black balls, you are still more likely to have drawn a black ball from Jar #2 than Jar #1. In fact, you would be twice as likely to have draw from Jar#2. This would still be slight evidence in favor of the hypothesis that you just drew from Jar #2 rather than Jar #1.</p>
+<p>So lets generalize this to get our definition of evidence:</p>
+<ul>
+<li>Evidence for hypothesis X =  An observation that rationally increases the likelihood of hypothesis X being true, even if it only increases it by a little bit.</li>
+</ul>
+<p>How can an observation do this? We just saw. An observation does this when it is more rationally <em>expected</em> (epistemically probable) given the hypothesis is true than given it is false. It is more rationally expected that you would draw a black ball on the assumption that you drew from Jar #2, so that’s why drawing a black ball constitutes evidence for the “I drew from Jar #2” hypothesis.</p>
+<br>
+<p><img src="/uploads/gun-fingerprint.svg" alt="" /></p>
+<p>A less behaved illustration may help solidify understanding:</p>
+<p>Suppose that in a murder trial, the murder weapon was brought forward and proven to have fingerprints on it that ostensibly match the suspect's. His name is John. Obviously, this is evidence (not proof) of John's guilt. But why? Is there a formal way to explain this? Yes! Here is why: because this particular observation O is more expected on the hypothesis H1 that &lt; John is guilty &gt; than on the hypothesis H2 that &lt; John is innocent &gt;. And again, we can also discern from the mathematics of Bayes that, the more expected the observation O is on H1 than H2, to a corresponding degree it is stronger evidence for H1 over H2. Would this automatically mean that H1 is true? Of course not; evidence is not proof. Even <em>strong</em> evidence can be outweighed or contextualized away, but your starting confidence in John’s guilt should presumably shift when you find out that his fingerprints are on the murder weapon.</p>
+<hr />
+<p>PRIOR PROBABILITY</p>
+<p>No discussion of Bayes would be complete without a discussion of &quot;prior probability.&quot; This is the starting credence that you update as evidence comes in. A quick way to think of it is this: if you currently think the likelihood of God existing is .99999, then it may take a lot of evidence to move you to agnosticism at .5 or less than .5 (i.e. atheism). Likewise, if you start off thinking the likelihood of God's existence is .000001, then it may take a lot of evidence to move you to theism. You can find rational people with both kinds of prior probability, but that doesn't mean everyone is rational. Maybe they got to their prior probability after having updated in irrational ways, for example.</p>
+<p>Where does our prior probability come from? Usually it comes from the last time you considered the issue (e.g. of God's existence) and updated it in response to new relevant data. For some people, the prior probability of God is very high based on their evidence (or their being irrational), and for others it is quite low. Some people are better than others at making sure their credences dance in accordance with the probability calculus.<sup>3</sup>:</p>
+<hr />
+<p>CONCLUSION:</p>
+<p>BeliefMap is an evidence and argument database, and it frames its arguments as “Bayesian” face-offs between green's view and red's view on some controversial question framed in the title. The arguments introduce new data, and we ultimately want to know whether the data pointed to is more expected on one view than the other, and by how much. The assumption is that we should update our confidence level in green or red's position on the claim based on how well their hypothesis fares against new data. Again, there are mathematically formal ways of doing all this which draw on basic probability theory but you don't need to get into the mathematics in order to get the gist of how Bayesian reasoning works.</p>
+<p>The take-away here is that certain observations should cause your confidence in propositions to shift up or down, and it should shift in accordance with how much more likely the observation O is on H1 vs H2. If you keep this in mind, you can quickly cut past many of the bad methods and criteria people invent for evaluating questions like “Does God exist?” or “Did Jesus rise from the dead?”<sup>4</sup></p>
+
+</div>
+                                                            <details class="atlas-orientation-sources">
+                                    <summary>Sources and notes</summary>
+                                    <div data-edit-block-field="raw_footnotes"><ol>
+<li>A helpful gist:</li>
+</ol>
+<ul>
+<li><em>The Stanford Encyclopedia of Philosophy</em> (William Talbott): “[Bayesian epistemology's] two main features are: (1) the introduction of a formal apparatus for inductive logic; (2) the introduction of a pragmatic self-defeat test (as illustrated by Dutch Book Arguments) for epistemic rationality as a way of extending the justification of the laws of deductive logic to include a justification for the laws of inductive logic. The formal apparatus itself has two main elements: the use of the laws of probability as coherence constraints on rational degrees of belief (or degrees of confidence) and the introduction of a rule of probabilistic inference, a rule or principle of conditionalization.</li>
+</ul>
+<ol start="2">
+<li>It has a surplus of applications</li>
+</ol>
+<ul>
+<li><em>The Stanford Encyclopedia of Philosophy</em> (William Talbott): “One important application of Bayesian epistemology has been to the analysis of scientific practice in Bayesian Confirmation Theory. In addition, a major branch of statistics, Bayesian statistics, is based on Bayesian principles. In psychology, an important branch of learning theory, Bayesian learning theory, is also based on Bayesian principles. Finally, the idea of analyzing rational degrees of belief in terms of rational betting behavior led to the 20th century development of a new kind of decision theory, Bayesian decision theory, which is now the dominant theoretical model for both the descriptive and normative analysis of decisions. The combination of its precise formal apparatus and its novel pragmatic self-defeat test for justification makes Bayesian epistemology one of the most important developments in epistemology in the 20th century” <ref>[“Bayesian Epistemology” (Stanford, 2008)  <a href="https://plato.stanford.edu/entries/epistemology-bayesian/">online</a>]</ref></li>
+</ul>
+<ol start="3">
+<li>One question that can come up is: what about very first time you considered the issue and got evidence for or against it? This would update what philosophers call your &quot;ur prior.&quot; So-called subjective Bayesians and Objective Bayesians debate whether there are rational constraints on your ur prior. Subjective Bayesians largely think you can have whatever you want, and as long as enough data comes in you'll move toward truth through updating. Objective Bayesans say you need to respect certain principles (e.g. simpler hypotheses should have higher ur priors). The good news is, both parties can agree that the relevance of prior probability, as long as it is not too incredibly high or low, regularly gets dwarfed by the evidence. That's why people with very different starting credences can wind up in the same place if enough new data comes in.</li>
+<li>Consider one example of a bad method/criterion/approach that is indefensible: <em>Scientism</em> is the view that science, or even just the scientific method, is the only way to have a rationally justified belief. However, despite scientific approaches being a very useful way to learn about some features of nature (e.g. its regularities), it can hardly be a literal “criterion” for rational belief or knowledge. After all, counterexamples abound (e.g. you do not know by science that <em>you exist</em>, nor 2+2=4, nor various historical truths, nor various moral facts, and not even simple facts like what you ate for breakfast). Moreover, scientism is self-refuting because it cannot itself be scientifically verified. As is almost unanimously acknowledged by specialists on all sides, scientism is a truly misguided criteria for rational belief. And most importantly: this view violates the basic/standard understanding of what evidence is (see above), because many observations/experences that can be surprising on a view are not necessarly naturalistic or realistically subject to empirical testing. If you think about it, almost none of your knowledge comes from science.</li>
+</ol>
+
+</div>
+                                </details>
+                                                    </div>
+                    </details>
+                                            </div>
+        </section>
+    
+<div class="arguments-page" data-editor-page="1156">
+            <div class="classic-question-keeper atlas-question-waypoint" data-classic-question-keeper data-search-index="false" aria-label="Question navigation">
+            <nav class="atlas-question-trail" aria-label="Question path">
+                <button class="atlas-question-trail__handle" type="button" aria-expanded="false" aria-controls="atlas-question-trail-popover" aria-label="Show question path">
+                    <span class="atlas-question-trail__branch" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="atlas-question-trail__count" data-atlas-question-trail-count>0</span>
+                </button>
+                <div class="atlas-question-trail__popover" id="atlas-question-trail-popover">
+                    <span class="atlas-question-trail__eyebrow">Argument path</span>
+                    <ol data-atlas-question-trail></ol>
+                </div>
+            </nav>
+            <div class="atlas-question-waypoint__current">
+                <a class="classic-question-keeper__question" href="#atlas-question-top" aria-current="page" aria-label="Return to the current question: How to use inductive / Bayesian reasoning (Simplified)">How to use inductive / Bayesian reasoning (Simplified)</a>
+                <nav class="atlas-question-waypoint__stances" aria-label="Jump to an argument section">
+                                                        </nav>
+            </div>
+        </div>
+    
+    
+    
+    
+    </div>
+</article>
+        </main>
+    </div>
+    <script defer src="https://unpkg.com/rxjs@^7/dist/bundles/rxjs.umd.min.js"></script>
+    <script defer src="/js/slide-element.min.js"></script>
+    <script defer src="/js/nav.js?v=1788717090"></script>
+    <script defer src="/js/section-animations.js"></script>
+            </body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1 user-scalable=yes">
+        <title>Is the BGV theorem true (Borde-Guth-Vilenkin)?</title>
+            <meta name="description" content="Clarifying the question: In 2003, the so-called BGV theorem was published in an updated paper. (The theorem is also called the Borde-Guth-Vilenkin theorem, afte...">
+        <meta property="og:title" content="Is the BGV theorem true (Borde-Guth-Vilenkin)?">
+        <meta property="og:description" content="Clarifying the question: In 2003, the so-called BGV theorem was published in an updated paper. (The theorem is also called the Borde-Guth-Vilenkin theorem, afte...">
+        <meta property="og:image" content="https://beliefmap.org/uploads/bgv-racing-light.svg">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="Is the BGV theorem true (Borde-Guth-Vilenkin)?">
+        <meta name="twitter:description" content="Clarifying the question: In 2003, the so-called BGV theorem was published in an updated paper. (The theorem is also called the Borde-Guth-Vilenkin theorem, afte...">
+        <meta name="twitter:image" content="https://beliefmap.org/uploads/bgv-racing-light.svg">
+        <link rel="canonical" href="https://beliefmap.org/universe/begin/bgv-borde-guth-vilenkin">
+        <link rel="preload" as="style" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" /><link rel="preload" as="style" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/app-BvRk9kiK.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/app-DSvTcRLd.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/artwork-DytzPnmj.css" data-navigate-track="reload" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/view-switcher-Lz1MuFr6.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/app-BvRk9kiK.js" data-navigate-track="reload"></script>    <link rel="preload" as="style" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" /><link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/classic-polish-k24hxHLU.css" data-navigate-track="reload" /><script type="module" src="https://beliefmap.org/build/assets/site-view-B_9IsClg.js" data-navigate-track="reload"></script>            <link rel="preload" as="style" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" /><link rel="stylesheet" href="https://beliefmap.org/build/assets/atlas-view-Ch_KGuSa.css" data-navigate-track="reload" />            <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f1624">
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicons/favicon-32x32.png">
+            <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CLNSLM00DV"></script>
+    <script>
+        window.BELIEFMAP_GA_ID = 'G-CLNSLM00DV';
+
+        // Secondary client shield for automated scrapers & test runners
+        if (navigator.webdriver || window.__nightmare || window.callPhantom || window._phantom) {
+            window['ga-disable-G-CLNSLM00DV'] = true;
+        }
+
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-CLNSLM00DV');
+
+        window.trackPageView = function(url, title) {
+            if (typeof gtag === 'function' && !window['ga-disable-G-CLNSLM00DV']) {
+                gtag('event', 'page_view', {
+                    page_title: title || document.title,
+                    page_location: window.location.href,
+                    page_path: url || (window.location.pathname + window.location.search + window.location.hash),
+                });
+            }
+        };
+    </script>
+    <link rel="modulepreload" as="script" href="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" /><script type="module" src="https://beliefmap.org/build/assets/analytics-BOldhpHn.js" data-navigate-track="reload"></script>        </head>
+<body class="site-view-classic site-view-atlas">
+        <nav class="site-view-switcher" aria-label="Choose site view" data-search-index="false">
+        <a href="https://beliefmap.org/universe/begin/bgv-borde-guth-vilenkin?view=atlas" data-site-view="atlas" class="is-active" aria-current="page">
+            <span aria-hidden="true">◇</span> Atlas
+        </a>
+        <a href="https://beliefmap.org/universe/begin/bgv-borde-guth-vilenkin?view=classic" data-site-view="classic" class="">
+            Classic
+        </a>
+    </nav>
+    <div id="site-wrapper">
+        <div id="left-pane" class="arguments-page-sidebar">
+    <nav class="sidebar-nav sidebar" data-search-index="false">
+        <a href="/" class="brand arguments-page-brand">
+            <object type="image/svg+xml" data="/images/Belief-Map-Logo.svg" aria-label="BeliefMap logo text with a compass design"></object>
+        </a>
+        <ul id="beliefmap-tree" class="menu"></ul>
+    </nav>
+    <div class="tree-search-dock">
+        <form action="/search-results/" class="search-form" method="get" data-search-index="false" role="search">
+            <label class="sr-only" for="tipue_search_input">Search the BeliefMap tree</label>
+            <input type="search" class="form-control" placeholder="Search the argument tree..." id="tipue_search_input" name="q" autocomplete="off" aria-controls="beliefmap-tree" aria-describedby="tree-search-status">
+            <button class="tree-search-clear" type="button" aria-label="Clear tree search" hidden>&times;</button>
+        </form>
+        <p id="tree-search-status" class="tree-search-status" role="status" aria-live="polite"></p>
+    </div>
+</div>
+<button class="tree-panel-toggle" type="button" aria-label="Collapse argument tree" aria-controls="left-pane" aria-expanded="true">
+    <span class="tree-panel-toggle__chevron" aria-hidden="true"></span>
+</button>
+        <main id="right-pane" class="ajax-wrap">
+            <div id="scroll-marker" style="position: absolute; top: 100vh;"></div>
+<article class="classic-argument-page" data-editor-page="171">
+    <header
+        id="atlas-question-top"
+        class="classic-atlas-hero atlas-hero atlas-hero-v2"
+         data-atlas-hero     >
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--green" aria-hidden="true"></div>
+        <div class="classic-atlas-hero__glow classic-atlas-hero__glow--red" aria-hidden="true"></div>
+        
+        <div class="classic-atlas-hero__content">
+            <nav class="classic-atlas-breadcrumbs" aria-label="Breadcrumb">
+                <a href="/?view=atlas">BeliefMap</a>
+                <span aria-hidden="true">/</span>
+                <span>Atlas view</span>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Current question</span>
+            </nav>
+
+            <p class="classic-atlas-eyebrow"><span></span> A live question · two directions · no dead ends</p>
+            <h1 data-classic-question-title data-edit-page-field="title">BGV Theorem: Do expanding-on-average universes require infinite speeds?</h1>
+            <p class="classic-atlas-hero__lede">
+                Open the strongest case, cross-examine every claim, and follow each reply until the reasoning reaches bedrock.
+            </p>
+
+                            <a class="classic-atlas-start-link" href="#orientation">
+                    Read the question briefing <span aria-hidden="true">↓</span>
+                </a>
+                    </div>
+
+                    <div class="atlas-hero-routes" aria-label="Choose a direction into the debate">
+                                    <div class="atlas-hero-routes__theme-art">
+                        <span
+            class="argument-art-stage argument-art-stage--ink atlas-hero-routes__theme-stage"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/bgv-racing-light.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+        </span>
+                        </div>
+                                                <div class="atlas-hero-routes__heading">
+                    <span>Choose a direction</span>
+                    <small>Both paths stay open</small>
+                </div>
+                <div class="atlas-hero-routes__grid is-single">
+                                            <a class="atlas-hero-route atlas-hero-route--yes" href="#spacetraveler" data-atlas-route="yes">
+                            <span>Supporting route</span>
+                            <strong>01</strong>
+                            <small>reasons mapped</small>
+                            <b>Explore support <i aria-hidden="true">↙</i></b>
+                        </a>
+                                                        </div>
+                <div class="atlas-hero-routes__scale" aria-hidden="true">
+                    <span style="--support-share: 100%"></span>
+                </div>
+            </div>
+            </header>
+
+            <section class="atlas-orientation" id="orientation" aria-labelledby="orientation-title">
+            <div class="atlas-orientation__heading">
+                <p>Before you begin</p>
+                <h2 id="orientation-title">Orient yourself to the question</h2>
+            </div>
+            <div class="atlas-orientation__cards">
+                                    <details
+                        class="atlas-orientation-card"
+                        id="question"
+                        data-editor-block="1042"
+                        data-editor-block-group="intro"
+                         open                     >
+                        <summary>
+                            <span>01</span>
+                            <strong data-edit-block-field="heading">Clarifying the question</strong>
+                            <i aria-hidden="true"></i>
+                        </summary>
+                        <div class="atlas-orientation-prose">
+                            <div data-edit-block-field="raw_expanded"><p>In 2003, the so-called <em>BGV theorem</em> was published in an updated paper. (The theorem is also called the <em>Borde-Guth-Vilenkin theorem</em>, after the papers's authors: Alan Guth, Alvin Borde, and Alexander Vilenkin).
+The BGV theorem is a straightforward proof that any universe which expands on average has to connect in a finite amount of time to a past boundary.<sup>1 , 2</sup> The proof moves by way of demonstrating that any such eternally inflating spacetime would require that faster-than-light travel be possible. (In fact, the required speed asymtotes to <em>infinity</em>.) Is this theorem correct? Do expanding-on-average spacetimes require such speeds?</p>
+
+</div>
+                                                            <details class="atlas-orientation-sources">
+                                    <summary>Sources and notes</summary>
+                                    <div data-edit-block-field="raw_footnotes"><ol>
+<li>In their own words:<br />
+• <strong>Alan Guth, Alvin Borde, and Alexander Vilenkin</strong>: “Our argument shows that null and time-like geodesics are, in general, past-incomplete in inflationary models, whether or not energy conditions hold, provided only that the averaged expansion condition Hav &gt; 0 holds along these past-directed geodesics.” <ref>[“Inflationary spacetimes are not past-complete” at	arXiv:gr-qc/0110012 (2003) 3.]</ref>
+To define some terms:<br />
+• <strong>Geodesic (in General Relativity)</strong> = def. The path that space takes a free floating particle through, as it expands or contracts. The particle ignores all influences other than gravity.<br />
+• <strong>Geodesically incomplete</strong> = def. A geodesic whose path is incomplete (finite): it terminates at some point. Geodesic incompleteness is symptomatic of a beginning/ending to classical spacetime.<br />
+You can think of geodesics as the time-directioned lines in canonical Big Bang cone picture. The lines may be infinite towards the future, but they terminate in the past at the supposed singularity.</li>
+<li>Notably, the boundary is most likely a singularity. Geodesic incompleteness is symptomatic of singularities.</li>
+</ol>
+<blockquote>
+<p>• <strong>Stephen Hawking &amp; Roger Penrose</strong>: “One can then recognize the occurrence of singularities by the existence of incomplete geodesics that cannot be extended to infinite values of the affine parameter. Definition of Singularity: A spacetime is singular if it is timelike or null geodesically incomplete but cannot be embedded in a larger spacetime. This definition reflects the most objectionable feature of singularities, that there can be particles whose history has a beginning or end at a finite time” <ref>[<em>The Nature of Space and Time</em> (Princeton, 1996), 15.]</ref><br />
+• <strong>Aron Wall</strong>: “If we assume that the universe was always expanding, so that the BGV theorem applies, then presumably there must have been some type of initial singularity.” <ref>[“Did the Universe Begin? III: BGV Theorem. http://www.wall.org/~aron/blog/did-the-universe-begin-iii-bgv-theorem/ ]</ref></p>
+</blockquote>
+
+</div>
+                                </details>
+                                                    </div>
+                    </details>
+                                    <details
+                        class="atlas-orientation-card"
+                        id="experts"
+                        data-editor-block="1043"
+                        data-editor-block-group="intro"
+                                            >
+                        <summary>
+                            <span>02</span>
+                            <strong data-edit-block-field="heading">Physicists and cosmologists unanimously agree</strong>
+                            <i aria-hidden="true"></i>
+                        </summary>
+                        <div class="atlas-orientation-prose">
+                            <div data-edit-block-field="raw_expanded"><ul>
+<li><strong>Gary Gibbons</strong>: “These examples also underscore the need for a theory of initial conditions in order to understand cosmology and the initial singularity or big bang. As emphasized by Penrose among others, elementary thermodynamic arguments indicate that the Universe began in a very special state and even proponents of eternal inflation have had to concede, following Borde, Guth, and Vilenkin, that eternity is past incomplete.” <ref>[“Singularities” in <em>The Quantum Structure of Space and Time</em> eds Gross, Henneaux, Sevrin (World Scientific Publishing, 2005), 60.]</ref></li>
+<li><strong>Gregory Vereshchagin</strong>: “However, inflation is insufficient when we face the challenge of cosmological singularity. In fact, it is shown that inflationary spacetimes are geodesically incomplete and therefore initial cosmological singularity is present even if inflation is of the eternal time and final singularity never occurs. <ref>[“Gauge Theories of Gravity with the Scalar Field Cosmology,” in <em>Frontiers in Field Theory</em> ed. Kovras (Nova Science, 2005), 215.]</ref></li>
+<li><strong>Mary-Jane Rubenstein</strong>: “In 2003, however, Arvind Borde, Alan Guth, and Alexander Vilenkin published a highly influential paper arguing that inflationary models cannot be ‘past eternal’” <ref>[<em>Worlds Without End: The Many Lives of the Multiverse</em> (Colombia, 2014), 284.]</ref></li>
+</ul>
+
+</div>
+                                                    </div>
+                    </details>
+                                            </div>
+        </section>
+    
+<div class="arguments-page" data-editor-page="171">
+            <div class="classic-question-keeper atlas-question-waypoint" data-classic-question-keeper data-search-index="false" aria-label="Question navigation">
+            <nav class="atlas-question-trail" aria-label="Question path">
+                <button class="atlas-question-trail__handle" type="button" aria-expanded="false" aria-controls="atlas-question-trail-popover" aria-label="Show question path">
+                    <span class="atlas-question-trail__branch" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="atlas-question-trail__count" data-atlas-question-trail-count>0</span>
+                </button>
+                <div class="atlas-question-trail__popover" id="atlas-question-trail-popover">
+                    <span class="atlas-question-trail__eyebrow">Argument path</span>
+                    <ol data-atlas-question-trail></ol>
+                </div>
+            </nav>
+            <div class="atlas-question-waypoint__current">
+                <a class="classic-question-keeper__question" href="#atlas-question-top" aria-current="page" aria-label="Return to the current question: BGV Theorem: Do expanding-on-average universes require infinite speeds?">BGV Theorem: Do expanding-on-average universes require infinite speeds?</a>
+                <nav class="atlas-question-waypoint__stances" aria-label="Jump to an argument section">
+                                            <a href="#atlas-stance-section-yes" data-atlas-stance="yes" class="is-active"  aria-current="location"  aria-label="Jump to the Yes section">Yes</a>
+                                                        </nav>
+            </div>
+        </div>
+    
+    
+    
+            <div id="atlas-stance-section-yes" class="green points-preface-div classic-section-divider is-affirming" data-atlas-stance-section="yes">
+            <span class="classic-section-divider__stance">Yes</span>
+            <span class="classic-section-divider__context">
+                <small>Reasons affirming the proposition</small>
+                <strong>BGV Theorem: Do expanding-on-average universes require infinite speeds?</strong>
+            </span>
+        </div>
+                    <ul>
+                <li class="point-li active obscured" data-editor-block="1044" data-editor-block-group="yes" data-editor-block-anchor="spacetraveler" data-editor-can-move-up="false" data-editor-can-move-down="false" data-editor-has-response="false" data-editor-has-footnotes="false">
+                    <h2 class="accordion-header green" id="spacetraveler" data-editorial-relation="" data-edit-block-field="heading">Vilenkin&#039;s spacetraveler</h2>
+                    <div class="bubble-container">
+                        <div class="back-decor green"></div>
+                                                    <section class="bubble opener green has-atlas-art">
+                                                                    <span
+            class="argument-art-stage argument-art-stage--ink atlas-bubble-art"
+        >
+            <span
+                class="argument-art-mask"
+                style="--argument-art: url('/uploads/vilenkins-rocket.svg')"
+                role="img"
+                aria-label="Argument illustration"
+            ></span>
+        </span>
+                                                                    <div data-edit-block-field="raw_expanded"><p><strong>Vilenkin's spacetraveler must have been traveling infinitely fast in the past</strong>. (What follows is a simplified version of the BGV proof with no math):</p>
+<blockquote>
+</blockquote>
+<ul>
+<li><strong>Alexander Vilenkin</strong>: “Let us now introduce another observer who is moving relative to the spectators [each of whom is motionless except for their riding the expansion of space]. We shall call him the space traveler. He is moving by inertia, with the engines of his spaceship turned off, and has been doing so for all eternity. As he passes the spectators, they register his velocity.”</li>
+</ul>
+<p>Since the spectators are flying apart [i.e. the universe is expanding], the space traveler’s velocity relative to each successive spectator will be smaller than his velocity relative to the preceding one. Suppose, for example, that the space traveler has just zoomed by the Earth at the speed of 100,000 kilometers per hour and is now headed toward a distant galaxy, about a billion light years away. That galaxy is moving away from us at a speed of 20,000 kilometers per second, so when the space traveler catches up with it, the observers there will see him moving at 80,000 kilometers per second.</p>
+<p>If the velocity of the space traveler relative to the spectators gets smaller and smaller into the future, then it follows that his velocity should get larger and larger as we follow his history into the past. In the limit, his velocity should get arbitrarily close to the speed of light.” <ref>[<em>Many Worlds in One</em> (Hill and Wang, 2006), 40.]</ref>
+This is all relevant because, according to standard Einsteinian interpretations, one cannot travel faster than the speed of light, and certainly one cannot travel at infinite speeds.</p>
+
+</div>
+                                                                                            </section>
+                                            </div>
+                </li>
+            </ul>
+                    
+    </div>
+</article>
+        </main>
+    </div>
+    <script defer src="https://unpkg.com/rxjs@^7/dist/bundles/rxjs.umd.min.js"></script>
+    <script defer src="/js/slide-element.min.js"></script>
+    <script defer src="/js/nav.js?v=1788717090"></script>
+    <script defer src="/js/section-animations.js"></script>
+            </body>
+</html>
