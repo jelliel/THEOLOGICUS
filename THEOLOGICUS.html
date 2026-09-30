@@ -41868,6 +41868,34 @@ window.continueTradApart = async function (msgId) {
       '<div class="v167-sn">' + esc(e.q || '') + '</div>' +
       '<a class="v167-lk" href="' + esc(e.su || '') + '" target="_blank" rel="noopener">traditionapostolique.fr ↗</a></div>';
   }
+  /* v177 — commentaires rabbiniques EN de sefaria.org (Rashi, Ramban, Ibn Ezra,
+     Targumim… — tous les commentaires de la Tanakh disponibles en anglais,
+     indexés par verset, clés Segond v167) */
+  var SEF = null;
+  function loadSEF() {
+    if (SEF !== null) return Promise.resolve(SEF);
+    return fetch('tradition/sefaria_idx.json').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { SEF = (j && j.idx) ? j : false; return SEF; })
+      .catch(function () { SEF = false; return SEF; });
+  }
+  function lookupSEF(ref) {
+    var sidx = SEF && SEF.idx ? SEF.idx : null;
+    if (!sidx || !ref) return [];
+    var out = [];
+    for (var v = ref.v1; v <= ref.v2; v++) {
+      var e = sidx[ref.b + ':' + ref.c + ':' + v];
+      if (e) out = out.concat(e);
+    }
+    return out.slice(0, 12);
+  }
+  function sefHtml(e) {
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(e.c || 'Commentateur') + '</span>' +
+      '<span class="v167-ti">— ' + esc(e.w || '') + '</span>' +
+      '<div class="v167-sn">' + esc(e.sn || '') + '</div>' +
+      '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
+      '<a class="v167-lk" href="' + esc(e.u || '') + '" target="_blank" rel="noopener">sefaria.org ↗</a></div>';
+  }
   function renderPanel() {
     var p = document.getElementById('v167-pat');
     if (!p || !panelOpen()) return;
@@ -41918,6 +41946,19 @@ window.continueTradApart = async function (msgId) {
         hsec.innerHTML = '<div class="v167-grp">§ Historical Christian — en (' + lst.length + ')</div>' + lst.map(hcfHtml).join('');
       } else {
         hsec.remove();
+      }
+    });
+    /* v177 — commentaires rabbiniques EN de sefaria.org (section asynchrone) */
+    body.insertAdjacentHTML('beforeend', '<div id="v167-sef"></div>');
+    loadSEF().then(function (sf) {
+      var ssec = document.getElementById('v167-sef');
+      if (!ssec || !panelOpen()) return;
+      if (!sf) { ssec.remove(); return; }
+      var lst = lookupSEF(curRef);
+      if (lst.length) {
+        ssec.innerHTML = '<div class="v167-grp">§ Sefaria — commentaires rabbins — en (' + lst.length + ')</div>' + lst.map(sefHtml).join('');
+      } else {
+        ssec.remove();
       }
     });
   }

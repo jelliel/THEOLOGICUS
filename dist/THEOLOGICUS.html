@@ -7653,7 +7653,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
-    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments pour/contre (beliefmap.org) — consultables hors-ligne">📚 SUJETS</button>
+    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -42095,7 +42095,7 @@ window.continueTradApart = async function (msgId) {
   if (window.__theoV170) return;
   window.__theoV170 = true;
 
-  var DATA = null, DDATA = null, BDATA = null, LOADING = false, VIEW = 'q';
+  var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null, LOADING = false, VIEW = 'q';
 
   var style = document.createElement('style');
   style.textContent =
@@ -42131,7 +42131,9 @@ window.continueTradApart = async function (msgId) {
     '.v170-stance.b-oui b{background:rgba(70,160,90,.25);color:#9fe3b8;border:1px solid rgba(120,220,150,.4)}' +
     '.v170-stance.b-non b{background:rgba(190,80,80,.25);color:#f0a0a0;border:1px solid rgba(240,140,140,.4)}' +
     '.v170-stance span{opacity:.75;font-style:italic}' +
-    '.v170-fn{font-size:11.5px;opacity:.72;border-left:2px solid rgba(79,142,247,.3);padding:4px 10px;margin:6px 0 2px}';
+    '.v170-fn{font-size:11.5px;opacity:.72;border-left:2px solid rgba(79,142,247,.3);padding:4px 10px;margin:6px 0 2px}' +
+    '.v170-cat{padding:8px 14px;border-bottom:1px dashed rgba(79,142,247,.12);cursor:pointer;color:#bfd4ff;font-size:12.5px}' +
+    '.v170-cat:hover{background:rgba(28,58,120,.4)}';
   document.head.appendChild(style);
 
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -42143,12 +42145,13 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v170-sujets';
     p.innerHTML = '<div id="v170-box">'
-      + '<div id="v170-head"><span id="v170-title">📚 Sujets, Doctrines &amp; Arguments — les témoins anciens</span>'
+      + '<div id="v170-head"><span id="v170-title">📚 Sujets, Doctrines, Arguments &amp; Articles</span>'
       + '<button id="v170-close" aria-label="Fermer">✕</button></div>'
       + '<div id="v170-bar"><div id="v170-tabs">'
       + '<button id="v170-tab-q" class="on">CITATIONS DES PÈRES</button>'
       + '<button id="v170-tab-d">DOCTRINES</button>'
       + '<button id="v170-tab-a">ARGUMENTS (beliefmap.org)</button>'
+      + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
@@ -42159,6 +42162,7 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-q').addEventListener('click', function(){ setView('q'); });
     document.getElementById('v170-tab-d').addEventListener('click', function(){ setView('d'); });
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
+    document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -42168,6 +42172,14 @@ window.continueTradApart = async function (msgId) {
       if (typeof window.__v167Translate === 'function') {
         window.__v167Translate(sn, b, document.getElementById('v170-status'));
       }
+    });
+    /* v176 — navigation par catégories des ARTICLES (CPH) */
+    document.getElementById('v170-body').addEventListener('click', function (ev) {
+      var c = ev.target.closest ? ev.target.closest('.v170-cat') : null;
+      if (!c) return;
+      var cat = c.getAttribute('data-cat');
+      CPCAT = (cat === '__back') ? null : cat;
+      render();
     });
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
@@ -42180,11 +42192,14 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-q').classList.toggle('on', v === 'q');
     document.getElementById('v170-tab-d').classList.toggle('on', v === 'd');
     document.getElementById('v170-tab-a').classList.toggle('on', v === 'a');
+    document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
-                       : 'Filtrer par question, thèse, argument ou mot du texte…';
+           : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
+                       : 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
+    CPCAT = null;
     load();   /* charge le corpus de la vue si absent */
     render();
   }
@@ -42325,6 +42340,65 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = shown ? shown + ' questions — ' + shownP + ' arguments (beliefmap.org)' : '';
   }
 
+  /* ── vue Articles (v176 — christianpublishinghouse.co) ── */
+  function renderP(q){
+    var body = document.getElementById('v170-body');
+    var h = '';
+    if (!q && !CPCAT) {
+      /* navigateur de catégories */
+      h += '<div style="padding:6px 14px 2px;opacity:.6;font-size:11px">' + CPDATA.nps + ' articles — ' + CPDATA.ncats + ' catégories — cliquez une catégorie :</div>';
+      h += '<div id="v170-cats">';
+      CPDATA.cats.forEach(function(c){
+        h += '<div class="v170-cat" data-cat="' + esc(c[0]) + '">' + esc(c[0])
+           + ' <span class="v170-n">(' + c[1] + ')</span></div>';
+      });
+      h += '</div>';
+      body.innerHTML = h;
+      var st0 = document.getElementById('v170-status');
+      if (st0) st0.textContent = CPDATA.nps + ' articles de christianpublishinghouse.co' + (CPFULL ? '' : ' — chargement des textes intégraux…');
+      return;
+    }
+    var posts, shown = 0;
+    if (CPCAT && !q) {
+      posts = CPDATA.ps.filter(function(p){ return (' · ' + p[3] + ' · ').indexOf(' · ' + CPCAT + ' · ') >= 0; });
+      posts.sort(function(a, b){ return b[2] < a[2] ? -1 : b[2] > a[2] ? 1 : 0; });
+    } else {
+      posts = CPDATA.ps.filter(function(p){
+        var hay = norm(p[1] + ' ' + p[3] + ' ' + p[4]);
+        if (CPFULL && CPFULL[p[0]]) {
+          var fp = CPFULL[p[0]];
+          hay += ' ' + norm(fp.s.map(function(x){ return x[0] + ' ' + x[1]; }).join(' '));
+        }
+        return hay.indexOf(q) >= 0;
+      });
+      posts.sort(function(a, b){ return b[2] < a[2] ? -1 : b[2] > a[2] ? 1 : 0; });
+      if (posts.length > 400) posts = posts.slice(0, 400);
+    }
+    posts.forEach(function(p){
+      shown++;
+      h += '<details class="v170-top"><summary>' + esc(p[1])
+         + ' <span class="v170-n">(' + esc(p[2]) + (p[3] ? ' · ' + esc(p[3].split(' · ')[0]) : '') + ')</span></summary>';
+      h += '<div class="v170-doc-q">' + esc(p[4]) + '</div>';
+      var fp = CPFULL && CPFULL[p[0]];
+      if (fp) {
+        fp.s.forEach(function(sec){
+          if (sec[0]) h += '<div class="v170-doc-h">' + esc(sec[0]) + '</div>';
+          h += '<div class="v170-wit"><div class="v167-sn">' + esc(sec[1]) + '</div>' + trBlock(sec[1]) + '</div>';
+        });
+      } else {
+        h += '<div style="padding:4px 14px"><a class="v167-lk" href="' + esc(p[5]) + '" target="_blank" rel="noopener">Lire sur christianpublishinghouse.co ↗</a></div>';
+      }
+      h += '<div style="padding:4px 14px 8px"><a class="v167-lk" href="' + esc(p[5]) + '" target="_blank" rel="noopener">source ↗</a>'
+         + (p[3] ? ' <span class="v170-n">' + esc(p[3]) + '</span>' : '') + '</div>';
+      h += '</details>';
+    });
+    var head = CPCAT && !q ? '<div class="v170-cat" data-cat="__back" style="color:#f5c542">← Toutes les catégories</div>' : '';
+    body.innerHTML = head + h || '<div style="opacity:.6;padding:16px">Aucun article ne correspond au filtre.</div>';
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = shown ? shown + ' articles' + (posts.length >= 400 && !CPCAT ? ' (400 premiers — affinez le filtre)' : '')
+                                   + (CPFULL ? '' : ' — textes intégraux en cours de chargement…') : '';
+  }
+
   function render(){
     var body = document.getElementById('v170-body');
     if (!body) return;
@@ -42340,8 +42414,12 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement des arguments…</div>';
       return;
     }
+    if (VIEW === 'p' && !CPDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du catalogue…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
-    if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else renderA(q);
+    if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q); else renderP(q);
   }
 
   function load(){
@@ -42364,6 +42442,23 @@ window.continueTradApart = async function (msgId) {
         .catch(function(){ BDATA = false; LOADING = false; render();
           var st = document.getElementById('v170-status');
           if (st) st.textContent = '⚠ Corpus des arguments indisponible (tradition/beliefmap.json introuvable).'; });
+    } else if (VIEW === 'p' && !CPDATA){
+      fetch('tradition/cph_idx.json').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ CPDATA = (j && j.ps && j.ps.length) ? j : false; LOADING = false; render();
+          if (CPDATA && !CPFULL) {
+            fetch('tradition/cph.json').then(function(r){ return r.ok ? r.json() : null; })
+              .then(function(k){
+                if (k && k.ps && k.ps.length) {
+                  CPFULL = {};
+                  k.ps.forEach(function(p){ CPFULL[p.i] = p; });
+                }
+                render();
+              }).catch(function(){});
+          }
+        })
+        .catch(function(){ CPDATA = false; LOADING = false; render();
+          var st = document.getElementById('v170-status');
+          if (st) st.textContent = '⚠ Catalogue indisponible (tradition/cph_idx.json introuvable).'; });
     } else {
       LOADING = false;
     }
