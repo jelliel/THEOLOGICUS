@@ -7652,6 +7652,7 @@ window.__ensureTafsirSurah = function(p){
     <select class="hud-select" id="model-select"></select>
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
+    <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <select class="hud-select" id="agent-select">
       <option value="">▸ NO AGENT</option>
     </select>
@@ -39059,6 +39060,578 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }
 
   var btn = document.getElementById('open-duel-modal');
+  if (btn) btn.addEventListener('click', open);
+})();
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v153a — LEXIQUE THÉOLOGIQUE VIVANT 📚
+   Détecte les termes techniques des trois traditions dans les réponses
+   (christologie, kenosis, midrash, ijtihad, tawhid…) et ajoute une rangée
+   de pastilles cliquables sous le message — même mécanique que les
+   manuscrits (v150). Clic = fiche : langue d'origine, terme original,
+   translittération, définition précise. Zéro réseau : tout est embarqué.
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoLex) return;
+  window.__theoLex = true;
+
+  /* [terme, langue, original+translit, définition] */
+  var GLOSSAIRE = [
+    ['Hypostase', 'grec', 'ὑπόστασις (hypostasis), « subsistance »', 'Dans la théologie trinitaire, une des trois manières d\'être divines — Père, Fils, Esprit — partageant la même nature (ousia). À Chalcédoine (451), le terme désigne aussi la personne du Christ unie en deux natures.'],
+    ['Kenosis', 'grec', 'κένωσις (kenōsis), « vidage »', 'L\'« anéantissement » volontaire du Christ qui, selon Ph 2,7, « se vide de lui-même » en prenant la condition de serviteur. Notion centrale en christologie (Harnack, Balthasar) et en spiritualité.'],
+    ['Péricope', 'grec', 'περικοπή (perikopē), « section découpée »', 'Unité de texte délimitée pour la lecture ou l\'exégèse : un épisode évangélique, une lecture liturgique du sabbat ou une section récitée de la prière.'],
+    ['Théophanie', 'grec', 'θεοφάνεια (theophaneia)', 'Manifestation visible de Dieu à des créatures : Buisson ardent (Ex 3), Thabor (Mt 17). La théologie apophatique y voit toujours un voile autant qu\'une révélation.'],
+    ['Christologie', 'grec', 'χριστός + λόγος', 'La discipline théologique qui étudie la personne, les natures et l\'œuvre du Christ. Ses grandes crises : Arianisme (Nicée 325), Nestorianisme (Éphèse 431), Monophysitisme (Chalcédoine 451).'],
+    ['Sotériologie', 'grec', 'σωτηρία (sōtēria), « salut »', 'L\'étude du salut : rachat, justification, rédemption. Les modèles varient — rançon (Anselme), satisfaction, Christus victor, illumination (islam et mystique juive ont leurs propres sotériologies).'],
+    ['Eschatologie', 'grec', 'ἔσχατος (eschatos), « dernier »', 'La doctrine des fins dernières : mort, jugement, résurrection, fins du monde. En islam, la eschatologie (akhirah) est un pilier de la foi ; en judaïsme, la ère messianique reste débattue.'],
+    ['Hamartiologie', 'grec', 'ἁμαρτία (hamartia), « faute »', 'La doctrine du péché : faute originelle (Augustin), inclination au mal (yetzer hara juif), oubli et nudité originelle (Coran 20,121 — sans transmission d\'une faute d\'Adam aux descendants).'],
+    ['Pneumatologie', 'grec', 'πνεῦμα (pneuma), « souffle »', 'La doctrine de l\'Esprit : troisième hypostase trinitaire (chrétiens), ruah hébraïque (souffle créateur), Rûh coranique insufflé à Adam et à Marie (Coran 21,91).'],
+    ['Ecclésiologie', 'grec', 'ἐκκλησία (ekklēsia), « assemblée »', 'La doctrine de l\'Église : institution (catholique), communion des Églises locales (orthodoxe), assemblée des saints (protestant), umma (islam), qahal/kehilla (Israël).'],
+    ['Théosis', 'grec', 'θέωσις, « divinisation »', 'Notion orthodoxe majeure : la participation de la créature à la vie divine (2 P 1,4), sans confusion des natures. Parent de la unio mystica latine et du fanā\' soufi (anéantissement en Dieu).'],
+    ['Apophatique', 'grec', 'ἀπόφασις, « négation »', 'La théologie négative : Dieu se dit mieux par ce qu\'il n\'est pas. Maîtres : Grégoire de Nysse, Pseudo-Denys, Maïmonide (Guide I), Ibn Arabi.'],
+    ['Doxologie', 'grec', 'δόξα (doxa), « gloire »', 'Parole de gloire adressée à Dieu : la Petite et la Grande doxologie byzantines, le Gloria, la tasbih coranique (33,70-75).'],
+    ['Kérygme', 'grec', 'κῆρυγμα, « proclamation »', 'Le noyau proclamé de la foi chrétienne (mort et résurrection du Christ, 1 Co 15,3-8), distinct de l\'enseignement (didachè). Étendu à toute prédication fondatrice.'],
+    ['Parousie', 'grec', 'παρουσία, « avènement, présence »', 'Le retour glorieux du Christ (1 Th 4,15). L\'islam attend le retour de ïsâ et le Mahdi ; le judaïsme, le Messie fils de David.'],
+    ['Exégèse', 'grec', 'ἐξήγησις, « conduire hors [le sens] »', 'L\'explication méthodique d\'un texte sacré : critique textuelle, contextes, langues originales. Les trois traditions ont développé des exégèses savantes : patristique, tafsir, midrash.'],
+    ['Herméneutique', 'grec', 'ἑρμηνευτική, « art d\'interpréter »', 'La théorie de l\'interprétation : sens littéral, allégorique, moral, anagogique (les quatre sens médiévaux) ; zahir/batin en islam ; peshat, remez, derash, sod (PaRDeS) dans le judaïsme.'],
+    ['Canon', 'grec/hébreu', 'κανών / קָנֶה, « règle, mesure »', 'La liste des livres reconnus comme inspirés : 73 livres catholiques, 66 protestants, Tanakh juif (24), Coran de 114 sourates. Les canons se fixent entre le Ier et le IVe siècle (Mishna, conciles).'],
+    ['Dogme', 'grec/latin', 'δόγμα → dogma', 'Une vérité définie comme révélée et engageant la foi. Le catholicisme a des dogmes définis solennellement ; l\'orthodoxie préfère parler de traditions reçues ; l\'islam distingue usul al-din (fondements) et branches.'],
+    ['Anathème', 'grec', 'ἀνάθεμα, « chose suspendue/dédiée »', 'Exclusion solennelle de la communion pour erreur doctrinale persistante (Ga 1,8-9 ; sessions de Trente). Le juif a le herem ; l\'islam le takfir — tous deux réglés par des conditions strictes.'],
+    ['Schisme', 'grec', 'σχίσμα, « déchirure »', 'Séparation d\'une communauté sans rupture de foi déclarée : le Grand Schisme de 1054 (Rome/Byzance), les églises réformées (1517), la séuvre communautaire après Kerbela (661).'],
+    ['Concile', 'grec/latin', 'σύνοδος / concilium', 'Assemblée des évêques pour trancher une question de foi : sept conciles œcuméniques reconnaissent les orthodoxes et beaucoup de protestants ; le catholicisme en ajoute quatre jusqu\'à Vatican II.'],
+    ['Eucharistie', 'grec', 'εὐχαριστία, « action de grâce »', 'Le sacrement du corps et du sang du Christ (1 Co 11,23-26) : transsubstantiation (catholique), présence réelle mystique (orthodoxe), mémorial spirituel (protestant). Le Kidouch juif et le repas coranique légal en font écho.'],
+    ['Transsubstantiation', 'latin', 'trans-substantia', 'Doctrine définie à Latran IV (1215) : au moment de la consécration, la substance du pain devient celle du Corps du Christ, les apparences (espèces) demeurant.'],
+    ['Filioque', 'latin', '« et du Fils »', 'Adjunction latine au Credo (le Saint-Esprit procède du Père « et du Fils »), rejetée par l\'orthodoxie — un des points de rupture menant à 1054.'],
+    ['Tawhid', 'arabe', 'توحيد (tawḥīd), « unification »', 'Le cœur de la foi islamique : l\'unicité absolue de Dieu (112,1-4). Rejet du shirk (association) ; les théologiens du kalâm précisent tawhid des noms, des attributs, du culte.'],
+    ['Sunna', 'arabe', 'سنة (sunna), « voie, coutume »', 'La conduite exemplaire du Prophète, transmise par les hadiths. Source de législation avec le Coran ; les chiites privilégient la voie des Imams.'],
+    ['Hadith', 'arabe', 'حديث (ḥadīth), « propos, récit »', 'Rapport de parole ou acte du Prophète, avec chaîne de transmission (isnad) et contenu (matn). Collections canoniques : Bukhari, Muslim (sunnites) ; al-Kafi (chiites).'],
+    ['Ijtihad', 'arabe', 'اجتهاد (ijtihād), « effort »', 'L\'effort d\'interprétation juridique du juriste qualifié (mujtahid) face à un cas nouveau — face à la taqlid (imitation des précédents). Le débat sur sa porte ou sa vivacité traverse tout le fiqh.'],
+    ['Ijma', 'arabe', 'إجماع (ijmāʿ), « consensus »', 'Le consensus des savants comme source secondaire du droit : « ma communauté ne s\'accordera jamais sur une erreur » (hadith). Sa base historique réelle est débattue.'],
+    ['Qiyas', 'arabe', 'قياس (qiyās), « mesure, analogie »', 'Le raisonnement analogique : transporter la règle d\'un cas au cas semblable par une cause commune (illa). Quatrième source du fiqh sunnite ; rejeté par les zahirites.'],
+    ['Tafsir', 'arabe', 'تفسير (tafsīr), « explication »', 'L\'exégèse coranique : langue, contextes de révélation (asbab al-nuzul), lectures. Grands jalons : Tabari, Razi, Ibn Kathir ; exégèse ésotérique (ta\'wil) chez les soufis et les chiites.'],
+    ['Kalâm', 'arabe', 'كلام (kalām), « parole, discours »', 'La théologie dialectique islamique : écoles mu\'tazile (rationaliste, VIIIe s.), asharite (compromis, Xe s.), maturidite. L\'équivalent des somme médiévales chrétiennes et du midrash juif.'],
+    ['Fitra', 'arabe', 'فطرة (fiṭra), « nature originelle »', 'La disposition innée de l\'être humain vers Dieu (30,30) : les hadiths en font le socle de la conversion, comparable au longing naturel de la tradition augustinienne.'],
+    ['Taqwa', 'arabe', 'تقوى (taqwā), « piété, prudence »', 'La conscience de Dieu qui règle la conduite (2,197 : « le meilleur provision est la taqwa ») — l\'équivalent fonctionnel de la crainte de Dieu biblique (yirat Adonaï).'],
+    ['Umma', 'arabe', 'أمة (umma)', 'La communauté des croyants. Le Coran l\'applique aussi à Israël (2,128) et parle d\'ummatan wasatan, « communauté médiane » (2,143).'],
+    ['Sira', 'arabe', 'سيرة (sīra), « biographie »', 'La vie du Prophète (Ibn Ishaq/Ibn Hisham, IXe s.), source du fiqh biographique et du débat historique occidental sur Mahomet.'],
+    ['Hégire', 'arabe', 'هجرة (hijra), « migration »', 'Le départ de La Mecque à Médine (622), point zéro du calendrier musulman — comme l\'Exode marque Israël et la Pâques les chrétiens.'],
+    ['Sharia', 'arabe', 'شريعة (sharīʿa), « chemin vers la source »', 'La loi révélée idéale, distincte du fiqh (jurisprudence humaine). Le terme revient en Jérémie et signifie « voie » ; la halakha juive a la même racine sémantique.'],
+    ['Torah', 'hébreu', 'תּוֹרָה (Torah), « enseignement »', 'Les cinq livres de Moïse, et par extension toute la Révélation (Torah écrite et orale). Le Coran parle de la Tawrat confiée à Moïse (5,44).'],
+    ['Midrash', 'hébreu', 'מדרש (midrash), « recherche »', 'L\'exégèse juive qui cherche dans le texte ce qu\'il ne dit pas explicitement : halakhique (legal) ou aggadique (narratif, moral). Bereshit Rabbah, Midrash Tehillim.'],
+    ['Halakha', 'hébreu', 'הלכה (halakha), « marche, conduite »', 'La partie normative de la loi juive : 613 commandements, codifiés dans le Mishneh Torah (Maïmonide) puis le Choulhan Aroukh (Yossef Karo, 1565).'],
+    ['Aggadah', 'hébreu', 'אגדה (aggadah), « récit »', 'Le récit non légal du talmud et du midrash : paraboles, légendes, théologie narrative — l\'équivalent de la homilétique.'],
+    ['Mishna', 'hébreu', 'משנה (mishna), « répétition, enseignement »', 'Compilation de la loi orale par Juda ha-Nassi (~200) : six ordres, 63 traités. Base du Talmud avec la Guémara (commentaire).'],
+    ['Guémara', 'araméen', 'גמרא (guémara), « étude, achèvement »', 'Le commentaire de la Mishna dans le Talmud : Talmud de Jérusalem (~400), de Babylone (~500, plus long et faisant autorité).'],
+    ['Talmud', 'hébreu', 'תלמוד (talmud), « étude »', 'Mishna + Guémara. Le « Talmud de Babylone » (~2,5 millions de mots) est, après la Bible, le texte fondateur du judaïsme rabbinique.'],
+    ['Nevi\'im', 'hébreu', 'נביאים (Nevi\'im), « Prophètes »', 'La deuxième section du Tanakh : Josué, Juges, Samuel, Rois, puis Isaïe, Jérémie, Ézéchiel et les Douze.'],
+    ['Ketouvim', 'hébreu', 'כתובים (Ketouvim), « Écrits »', 'La troisième section du Tanakh : Psaumes, Proverbes, Job, les cinq rouleaux (Megillot), Daniel, Esdras-Néhémie, Chroniques.'],
+    ['Septante', 'grec/latin', 'LXX, « soixante-dix »', 'Traduction grecque de la Bible juive (Alexandrie, IIIe-IIe s. av. J.-C.), bible des apôtres et des Pères. La tradition rapporte 72 traducteurs (Lettre d\'Aristée).'],
+    ['Vulgate', 'latin', 'vulgata (editio), « version répandue »', 'Traduction latine de Jérôme (~400), déclarée officielle par le concile de Trente (1546). Base du Nouveau Testament latin et de la théologie occidentale.'],
+    ['Targum', 'araméen', 'תרגום (targoum), « traduction »', 'Traductions araméennes de la Bible lues à la synagogue après l\'exil, avec expansion interprétative (Targum Onqelos, Jonathan).']
+  ];
+
+  /* regex souple sur les accents, mot entier */
+  function accentFlex(s) {
+    return s.replace(/[aàâäAÀÂÄ]/g, '[aàâäAÀÂÄ]')
+            .replace(/[eéèêëEÉÈÊË]/g, '[eéèêëEÉÈÊË]')
+            .replace(/[iîïIÎÏ]/g, '[iîïIÎÏ]')
+            .replace(/[oôöOÔÖ]/g, '[oôöOÔÖ]')
+            .replace(/[uûüUÛÜ]/g, '[uûüUÛÜ]')
+            .replace(/c/g, '[cç]').replace(/C/g, '[cç]');
+  }
+
+  var RES = GLOSSAIRE.map(function (g) {
+    return { g: g, re: new RegExp('\\b' + accentFlex(g[0]) + '\\b', 'i') };
+  });
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function scan(root) {
+    var boxes = (root || document).querySelectorAll('.message-content:not([data-lex-done])');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      b.dataset.lexDone = '1';
+      var txt = b.textContent || '';
+      if (txt.length < 8) continue;
+      var found = [], seen = {};
+      RES.forEach(function (r) {
+        if (r.re.test(txt) && !seen[r.g[0]]) { seen[r.g[0]] = 1; found.push(r.g); }
+      });
+      if (!found.length) continue;
+      var row = document.createElement('div');
+      row.className = 'theo-lex';
+      var html = '<span class="theo-lex-t">📚 Lexique :</span>';
+      found.forEach(function (g) {
+        html += '<button type="button" class="theo-lex-chip" data-term="' + esc(g[0]) + '">📖 ' + esc(g[0]) + '</button>';
+      });
+      row.innerHTML = html;
+      b.appendChild(row);
+    }
+  }
+
+  /* ── Fiche (modal) ── */
+  var ov, body, title;
+  function build() {
+    if (ov) return;
+    var css = document.createElement('style');
+    css.textContent =
+      '.theo-lex{margin-top:8px;padding-top:6px;border-top:1px dashed rgba(79,142,247,.3);display:flex;flex-wrap:wrap;gap:6px;align-items:center}' +
+      '.theo-lex-t{font-size:11px;color:var(--cyan,#4f8ef7);opacity:.8}' +
+      '.theo-lex-chip{border:1px solid rgba(79,142,247,.4);background:rgba(79,142,247,.1);color:inherit;border-radius:999px;padding:2px 10px;font-size:11.5px;cursor:pointer}' +
+      '.theo-lex-chip:hover{background:rgba(79,142,247,.18)}' +
+      '#theo-lex-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}' +
+      '#theo-lex-modal.open{display:flex}' +
+      '#theo-lex-box{width:min(520px,94vw);max-height:80vh;overflow:auto;background:var(--bg-panel,var(--bg,#141a24));border:1px solid rgba(79,142,247,.3);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+      '#theo-lex-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid rgba(79,142,247,.18);font-family:Orbitron,monospace;font-size:13px;letter-spacing:1px}' +
+      '#theo-lex-title{margin-right:auto}' +
+      '#theo-lex-close{background:transparent;border:1px solid rgba(79,142,247,.3);color:inherit;border-radius:8px;width:28px;height:28px;font-size:13px;cursor:pointer}' +
+      '.theo-lex-card{padding:14px 16px;font-size:13px;line-height:1.6}' +
+      '.theo-lex-card h3{margin:0 0 2px;font-size:16px}' +
+      '.theo-lex-orig{font-size:13.5px;color:var(--cyan,#4f8ef7);margin:2px 0 10px}' +
+      '.theo-lex-lang{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:1px;border:1px solid rgba(79,142,247,.35);border-radius:999px;padding:1px 8px;opacity:.7;margin-bottom:8px}';
+    document.head.appendChild(css);
+    ov = document.createElement('div');
+    ov.id = 'theo-lex-modal';
+    ov.innerHTML = '<div id="theo-lex-box"><div id="theo-lex-head"><span id="theo-lex-title">📚 Lexique théologique</span>' +
+      '<button id="theo-lex-close" title="Fermer (Échap)">✕</button></div><div id="theo-lex-body"></div></div>';
+    document.body.appendChild(ov);
+    body = ov.querySelector('#theo-lex-body');
+    title = ov.querySelector('#theo-lex-title');
+    ov.querySelector('#theo-lex-close').addEventListener('click', function () { ov.classList.remove('open'); });
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && ov.classList.contains('open')) { e.stopPropagation(); ov.classList.remove('open'); }
+    }, true);
+  }
+
+  /* clic : une pastille ouvre la fiche ; toutes les fiches du message sont
+     accessibles en réouvrant sur une autre pastille. */
+  document.addEventListener('click', function (e) {
+    var chip = e.target && e.target.closest ? e.target.closest('.theo-lex-chip') : null;
+    if (!chip) return;
+    e.preventDefault(); e.stopPropagation();
+    var term = chip.dataset.term;
+    var g = null;
+    GLOSSAIRE.forEach(function (x) { if (x[0] === term) g = x; });
+    if (!g) return;
+    build();
+    title.textContent = '📚 Lexique théologique';
+    body.innerHTML = '<div class="theo-lex-card">' +
+      '<span class="theo-lex-lang">' + esc(g[1]) + '</span>' +
+      '<h3>' + esc(g[0]) + '</h3>' +
+      '<div class="theo-lex-orig">' + esc(g[2]) + '</div>' +
+      '<p>' + esc(g[3]) + '</p></div>';
+    ov.classList.add('open');
+  });
+
+  /* observation des nouveaux messages (même garde que les manuscrits) */
+  var moT = false;
+  new MutationObserver(function () {
+    if (window.__atcStreaming || window.__atcApplying) return;
+    if (moT) return; moT = true;
+    requestAnimationFrame(function () { moT = false; scan(document.body); });
+  }).observe(document.body, { childList: true, subtree: true });
+  scan(document.body);
+})();
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v153b — CHRONOLOGIE DES CONCILES & DOGMES 📜
+   Détecte les repères historiques dans les réponses (Nicée, Chalcédoine,
+   Grand Schisme, Hégire, Talmud…) et ajoute des pastilles qui ouvrent une
+   frise verticale des trois traditions, avec les événements cités mis en
+   évidence. Données embarquées, zéro réseau.
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoChrono) return;
+  window.__theoChrono = true;
+
+  /* [annee (negatif = av. J.-C.), affichage, libellé, description, catégorie, regex source] */
+  var EVENEMENTS = [
+    [-1250, '~1250 av.', 'Exode', 'Sortie d\'Égypte et alliance du Sinaï : moment fondateur d\'Israël, commémoré par la Pâque juive et le Vendredi saint chrétien.', 'judaisme', 'exode|passage de la mer'],
+    [-1000, '~1000 av.', 'Règne de David', 'Jérusalem devient capitale ; la promesse dynastique (2 S 7) fonde l\'attente messianique (fils de David).', 'judaisme', 'r[èe]gne de david|roi david'],
+    [-587, '587 av.', 'Exil babylonien', 'Destruction du Premier Temple : naissance de la synagogue, du canon en formation et de la théologie du souffrance juste (Ézéchiel, Deutéro-Isaïe).', 'judaisme', 'exil babylonien|destruction du premier temple|587'],
+    [49, '49', 'Concile de Jérusalem', 'Actes 15 : les païens sont reçus sans circoncision — premier acte de la séparation progressive entre christianisme et judaïsme rabbinique.', 'christianisme', 'concile de j[ée]rusalem|actes 15'],
+    [70, '70', 'Destruction du Second Temple', 'Par Titus : fin du culte sacrificiel, montée du pharisaïsme rabbinique, Yohanan ben Zakaï à Yavné. Un tournant pour le judaïsme ET pour le christianisme naissant.', 'judaisme', 'destruction du second temple|second temple|temple de j[ée]rusalem'],
+    [325, '325', 'Ier concile de Nicée', 'Contre Arius : le Fils est « consubstantiel au Père » (homoousios). Premier credo universel, datation de Pâques. Le concile le plus décisif de l\'histoire chrétienne.', 'christianisme', 'nic[ée]e|nicaea|325'],
+    [381, '381', 'Ier concile de Constantinople', 'Complète le credo de Nicée : divinité du Saint-Esprit. Le Credo dit « de Nicée-Constantinople » est celui des liturgies actuelles.', 'christianisme', 'constantinople 381|381|credo de nic[ée]e'],
+    [431, '431', 'Concile d\'Éphèse', 'Marie déclarée Theotokos (Mère de Dieu) contre Nestorius ; unité des deux natures dans la personne du Christ.', 'christianisme', '[ée]ph[èe]se|nestorius|theotokos|431'],
+    [451, '451', 'Concile de Chalcédoine', 'Le Christ : « deux natures sans confusion, sans changement, sans division, sans séparation » en une hypostase. Les Églises orientales « non-chalcédoniennes » (copte, arménienne, syriaque) s\'en séparent.', 'christianisme', 'chalc[ée]doine|monophysite|451'],
+    [553, '553', 'IIe concile de Constantinople', 'Condamne les « Trois Chapitres » et l\'origénisme ; achève la réception de Chalcédoine en Orient.', 'christianisme', 'trois chapitres|orig[èe]ne'],
+    [622, '622', 'Hégire', 'Migration de Mahomet de La Mecque à Médine : année 1 du calendrier musulman, naissance de la communauté (umma) organisée.', 'islam', 'h[ée]gire|hijra|622'],
+    [632, '632', 'Mort du Prophète', 'Abu Bakr devient calife ; la question de la succession (sunna/chiisme) s\'ouvre — Kerbela (680) la scellera.', 'islam', 'mort du proph[èe]te|abu bakr|632'],
+    [650, '~650', 'Compilation du Coran', 'Sous le calife Uthman, le texte coranique est unifié (rasm uthmani) ; la fixation vowelle viendra aux VIIIe-Xe s.', 'islam', 'compilation du coran|uthman|uthm[aâ]n'],
+    [661, '661', 'Séparation sunnites / chiites', 'Après l\'assassinat de Ali : le pouvoir passe aux Omeyyades ; les partisans d\'Ali (shi\'at Ali) font de l\'Imamat un principe doctrinal.', 'islam', 'sunnite|chiite|kerbala|karbala|661'],
+    [700, 'VIIIe s.', 'Écoles juridiques & Kalâm', 'Fondation des madhhab (hanafite, malikite, shafi\'ite, hanbalite) et de la théologie dialectique (mu\'tazila puis ash\'arisme).', 'islam', 'madhhab|kal[aâ]m|mu.tazila|asharite|shafi|hanafi|malikite|hanbalite'],
+    [786, '~870', 'Canonisation des hadiths', 'Les grandes collections sunnites (Bukhari, Muslim) fixent la Sunna ; les chiites canonisent les recueils des Imams.', 'islam', 'bukhari|muslim\\b|hadith|isnad'],
+    [870, '~870', 'Al-Bukhari', 'Le Sahih d\'al-Bukhari (~870) : le recueil de hadiths le plus autorisé du sunnisme.', 'islam', 'al-bukhari|bukhari'],
+    [900, '~900', 'Talmud de Babylone', 'Vers 500-900, la Guémara se fixe : le Talmud de Babylone devient, après la Bible, le texte directeur du judaïsme rabbinique.', 'judaisme', 'talmud|gu[ée]mara|babylone'],
+    [1054, '1054', 'Grand Schisme', 'Rome et Constantinople s\'excommunient mutuellement (filioque, primauté, azymes) : naissance des mondes catholique et orthodoxe séparés.', 'christianisme', 'grand schisme|1054|filioque'],
+    [1100, 'XIIe s.', 'Al-Ghazali', 'Ihya \'ulum al-din (Revivification des sciences de la foi) : synthèse entre loi, théologie et spiritualité qui marque tout le sunnisme ; apologie de l\'expérience intérieure (Munqidh).', 'islam', 'ghazali|ihya'],
+    [1190, '1190', 'Maïmonide, Guide des égarés', 'Rambam concilie Torah et raison aristotélicienne ; son Mishneh Torah codifie la halakha. Modèle des grandes synthèses (Thomas d\'Aquin le lira).', 'judaisme', 'ma[ïi]monide|rambam|guide des [ée]gar[ée]s'],
+    [1265, '1265-1274', 'Somme de théologie', 'Thomas d\'Aquin : la grande synthèse scolastique — raison et révélation, cinq voies, hylémorphisme appliqué à l\'Eucharistie.', 'christianisme', 'somme th[ée]ologique|thomas d.aquin|scolastique'],
+    [1517, '1517', 'Réforme protestante', 'Les 95 thèses de Luther (Indulgences, Sola scriptura, Sola fide) : éclatement de l\'Occident chrétien en confessions.', 'christianisme', 'luther|r[ée]forme protestante|95 th[èe]ses|1517|sola scriptura'],
+    [1530, '1530', 'Confession d\'Augsbourg', 'Melanchthon fixe la foi luthérienne ; première confession de foi de la Réforme.', 'christianisme', 'augsbourg|melanchthon'],
+    [1536, '1536', 'Institution de la religion chrétienne', 'Calvin systématise la théologie réformée (prédestination, cène spirituelle, élection) — version définitive 1559.', 'christianisme', 'calvin|institution de la religion'],
+    [1545, '1545-1563', 'Concile de Trente', 'Réponse catholique à la Réforme : dogmes confirmés, séminaires, Vulgate officielle, réforme disciplinaire (contre-réforme).', 'christianisme', 'trente|contre-r[ée]forme|1545'],
+    [1565, '1565', 'Choulhan Aroukh', 'Yossef Karo codifie la halakha pour toute la diaspora ; encore aujourd\'hui le code de référence du judaïsme orthodoxe.', 'judaisme', 'choulhan aroukh|choulhan \'aroukh|schulchan aruch'],
+    [1869, '1869-1870', 'Concile Vatican I', 'Infaillibilité pontificale et juridiction universelle — définies en pleine crise italienne ; interrompu par la prise de Rome.', 'christianisme', 'vatican i|infaillibilit[ée] pontificale'],
+    [1962, '1962-1965', 'Concile Vatican II', 'Ouverture œcuménique, liturgie en langue vivante, liberté religieuse, Nostra Aetate (relations avec l\'islam et le judaïsme). Le concile qui a refait le visage du catholicisme moderne.', 'christianisme', 'vatican ii|nostra aetate|1962'],
+    [1948, '1948', 'Déclaration universelle des droits de l\'homme', 'Repère moderne : liberté de religion (art. 18) — cadre des débats contemporains entre les trois traditions.', 'christianisme', 'droits de l.homme|dudh|1948']
+  ];
+
+  var CATS = {
+    christianisme: { n: '✝️ Christianisme', c: '#4f8ef7' },
+    islam: { n: '☪️ Islam', c: '#3fae7a' },
+    judaisme: { n: '✡️ Judaïsme', c: '#c9a227' }
+  };
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* détection : quels événements sont cités dans ce texte ? */
+  function detect(text) {
+    var found = [];
+    EVENEMENTS.forEach(function (ev) {
+      try { if (new RegExp(ev[5], 'i').test(text)) found.push(ev); } catch (e) {}
+    });
+    return found;
+  }
+
+  function scan(root) {
+    var boxes = (root || document).querySelectorAll('.message-content:not([data-chr-done])');
+    for (var i = 0; i < boxes.length; i++) {
+      var b = boxes[i];
+      b.dataset.chrDone = '1';
+      var txt = b.textContent || '';
+      if (txt.length < 8) continue;
+      var found = detect(txt);
+      if (!found.length) continue;
+      var row = document.createElement('div');
+      row.className = 'theo-chr';
+      var html = '<span class="theo-chr-t">📜 Repères historiques :</span>';
+      found.forEach(function (ev) {
+        html += '<button type="button" class="theo-chr-chip" data-y="' + ev[0] + '">' + esc(ev[1]) + ' · ' + esc(ev[2]) + '</button>';
+      });
+      row.innerHTML = html;
+      b.appendChild(row);
+    }
+  }
+
+  /* ── Frise (modal) ── */
+  var ov, listEl, curCat = 'tous', highlights = [];
+
+  function build() {
+    if (ov) return;
+    var css = document.createElement('style');
+    css.textContent =
+      '.theo-chr{margin-top:8px;padding-top:6px;border-top:1px dashed rgba(201,162,39,.35);display:flex;flex-wrap:wrap;gap:6px;align-items:center}' +
+      '.theo-chr-t{font-size:11px;color:#c9a227;opacity:.9}' +
+      '.theo-chr-chip{border:1px solid rgba(201,162,39,.45);background:rgba(201,162,39,.1);color:inherit;border-radius:999px;padding:2px 10px;font-size:11.5px;cursor:pointer}' +
+      '.theo-chr-chip:hover{background:rgba(201,162,39,.2)}' +
+      '#theo-chr-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(3px)}' +
+      '#theo-chr-modal.open{display:flex}' +
+      '#theo-chr-box{width:min(640px,94vw);max-height:84vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid rgba(201,162,39,.3);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+      '#theo-chr-head{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(201,162,39,.2);font-family:Orbitron,monospace;font-size:13px;letter-spacing:1px}' +
+      '#theo-chr-close{margin-left:auto;background:transparent;border:1px solid rgba(201,162,39,.3);color:inherit;border-radius:8px;width:28px;height:28px;font-size:13px;cursor:pointer}' +
+      '#theo-chr-filters{display:flex;gap:6px;padding:8px 16px 0;flex-wrap:wrap}' +
+      '.theo-chr-f{border:1px solid rgba(128,128,128,.3);background:transparent;color:inherit;border-radius:999px;padding:2px 10px;font-size:11px;cursor:pointer;opacity:.7}' +
+      '.theo-chr-f.on{opacity:1;border-color:currentColor}' +
+      '#theo-chr-list{overflow:auto;padding:12px 16px 16px;flex:1 1 auto}' +
+      '.theo-chr-ev{position:relative;padding:0 0 14px 56px;border-left:2px solid rgba(128,128,128,.25);margin-left:14px}' +
+      '.theo-chr-ev:last-child{padding-bottom:2px}' +
+      '.theo-chr-dot{position:absolute;left:-8px;top:2px;width:14px;height:14px;border-radius:50%;border:2px solid rgba(0,0,0,.25)}' +
+      '.theo-chr-y{font-family:Orbitron,monospace;font-size:12px;letter-spacing:1px}' +
+      '.theo-chr-lb{font-weight:700;font-size:13.5px;margin:1px 0}' +
+      '.theo-chr-ds{font-size:12px;opacity:.8;line-height:1.5}' +
+      '.theo-chr-ev.hl{background:rgba(201,162,39,.12);border-radius:8px;padding-top:6px;padding-bottom:8px;margin-left:8px}';
+    document.head.appendChild(css);
+    ov = document.createElement('div');
+    ov.id = 'theo-chr-modal';
+    ov.innerHTML = '<div id="theo-chr-box">' +
+      '<div id="theo-chr-head">📜 Chronologie des conciles &amp; dogmes<button id="theo-chr-close" title="Fermer (Échap)">✕</button></div>' +
+      '<div id="theo-chr-filters"></div>' +
+      '<div id="theo-chr-list"></div></div>';
+    document.body.appendChild(ov);
+    listEl = ov.querySelector('#theo-chr-list');
+    ov.querySelector('#theo-chr-close').addEventListener('click', function () { ov.classList.remove('open'); });
+    ov.addEventListener('mousedown', function (e) { if (e.target === ov) ov.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && ov.classList.contains('open')) { e.stopPropagation(); ov.classList.remove('open'); }
+    }, true);
+    /* filtres */
+    var fWrap = ov.querySelector('#theo-chr-filters');
+    var mkF = function (id, label) {
+      var b = document.createElement('button');
+      b.className = 'theo-chr-f' + (curCat === id ? ' on' : '');
+      b.textContent = label;
+      b.addEventListener('click', function () {
+        curCat = id;
+        fWrap.querySelectorAll('.theo-chr-f').forEach(function (x) { x.classList.remove('on'); });
+        b.classList.add('on');
+        render();
+      });
+      fWrap.appendChild(b);
+    };
+    mkF('tous', 'Tout');
+    Object.keys(CATS).forEach(function (k) { mkF(k, CATS[k].n); });
+  }
+
+  function render() {
+    listEl.innerHTML = '';
+    var evs = EVENEMENTS.slice().sort(function (a, b) { return a[0] - b[0]; });
+    evs.forEach(function (ev) {
+      if (curCat !== 'tous' && ev[4] !== curCat) return;
+      var cat = CATS[ev[4]];
+      var hl = highlights.indexOf(ev[0]) >= 0;
+      var d = document.createElement('div');
+      d.className = 'theo-chr-ev' + (hl ? ' hl' : '');
+      d.innerHTML = '<span class="theo-chr-dot" style="background:' + cat.c + '"></span>' +
+        '<span class="theo-chr-y" style="color:' + cat.c + '">' + esc(ev[1]) + '</span>' +
+        '<div class="theo-chr-lb">' + esc(ev[2]) + '</div>' +
+        '<div class="theo-chr-ds">' + esc(ev[3]) + '</div>';
+      listEl.appendChild(d);
+    });
+  }
+
+  function openAt(events) {
+    build();
+    highlights = (events || []).map(function (ev) { return ev[0]; });
+    render();
+    ov.classList.add('open');
+    var first = listEl.querySelector('.theo-chr-ev.hl');
+    if (first) first.scrollIntoView({ block: 'center' });
+  }
+
+  /* clic pastille → frise avec l'événement cité mis en évidence */
+  document.addEventListener('click', function (e) {
+    var chip = e.target && e.target.closest ? e.target.closest('.theo-chr-chip') : null;
+    if (!chip) return;
+    e.preventDefault(); e.stopPropagation();
+    var y = Number(chip.dataset.y);
+    var evs = [];
+    EVENEMENTS.forEach(function (ev) { if (ev[0] === y) evs.push(ev); });
+    openAt(evs);
+  });
+
+  var moT = false;
+  new MutationObserver(function () {
+    if (window.__atcStreaming || window.__atcApplying) return;
+    if (moT) return; moT = true;
+    requestAnimationFrame(function () { moT = false; scan(document.body); });
+  }).observe(document.body, { childList: true, subtree: true });
+  scan(document.body);
+})();
+
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v153c — VUE COMPARATIVE DES TRADITIONS 🌍
+   Le cœur inter-religieux : une question → cinq réponses en parallèle,
+   chacune tenue par un théologien d'une tradition (catholique, orthodoxe,
+   protestant, islam, judaïsme), avec sources précises et chrono.
+   Réutilise callLLMStream / mdToHtml / resolveModelConfig. Chaque réponse
+   peut être gardée au chat — ou les cinq d'un coup.
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoTrad) return;
+  window.__theoTrad = true;
+
+  var TRADITIONS = [
+    { id: 'catholique', n: '✝️ Catholique', sys: 'Tu réponds STRICTEMENT du point de vue de la théologie catholique, comme un théologien rigoureux formé au magistère : conciles (Nicée, Trente, Vatican II), Somme de théologie de Thomas d\'Aquin, Catéchisme de l\'Église catholique, Pères latins. Cite tes sources précises (référence biblique, concile, numéro de catechisme si tu les connais). Structure : **Position** · **Fondement** · **Développement** · **Sources**. Maximum 250 mots. En français.' },
+    { id: 'orthodoxe', n: '☦️ Orthodoxe', sys: 'Tu réponds STRICTEMENT du point de vue de la théologie orthodoxe orientale : les sept premiers conciles œcuméniques, les Pères grecs (Grégoire de Nysse, Maxime le Confesseur, Grégoire Palamas), la théosis, la liturgie byzantine, l\'iconologie. Cite tes sources précises. Structure : **Position** · **Fondement** · **Développement** · **Sources**. Maximum 250 mots. En français.' },
+    { id: 'protestant', n: '✝️ Protestant', sys: 'Tu réponds STRICTEMENT du point de vue de la théologie protestante (luthérienne et réformée) : Sola scriptura, Sola fide, Sola gratia, Luther, Calvin, les confessions de foi (Augsbourg, Westminster). Cite tes sources précises (référence biblique, confession, catéchisme). Structure : **Position** · **Fondement** · **Développement** · **Sources**. Maximum 250 mots. En français.' },
+    { id: 'islam', n: '☪️ Islam', sys: 'Tu réponds STRICTEMENT du point de vue de la théologie islamique, comme un savant rigoureux : Coran (cite sourate:verset), Sunna (hadiths canoniques), les écoles du kalâm et du fiqh, grands tafsir (Tabari, Razi, Ibn Kathir). Présente les points de consensus et, si utile, les divergences entre écoles. Structure : **Position** · **Fondement** · **Développement** · **Sources**. Maximum 250 mots. En français.' },
+    { id: 'judaisme', n: '✡️ Judaïsme', sys: 'Tu réponds STRICTEMENT du point de vue de la théologie juive rabbinique : Tanakh (cite livre/chapitre/verset), Talmud (traité), midrash, Rachi, Maïmonide, Choulhan Aroukh. Présente les points de consensus et, si utile, les divergences (achkénaze/sépharade, hassidim/mitnagdim). Structure : **Position** · **Fondement** · **Développement** · **Sources**. Maximum 250 mots. En français.' }
+  ];
+
+  var CSS =
+    '#tt-modal{position:fixed;inset:0;z-index:99996;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(3px)}' +
+    '#tt-modal.open{display:flex}' +
+    '#tt-box{width:min(1240px,97vw);max-height:94vh;display:flex;flex-direction:column;background:var(--bg-panel,var(--bg,#141a24));border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.55);color:var(--text,#e8eefc)}' +
+    '#tt-head{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.18));font-family:Orbitron,monospace;font-size:14px;letter-spacing:1px;flex:0 0 auto}' +
+    '#tt-head small{font-family:system-ui,sans-serif;font-size:11px;font-weight:400;letter-spacing:0;opacity:.6;margin-left:auto}' +
+    '.tt-x{background:transparent;border:1px solid var(--cyan-dim,rgba(79,142,247,.3));color:inherit;border-radius:8px;width:30px;height:30px;font-size:14px;cursor:pointer;flex:0 0 auto}' +
+    '.tt-x:hover{background:var(--cyan-dim,rgba(79,142,247,.12))}' +
+    '#tt-ctrl{display:flex;gap:8px;align-items:center;padding:10px 16px;flex:0 0 auto}' +
+    '#tt-q{flex:1 1 240px;min-height:38px;max-height:110px;resize:vertical;background:var(--bg-dark,var(--bg,#0d131d));color:var(--text,#e8eefc);border:1px solid var(--cyan-dim,rgba(79,142,247,.3));border-radius:8px;padding:8px;font-family:inherit;font-size:13px}' +
+    '#tt-go{background:var(--cyan-dim,rgba(79,142,247,.12));border:1px solid var(--cyan-dim,rgba(79,142,247,.35));color:inherit;border-radius:8px;padding:9px 14px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}' +
+    '#tt-go:disabled{opacity:.5;cursor:default}' +
+    '#tt-keepall{border:1px solid var(--cyan-dim,rgba(79,142,247,.3));background:transparent;color:inherit;border-radius:8px;padding:9px 12px;font-size:12px;cursor:pointer;white-space:nowrap}' +
+    '#tt-keepall:disabled{opacity:.4;cursor:default}' +
+    '#tt-res{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;padding:2px 16px 16px;overflow:auto;flex:1 1 auto}' +
+    '.tt-col{border:1px solid var(--cyan-dim,rgba(79,142,247,.22));border-radius:10px;display:flex;flex-direction:column;min-height:140px;overflow:hidden}' +
+    '.tt-hd{display:flex;gap:6px;align-items:center;padding:7px 9px;font-size:11.5px;font-weight:700;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.15))}' +
+    '.tt-st{font-weight:400;opacity:.8;flex:1 1 auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.tt-body{padding:9px 10px;overflow:auto;flex:1 1 auto;font-size:12px;line-height:1.55}' +
+    '.tt-body pre{white-space:pre-wrap;word-break:break-word;margin:0}' +
+    '.tt-ft{display:flex;gap:6px;padding:6px 9px;border-top:1px solid var(--cyan-dim,rgba(79,142,247,.15));flex:0 0 auto}' +
+    '.tt-btn{border:1px solid var(--cyan-dim,rgba(79,142,247,.3));background:var(--cyan-dim,rgba(79,142,247,.1));color:inherit;border-radius:8px;padding:4px 9px;font-size:11px;cursor:pointer}' +
+    '.tt-btn:hover{filter:brightness(1.25)}' +
+    '.tt-btn:disabled{opacity:.35;cursor:default}';
+
+  var built = false;
+  var running = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function build() {
+    if (built) return;
+    built = true;
+    var st = document.createElement('style');
+    st.id = 'tt-style'; st.textContent = CSS;
+    document.head.appendChild(st);
+    var cols = TRADITIONS.map(function (t) {
+      return '<div class="tt-col" data-tid="' + t.id + '">' +
+        '<div class="tt-hd"><span>' + esc(t.n) + '</span><span class="tt-st">🟠 prêt</span></div>' +
+        '<div class="tt-body"><pre>Posez la question en haut puis lancez — chaque tradition répond via le modèle actif.</pre></div>' +
+        '<div class="tt-ft"><button class="tt-btn tt-k" disabled>✅ Garder</button></div>' +
+        '</div>';
+    }).join('');
+    var md = document.createElement('div');
+    md.id = 'tt-modal';
+    md.innerHTML = '<div id="tt-box">' +
+      '<div id="tt-head">🌍 Vue comparative des traditions<small>la même question selon cinq traditions</small>' +
+        '<button class="tt-x" id="tt-close" title="Fermer (Échap)">✕</button></div>' +
+      '<div id="tt-ctrl">' +
+        '<textarea id="tt-q" rows="1" placeholder="La question à poser aux cinq traditions…"></textarea>' +
+        '<button id="tt-go">⚡ LANCER</button>' +
+        '<button id="tt-keepall" disabled>✅ Garder tout</button>' +
+        '<button class="tt-x" id="tt-close2" title="Fermer (Échap)">✕</button>' +
+      '</div>' +
+      '<div id="tt-res">' + cols + '</div>' +
+      '</div>';
+    document.body.appendChild(md);
+    md.addEventListener('click', function (e) { if (e.target === md) md.classList.remove('open'); });
+    document.getElementById('tt-close').addEventListener('click', function () { md.classList.remove('open'); });
+    document.getElementById('tt-close2').addEventListener('click', function () { md.classList.remove('open'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') md.classList.remove('open'); });
+    document.getElementById('tt-go').addEventListener('click', run);
+    document.getElementById('tt-keepall').addEventListener('click', keepAll);
+    document.querySelectorAll('.tt-col').forEach(function (col) { col.querySelector('.tt-k').addEventListener('click', function () { keepOne(col); }); });
+  }
+
+  async function runCol(col, t, q) {
+    var stEl = col.querySelector('.tt-st');
+    var body = col.querySelector('.tt-body');
+    var cfg = null;
+    try { cfg = resolveModelConfig(state.model); } catch (e) {}
+    if (!cfg || !cleanApiKey(cfg.apiKey || '')) {
+      stEl.textContent = '⚪ pas de clé';
+      body.innerHTML = '<pre>Aucune clé configurée.</pre>';
+      return null;
+    }
+    stEl.textContent = '⏳…';
+    var full = '';
+    try {
+      await callLLMStream(cfg, [
+        { role: 'system', content: t.sys },
+        { role: 'user', content: q }
+      ], { temperature: 0.6, max_tokens: 1200 }, function (chunk, all) {
+        full = all;
+        /* rendu throttlé : 5 flux simultanés, on reste léger */
+        if (!col.__pending) {
+          col.__pending = true;
+          setTimeout(function () {
+            col.__pending = false;
+            body.innerHTML = mdToHtml(full);
+          }, 200);
+        }
+      });
+      body.innerHTML = mdToHtml(full);
+      stEl.textContent = '🟢 ok';
+      return { text: full, tid: t.id, n: t.n };
+    } catch (e) {
+      stEl.textContent = '🔴 erreur';
+      var msg = String((e && e.message) || e).slice(0, 200).replace(/</g, '&lt;');
+      body.innerHTML = '<pre>' + msg + '</pre>';
+      return null;
+    }
+  }
+
+  async function run() {
+    if (running) return;
+    var q = document.getElementById('tt-q').value.trim();
+    if (!q) { toast('Pose d\'abord la question comparative', 'error'); return; }
+    running = true;
+    var go = document.getElementById('tt-go');
+    go.disabled = true; go.textContent = '⏳ 5 TRADITIONS…';
+    document.getElementById('tt-keepall').disabled = true;
+    var sys = (typeof buildSystemPrompt === 'function') ? buildSystemPrompt() : '';
+    /* NOTE : le prompt de tradition prime sur le persona du chat pour la
+       neutralité de l'exercice — le modèle ne fait que la voix. */
+    void sys;
+    var ps = [];
+    document.querySelectorAll('.tt-col').forEach(function (col) {
+      var t = null;
+      TRADITIONS.forEach(function (x) { if (x.id === col.dataset.tid) t = x; });
+      col.__res = null;
+      col.querySelector('.tt-k').disabled = true;
+      ps.push(runCol(col, t, q).then(function (r) { col.__res = r; col.querySelector('.tt-k').disabled = !r; return r; }));
+    });
+    var r = await Promise.all(ps);
+    go.disabled = false; go.textContent = '⚡ LANCER';
+    document.getElementById('tt-keepall').disabled = !(r[0] || r[1] || r[2] || r[3] || r[4]);
+    running = false;
+    var ok = r.filter(Boolean).length;
+    toast('🌍 Comparative terminée — ' + ok + '/5 réponses', ok === 5 ? 'success' : 'error');
+  }
+
+  function pushAll(which) {
+    var q = document.getElementById('tt-q').value.trim();
+    /* la question d'abord (si pas déjà la dernière user) */
+    if (q) {
+      var lastU = null;
+      for (var j = state.messages.length - 1; j >= 0; j--) {
+        if (state.messages[j].role === 'user') { lastU = state.messages[j].content; break; }
+      }
+      if (lastU !== q) state.messages.push({ role: 'user', content: q, ts: now() });
+    }
+    document.querySelectorAll('.tt-col').forEach(function (col) {
+      if (which && which !== col.dataset.tid) return;
+      var res = col.__res;
+      if (!res) return;
+      state.messages.push({ role: 'assistant', content: '🌍 **' + res.n + '**\n\n' + res.text, ts: now() });
+    });
+    if (typeof renderMessages === 'function') renderMessages();
+    if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
+  }
+
+  function keepAll() {
+    pushAll(null);
+    toast('✅ Les cinq traditions ajoutées à la conversation', 'success');
+    document.getElementById('tt-modal').classList.remove('open');
+  }
+
+  function keepOne(col) {
+    if (!col.__res) return;
+    pushAll(col.dataset.tid);
+    toast('✅ Réponse ajoutée à la conversation', 'success');
+  }
+
+  function open() {
+    build();
+    var inp = document.getElementById('user-input');
+    var qt = document.getElementById('tt-q');
+    if (inp && inp.value.trim() && !qt.value.trim()) qt.value = inp.value.trim();
+    document.getElementById('tt-modal').classList.add('open');
+  }
+
+  var btn = document.getElementById('open-trad-modal');
   if (btn) btn.addEventListener('click', open);
 })();
 
