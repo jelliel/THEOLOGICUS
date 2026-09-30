@@ -15714,6 +15714,9 @@ function renderMessages(scrollToTop) {
     const audioHtml = m.audioName ? `<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:4px">🎵 ${m.audioName}</div>` : '';
     let content = typeof m.content === 'string' ? m.content : '';
     let suggestionsHtml = '';
+    /* v155 — bouton SUITE TRADITIONS sur les vues comparatives gardées */
+    const isTradMsg = m.role === 'assistant' && /^#{2,4}\s*(🌍|🧭)/m.test(content);
+    const tradApartBtn = isTradMsg ? `<button class="msg-continue-btn" onclick="continueTradApart(${msgId})" title="Nouvel approfondissement comparatif des cinq traditions, en colonnes, comme une reponse a part" style="background:rgba(201,162,39,.14);color:#e8c65a;border:1px solid rgba(201,162,39,.5);padding:6px 16px;font-weight:900;font-size:12px;border-radius:6px;cursor:pointer;display:block;width:fit-content;margin-top:6px;box-shadow:0 2px 8px rgba(201,162,39,.25)">⊕ SUITE TRADITIONS</button>` : '';
     if (m.role === 'assistant') {
       if (Array.isArray(m.suggestions) && m.suggestions.length) {
         // Suggestions deja generees et stockees -> rendu SYNCHRONE (survit a tout re-render)
@@ -15732,6 +15735,7 @@ function renderMessages(scrollToTop) {
       <div id="sug-${msgId}" class="suggestions-slot">${suggestionsHtml}</div>
       <button class="msg-play-btn" onclick="speakFromMsg(${msgId})" title="Lire ce message et la suite" style="background:#ffd700;color:#000;border:none;padding:6px 16px;font-weight:900;font-size:12px;border-radius:6px;cursor:pointer;display:block;width:fit-content;margin-top:10px;box-shadow:0 2px 8px rgba(255,215,0,0.4)">▶ LIRE</button>
       <button class="msg-continue-btn" onclick="continueLastResponse()" title="Poursuivre la reponse dans le meme elan" style="background:var(--cyan);color:#000;border:none;padding:6px 16px;font-weight:900;font-size:12px;border-radius:6px;cursor:pointer;display:block;width:fit-content;margin-top:6px;box-shadow:0 2px 8px rgba(79,142,247,0.3)">▶ SUITE</button>
+      ${tradApartBtn}
       <div class="msg-meta">
         <span>${new Date(m.ts).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'})}</span>
         ${memTags}
@@ -40221,6 +40225,135 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   var btn = document.getElementById('export-word-btn');
   if (btn) btn.addEventListener('click', exportWord);
 })();
+
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v155 (2.0.276) — HEADER DÉBORDÉ + SUITE TRADITIONS
+   1) Menu déroulant "✨ ATELIER" : regroupe les 6 boutons d'atelier du
+      header (jauge, duel, traditions, homélie, lectio, recherche) —
+      les vrais boutons (mêmes ids) sont DÉPLACÉS dans le panneau, tout
+      le câblage existant continue de fonctionner. STUDIO VIDÉO et
+      AI VIDEO rejoignent le menu "⋯ Plus" (v6), section Média.
+   2) Garde-fous universels : aucune modale ne peut dépasser l'écran.
+   3) "⊕ SUITE TRADITIONS" sur les vues comparatives gardées en
+      conversation : produit un NOUVEAU volet d'approfondissement
+      (mêmes colonnes ### 🌍 + ### 🧭), en message autonome.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV155) return; window.__theoV155 = true;
+
+  /* ── CSS : panneau + garde-fous modales ── */
+  var st = document.createElement('style');
+  st.textContent =
+    '#v155-atelier{position:relative;flex:0 0 auto}' +
+    '#v155-atelier-panel{position:absolute;top:calc(100% + 8px);left:0;min-width:250px;padding:6px;display:none;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000}' +
+    '#v155-atelier-panel.open{display:flex}' +
+    '#v155-atelier-panel .hud-btn{display:block;width:100%;text-align:left;margin:2px 0;white-space:nowrap}' +
+    '#v155-atelier-panel .v155-lbl{font-size:9px;letter-spacing:2px;opacity:.5;padding:6px 8px 2px;font-family:var(--font-mono,monospace);text-transform:uppercase}' +
+    '#tj-box,#td-box,#tt-box,#th-box,#tl-box,#ts-box,#theo-lex-box,#theo-chr-box{max-width:97vw !important;max-height:94vh !important}';
+  document.head.appendChild(st);
+
+  /* ── 1) Menu ATELIER ── */
+  var IDS = ['open-gauge-modal', 'open-duel-modal', 'open-trad-modal', 'open-homelie-modal', 'open-lectio-modal', 'open-semsearch-modal'];
+  var agentSel = document.getElementById('agent-select');
+  var controls = document.querySelector('.header-controls');
+  if (controls && agentSel) {
+    var wrap = document.createElement('div'); wrap.id = 'v155-atelier';
+    var btn = document.createElement('button'); btn.className = 'hud-btn'; btn.id = 'v155-atelier-btn'; btn.type = 'button';
+    btn.title = 'Ateliers : jauge des modeles, duel, traditions, homelie, lectio, recherche semantique';
+    btn.innerHTML = '✨ ATELIER ▾';
+    var panel = document.createElement('div'); panel.id = 'v155-atelier-panel';
+    var lbl = document.createElement('div'); lbl.className = 'v155-lbl'; lbl.textContent = 'Ateliers';
+    panel.appendChild(lbl);
+    var moved = 0;
+    IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) { panel.appendChild(el); moved++; }
+    });
+    if (moved) {
+      wrap.appendChild(btn); wrap.appendChild(panel);
+      controls.insertBefore(wrap, agentSel);
+      function closeP() { panel.classList.remove('open'); btn.innerHTML = '✨ ATELIER ▾'; }
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var o = panel.classList.toggle('open');
+        btn.innerHTML = o ? '✨ ATELIER ▴' : '✨ ATELIER ▾';
+      });
+      panel.addEventListener('click', function (e) {
+        if (e.target.closest && e.target.closest('.hud-btn')) setTimeout(closeP, 60);
+      });
+      document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) closeP(); });
+    }
+  }
+
+  /* ── STUDIO VIDÉO + AI VIDEO -> menu "⋯ Plus" (v6), section Média ── */
+  try {
+    var menu = document.getElementById('v6-more-menu');
+    if (menu) {
+      var l2 = document.createElement('div'); l2.className = 'mm-label'; l2.textContent = 'Média';
+      menu.appendChild(l2);
+      ['open-studio-modal', 'open-aivideo-modal'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) menu.appendChild(el);
+      });
+    }
+  } catch (e) { console.warn('[v155] menu plus', e); }
+})();
+
+/* ── 3) SUITE TRADITIONS : approfondissement comparatif autonome ──
+   Appelée par le bouton ⊕ SUITE TRADITIONS rendu sur les messages
+   contenant des sections ### 🌍 / ### 🧭 (vues comparatives gardées).
+   Contexte = la conversation JUSQU'À ce message (inclus) ; le modèle
+   produit un nouveau volet comparatif au même format, affiché comme
+   une réponse séparée (les colonnes se re-layoutent via le hook
+   renderMessages existant). */
+window.continueTradApart = async function (msgId) {
+  var msgs = state.messages || [];
+  var idx = -1;
+  for (var i = 0; i < msgs.length; i++) { if ((msgs[i].ts || 0) === msgId) { idx = i; break; } }
+  if (idx < 0) { toast('Message introuvable', 'error'); return; }
+  var activeModelId = (state.agent && state.agent.modelPref && state.agent.modelPref !== '') ? state.agent.modelPref : state.model;
+  var cfg = resolveModelConfig(activeModelId);
+  if (!cfg.apiKey) { toast('Configurez votre cle API', 'error'); openApiKeyModal(); return; }
+  var sb = document.getElementById('send-btn');
+  if (sb) { sb.disabled = true; sb.innerHTML = '<span class="spin-ring"></span>'; }
+  showTyping();
+  var INSTR = "La conversation contient deja une vue comparative des cinq traditions (catholique, orthodoxe, protestante, islam, judaisme). Produisez maintenant un NOUVEAU volet d approfondissement, en reponse autonome, SANS repeter ce qui a deja ete dit. Format strictement identique : un titre de section '### 🌍 <Nom de la tradition>' suivi du developpement (120 a 150 mots) pour CHACUNE des cinq traditions, puis '### 🧭 Synthese comparee' (3 a 4 points). Choisissez des ANGLES NOUVEAUX parmi : textes fondateurs precis, figures marquantes, pratique spirituelle concrete, calendrier et fetes, art et architecture, place de la femme, rapport au sacre, priere et liturgie, rapports entre traditions. N ajoutez aucune introduction ni conclusion en dehors des sections.";
+  var ctx = [
+    { role: 'system', content: buildSystemPrompt() }
+  ].concat(
+    msgs.slice(0, idx + 1).slice(-22).map(function (m) { return { role: m.role, content: m.content }; })
+  ).concat([
+    { role: 'system', content: INSTR }
+  ]);
+  var model = MODELS.find(function (m) { return m.id === activeModelId; }) || MODELS[0];
+  var agentTemp = state.agent && state.agent.temperature !== undefined ? state.agent.temperature : model.temp;
+  var agentMaxTok = (state.agent && state.agent.maxTokens) || 4096;
+  hideTyping();
+  var _sd = _createStreamDiv();
+  var _renderer = _createStreamRenderer(_sd.content, _sd.div, _sd.slot);
+  try {
+    window.__atcStreaming = true;
+    var reply = await callLLMStream(cfg, ctx, { temperature: agentTemp, max_tokens: agentMaxTok }, function (chunk, full) { _renderer.push(chunk, full); });
+    _renderer.finish(reply);
+    window.__atcStreaming = false;
+    state.messages.push({ role: 'assistant', content: reply, ts: now(), continued: true, tradSuite: true });
+    markChatDirty();
+    setTimeout(renderMessages, 0);
+    speakText(reply);
+    await saveChat();
+    toast('Nouveau volet comparatif ajoute', 'info');
+  } catch (e) {
+    window.__atcStreaming = false;
+    hideTyping();
+    appendApiErrorMessage(e);
+  } finally {
+    var sb2 = document.getElementById('send-btn');
+    if (sb2) { sb2.disabled = false; sb2.innerHTML = 'SEND ▶'; }
+  }
+};
 
 </script>
 </body>
