@@ -62,7 +62,7 @@ BOOKS = {
     'ezechiel':26,'ez':26,'daniel':27,'dan':27,'dn':27,'osee':28,'os':28,'ho':28,
     'joel':29,'jl':29,'amos':30,'am':30,'jonas':32,'jon':32,'michee':33,'mi':33,
     'nahum':34,'na':34,'habacuc':35,'hab':35,'sophonie':36,'sop':36,'aggee':37,'ag':37,
-    'zacharie':38,'za':38,'malachie':39,'mal':39,'matthieu':40,'matt':40,'mt':40,
+    'zacharie':38,'za':38,'malachie':39,'mal':39,'ml':39,'matthieu':40,'matt':40,'mt':40,
     'marc':41,'mc':41,'luc':42,'lc':42,'jean':43,'jn':43,'actes':44,'ac':44,
     'romains':45,'rom':45,'rm':45,'galates':48,'gal':48,'ga':48,'ephesiens':49,'eph':49,
     'philippiens':50,'phil':50,'colossiens':51,'col':51,'tite':56,'tit':56,'tt':56,
