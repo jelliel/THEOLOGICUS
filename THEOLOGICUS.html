@@ -41346,7 +41346,6 @@ window.continueTradApart = async function (msgId) {
   if (!bindTop()) document.addEventListener('DOMContentLoaded', bindTop);
 
   /* ── 2) plan des longues réponses ── */
-  var scanTimer = null;
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function buildToc(box) {
     var hs = Array.prototype.slice.call(box.querySelectorAll('h2, h3, h4')).filter(function (h) { return !h.closest('.theo-toc'); });
@@ -41377,9 +41376,16 @@ window.continueTradApart = async function (msgId) {
       try { buildToc(box); } catch (e) {}
     });
   }
+  /* v165c — THROTTLE et non debounce : l'app mute le DOM en continu
+     (horloges, animations, curseur de stream), un debounce de 700ms
+     ne se déclencherait JAMAIS. Le throttle garantit un scan régulier. */
+  var lastRun = 0, pending = null;
   function queueScan() {
-    clearTimeout(scanTimer);
-    scanTimer = setTimeout(scan, 700);
+    var now = Date.now();
+    if (now - lastRun >= 700) { lastRun = now; scan(); }
+    else if (!pending) {
+      pending = setTimeout(function () { pending = null; lastRun = Date.now(); scan(); }, 700 - (now - lastRun));
+    }
   }
   var mo = new MutationObserver(queueScan);
   function start() {
