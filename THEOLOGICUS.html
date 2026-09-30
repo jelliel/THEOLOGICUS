@@ -41059,7 +41059,9 @@ window.continueTradApart = async function (msgId) {
     if (box.dataset.figGenDone) return;
     box.dataset.figGenDone = '1';
     if (!isOn()) return;
-    if ((box.textContent || '').length < 60) return;
+    /* uniquement les RÉPONSES de l'assistant (pas les questions user) */
+    if (!box.closest || !box.closest('.message.assistant')) return;
+    if ((box.textContent || '').length < 40) return;
     var have = box.querySelectorAll('.theo-fig').length;
     var slots = 2 - have;
     if (slots <= 0) return;
