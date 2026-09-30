@@ -41383,8 +41383,9 @@ window.continueTradApart = async function (msgId) {
   }
   var mo = new MutationObserver(queueScan);
   function start() {
-    var c = document.getElementById('chat-container') || document.body;
-    mo.observe(c, { childList: true, subtree: true });
+    /* v165b — observe body (comme v161) : le conteneur de chat peut
+       être reconstruit ou ne pas exister au chargement du module */
+    mo.observe(document.body, { childList: true, subtree: true });
     queueScan();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
