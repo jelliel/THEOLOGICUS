@@ -42159,6 +42159,15 @@ window.continueTradApart = async function (msgId) {
       h += '<details class="v170-top"' + (q ? ' open' : '') + '><summary>' + esc(d.t)
          + ' <span class="v170-n">(' + tl.length + ' témoins · ' + ar.length + ' arguments)</span></summary>';
       if (d.q) h += '<div class="v170-doc-q">' + esc(d.q) + '</div>';
+      if (d.xs && d.xs.length) {
+        h += '<div class="v170-doc-h">Analyse</div>';
+        d.xs.forEach(function(x){
+          h += '<div class="v170-wit"><b>' + esc(x.w) + '</b>'
+             + '<div class="v167-sn" style="margin-top:4px">' + esc(x.t) + '</div>'
+             + (trGet && trGet(x.t) ? frDiv(trGet(x.t)) : '<button type="button" class="v167-tr" data-sn="' + esc(x.t) + '">🌐 FR</button>')
+             + '</div>';
+        });
+      }
       if (tl.length) {
         h += '<div class="v170-doc-h">Timeline des témoins</div>';
         tl.forEach(function(x){

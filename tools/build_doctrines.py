@@ -68,6 +68,7 @@ def main():
         q = para_after(h, '</h1>')
         # timeline : la section <h2>Timeline</h2> contient un <h3> par témoin
         tl = []
+        xs = []   # v174 : sections spéciales (hub pages, verdicts, scénarios…)
         mtl = re.search(r'<h2[^>]*>\s*Timeline\s*</h2>(.*?)(?=<h2|$)', h, re.S)
         if mtl:
             for m in re.finditer(r'<h3[^>]*>(.*?)</h3>', mtl.group(1), re.S):
@@ -78,7 +79,17 @@ def main():
                 body = clean(mtl.group(1)[start:end])
                 if wt and len(body) >= 60:
                     tl.append({'w': wt, 't': clip(body, 700)})
+        # v174 — tout h2 hors Timeline/Arguments/Sources est une section
+        # spéciale à préserver (pages hub, verdicts comparatifs, scénarios…)
+        for wt, whtml in sections_between(h, 'h2'):
+            if wt.lower() in ('timeline', 'arguments', 'sources') or not wt:
+                continue
+            body = clean(whtml)
+            if len(body) >= 60:
+                xs.append({'w': wt, 't': clip(body, 700)})
         # arguments : docs/doctrines/<slug>/arguments/*.html
+        # v174 : structures variables — « The claim » (standard) OU
+        # « The question » / « The case for … » (85 pages au début non extraites)
         ar = []
         adir = f.parent / f.stem / 'arguments'
         for af in sorted(adir.glob('*.html')):
@@ -86,16 +97,37 @@ def main():
             if not ah or '<h1' not in ah:
                 continue
             aq = clean(re.search(r'<h1[^>]*>(.*?)</h1>', ah, re.S).group(1))
-            sec = dict(sections_between(ah, 'h2'))
-            claim = clip(sec.get('The claim', ''), 600)
-            assess = clip(sec.get('Assessment', ''), 450)
-            adv = clip(sec.get('Adversarial assessment', ''), 0)  # réservé
+            secs = sections_between(ah, 'h2')
+            sec = dict(secs)
+            claim = sec.get('The claim') or sec.get('The question', '')
+            if not claim:
+                for k, v in sec.items():
+                    if k.lower().startswith('the case for'):
+                        claim = v
+                        break
+            assess = sec.get('Assessment', '')
+            if not claim:
+                # v174 — structure libre : concatène les sections de contenu
+                # (tout sauf Sources / Assessment / Adversarial) jusqu'à 600 c
+                buf = ''
+                for k, v in secs:
+                    if k.lower() in ('sources', 'assessment', 'adversarial assessment'):
+                        continue
+                    t = clean(v)
+                    if len(t) < 40:
+                        continue
+                    buf += ('§ ' + k + ' — ' if buf else '') + t
+                    if len(buf) >= 500:
+                        break
+                claim = buf
+            claim = clip(clean(claim), 600)
+            assess = clip(clean(assess), 450)
             if not claim:
                 continue
             ar.append({'q': clip(aq, 160), 'c': claim, 'a': assess,
                        'u': 'https://historicalchristian.faith/doctrine/doctrines/%s/arguments/%s'
                             % (f.stem, af.name)})
-        ds.append({'s': f.stem, 't': title, 'q': clip(q, 700), 'tl': tl, 'ar': ar})
+        ds.append({'s': f.stem, 't': title, 'q': clip(q, 700), 'tl': tl, 'ar': ar, 'xs': xs})
     meta = {'v': 1, 'source': 'historicalchristian.faith (Doctrine-Database)',
             'built': time.strftime('%Y-%m-%d'), 'n': len(ds),
             'args': sum(len(d['ar']) for d in ds), 'ds': ds}
