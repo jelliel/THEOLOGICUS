@@ -40461,8 +40461,9 @@ window.continueTradApart = async function (msgId) {
   st.textContent =
     /* corps de lecture des messages */
     '.message-content{font-size:15px;line-height:1.68}' +
-    /* césure française des blocs de texte */
-    '.message-content p,.message-content li,.message-content blockquote{hyphens:auto;-webkit-hyphens:auto}' +
+    /* césure française : posée sur le conteneur (les textes sont des nœuds
+       bruts pre-wrap, pas des <p> — hyphens hérite vers tout le contenu) */
+    '.message-content{hyphens:auto;-webkit-hyphens:auto}' +
     /* rythme vertical des paragraphes et titres */
     '.message-content p{margin:.55em 0}' +
     '.message-content h2{margin:18px 0 8px}' +
