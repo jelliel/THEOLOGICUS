@@ -42152,6 +42152,7 @@ window.continueTradApart = async function (msgId) {
       var tl = d.tl, ar = d.ar;
       if (q) {
         hay += ' ' + norm(d.tl.map(function(x){ return x.w + ' ' + x.t; }).join(' '));
+        hay += ' ' + norm((d.xs || []).map(function(x){ return x.w + ' ' + x.t; }).join(' '));
         hay += ' ' + norm(d.ar.map(function(x){ return x.q + ' ' + x.c; }).join(' '));
       }
       if (q && hay.indexOf(q) < 0) return;
