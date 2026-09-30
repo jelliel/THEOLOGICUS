@@ -41680,6 +41680,9 @@ window.continueTradApart = async function (msgId) {
          (endpoints /libretranslate/* du proxy exe, cf. module v59) +
          auto-traduction dès que les modèles sont chargés. */
       function translateSnippet(sn, b) {
+        /* v171 — déjà traduit ? on réaffiche la traduction enregistrée */
+        var cached = trGet(sn);
+        if (cached) { b.outerHTML = frDiv(cached); return Promise.resolve(); }
         if (!(window.__LT && window.__LT.resolve)) {
           b.outerHTML = '<div class="v167-sn" style="opacity:.6">LibreTranslate indisponible dans ce contexte.</div>';
           return Promise.resolve();
@@ -41694,8 +41697,12 @@ window.continueTradApart = async function (msgId) {
           }).then(function (r) { return r.json(); });
         }).then(function (d) {
           var t = d && d.translatedText;
-          b.outerHTML = t ? '<div class="v167-sn" style="color:#7fdfff">🇫🇷 ' + esc(t) + '</div>'
-                          : '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>';
+          if (t) {
+            trPut(sn, t);   /* v171 — mémoriser pour les prochaines ouvertures */
+            b.outerHTML = frDiv(t);
+          } else {
+            b.outerHTML = '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>';
+          }
         });
       }
       /* v169 — propose de démarrer le serveur LOCALEMENT, dans le panneau */
@@ -41766,14 +41773,37 @@ window.continueTradApart = async function (msgId) {
     ensureIndex();
     renderPanel();
   }
+  /* v171 — cache persistant des traductions FR (localStorage « theo_v171_tr ») :
+     un extrait déjà traduit est réaffiché automatiquement, sans rappeler le
+     serveur — la traduction est faite UNE seule fois, pour toujours. */
+  var TRC = (function () {
+    try { return JSON.parse(localStorage.getItem('theo_v171_tr') || '{}') || {}; }
+    catch (e) { return {}; }
+  })();
+  function trKey(s) {
+    s = String(s || '');
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return 'h' + h;
+  }
+  function trGet(sn) {
+    return Object.prototype.hasOwnProperty.call(TRC, trKey(sn)) ? TRC[trKey(sn)] : null;
+  }
+  function trPut(sn, t) {
+    TRC[trKey(sn)] = String(t || '');
+    try { localStorage.setItem('theo_v171_tr', JSON.stringify(TRC)); } catch (e) { /* quota dépassé : garde en mémoire pour la session */ }
+  }
+  function frDiv(t) { return '<div class="v167-sn" style="color:#7fdfff">🇫🇷 ' + esc(t) + '</div>'; }
   function itemHtml(e) {
     var meta = (window.__fathersIndex || {})[e.w] || {};
     var url = 'https://www.newadvent.org/fathers/' + e.w + '.htm';
+    var cached = trGet(e.sn || '');
     return '<div class="v167-item">' +
       '<span class="v167-au">' + esc(meta.a || 'Père de l\'Église') + '</span> ' +
       '<span class="v167-ti">— ' + esc(meta.t || '') + (e.st ? ' · ' + esc(e.st.slice(0, 80)) : '') + '</span>' +
       '<div class="v167-sn">' + esc(e.sn || '') + '…</div>' +
-      '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
+      (cached ? frDiv(cached)
+              : '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>') +
       '<a class="v167-lk" href="' + url + '" target="_blank" rel="noopener">newadvent.org ↗</a></div>';
   }
   /* v168 — corpus FR de traditionapostolique.fr (tradition/ta.json) */
