@@ -40586,5 +40586,87 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v159 (2.0.284) — MENU « 🎬 MEDIA » DANS LE HEADER
+   Comme ✨ ATELIER : les vrais boutons STUDIO VIDÉO et AI VIDEO (mêmes
+   ids, câblage intact) sont déplacés dans un panneau déroulant ancré
+   sous le bouton MEDIA (position:fixed dans body — le header a
+   overflow:hidden qui clippe les panneaux absolus).
+   Bonus cohérence : ATELIER / MEDIA / Aa s'excluent mutuellement —
+   un seul menu ouvert à la fois.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV159) return; window.__theoV159 = true;
+
+  var st = document.createElement('style');
+  st.id = 'v159-css';
+  st.textContent =
+    '#v159-media-wrap{position:relative;flex:0 0 auto}' +
+    '#v159-media-panel{position:fixed;min-width:230px;padding:6px;display:none;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000}' +
+    '#v159-media-panel.open{display:flex}' +
+    '#v159-media-panel .hud-btn{display:block;width:100%;text-align:left;margin:2px 0;white-space:nowrap}' +
+    '#v159-media-panel .v159-lbl{font-size:9px;letter-spacing:2px;opacity:.5;padding:6px 8px 2px;font-family:var(--font-mono,monospace);text-transform:uppercase}';
+  document.head.appendChild(st);
+
+  var studio = document.getElementById('open-studio-modal');
+  var aivideo = document.getElementById('open-aivideo-modal');
+  var controls = document.querySelector('.header-controls');
+  if (!controls || !studio || !aivideo) return;
+
+  var wrap = document.createElement('div'); wrap.id = 'v159-media-wrap';
+  var btn = document.createElement('button');
+  btn.className = 'hud-btn'; btn.id = 'v159-media-btn'; btn.type = 'button';
+  btn.title = 'Média : Studio Vidéo et AI VIDEO';
+  btn.innerHTML = '🎬 MEDIA ▾';
+  var panel = document.createElement('div'); panel.id = 'v159-media-panel';
+  var lbl = document.createElement('div'); lbl.className = 'v159-lbl'; lbl.textContent = 'Média';
+  panel.appendChild(lbl);
+  panel.appendChild(studio);
+  panel.appendChild(aivideo);
+  wrap.appendChild(btn);
+  controls.insertBefore(wrap, studio); /* studio est encore enfant de controls */
+  document.body.appendChild(panel);
+
+  function place() {
+    var r = btn.getBoundingClientRect();
+    var lw = 230, left = r.left;
+    if (left + lw > window.innerWidth - 10) left = window.innerWidth - 10 - lw;
+    if (left < 10) left = 10;
+    panel.style.left = left + 'px';
+    panel.style.top = (r.bottom + 8) + 'px';
+  }
+  function closeP() { panel.classList.remove('open'); btn.innerHTML = '🎬 MEDIA ▾'; }
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var o = panel.classList.toggle('open');
+    if (o) { place(); btn.innerHTML = '🎬 MEDIA ▴'; } else btn.innerHTML = '🎬 MEDIA ▾';
+  });
+  panel.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('.hud-btn')) setTimeout(closeP, 60);
+  });
+  document.addEventListener('click', function (e) {
+    if (!wrap.contains(e.target) && !panel.contains(e.target)) closeP();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeP(); });
+  window.addEventListener('scroll', closeP, true);
+  window.addEventListener('resize', closeP);
+
+  /* ── un seul menu ouvert à la fois (capture : avant les toggles) ── */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!(t && t.closest)) return;
+    if (t.closest('#v159-media-btn')) {
+      var a = document.getElementById('v155-atelier-panel'); if (a) a.classList.remove('open');
+      var ab = document.getElementById('v155-atelier-btn'); if (ab) ab.innerHTML = '✨ ATELIER ▾';
+      var b = document.getElementById('v158-aa-panel'); if (b) b.classList.remove('open');
+    } else if (t.closest('#v155-atelier-btn') || t.closest('#v158-aa-btn')) {
+      closeP();
+    }
+  }, true);
+})();
+
+</script>
 </body>
 </html>
