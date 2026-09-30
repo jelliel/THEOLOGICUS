@@ -42005,14 +42005,76 @@ window.continueTradApart = async function (msgId) {
   /* ── démarrage : construction en tâche de fond après 8 s ── */
   setTimeout(ensureIndex, 8000);
 
-  /* v173 — exports pour les autres panneaux (SUJETS & DOCTRINES) :
-     mêmes boutons 🌐 FR, même cache de traductions, même offre de
-     démarrage LibreTranslate. */
+  /* v173/v175 — exports pour les autres panneaux (SUJETS, DOCTRINES, ARGUMENTS) :
+     mêmes boutons 🌐 FR, même cache de traductions, même offre de démarrage
+     LibreTranslate. v175 : implémentation autonome — translateSnippet et
+     offerLtStart sont imbriquées dans openPanel, donc inaccessibles ici. */
+  function shTranslate(sn, b) {
+    var cached = trGet(sn);
+    if (cached) { b.outerHTML = frDiv(cached); return Promise.resolve(); }
+    if (!(window.__LT && window.__LT.resolve)) {
+      b.outerHTML = '<div class="v167-sn" style="opacity:.6">LibreTranslate indisponible dans ce contexte.</div>';
+      return Promise.resolve();
+    }
+    b.dataset.busy = '1';
+    b.textContent = '⏳ traduction…';
+    return window.__LT.resolve().then(function (ep) {
+      if (!ep) throw new Error('no-server');
+      return fetch(ep + '/translate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q: sn, source: 'en', target: 'fr', format: 'text' })
+      }).then(function (r) { return r.json(); });
+    }).then(function (d) {
+      var t = d && d.translatedText;
+      if (t) { trPut(sn, t); b.outerHTML = frDiv(t); }
+      else { b.outerHTML = '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>'; }
+    });
+  }
+  function shLtStart(stat, sn, b) {
+    b.textContent = '🌐 FR'; delete b.dataset.busy;
+    if (!stat) return;
+    stat.innerHTML = 'LibreTranslate est arrêté. <button type="button" id="v167-ltstart2">▶ Démarrer LibreTranslate</button>'
+      + ' <span style="opacity:.6">— ou PARAMÈTRES → « 🌐 Traduction locale ».</span>';
+    var sb = document.getElementById('v167-ltstart2');
+    if (!sb || sb.dataset.wired) return;
+    sb.dataset.wired = '1';
+    sb.addEventListener('click', function () {
+      sb.disabled = true;
+      sb.textContent = '⏳ démarrage… les modèles chargent (jusqu\'à ~1 min)';
+      var tries = 0;
+      function poll() {
+        tries++;
+        var done = false;
+        fetch('/libretranslate/status').then(function (r) { return r.json(); }).then(function (st) {
+          if (st && st.installed === false && !st.installing) {
+            sb.textContent = '⬇️ installation de LibreTranslate (plusieurs minutes)…';
+            fetch('/libretranslate/install', { method: 'POST' }).catch(function () {});
+            setTimeout(poll, 5000);
+            return;
+          }
+          if (st && (st.ready || st.running)) { done = true; }
+          else if (tries < 40) { setTimeout(poll, 3000); return; }
+          if (done) {
+            shTranslate(sn, b).then(function () { if (stat) stat.textContent = ''; })
+              .catch(function () { sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate'; });
+          } else {
+            sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate';
+            if (stat && st && st.last_error) stat.textContent = '⚠ ' + st.last_error;
+          }
+        }).catch(function () {
+          if (tries < 10) { setTimeout(poll, 3000); return; }
+          sb.disabled = false; sb.textContent = '▶ Démarrer LibreTranslate';
+        });
+      }
+      fetch('/libretranslate/start', { method: 'POST' }).catch(function () {});
+      setTimeout(poll, 3000);
+    });
+  }
   window.__v167TrGet = trGet;
   window.__v167FrDiv = frDiv;
   window.__v167Translate = function (sn, b, statEl) {
-    return translateSnippet(sn, b).catch(function () {
-      offerLtStart(statEl || document.getElementById('v167-status'), sn, b);
+    return shTranslate(sn, b).catch(function () {
+      shLtStart(statEl || document.getElementById('v167-status'), sn, b);
     });
   };
 })();
