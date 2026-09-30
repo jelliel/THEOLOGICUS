@@ -7708,6 +7708,7 @@ window.__ensureTafsirSurah = function(p){
     <button id="file-upload-btn" title="Joindre un fichier (image, audio, PDF, DOCX, TXT, ZIP)">📎</button>
     <button id="tts-btn" title="Lecture vocale des réponses">🔊</button>
     <button id="tts-all-btn" title="Lire depuis le début (ou cliquez ▶ LIRE sur un message)">▶️</button>
+    <button id="v160-fig-btn" title="Images de manuscrits : affichées">🖼</button>
     <button id="auto-continue-btn" title="Suite automatique: desactivee">🔁</button>
     <button id="chat-lt-btn" title="Traduire le texte saisi (LibreTranslate)">🌐</button>
     <button id="folder-upload-btn" title="Importer un dossier complet">📁</button>
@@ -40668,6 +40669,179 @@ window.continueTradApart = async function (msgId) {
       closeP();
     }
   }, true);
+})();
+
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v160 (2.0.286) — IMAGES DE MANUSCRITS AFFICHÉES AUTOMATIQUEMENT
+   Le module v150 détecte les manuscrits cités (P52, Codex Sinaiticus…)
+   et insère des pastilles cliquables vers une galerie. Demande user :
+   voir l'image DIRECTEMENT dans le message, pas seulement au clic.
+   ── Fonctionnement ──
+   • Un MutationObserver surveille l'apparition des lignes .theo-mss
+     (insérées par v150) : elles portent les manuscrits détectés dans
+     leurs chips (data-wiki) — zéro duplication de la détection.
+   • Pour les 2 premiers manuscrits d'un message, une FICHE est insérée
+     juste AU-DESSUS des pastilles : image Wikimedia (via l'API REST
+     Wikipédia fr→en, déjà utilisée par l'app), titre, extrait court,
+     lien vers l'article (nouvel onglet).
+   • Cache localStorage (theologicus_mssfig_v1) : une image jamais
+     re-téléchargée ; les anciennes conversations s'enrichissent au
+     rechargement.
+   • Toggle 🖼 dans la barre de saisie (persisté theologicus_mssfig).
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoMssFig) return; window.__theoMssFig = true;
+
+  var CKEY = 'theologicus_mssfig_v1';
+  var TKEY = 'theologicus_mssfig_on';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function cget() { try { return JSON.parse(localStorage.getItem(CKEY) || '{}'); } catch (e) { return {}; } }
+  function cset(c) { try { localStorage.setItem(CKEY, JSON.stringify(c)); } catch (e) {} }
+  function isOn() { try { return localStorage.getItem(TKEY) !== '0'; } catch (e) { return true; } }
+
+  /* ── API REST Wikipédia fr→en (identique au module v150) ── */
+  function fetchSum(wiki) {
+    var langs = ['fr', 'en'];
+    function tryLang(i) {
+      if (i >= langs.length) return Promise.resolve(null);
+      return fetch('https://' + langs[i] + '.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(wiki) + '?redirect=true')
+        .then(function (r) { if (!r.ok) throw new Error('http'); return r.json(); })
+        .then(function (j) {
+          if (!j || (!j.thumbnail && !j.originalimage)) return tryLang(i + 1);
+          return j;
+        })
+        .catch(function () { return tryLang(i + 1); });
+    }
+    return tryLang(0);
+  }
+
+  /* ── Fiche image inline ── */
+  function buildFig(data, label) {
+    var fig = document.createElement('div');
+    fig.className = 'theo-fig';
+    fig.innerHTML =
+      '<a class="theo-fig-img" href="' + esc(data.link) + '" target="_blank" rel="noopener" title="Ouvrir l\'article Wikipédia">' +
+      '<img src="' + esc(data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy">' +
+      '</a>' +
+      '<div class="theo-fig-txt">' +
+      '<div class="theo-fig-t">' + esc(data.title || label) + '</div>' +
+      (data.extract ? '<div class="theo-fig-x">' + esc(String(data.extract).slice(0, 170)) + (String(data.extract).length > 170 ? '…' : '') + '</div>' : '') +
+      '<a class="theo-fig-l" href="' + esc(data.link) + '" target="_blank" rel="noopener">Article Wikipédia →</a>' +
+      '</div>';
+    return fig;
+  }
+
+  var pending = {};
+  function ensureFig(row, wiki, label) {
+    var c = cget();
+    if (c[wiki]) { insertFig(row, c[wiki], label); return; }
+    if (pending[wiki]) { pending[wiki].push({ row: row, label: label }); return; }
+    pending[wiki] = [{ row: row, label: label }];
+    fetchSum(wiki).then(function (j) {
+      var waiters = pending[wiki]; delete pending[wiki];
+      if (!j) return;
+      var img = (j.originalimage && j.originalimage.source) || (j.thumbnail && j.thumbnail.source) || '';
+      if (!img) return;
+      var data = {
+        img: img,
+        title: j.title || label,
+        extract: j.extract || '',
+        link: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) ||
+              ('https://fr.wikipedia.org/wiki/' + encodeURIComponent(wiki))
+      };
+      c = cget(); c[wiki] = data; cset(c);
+      waiters.forEach(function (w) {
+        if (w.row.isConnected) insertFig(w.row, data, w.label);
+      });
+    });
+  }
+
+  function insertFig(row, data, label) {
+    if (row.querySelector('.theo-fig[data-wiki="' + esc(wikiKey(data)) + '"]')) return;
+    var fig = buildFig(data, label);
+    fig.dataset.wiki = wikiKey(data);
+    row.parentNode.insertBefore(fig, row);
+  }
+  function wikiKey(d) { return String(d.link || d.img).slice(-60); }
+
+  /* ── Observation des pastilles insérées par v150 ── */
+  function processRow(row) {
+    if (row.dataset.figDone) return;
+    row.dataset.figDone = '1';
+    if (!isOn()) return;
+    var chips = row.querySelectorAll('.theo-mss-chip');
+    var n = 0;
+    chips.forEach(function (ch) {
+      if (n >= 2) return;
+      ensureFig(row, ch.dataset.wiki, ch.dataset.label || ch.dataset.wiki);
+      n++;
+    });
+  }
+  function scanAll(root) {
+    (root || document).querySelectorAll('.theo-mss:not([data-fig-done])').forEach(processRow);
+  }
+
+  var mo = new MutationObserver(function (muts) {
+    for (var i = 0; i < muts.length; i++) {
+      var added = muts[i].addedNodes;
+      for (var k = 0; k < added.length; k++) {
+        var nd = added[k];
+        if (nd.nodeType !== 1) continue;
+        if (nd.classList && nd.classList.contains('theo-mss')) processRow(nd);
+        else if (nd.querySelectorAll) scanAll(nd);
+      }
+    }
+  });
+  function start() {
+    scanAll(document);
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+
+  /* ── CSS ── */
+  var st = document.createElement('style');
+  st.id = 'v160-css';
+  st.textContent =
+    '.theo-fig{display:flex;gap:12px;align-items:flex-start;margin:10px 0 2px;padding:10px;border:1px solid rgba(79,142,247,.25);border-radius:12px;background:rgba(10,20,36,.55);max-width:560px}' +
+    '.theo-fig-img{flex:0 0 auto;display:block}' +
+    '.theo-fig-img img{display:block;width:190px;max-height:170px;object-fit:contain;border-radius:8px;background:#0a0f18;cursor:zoom-in}' +
+    '.theo-fig-t{font-weight:700;font-size:13px;color:var(--cyan,#4f8ef7);margin-bottom:3px}' +
+    '.theo-fig-x{font-size:12px;line-height:1.5;opacity:.85;margin-bottom:5px}' +
+    '.theo-fig-l{font-size:11.5px;color:var(--cyan,#4f8ef7);text-decoration:none;opacity:.85}' +
+    '.theo-fig-l:hover{text-decoration:underline}' +
+    '@media (max-width:640px){.theo-fig{flex-direction:column}.theo-fig-img img{width:100%;max-height:220px}}';
+  document.head.appendChild(st);
+
+  /* ── Toggle 🖼 dans la barre de saisie ── */
+  function wireToggle() {
+    var btn = document.getElementById('v160-fig-btn');
+    if (!btn) return;
+    function paint() {
+      var on = isOn();
+      btn.style.background = on ? 'rgba(79,142,247,.25)' : '';
+      btn.style.color = on ? '#bfe0ff' : '';
+      btn.title = on ? 'Images de manuscrits : AFFICHÉES (cliquer pour désactiver)' : 'Images de manuscrits : masquées (cliquer pour activer)';
+    }
+    btn.addEventListener('click', function () {
+      var on = isOn();
+      try { localStorage.setItem(TKEY, on ? '0' : '1'); } catch (e) {}
+      paint();
+      if (!on) scanAll(document);
+      else document.querySelectorAll('.theo-fig').forEach(function (f) { f.remove(); });
+    });
+    paint();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireToggle);
+  else wireToggle();
 })();
 
 </script>
