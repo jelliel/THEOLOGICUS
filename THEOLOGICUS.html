@@ -40950,8 +40950,25 @@ window.continueTradApart = async function (msgId) {
     [/didach[èe]/i, ['Didache', 'Didaché']],
     [/imitation\s+de\s+j[ée]sus/i, ['The Imitation of Christ', 'De l\'Imitation de Jésus-Christ']]
   ].filter(Boolean);
-  /* conciles : spécifiques puis générique */
+  /* conciles : spécifiques (ordinaux d'abord) puis générique — v163 : les 21 œcuméniques */
   var CONCILES = [
+    [/constantinople\s+(?:ii\b|2\b)/i, ['Second Council of Constantinople', 'Deuxième concile de Constantinople']],
+    [/constantinople\s+(?:iii\b|3\b)/i, ['Third Council of Constantinople', 'Troisième concile de Constantinople']],
+    [/constantinople\s+(?:iv\b|4\b)/i, ['Fourth Council of Constantinople', 'Quatrième concile de Constantinople']],
+    [/latran\s+(?:i\b|1\b)/i, ['First Lateran Council', 'Premier concile du Latran']],
+    [/latran\s+(?:ii\b|2\b)/i, ['Second Lateran Council', 'Deuxième concile du Latran']],
+    [/latran\s+(?:iii\b|3\b)/i, ['Third Lateran Council', 'Troisième concile du Latran']],
+    [/latran\s+(?:iv\b|4\b)/i, ['Fourth Council of the Lateran', 'Quatrième concile du Latran']],
+    [/latran\s+(?:v\b|5\b)/i, ['Fifth Lateran Council', 'Cinquième concile du Latran']],
+    [/latran\b/i, ['Fourth Council of the Lateran', 'Quatrième concile du Latran']],
+    [/lyon\s+(?:i\b|1\b)/i, ['First Council of Lyon', 'Premier concile de Lyon']],
+    [/lyon\s+(?:ii\b|2\b)/i, ['Second Council of Lyon', 'Deuxième concile de Lyon']],
+    [/concile\s+de\s+lyon/i, ['Second Council of Lyon', 'Deuxième concile de Lyon']],
+    [/concile\s+de\s+vienne\b/i, ['Council of Vienne', 'Concile de Vienne']],
+    [/concile\s+de\s+constance\b/i, ['Council of Constance', 'Concile de Constance']],
+    [/concile\s+de\s+ba(?:s|î)le\b/i, ['Council of Basel', 'Concile de Bâle']],
+    [/concile\s+de\s+florence\b/i, ['Council of Florence', 'Concile de Florence']],
+    [/concile\s+d['’]orange\b/i, ['Synods of Orange', 'Concile d\'Orange']],
     [/concile\s+de\s+nic[ée]e\s+(ii|2)\b/i, ['Second Council of Nicaea']],
     [/concile\s+de\s+nic[ée]e|nic[ée]e\b/i, ['First Council of Nicaea', 'Premier concile de Nicée']],
     [/concile\s+de\s+constantinople/i, ['First Council of Constantinople', 'Premier concile de Constantinople']],
@@ -41009,6 +41026,33 @@ window.continueTradApart = async function (msgId) {
     [/jean\s+damasc[èe]ne/i, ['John of Damascus', 'Jean Damascène']],
     [/bernard\s+de\s+clairvaux/i, ['Bernard of Clairvaux', 'Bernard de Clairvaux']],
     [/th[ée]r[èe]se\s+de\s+lisieux/i, ['Thérèse of Lisieux', 'Thérèse de Lisieux']],
+    /* v163 — docteurs de l'Église (suite de la liste des 37) */
+    [/j[ée]r[ôo]me\s+de\s+stridon|saint\s+j[ée]r[ôo]me\b/i, ['Jerome', 'Jérôme de Stridon']],
+    [/b[èe]de\s+le\s+v[ée]n[ée]rable|v[ée]n[ée]rable\s+b[èe]de/i, ['Bede', 'Bède le Vénérable']],
+    [/l[ée]on\s+le\s+grand/i, ['Leo the Great', 'Léon le Grand']],
+    [/pierre\s+chrysologue/i, ['Peter Chrysologus', 'Pierre Chrysologue']],
+    [/hilaire\s+de\s+poitiers/i, ['Hilary of Poitiers', 'Hilaire de Poitiers']],
+    [/cyrille\s+de\s+j[ée]rusalem/i, ['Cyril of Jerusalem', 'Cyrille de Jérusalem']],
+    [/cyrille\s+d['’]alexandrie/i, ['Cyril of Alexandria', 'Cyrille d\'Alexandrie']],
+    [/pierre\s+canisius/i, ['Peter Canisius', 'Pierre Canisius']],
+    [/jean\s+de\s+la\s+croix/i, ['John of the Cross', 'Jean de la Croix']],
+    [/robert\s+bellarmin/i, ['Robert Bellarmine', 'Robert Bellarmin']],
+    [/laurent\s+de\s+brindes/i, ['Lawrence of Brindisi', 'Laurent de Brindes']],
+    [/antoine\s+de\s+padoue/i, ['Anthony of Padua', 'Antoine de Padoue']],
+    [/catherine\s+de\s+sienne/i, ['Catherine of Siena', 'Catherine de Sienne']],
+    [/pierre\s+damien/i, ['Peter Damian', 'Pierre Damien']],
+    [/albert\s+le\s+grand|albertus\s+ magnus/i, ['Albertus Magnus', 'Albert le Grand']],
+    [/bonaventure/i, ['Bonaventure']],
+    [/anselme\s+de\s+cantorb[ée]ry/i, ['Anselm of Canterbury', 'Anselme de Cantorbéry']],
+    [/jean\s+d['’]avila/i, ['John of Ávila', 'Jean d\'Avila']],
+    [/gr[ée]goire\s+de\s+narek/i, ['Gregory of Narek', 'Grégoire de Narek']],
+    /* v163 — autres figures et artefacts utiles */
+    [/denys\s+l['’]ar[ée]opagite/i, ['Pseudo-Dionysius the Areopagite', 'Denys l\'Aréopagite']],
+    [/cl[ée]ment\s+de\s+rome/i, ['Pope Clement I', 'Clément de Rome']],
+    [/hippolyte\s+de\s+rome/i, ['Hippolytus of Rome', 'Hippolyte de Rome']],
+    [/codex\s+l[ée]ningradensis|codex\s+de\s+l[ée]ningrad/i, ['Leningrad Codex', 'Codex de Leningrad']],
+    [/code\s+d['’]hammurabi/i, ['Code of Hammurabi', 'Code d\'Hammurabi']],
+    [/rouleau\s+de\s+cuivre/i, ['Copper Scroll', 'Rouleau de cuivre']],
   ];
 
   /* ── extraction des candidats ── */
