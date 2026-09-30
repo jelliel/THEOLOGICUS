@@ -41298,5 +41298,99 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v165 (2.0.295) — NAVIGATION DES RÉPONSES
+   1) Bouton flottant "↑" : retour en haut de la conversation
+      (visible dès 600px de défilement, z-index sous les panneaux).
+   2) "📑 Plan de la réponse" : sommaire repliable injecté en tête des
+      longues réponses (≥3 titres ##/###/####) — complète la minimap
+      v128, utile surtout sur mobile où celle-ci est masquée.
+   Ne duplique rien : le COPIER, l'export WORD et la sauvegarde JSON
+   existent déjà (msg-actions, __theoDocx, modale DATA).
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV165) return; window.__theoV165 = true;
+
+  var st = document.createElement('style');
+  st.textContent =
+    '#v165-top{position:fixed;right:18px;bottom:96px;width:40px;height:40px;border-radius:50%;background:var(--bg-panel,#101826);color:var(--cyan,#4f8ef7);border:1px solid rgba(79,142,247,.45);font-size:17px;font-weight:900;cursor:pointer;z-index:120000;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;box-shadow:0 6px 20px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}' +
+    '#v165-top.show{opacity:1;pointer-events:auto}' +
+    '#v165-top:hover{transform:translateY(-2px);border-color:var(--cyan,#4f8ef7)}' +
+    '.theo-toc{margin:0 0 12px;padding:8px 12px;background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.22);border-radius:10px;font-size:12.5px;line-height:1.5}' +
+    '.theo-toc summary{cursor:pointer;font-weight:800;color:var(--cyan,#4f8ef7);letter-spacing:.3px;user-select:none}' +
+    '.theo-toc nav{margin-top:6px;display:flex;flex-direction:column;gap:2px}' +
+    '.theo-toc a{color:var(--text,#dbe6f4);text-decoration:none;padding:2px 4px;border-radius:5px}' +
+    '.theo-toc a:hover{background:rgba(79,142,247,.12);color:var(--cyan,#4f8ef7)}' +
+    '.theo-toc a.theo-toc-h3{padding-left:16px;font-size:12px;opacity:.85}' +
+    '.theo-toc a.theo-toc-h4{padding-left:28px;font-size:11.5px;opacity:.7}';
+  document.head.appendChild(st);
+
+  /* ── 1) retour en haut ── */
+  var topBtn = document.createElement('button');
+  topBtn.id = 'v165-top';
+  topBtn.textContent = '↑';
+  topBtn.title = 'Retour en haut de la conversation';
+  topBtn.setAttribute('aria-label', 'Retour en haut');
+  document.body.appendChild(topBtn);
+  function bindTop() {
+    var c = document.getElementById('chat-container');
+    if (!c) return false;
+    c.addEventListener('scroll', function () {
+      topBtn.classList.toggle('show', c.scrollTop > 600);
+    }, { passive: true });
+    topBtn.addEventListener('click', function () { c.scrollTo({ top: 0, behavior: 'smooth' }); });
+    return true;
+  }
+  if (!bindTop()) document.addEventListener('DOMContentLoaded', bindTop);
+
+  /* ── 2) plan des longues réponses ── */
+  var scanTimer = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function buildToc(box) {
+    var hs = Array.prototype.slice.call(box.querySelectorAll('h2, h3, h4')).filter(function (h) { return !h.closest('.theo-toc'); });
+    if (hs.length < 3) return;
+    var old = box.querySelector('.theo-toc');
+    if (old && Number(old.dataset.count) === hs.length) return; /* déjà à jour */
+    var nav = hs.map(function (h, i) {
+      h.dataset.v165i = i;
+      var cls = h.tagName === 'H3' ? 'theo-toc-h3' : (h.tagName === 'H4' ? 'theo-toc-h4' : '');
+      return '<a class="' + cls + '" data-v165i="' + i + '" href="#">' + esc(h.textContent.trim().slice(0, 70)) + '</a>';
+    }).join('');
+    if (old) old.remove();
+    var d = document.createElement('details');
+    d.className = 'theo-toc';
+    d.dataset.count = hs.length;
+    d.innerHTML = '<summary>📑 Plan de la réponse (' + hs.length + ' sections)</summary><nav>' + nav + '</nav>';
+    d.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('a[data-v165i]') : null;
+      if (!a) return;
+      e.preventDefault();
+      var h = box.querySelector('h2[data-v165i="' + a.dataset.v165i + '"],h3[data-v165i="' + a.dataset.v165i + '"],h4[data-v165i="' + a.dataset.v165i + '"]');
+      if (h) h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    box.insertBefore(d, box.firstChild);
+  }
+  function scan() {
+    document.querySelectorAll('.message.assistant .message-content').forEach(function (box) {
+      try { buildToc(box); } catch (e) {}
+    });
+  }
+  function queueScan() {
+    clearTimeout(scanTimer);
+    scanTimer = setTimeout(scan, 700);
+  }
+  var mo = new MutationObserver(queueScan);
+  function start() {
+    var c = document.getElementById('chat-container') || document.body;
+    mo.observe(c, { childList: true, subtree: true });
+    queueScan();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+</script>
 </body>
 </html>
