@@ -40248,7 +40248,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   var st = document.createElement('style');
   st.textContent =
     '#v155-atelier{position:relative;flex:0 0 auto}' +
-    '#v155-atelier-panel{position:absolute;top:calc(100% + 8px);left:0;min-width:250px;padding:6px;display:none;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000}' +
+    '#v155-atelier-panel{position:fixed;min-width:250px;padding:6px;display:none;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000;max-height:78vh;overflow:auto}' +
     '#v155-atelier-panel.open{display:flex}' +
     '#v155-atelier-panel .hud-btn{display:block;width:100%;text-align:left;margin:2px 0;white-space:nowrap}' +
     '#v155-atelier-panel .v155-lbl{font-size:9px;letter-spacing:2px;opacity:.5;padding:6px 8px 2px;font-family:var(--font-mono,monospace);text-transform:uppercase}' +
@@ -40273,33 +40273,38 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       if (el) { panel.appendChild(el); moved++; }
     });
     if (moved) {
-      wrap.appendChild(btn); wrap.appendChild(panel);
+      wrap.appendChild(btn);
       controls.insertBefore(wrap, agentSel);
+      /* v155b — le panneau vit dans body (position:fixed) : .header-controls
+         a overflow:hidden qui clippait le menu ouvert. On l'ancre sous le
+         bouton à chaque ouverture. */
+      document.body.appendChild(panel);
+      function placeP() {
+        var r = btn.getBoundingClientRect();
+        var lw = Math.max(250, r.width);
+        panel.style.minWidth = lw + 'px';
+        var left = r.left;
+        if (left + lw > window.innerWidth - 10) left = Math.max(10, window.innerWidth - 10 - lw);
+        panel.style.left = left + 'px';
+        var top = r.bottom + 8;
+        if (top + 320 > window.innerHeight) top = Math.max(10, r.top - 8 - 320);
+        panel.style.top = top + 'px';
+      }
       function closeP() { panel.classList.remove('open'); btn.innerHTML = '✨ ATELIER ▾'; }
       btn.addEventListener('click', function (e) {
         e.stopPropagation();
         var o = panel.classList.toggle('open');
-        btn.innerHTML = o ? '✨ ATELIER ▴' : '✨ ATELIER ▾';
+        if (o) { placeP(); btn.innerHTML = '✨ ATELIER ▴'; } else btn.innerHTML = '✨ ATELIER ▾';
       });
       panel.addEventListener('click', function (e) {
         if (e.target.closest && e.target.closest('.hud-btn')) setTimeout(closeP, 60);
       });
-      document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) closeP(); });
+      document.addEventListener('click', function (e) { if (!wrap.contains(e.target) && !panel.contains(e.target)) closeP(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeP(); });
+      window.addEventListener('scroll', closeP, true);
+      window.addEventListener('resize', closeP);
     }
   }
-
-  /* ── STUDIO VIDÉO + AI VIDEO -> menu "⋯ Plus" (v6), section Média ── */
-  try {
-    var menu = document.getElementById('v6-more-menu');
-    if (menu) {
-      var l2 = document.createElement('div'); l2.className = 'mm-label'; l2.textContent = 'Média';
-      menu.appendChild(l2);
-      ['open-studio-modal', 'open-aivideo-modal'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (el) menu.appendChild(el);
-      });
-    }
-  } catch (e) { console.warn('[v155] menu plus', e); }
 })();
 
 /* ── 3) SUITE TRADITIONS : approfondissement comparatif autonome ──
