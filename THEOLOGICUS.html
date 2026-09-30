@@ -40924,6 +40924,43 @@ window.continueTradApart = async function (msgId) {
     [/geniza|gueniza/i, ['Geniza du Caire', 'Cairo Geniza']],
     [/mur\s+(?:des\s+)?(?:lamentations|occidental)/i, ['Mur des Lamentations', 'Western Wall']]
   ];
+  /* v162 — thèmes : catéchèse, canons, patristique, recherche scientifique */
+  var THEMES = [
+    [/cat[ée]chisme\s+de\s+l['’]?[ée]glise\s+catholique/i, ['Catechism of the Catholic Church', 'Catéchisme de l\'Église catholique']],
+    [/cat[ée]chisme\s+(?:du\s+concile\s+)?de\s+tr[ée]nte/i, ['Roman Catechism', 'Catéchisme du concile de Trente']],
+    [/cat[ée]chisme|cat[ée]ch[èe]se/i, ['Catechism', 'Catéchisme']],
+    [/encyclique/i, ['Encyclical', 'Encyclique']],
+    [/bulle\s+pontificale/i, ['Papal bull', 'Bulle pontificale']],
+    [/canon\s+biblique|canon\s+des\s+[ée]critures/i, ['Biblical canon', 'Canon biblique']],
+    [/corpus\s+(iuris|juris)\s+canonici/i, ['Corpus Juris Canonici']],
+    [/p[èe]res\s+de\s+l['’][ée]glise/i, ['Church Fathers', 'Pères de l\'Église']],
+    [/arch[ée]ologie\s+biblique/i, ['Biblical archaeology', 'Archéologie biblique']],
+    [/papyrologie/i, ['Papyrology', 'Papyrologie']],
+    [/[ée]pigraphie/i, ['Epigraphy', 'Épigraphie']],
+    [/datation\s+au\s+carbone|carbone\s+14|radiocarbone/i, ['Radiocarbon dating', 'Datation au carbone 14']],
+    [/codicologie/i, ['Codicology']],
+    [/enluminur|manuscrits?\s+enlumin[ée]s?/i, ['Illuminated manuscript', 'Manuscrit enluminé']],
+    [/vulgate/i, ['Vulgate']],
+    [/septante|lxx\b/i, ['Septuagint', 'Septante']],
+    [/talmud/i, ['Talmud']],
+    [/mishna\b/i, ['Mishnah']],
+    [/hadith/i, ['Hadith']],
+    [/cit[ée]\s+de\s+dieu/i, ['City of God (book)', 'De civitate Dei']],
+    [/somme\s+th[ée]ologique|summa\s+theologiae/i, ['Summa Theologica', 'Somme théologique']],
+    [/didach[èe]/i, ['Didache', 'Didaché']],
+    [/imitation\s+de\s+j[ée]sus/i, ['The Imitation of Christ', 'De l\'Imitation de Jésus-Christ']]
+  ].filter(Boolean);
+  /* conciles : spécifiques puis générique */
+  var CONCILES = [
+    [/concile\s+de\s+nic[ée]e\s+(ii|2)\b/i, ['Second Council of Nicaea']],
+    [/concile\s+de\s+nic[ée]e|nic[ée]e\b/i, ['First Council of Nicaea', 'Premier concile de Nicée']],
+    [/concile\s+de\s+constantinople/i, ['First Council of Constantinople', 'Premier concile de Constantinople']],
+    [/concile\s+d['’]?[ée]ph[èe]se/i, ['Council of Ephesus', 'Concile d\'Éphèse']],
+    [/chalc[ée]doine/i, ['Council of Chalcedon', 'Concile de Chalcédoine']],
+    [/concile\s+de\s+tr[ée]nte/i, ['Council of Trent', 'Concile de Trente']],
+    [/vatican\s+(?:ii|2)\b/i, ['Second Vatican Council', 'Second concile œcuménique du Vatican']],
+    [/vatican\s+(?:i|1)\b/i, ['First Vatican Council', 'Premier concile œcuménique du Vatican']]
+  ];
   var STOP = {
     'nouveau testament': 1, 'ancien testament': 1, 'fils de dieu': 1, 'fils de l homme': 1,
     'royaume de dieu': 1, 'royaume des cieux': 1, 'parole de dieu': 1, 'saint esprit': 1,
@@ -40958,7 +40995,20 @@ window.continueTradApart = async function (msgId) {
     [/benoit\s+xvi|pape\s+benoit/i, ['Pope Benedict XVI']],
     [/bouddha/i, ['Gautama Buddha', 'Bouddha']],
     [/mahomet|muhammad/i, ['Muhammad', 'Mahomet']],
-    [/conseil\s+de\s+nicee?|concile\s+de\s+nic[ée]e/i, ['First Council of Nicaea', 'Premier concile de Nicée']]
+    [/conseil\s+de\s+nicee?|concile\s+de\s+nic[ée]e/i, ['First Council of Nicaea', 'Premier concile de Nicée']],
+    /* v162 — Pères de l'Église, docteurs et œuvres patristiques */
+    [/ir[ée]n[ée]e\s+de\s+lyon|\bIr[ée]n[ée]e\b/i, ['Irenaeus', 'Irénée de Lyon']],
+    [/ignace\s+d['’]antioche/i, ['Ignatius of Antioch', 'Ignace d\'Antioche']],
+    [/polycarpe/i, ['Polycarp', 'Polycarpe de Smyrne']],
+    [/cl[ée]ment\s+d['’]alexandrie/i, ['Clement of Alexandria', 'Clément d\'Alexandrie']],
+    [/justin\s+(martyr|philosophe)/i, ['Justin Martyr']],
+    [/cyprien\s+de\s+carthage|saint\s+cyprien\b/i, ['Cyprian', 'Cyprien de Carthage']],
+    [/ambroise\s+de\s+milan|saint\s+ambroise\b/i, ['Ambrose', 'Ambroise de Milan']],
+    [/gr[ée]goire\s+le\s+grand/i, ['Gregory the Great', 'Grégoire le Grand']],
+    [/isidore\s+de\s+s[ée]ville/i, ['Isidore of Seville', 'Isidore de Séville']],
+    [/jean\s+damasc[èe]ne/i, ['John of Damascus', 'Jean Damascène']],
+    [/bernard\s+de\s+clairvaux/i, ['Bernard of Clairvaux', 'Bernard de Clairvaux']],
+    [/th[ée]r[èe]se\s+de\s+lisieux/i, ['Thérèse of Lisieux', 'Thérèse de Lisieux']],
   ];
 
   /* ── extraction des candidats ── */
@@ -40973,6 +41023,13 @@ window.continueTradApart = async function (msgId) {
     var i, m;
     for (i = 0; i < PERSONNES.length; i++) if (PERSONNES[i][0].test(text)) push(PERSONNES[i][1]);
     for (i = 0; i < SITES.length; i++) if (SITES[i][0].test(text)) push(SITES[i][1]);
+    for (i = 0; i < THEMES.length; i++) if (THEMES[i][0].test(text)) push(THEMES[i][1]);
+    for (i = 0; i < CONCILES.length; i++) if (CONCILES[i][0].test(text)) push(CONCILES[i][1]);
+    var reCcl = /conciles?\s+(?:œcum[ée]nique\s+)?(?:de|d['’])\s+([A-ZÉÈÀ][\wà-öø-ÿ'’-]+(?:\s+[A-ZÉÈÀ][\wà-öø-ÿ'’-]+)?)/g;
+    while ((m = reCcl.exec(text))) {
+      var cn = m[1].replace(/\s+$/, '');
+      push(['Concile de ' + cn, 'Council of ' + cn], 'Concile de ' + cn);
+    }
     if (/sanaa|san'\u2019?a\u0304?'|\u1E63an'\u0101'/i.test(text)) push(['Sanaa manuscript', 'Codex Sanʿāʾ'], 'Manuscrits de Sanaa');
     if (/coran\s+bleu|blue\s+quran/i.test(text)) push(['Blue Quran', 'Coran bleu'], 'Coran bleu');
     var reSte = /st[èe]les?\s+(?:de\s+|d[ue]\s+)?([A-ZÉÈÀ][\wà-öø-ÿ'’-]+(?:\s+[A-ZÉÈÀ][\wà-öø-ÿ'’-]+)?)/g;
@@ -40991,6 +41048,7 @@ window.continueTradApart = async function (msgId) {
     raw.forEach(function (ph) {
       var key = ph.toLowerCase().replace(/['’]/g, ' ').replace(/\s+/g, ' ').trim();
       if (STOP[key]) return;
+      if (/^(concile|conciles|stele|st[èe]le)\b/.test(key)) return; /* déjà traité par les motifs dédiés */
       if (key.length < 9) return;               /* trop court = bruit */
       var words = key.split(' ');
       if (words.length > 5) return;             /* phrase, pas un nom */
