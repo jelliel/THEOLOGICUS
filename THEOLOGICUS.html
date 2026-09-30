@@ -41834,6 +41834,33 @@ window.continueTradApart = async function (msgId) {
     }
     return { exact: exact.slice(0, 10), near: near.slice(0, 6), book: book.slice(0, 4) };
   }
+  /* v172 — corpus EN de historicalchristian.faith (Writings-Database :
+     5464 œuvres de 439 pères, indexées par verset, clés Segond v167) */
+  var HCF = null;
+  function loadHCF() {
+    if (HCF !== null) return Promise.resolve(HCF);
+    return fetch('tradition/hcf_idx.json').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { HCF = (j && j.idx) ? j : false; return HCF; })
+      .catch(function () { HCF = false; return HCF; });
+  }
+  function lookupHCF(ref) {
+    var hidx = HCF && HCF.idx ? HCF.idx : null;
+    if (!hidx || !ref) return [];
+    var out = [];
+    for (var v = ref.v1; v <= ref.v2; v++) {
+      var e = hidx[ref.b + ':' + ref.c + ':' + v];
+      if (e) out = out.concat(e);
+    }
+    return out.slice(0, 12);
+  }
+  function hcfHtml(e) {
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(e.f || 'Père de l\'Église') + (e.y ? ' <span class="v170-n">[AD ' + e.y + ']</span>' : '') + '</span>' +
+      '<span class="v167-ti">— ' + esc(e.w || '') + '</span>' +
+      '<div class="v167-sn">' + esc(e.sn || '') + '</div>' +
+      '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
+      '<a class="v167-lk" href="' + esc(e.u || '') + '" target="_blank" rel="noopener">historicalchristian.faith ↗</a></div>';
+  }
   function taHtml(e) {
     return '<div class="v167-item">' +
       '<span class="v167-au">' + esc(e.a || '') + '</span>' +
@@ -41879,6 +41906,19 @@ window.continueTradApart = async function (msgId) {
       else if (t.near.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même chapitre)</div>' + t.near.map(taHtml).join('');
       else if (t.book && t.book.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même livre)</div>' + t.book.map(taHtml).join('');
       tsec.innerHTML = th;
+    });
+    /* v172 — extraits EN de historicalchristian.faith (section asynchrone) */
+    body.insertAdjacentHTML('beforeend', '<div id="v167-hcf"></div>');
+    loadHCF().then(function (hc) {
+      var hsec = document.getElementById('v167-hcf');
+      if (!hsec || !panelOpen()) return;
+      if (!hc) { hsec.remove(); return; }
+      var lst = lookupHCF(curRef);
+      if (lst.length) {
+        hsec.innerHTML = '<div class="v167-grp">§ Historical Christian — en (' + lst.length + ')</div>' + lst.map(hcfHtml).join('');
+      } else {
+        hsec.remove();
+      }
     });
   }
 
