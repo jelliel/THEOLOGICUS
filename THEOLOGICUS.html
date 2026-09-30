@@ -39469,7 +39469,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     '#tt-go:disabled{opacity:.5;cursor:default}' +
     '#tt-keepall{border:1px solid var(--cyan-dim,rgba(79,142,247,.3));background:transparent;color:inherit;border-radius:8px;padding:9px 12px;font-size:12px;cursor:pointer;white-space:nowrap}' +
     '#tt-keepall:disabled{opacity:.4;cursor:default}' +
-    '#tt-res{display:grid;grid-template-columns:1fr;gap:10px;padding:2px 16px 16px;overflow:auto;flex:1 1 auto}' +
+    '#tt-res{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;padding:2px 16px 16px;overflow:auto;flex:1 1 auto;align-items:start}' +
     '.tt-col{border:1px solid var(--cyan-dim,rgba(79,142,247,.22));border-radius:10px;display:flex;flex-direction:column;min-height:140px;overflow:hidden}' +
     '.tt-hd{display:flex;gap:6px;align-items:center;padding:7px 9px;font-size:11.5px;font-weight:700;border-bottom:1px solid var(--cyan-dim,rgba(79,142,247,.15))}' +
     '.tt-st{font-weight:400;opacity:.8;flex:1 1 auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
@@ -39600,12 +39600,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       }
       if (lastU !== q) state.messages.push({ role: 'user', content: q, ts: now() });
     }
+    /* v153d — UNE seule message avec les sections « 🌍 **Tradition** » :
+       le relayout horizontal (renderMessages hook) en fera des colonnes. */
+    var parts = [];
     document.querySelectorAll('.tt-col').forEach(function (col) {
       if (which && which !== col.dataset.tid) return;
       var res = col.__res;
       if (!res) return;
-      state.messages.push({ role: 'assistant', content: '🌍 **' + res.n + '**\n\n' + res.text, ts: now() });
+      parts.push('🌍 **' + res.n + '**\n\n' + res.text);
     });
+    if (parts.length) state.messages.push({ role: 'assistant', content: parts.join('\n\n'), ts: now() });
     if (typeof renderMessages === 'function') renderMessages();
     if (typeof saveChat === 'function') { try { saveChat(); } catch (e) {} }
   }
@@ -39629,6 +39633,63 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     if (inp && inp.value.trim() && !qt.value.trim()) qt.value = inp.value.trim();
     document.getElementById('tt-modal').classList.add('open');
   }
+
+  /* ── v153d — RELAYOUT HORIZONTAL dans la conversation ──
+     Les messages assistant dont le contenu contient plusieurs sections
+     « 🌍 **Tradition** » sont recomposés en colonnes côte à côte, comme
+     dans la fenêtre. Appliqué après chaque renderMessages (et donc aussi
+     au rechargement d'une ancienne conversation). Une seule section
+     (« Garder » individuel) reste pleine largeur. */
+  var relCSSDone = false;
+  function relayoutTrad(el) {
+    var kids = Array.prototype.slice.call(el.children);
+    var groups = [], cur = null;
+    kids.forEach(function (k) {
+      var t = (k.textContent || '').trim();
+      if (t.indexOf('🌍 ') === 0) { cur = [k]; groups.push(cur); }
+      else if (cur) cur.push(k);
+    });
+    if (groups.length < 2) return;
+    if (!relCSSDone) {
+      relCSSDone = true;
+      var css = document.createElement('style');
+      css.textContent =
+        '.theo-tt-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-items:start}' +
+        '.theo-tt-col{min-width:0;border:1px solid var(--cyan-dim,rgba(79,142,247,.25));border-radius:10px;padding:8px 10px;background:rgba(79,142,247,.04)}' +
+        ':root[data-motion="off"] .theo-tt-col{transition:none}';
+      document.head.appendChild(css);
+    }
+    var row = document.createElement('div');
+    row.className = 'theo-tt-row';
+    groups.forEach(function (g) {
+      var col = document.createElement('div');
+      col.className = 'theo-tt-col';
+      g.forEach(function (k) { col.appendChild(k); });
+      row.appendChild(col);
+    });
+    el.innerHTML = '';
+    el.appendChild(row);
+  }
+
+  try {
+    var origRm = window.renderMessages;
+    if (typeof origRm === 'function' && !origRm.__theoTradHooked) {
+      var rmHooked = function () {
+        var out = origRm.apply(this, arguments);
+        try {
+          document.querySelectorAll('.message.assistant .message-content').forEach(function (el) {
+            if (el.dataset.ttDone) return;
+            if ((el.textContent || '').indexOf('🌍 ') < 0) { el.dataset.ttDone = '1'; return; }
+            relayoutTrad(el);
+            el.dataset.ttDone = '1';
+          });
+        } catch (e) {}
+        return out;
+      };
+      rmHooked.__theoTradHooked = true;
+      window.renderMessages = rmHooked;
+    }
+  } catch (e) {}
 
   var btn = document.getElementById('open-trad-modal');
   if (btn) btn.addEventListener('click', open);
