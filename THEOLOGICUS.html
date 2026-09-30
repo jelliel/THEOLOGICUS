@@ -40361,5 +40361,82 @@ window.continueTradApart = async function (msgId) {
 };
 
 </script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v156 (2.0.279) — ACCESSIBILITÉ & COHÉRENCE DES MODALES
+   Basé sur les règles UX du skill ui-ux-pro-max (priorité 1 accessibilité,
+   règle HIGH « focus visible » déjà couverte par v26) ; comble les gaps
+   mesurés :
+   1. ÉCHAP universel : ferme la première modale ouverte (.modal-overlay
+      .active, modales théo en .open, wizard d'installation) — les
+      gestionnaires existants restent en place (fermeture idempotente).
+   2. CLIC SUR LE FOND (scrim) délégué : vaut pour les .modal-overlay
+      génériques (api, data, settings, agent, hermes…) qui n'en avaient
+      pas, et pour toute modale future.
+   3. ARIA : les boutons ✕ sans libellé reçoivent aria-label="Fermer"
+      (règle priorité 1 : bouton icône sans label = anti-pattern).
+   4. color-scheme: dark — les contrôles natifs (scrollbars, inputs
+      date/color) suivent le thème sombre (checklist Dark Mode OLED).
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__theoV156) return; window.__theoV156 = true;
+
+  /* ── 4) color-scheme sombre ── */
+  var st = document.createElement('style');
+  st.id = 'v156-a11y-css';
+  st.textContent =
+    ':root{color-scheme:dark}' +
+    /* le scrim des modales theo .open ferme au clic (déjà en place module
+       par module) — rien à ajouter en CSS ; tout est en délégation JS */ '';
+  document.head.appendChild(st);
+
+  /* ── 1) ÉCHAP universel (capture, une modale par pression) ── */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelector(
+      '.modal-overlay.active, #setup-wizard-overlay.active, [id$="-modal"].open'
+    );
+    if (open) {
+      if (open.classList.contains('active')) open.classList.remove('active');
+      else open.classList.remove('open');
+    }
+  }, true);
+
+  /* ── 2) CLIC SUR LE FOND (délégation, toute modale présente ou future) ── */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || t.nodeType !== 1) return;
+    if (t.classList.contains('modal-overlay') && t.classList.contains('active')) {
+      t.classList.remove('active');
+      return;
+    }
+    if (/-modal$/.test(t.id || '') && t.classList.contains('open')) {
+      t.classList.remove('open');
+    }
+  });
+
+  /* ── 3) aria-label sur les ✕ sans libellé ── */
+  function labelCloses() {
+    var n = 0;
+    document.querySelectorAll('button').forEach(function (b) {
+      if (b.getAttribute('aria-label')) return;
+      var txt = (b.textContent || '').trim();
+      if (/^[✕×✖⨯☓✗]$/.test(txt)) {
+        b.setAttribute('aria-label', 'Fermer');
+        n++;
+      }
+    });
+    return n;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', labelCloses);
+  } else {
+    labelCloses();
+  }
+  window.__theoV156LabelCloses = labelCloses;
+})();
+
+</script>
 </body>
 </html>
