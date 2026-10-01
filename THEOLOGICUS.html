@@ -42077,6 +42077,7 @@ window.continueTradApart = async function (msgId) {
     body.innerHTML = h;
     try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
     try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+    try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     /* v168 — citations FR de traditionapostolique.fr (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-ta"></div>');
     loadTA().then(function (ta) {
@@ -42091,6 +42092,7 @@ window.continueTradApart = async function (msgId) {
       tsec.innerHTML = th;
       try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
       try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+      try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     });
     /* v172 — extraits EN de historicalchristian.faith (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-hcf"></div>');
@@ -42103,6 +42105,7 @@ window.continueTradApart = async function (msgId) {
         hsec.innerHTML = '<div class="v167-grp">§ Historical Christian — en (' + lst.length + ')</div>' + lst.map(hcfHtml).join('');
         try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
         try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+        try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
       } else {
         hsec.remove();
       }
@@ -42124,6 +42127,7 @@ window.continueTradApart = async function (msgId) {
       }
       try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
       try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+      try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     });
   }
 
@@ -42310,6 +42314,7 @@ window.continueTradApart = async function (msgId) {
   }
   window.__v167TrGet = trGet;
   window.__v167FrDiv = frDiv;
+  window.__v167OpenPanel = openPanel;   /* v192 — favoris/historique */
   window.__v167Translate = function (sn, b, statEl) {
     return shTranslate(sn, b).catch(function () {
       shLtStart(statEl || document.getElementById('v167-status'), sn, b);
@@ -43768,6 +43773,7 @@ window.continueTradApart = async function (msgId) {
     body.innerHTML = h;
     try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
     try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+    try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     /* v190 — § Parallèles bibliques (rempli de façon asynchrone) */
     var para = document.createElement('div');
     para.id = 'v183-para';
@@ -43780,6 +43786,7 @@ window.continueTradApart = async function (msgId) {
       box.innerHTML = '<div class="v167-grp">§ Parallèles bibliques (' + hits.length + ')</div>' + hits.map(function (p) { return paraHtml(p, s, v1); }).join('');
       try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
       try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}
+      try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     });
   }
 
@@ -43930,7 +43937,7 @@ window.continueTradApart = async function (msgId) {
   window.__theoV189 = true;
 
   var BASKET = 'theo_basket_v1', NOTES = 'theo_panel_notes_v1';
-  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr'];
+  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr', 'theo_v193_ai', 'theo_favorites_v1', 'theo_history_v1', 'theo_panel_font'];
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function ld(k){ try { var a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
   function sv(k, a){ try { localStorage.setItem(k, JSON.stringify(a)); } catch(e){} }
@@ -43977,7 +43984,7 @@ window.continueTradApart = async function (msgId) {
     p.id = 'v189-pan';
     p.innerHTML = '<div id="v189-box">'
       + '<div id="v189-head"><span>🧺 Feuille d\'étude — sélections, notes &amp; sauvegarde</span><button id="v189-close" aria-label="Fermer">✕</button></div>'
-      + '<div id="v189-tabs"><button data-v="basket" class="on">🧺 Panier</button><button data-v="notes">📝 Notes</button><button data-v="backup">💾 Sauvegarde</button></div>'
+      + '<div id="v189-tabs"><button data-v="basket" class="on">🧺 Panier</button><button data-v="notes">📝 Notes</button><button data-v="fav">⭐ Favoris</button><button data-v="backup">💾 Sauvegarde</button></div>'
       + '<div id="v189-body"></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function(e){ if (e.target === p) p.classList.remove('open'); });
@@ -43999,6 +44006,7 @@ window.continueTradApart = async function (msgId) {
     if (!body) return;
     if (VIEW === 'basket') renderBasket(body);
     else if (VIEW === 'notes') renderNotes(body);
+    else if (VIEW === 'fav') renderFav(body);
     else renderBackup(body);
   }
   function openPanel(v){
@@ -44071,6 +44079,56 @@ window.continueTradApart = async function (msgId) {
       });
     });
   }
+
+  /* ── v192 — favoris & historique ── */
+  function renderFav(body){
+    var favs = ld('theo_favorites_v1');
+    var hist = ld('theo_history_v1');
+    var h = '<div class="v189-item" style="border:none"><b>⭐ FAVORIS</b></div>';
+    if (!favs.length) h += '<div class="v189-empty">Clique ⭐ dans l\'en-tête d\'un panneau (tafsirs, Pères) pour épingler un passage.</div>';
+    else favs.forEach(function(f){
+      h += '<div class="v189-item"><b>' + esc(f.label || '') + '</b> '
+        + '<button data-open="' + f.id + '">📖 Ouvrir</button><button data-unfav="' + f.id + '">✕ Retirer</button></div>';
+    });
+    h += '<div class="v189-item" style="border:none;margin-top:14px"><b>🕘 HISTORIQUE</b></div>';
+    if (!hist.length) h += '<div class="v189-empty">Vos derniers passages ouverts (tafsirs, Pères) apparaîtront ici.</div>';
+    else {
+      hist.slice(0, 25).forEach(function(x){
+        h += '<div class="v189-item"><b>' + esc(x.label || '') + '</b> '
+          + '<button data-hopen="' + x.id + '">📖 Ouvrir</button></div>';
+      });
+      h += '<button id="v189-hclear" style="background:none;border:1px solid rgba(255,51,102,.5);color:#f0a0a0;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;margin-top:8px">🗑 Effacer l\'historique</button>';
+    }
+    body.innerHTML = h;
+    function findIn(list, id){ return list.find(function(x){ return x.id === id; }); }
+    body.querySelectorAll('[data-open]').forEach(function(b){
+      b.addEventListener('click', function(){ openFavEntry(ld('theo_favorites_v1'), b.dataset.open); });
+    });
+    body.querySelectorAll('[data-unfav]').forEach(function(b){
+      b.addEventListener('click', function(){
+        sv('theo_favorites_v1', ld('theo_favorites_v1').filter(function(x){ return x.id !== b.dataset.unfav; }));
+        render();
+      });
+    });
+    body.querySelectorAll('[data-hopen]').forEach(function(b){
+      b.addEventListener('click', function(){ openFavEntry(ld('theo_history_v1'), b.dataset.hopen); });
+    });
+    var hc = body.querySelector('#v189-hclear');
+    if (hc) hc.addEventListener('click', function(){ if (confirm('Effacer tout l\'historique ?')) { sv('theo_history_v1', []); render(); } });
+  }
+  function openFavEntry(list, id){
+    var e = null;
+    list.forEach(function(x){ if (x.id === id) e = x; });
+    if (e && typeof window.__v193OpenEntry === 'function') window.__v193OpenEntry(e);
+  }
+  window.__v193OpenEntry = function(e){
+    var p = document.getElementById('v189-pan');
+    if (p) p.classList.remove('open');
+    if (!e || !e.open) { toast('Ouverture indisponible pour cette entrée', 'info'); return; }
+    if (e.open.kind === 'quran' && window.__v183Open) window.__v183Open(e.open.s, e.open.v1, e.open.v2);
+    else if (e.open.kind === 'bible' && window.__v167OpenPanel) window.__v167OpenPanel(e.open.ref);
+    else toast('Ouvrir : panneau indisponible', 'info');
+  };
 
   /* ── sauvegarde ── */
   function renderBackup(body){
@@ -44306,6 +44364,217 @@ window.continueTradApart = async function (msgId) {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addHudButton);
   else addHudButton();
+})();
+</script>
+
+<script id="v191-lecture">
+/* ═══════════════════════════════════════════════════════════════════
+   v191+v192+v193 — MODE LECTURE, FAVORIS/HISTORIQUE, TRADUCTION IA
+   v191 : A− / A+ dans les en-têtes des panneaux v183/v167 (taille de
+          police persistée, var CSS --panel-fs).
+   v192 : ⭐ favoris + 🕘 historique d'ouverture des panneaux, onglet
+          « ⭐ Favoris » de la feuille d'étude (v189), ouverture directe.
+   v193 : bouton ✨ IA à côté de 🌐 FR sur les textes ≥ 400 caractères :
+          traduction par le modèle ACTIF de l'application (Mistral ou
+          autre, via resolveModelConfig/apiEndpoint) — nettement
+          supérieure à LibreTranslate sur les textes théologiques.
+          Cache dédié theo_v193_ai, inclus dans la sauvegarde v189.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__theoV193) return;
+  window.__theoV193 = true;
+
+  var FAV = 'theo_favorites_v1', HIST = 'theo_history_v1', AIC = 'theo_v193_ai', FS = 'theo_panel_font';
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function ld(k){ try { var a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
+  function sv(k, a){ try { localStorage.setItem(k, JSON.stringify(a)); } catch(e){} }
+  function toast(m, k){ if (window.toast) window.toast(m, k || 'info'); }
+
+  /* ── styles ── */
+  var style = document.createElement('style');
+  style.textContent =
+    '#v183-body, #v167-body { font-size: var(--panel-fs, 12.5px) !important; }' +
+    '.v191-ctrl{display:inline-flex;gap:4px;margin:0 8px}' +
+    '.v191-ctrl button{background:rgba(12,20,36,.7);border:1px solid rgba(79,142,247,.3);color:#8fa8d8;border-radius:7px;padding:3px 8px;font:700 11px Consolas,monospace;cursor:pointer}' +
+    '.v191-ctrl button:hover{color:#bfd4ff;border-color:rgba(79,142,247,.6)}' +
+    '.v193-ai{border-color:rgba(201,167,255,.5) !important;color:#c9a7ff !important}' +
+    '.v193-ai:hover{border-color:rgba(201,167,255,.9) !important}' +
+    '.v193-aidiv{color:#c9a7ff !important}';
+  document.head.appendChild(style);
+
+  /* ── v191 : taille de police ── */
+  function applyFs(){
+    var px = +(localStorage.getItem(FS) || 12.5);
+    document.documentElement.style.setProperty('--panel-fs', px + 'px');
+  }
+  function bumpFs(d){
+    var px = +(localStorage.getItem(FS) || 12.5);
+    px = Math.max(10, Math.min(20, px + d));
+    localStorage.setItem(FS, String(px));
+    applyFs();
+  }
+  applyFs();
+
+  /* ── v192 : favoris / historique ── */
+  function favLabelFromKey(key){
+    if (!key) return '';
+    return String(key).replace(/^v183#/, 'Coran ').replace(/^v167#/, 'Bible ');
+  }
+  function parseQuranRef(key){
+    var m = /^v183#(\d+):(\d+)(?:-(\d+))?$/.exec(key || '');
+    return m ? { s: +m[1], v1: +m[2], v2: m[3] ? +m[3] : null } : null;
+  }
+  function trackHistory(label, openData){
+    if (!label) return;
+    var arr = ld(HIST);
+    if (arr.length && arr[0].label === label) return;
+    arr.unshift({ id: 'hs-' + Date.now(), label: label, ts: Date.now(), open: openData || null });
+    sv(HIST, arr.slice(0, 60));
+  }
+  function openEntry(e){
+    var p = document.getElementById('v189-pan');
+    if (p) p.classList.remove('open');
+    if (!e || !e.open) { toast('Ouverture indisponible pour cette entrée', 'info'); return; }
+    if (e.open.kind === 'quran' && window.__v183Open) window.__v183Open(e.open.s, e.open.v1, e.open.v2);
+    else if (e.open.kind === 'bible' && window.__v167OpenPanel) window.__v167OpenPanel(e.open.ref);
+    else toast('Ouvrir : panneau indisponible', 'info');
+  }
+  window.__v193ToggleFav = function(){
+    var box = document.querySelector('#v183-box, #v167-box');
+    var pat = box ? box.closest('#v183-pat, #v167-pat') : null;
+    var key = pat && pat.dataset && pat.dataset.markKey;
+    if (!key) { toast('⭐ Rien à épingler ici', 'info'); return; }
+    var label = favLabelFromKey(key);
+    var arr = ld(FAV);
+    if (arr.some(function(f){ return f.key === key; })) { toast('⭐ Déjà dans les favoris', 'info'); return; }
+    var open = null;
+    if (key.indexOf('v183#') === 0) { var qr = parseQuranRef(key); if (qr) open = { kind: 'quran', s: qr.s, v1: qr.v1, v2: qr.v2 }; }
+    else if (key.indexOf('v167#') === 0) open = { kind: 'bible', ref: key.replace(/^v167#/, '') };
+    arr.unshift({ id: 'fv-' + Date.now(), key: key, label: label, open: open, ts: Date.now() });
+    sv(FAV, arr);
+    toast('⭐ ' + label + ' épinglé dans les favoris', 'success');
+  };
+
+  /* ── contrôles d'en-tête (A− A+ ⭐) ── */
+  function injectControls(headId, beforeId){
+    var head = document.getElementById(headId);
+    if (!head || head.querySelector('.v191-ctrl')) return;
+    var span = document.createElement('span');
+    span.className = 'v191-ctrl';
+    span.innerHTML = '<button type="button" data-fs="-" title="Réduire la police du panneau">A−</button>'
+      + '<button type="button" data-fs="+" title="Agrandir la police du panneau">A+</button>'
+      + '<button type="button" class="v192-fav" title="Épingler ce passage dans les favoris">⭐</button>';
+    var ref = document.getElementById(beforeId);
+    if (ref && ref.parentNode === head) head.insertBefore(span, ref);
+    else head.appendChild(span);
+  }
+  document.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('.v191-ctrl button') : null;
+    if (!t) return;
+    if (t.dataset.fs) { bumpFs(t.dataset.fs === '+' ? 1 : -1); return; }
+    if (t.classList.contains('v192-fav')) { window.__v193ToggleFav(); return; }
+  });
+
+  /* ── wrappers d'ouverture : historique + injection des contrôles ── */
+  function wrapOpen(id, after){
+    var fn = window[id];
+    if (typeof fn !== 'function' || fn.__v193wrapped) return;
+    var wrapped = function(){
+      var r = fn.apply(null, arguments);
+      setTimeout(function(){
+        injectControls('v183-head', 'v183-cite');
+        injectControls('v167-head', 'v167-close');
+      }, 700);
+      try { after(arguments); } catch(e){}
+      return r;
+    };
+    wrapped.__v193wrapped = true;
+    window[id] = wrapped;
+  }
+  function init(){
+    wrapOpen('__v183Open', function(args){
+      var label = 'Coran ' + args[0] + ':' + args[1] + (args[2] && args[2] !== args[1] ? '-' + args[2] : '');
+      trackHistory(label, { kind: 'quran', s: args[0], v1: args[1], v2: args[2] || null });
+    });
+    wrapOpen('__v167OpenPanel', function(args){
+      trackHistory(String(args[0] || ''), { kind: 'bible', ref: String(args[0] || '') });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  /* ── v193 : traduction IA ── */
+  function aiCacheKey(sn){
+    var h = 5381;
+    for (var i = 0; i < sn.length; i++) h = ((h << 5) + h + sn.charCodeAt(i)) | 0;
+    return 'ai' + h;
+  }
+  function aiCacheGet(sn){
+    try { var c = JSON.parse(localStorage.getItem(AIC) || '{}'); return c[aiCacheKey(sn)] || null; } catch(e){ return null; }
+  }
+  function aiCachePut(sn, t){
+    try {
+      var c = JSON.parse(localStorage.getItem(AIC) || '{}');
+      c[aiCacheKey(sn)] = t;
+      var keys = Object.keys(c);
+      if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function(k){ delete c[k]; });
+      localStorage.setItem(AIC, JSON.stringify(c));
+    } catch(e){}
+  }
+  window.__v193Translate = async function(sn, b){
+    var cached = aiCacheGet(sn);
+    if (cached) { b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(cached) + '</div>'; return; }
+    var cfg = null;
+    try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
+    if (!cfg || !cfg.apiKey) {
+      toast('✨ IA non configurée — PARAMÈTRES → clé API (Mistral, Agnes…)', 'error');
+      return;
+    }
+    b.dataset.busy = '1'; b.textContent = '⏳ IA…';
+    var prompt = 'Traduis en français ce texte issu d\'un corpus de théologie et de comparatisme religieux. '
+      + 'Conserve intégralement le contenu : ne résume pas, ne saute rien. Garde les références bibliques/coraniques, '
+      + 'les noms propres et le registre académique. Rends uniquement la traduction, sans commentaire.\n\n' + sn;
+    try {
+      var res = await fetch(apiEndpoint(cfg.endpoint), {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: prompt }], temperature: 0.2 })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      var t = ((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '').trim();
+      if (t.indexOf('```') === 0) t = t.replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim();
+      if (!t) throw new Error('réponse vide');
+      aiCachePut(sn, t);
+      b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(t) + '</div>';
+      toast('✨ Traduction IA terminée', 'success');
+    } catch(e) {
+      b.textContent = '✨ IA'; delete b.dataset.busy;
+      toast('Échec de la traduction IA : ' + e.message, 'error');
+    }
+  };
+  /* ajoute le bouton ✨ IA après chaque bouton 🌐 portant un texte long */
+  window.__v193Enhance = function(rootEl){
+    if (!rootEl) return;
+    rootEl.querySelectorAll('.v167-tr').forEach(function(b){
+      if (b.dataset.aiDone) return;
+      b.dataset.aiDone = '1';
+      var sn = b.dataset.sn || '';
+      if (sn.length < 400) return;
+      var ai = document.createElement('button');
+      ai.type = 'button';
+      ai.className = 'v167-tr v193-ai';
+      ai.title = "Traduire avec l'IA active (qualité supérieure sur les textes théologiques)";
+      ai.textContent = '✨ IA';
+      ai.addEventListener('click', function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        if (ai.dataset.busy) return;
+        window.__v193Translate(sn, ai);
+      });
+      b.insertAdjacentElement('afterend', ai);
+    });
+  };
 })();
 </script>
 

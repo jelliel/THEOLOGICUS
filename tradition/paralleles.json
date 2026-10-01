@@ -1,50 +1,724 @@
 {
   "note": "Parallèles biblique-coraniques curés pour THEOLOGICUS (v190). Chaque entrée : q = référence coranique (s:v ou s:v1-v2), t = titre court, refs = passages bibliques avec très courte glose, n = note de lecture. Outil d'étude comparative — les mises en regard ne présupposent ni dépendance ni accord doctrinal.",
   "paralleles": [
-    {"q": "2:255", "t": "Ayat al-Kursi — le Trône, le Vivant, l'Existant", "refs": ["Ex 3:14 — « Je suis celui qui suis » (nom divin, éternité)", "Jn 10:28-29 — « nul ne les ravira de ma main »", "Ps 121:4 — le Gardien d'Israël ne dort ni ne s'endort"], "n": "Le verset du Trône affirme la vie absolue et la souveraineté sans sommeil ni fatigue : mise en regard classique avec le nom divin de l'Exode et la garde ininterrompue du Ps 121."},
-    {"q": "2:117", "t": "Créateur du ciel et de la terre par une parole", "refs": ["Gn 1:3 — « Que la lumière soit »", "Ps 33:9 — il parle, et cela existe", "Heb 11:3 — les mondes ont été formés par la parole de Dieu"], "n": "La formule coranique « Kun fa-yakûn » rejoint le motif biblique de la création par la seule parole divine."},
-    {"q": "2:286", "t": "Dieu n'impose à aucune âme plus qu'elle ne peut porter", "refs": ["1 Co 10:13 — Dieu fournit le chemin de sortie dans l'épreuve", "Mt 6:13 — « ne nous soumets pas à la tentation »"], "n": "Thème commun de la proportion entre épreuve et capacité."},
-    {"q": "2:111, 3:42-43", "t": "Marie choisie et purifiée", "refs": ["Lc 1:26-38 — l'ange Gabriel annonce à Marie", "Es 7:14 — la jeune mère et l'enfant Emmanouel"], "n": "Les titres de Marie (élue, purifiée, soumise) rejoignent le portrait lucanique de la servante du Seigneur."},
-    {"q": "3:35-37", "t": "Marie enfant consacrée au Temple, nourrie par Dieu", "refs": ["1 S 1:22-28 — Samuel confié au sanctuaire par Anne", "Lc 2:36-38 — la prophétesse Anne au Temple"], "n": "La scène de l'enfant livrée au sanctuaire nourri d'en haut rappelle le cycle de Samuel, parallèle souvent relevé."},
-    {"q": "3:45-47", "t": "Annonce de la naissance virginale de Jésus", "refs": ["Lc 1:26-38 — « l'Esprit-Saint viendra sur toi »", "Mt 1:18-23 — conception par l'Esprit-Saint", "Es 7:14 — la vierge enceinte"], "n": "Le Coran affirme explicitement la conception sans homme par décret divin : convergence remarquable avec Mt-Lc."},
-    {"q": "3:49", "t": "Les miracles de Jésus : guérisons et ressuscitations", "refs": ["Mt 11:4-5 — les aveugles voient, les morts se relèvent", "Jn 9 — guérison de l'aveugle-né à la boue"], "n": "La liste coranique des signes suit de près le résumé du ministère en Mt 11 (réponse de Jésus à Jean)."},
-    {"q": "3:59", "t": "Jésus comme Adam : créé par un décret de Dieu", "refs": ["Gn 2:7 — Adam formé du sol, souffle de vie", "Rm 5:12-19 — Adam figure de celui qui vient", "1 Co 15:22, 45 — le dernier Adam, esprit vivifiant"], "n": "L'argument a fortiori coranique croise la typologie paulinienne Adam/Christ, avec des conclusions théologiques différentes."},
-    {"q": "4:157-158", "t": "La crucifixion « niée » — il fut élevé vers Dieu", "refs": ["Mt 27; Mc 15; Lc 23; Jn 19 — les récits de la Passion", "1 Co 15:3-8 — « mort, enseveli, ressuscité le troisième jour »"], "n": "Le verset le plus discuté du dialogue islamo-chrétien : la substitution ou l'élévation contre le témoignage unanime des Évangiles. Lecture à faire avec les exégèses musulmanes diverses (substitut, ascension sans mort, apparence)."},
-    {"q": "5:27-31", "t": "Caïn et Abel : le premier meurtre", "refs": ["Gn 4:1-16 — Caïn, Abel et le sang qui crie"], "n": "Récit harmonique avec Gn 4 ; le corbeau qui montre comment ensevelir est un détail propre au Coran."},
-    {"q": "5:32", "t": "« Quiconque tue un être humain… c'est comme s'il tuait toute l'humanité »", "refs": ["Gn 9:6 — le sang de l'homme, l'image de Dieu", "Mishna Sanhédrin 4:5 — « qui sauve une âme sauve un monde entier »"], "n": "La dépendance littérale de la Mishna (Sifra Emor aussi) est quasi certaine : cas célèbre d'emprunt juif assumé."},
-    {"q": "5:110", "t": "Jésus donne vie aux morts et crée l'oiseau d'argile", "refs": ["Jn 9:6-7 — l'aveugle guéri avec de la boue", "Mt 11:5 — les morts se relèvent"], "n": "L'oiseau d'argile qui s'envole provient des Évangiles de l'enfance (Thomas 2, Pseudo-Matthieu) : paralittérature chrétienne entrée dans le Coran."},
-    {"q": "6:85-87", "t": "Zacharie, Jean, Jésus, Élie, Isaïe… les justes guidés", "refs": ["Lc 1 — Zacharie, Élisabeth, Jean", "1 R 17-19; 2 R 2 — Élie, Élisée"], "n": "Catalogue prophétique correspondant au canon biblique ; utile pour la christologie comparée des titres (prophète/verbe)."},
-    {"q": "7:40", "t": "« Ils n'entreront au Paradis qu'aussi aisément qu'un chameau par le chas de l'aiguille »", "refs": ["Mt 19:24; Mc 10:25; Lc 18:25 — l'éléphant ou le chameau par le chas de l'aiguille"], "n": "Hyperbole partagée presque mot à mot (le mot arabe jmal peut se lire jumal « câble épais »), question de richesse et de salut."},
-    {"q": "7:54", "t": "Six jours, puis Il s'est établi sur le Trône", "refs": ["Gn 1:1-2:3 — les six jours", "Ex 20:11 — six jours et le repos", "Ps 104:2-3 — les cieux tendus comme une tente"], "n": "Chronologie créatrice commune ; la théologie du Trône (istiwa') fait débat en islam comme l'anthropomorphisme en exégèse biblique."},
-    {"q": "7:172", "t": "L'alliance primordiale : « Ne suis-je pas votre Seigneur ? »", "refs": ["Rm 1:19-20 — connaissance innée de Dieu par le créé", "Jn 1:9 — la lumière vraie éclaire tout homme venant au monde"], "n": "Le « jour des alliances » coranique résonne avec l'idée d'une connaissance de Dieu antérieure à l'histoire (graine de la théologie naturelle)."},
-    {"q": "11:71-73", "t": "Annonce d'Isaac, le rire de Sara", "refs": ["Gn 17:15-19 — Isaac « il rira »", "Gn 18:9-15 — Sara rit à la porte de la tente"], "n": "Le rire de la femme stérile annoncée mère est repris fidèlement, étymologie d'Isaac incluse."},
-    {"q": "12:4-100", "t": "Joseph : songe des astres, trahison, éminence, pardon", "refs": ["Gn 37-50 — le cycle de Joseph", "Gn 37:9-10 — les onze astres prosternés", "Gn 42:6 — les frères prosternés devant Joseph"], "n": "Le récit coranique le plus développé sur une figure biblique : mêmes structures, accents moraux propres (pudicitie de Joseph, pardon final)."},
-    {"q": "15:28-29", "t": "Adam et l'esprit soufflé", "refs": ["Gn 2:7 — « Il souffla dans ses narines un souffle de vie »"], "n": "Le souffle divin comme marque de dignité de l'homme ; enjeu anthropologique commun."},
-    {"q": "18:9-26", "t": "Les jeunes gens endormis dans la grotte, trois cents ans et plus", "refs": ["Rm 6:4; Gn? — voir plutôt : Actes de Sept Dormants d'Éphèse (Gens 7:31-8:1, BHL 2317)"], "n": "Les Sept Dormants d'Éphèse : légende chrétienne très répandue (Syrie, Araméen) avant l'islam — le Coran en donne une version autonome avec le chien."},
-    {"q": "18:60-82", "t": "Moïse suit le Serviteur de Dieu (al-Khidr) et ses actes énigmatiques", "refs": ["Josèphe, Antiquités II — Elie? — plutôt : aggadah de R. Joshua b. Levi (Talmud, Berakhot 7a b.)"], "n": "Le voyage de l'initiation aux actes divins opaques a des parallèles dans l'aggadah ; al-Khidr devient en islam le patron des initiés."},
-    {"q": "18:83-98", "t": "Dhû-l-Qarnayn, « le deux-cornes », jusqu'aux deux soleil couchants", "refs": ["1 M 1:1-8 — Alexandre le Grand", "Dn 8:5-21 — le bouc aux deux cornes"], "n": "La légende syriaque d'Alexandre (Néhishtah de Jacques de Saroug) explique les cornes (Ammon), le mur et Gog-Magog."},
-    {"q": "19:16-33", "t": "Marie sous le palmier, l'annonce, « parle aux gens du berceau »", "refs": ["Lc 1:26-38 — l'annonciation", "Pseudo-Matthieu 20-21; Évangile de l'enfance arabe — Marie et le palmier, la nourriture miraculeuse"], "n": "Composition unique où parallèles canoniques et apocryphes s'entrelacent ; le Jésus nouveau-né parlant vient des récits d'enfance."},
-    {"q": "19:7-10", "t": "Zacharie privé de parole trois jours", "refs": ["Lc 1:20-22 — Zacharie muet jusqu'à la naissance de Jean"], "n": "Même motif, durée différente (3 jours vs 9 mois) — bon exemple d'adaptation narrative."},
-    {"q": "20:88-97", "t": "Le veau d'or de Samiri, Samarie", "refs": ["Ex 32 — le veau d'or, Aaron", "1 R 12:28-30 — les veaux de Jéroboam à Bethel et Samarie"], "n": "Le nom « Samiri » provient d'une contamination entre Ex 32 et la Samarie de 1 R 12 — cas d'école de relecture coranique."},
-    {"q": "21:51-70", "t": "Abraham brise les idoles, la catapulte et le feu", "refs": ["Gn 11:27-12:3 — sortie d'Our", "Bereshit Rabba 38; Gens 6 (Abraham, idoles) — Abraham détruit les idoles de Térah"], "n": "Le feu qui ne brûle pas et la brisure des idoles proviennent du midrash juif, transmis au Coran puis à la tradition islamique."},
-    {"q": "21:105", "t": "« Mes serviteurs justes hériteront de la terre »", "refs": ["Ps 37:11 — « les doux posséderont le pays »", "Mt 5:5 — bienheureux les doux, ils hériteront la terre"], "n": "Citation quasi littérale des Psaumes, présentée comme parole de la Torah à venir dans les Psaumes de David."},
-    {"q": "21:87-88", "t": "Dhû-n-Nûn (Jonas) dans les ténèbres, sa prière, son sauvetage", "refs": ["Jon 1-2 — Jonas englouti, prière depuis le poisson"], "n": "La prière de Jonas dans le ventre du poisson est l'un des emprunts les plus nets ; J 21:87 fournit la prière type du prophète acculé."},
-    {"q": "24:35", "t": "Le Verset de la Lumière — Dieu est lumière des cieux et de la terre", "refs": ["Jn 8:12 — « Je suis la lumière du monde »", "1 Jn 1:5 — Dieu est lumière", "Ex 27:20 — la lampe du sanctuaire (huile qui éclaire sans se toucher)"], "n": "Parabole de la niche et de la lampe : sommet mystique coranique à comparer aux théologies bibliques et patristiques de la lumière."},
-    {"q": "27:15-44", "t": "Salomon, la fourmi, la huppe et la reine de Saba", "refs": ["1 R 10; 2 Ch 9 — la reine de Saba", "Ps 72 — le règne universel du fils de David"], "n": "Le récit amplifie 1 R 10 avec des traits du midrash (langage des animaux, trône) et une fin de conversion de la reine."},
-    {"q": "28:3-42", "t": "Moïse : l'enfant sauvé du Nil, Pharaon, la mer", "refs": ["Ex 2-15 — l'enfance de Moïse, l'Exode", "Ex 14 — la mer se fend"], "n": "Trame harmonique ; les ajouts (le berceau préservé du fait d'être allaité par sa mère, le corps de Pharaon préservé en signe) sont propres au Coran et au midrash."},
-    {"q": "29:14", "t": "Noé demeura mille ans moins cinquante parmi son peuple", "refs": ["Gn 5:32; 7:6 — Noé âgé de 600 ans au déluge, 950 ans de vie"], "n": "Chronologie harmonisée : « mille moins cinquante » = 950 ans, chiffre exact de Gn 5:32 (lumière sur la méthode coranique d'arithmétique biblique)."},
-    {"q": "32:9; 38:71-72", "t": "Le souffle de l'esprit d'Adam", "refs": ["Gn 2:7 — le souffle de vies", "Sg 15:11 — l'esprit vital soufflé en l'homme"], "n": "Reprise du motif du souffle : l'anthropologie coranique y ancre la dignité et le péché de l'orgueil."},
-    {"q": "33:72", "t": "Le dépôt (amâna) offert aux cieux, à la terre et à l'homme", "refs": ["Dt 33:4? — la Torah confiée; voir plutôt 4 Macabées? — mieux : Eccl? — thème du dépôt"] , "n": "Le « dépôt » confié à l'homme que cieux et terre refusent : thème d'origine rabbinique (dépôt de la Torah, Sifre Dt 343) transposé en anthropologie universelle."},
-    {"q": "37:97-113", "t": "Abraham soumis au sacrifice de son fils", "refs": ["Gn 22 — le sacrifice d'Isaac (Aqédah)"], "n": "L'Aqédah reprise : le Coran ne nomme pas le fils avec certitude (l'exégèse majoritaire dira Ismaël) ; le rachat par une bête est commun (Gn 22:13)."},
-    {"q": "41:9-12", "t": "Création en six jours, sept cieux", "refs": ["Gn 1 — six jours", "2 Co 12:2 — le troisième ciel", "1 R 8:27 — les cieux ne peuvent te contenir"], "n": "Structure hexaémérique commune ; le pluriel des cieux (sab' samawât) rejoint la cosmologie biblique à étages."},
-    {"q": "43:59-65", "t": "Jésus, serviteur et signe, « adorons un seul Seigneur »", "refs": ["Mc 10:45 — le Fils de l'homme venu pour servir", "Jn 17:3 — connaître l'unique vrai Dieu"], "n": "Le Coran retient Jésus comme serviteur et messager : cœur du désaccord théologique, à lire avec les christologies du Nouveau Testament."},
-    {"q": "44:30-32", "t": "Israël délivré de Pharaon, élu au-dessus des mondes", "refs": ["Ex 14 — la traversée de la mer", "Dt 7:6 — Israël peuple élu"], "n": "L'élection d'Israël est affirmée dans le Coran ; clé du dialogue judéo-islamique."},
-    {"q": "51:24-30", "t": "Les hôtes d'Abraham, l'annonce au vieillard et à sa femme stérile", "refs": ["Gn 18:1-15 — les trois visiteurs de Mambré"], "n": "Hospitalité d'Abraham et rires de Sara repris en une seule scène condensée."},
-    {"q": "57:27", "t": "Monachisme qu'ils ont inventé, non prescrit", "refs": ["Mt 19:21 — vendre ses biens et suivre Jésus", "1 Tm 4:1-3 — les règles d'abstinence sévères"], "n": "Jugement coranique sur la vie monastique chrétienne : conversation à mener avec l'ascétisme évangélique et ses dérives dénoncés dans l'Église elle-même."},
-    {"q": "66:10-12", "t": "Épouses de Noé et de Lot (infirmes) vs Marie (croyante parfaite)", "refs": ["Gn 6-9; Gn 19 — les familles de Noé et de Lot", "Lc 1:38 — Marie, servante du Seigneur"], "n": "Le salut n'est pas héréditaire : exempla féminins opposés, Marie close du tableau."},
-    {"q": "89:27-30", "t": "« Ô âme apaisée, retourne vers ton Seigneur, satisfaite et agréée »", "refs": ["Mt 11:28-30 — « Venez à moi… et je vous procurerai du repos »", "Ph 4:7 — la paix qui surpasse toute intelligence"], "n": "L'âme satisfaite (mutma'inna) : point de contact mystique entre béatitudes et paix chrétienne."},
-    {"q": "96:1-5", "t": "« Lis ! » — la première révélation au nom du Seigneur créateur", "refs": ["Ex 3:4 — « Moïse, Moïse » : la vocation du prophète", "Es 6:8 — « Envois-moi » : la vocation d'Isaïe"], "n": "Schéma prophétique biblique de la vocation (appel par le nom, mission paradoxale) appliqué à Muhammad par le Coran lui-même."},
-    {"q": "105", "t": "L'Éléphant — l'armée détruite par des oiseaux jetant des pierres", "refs": ["2 R 19:35 — l'ange de l'Éternel frappe l'armée d'Assyrie", "Ex 12:29 — plaie nocturne"], "n": "Miracle protecteur de la Kaaba (année de la naissance de Muhammad selon la tradition) sur le modèle des interventions angéliques bibliques."},
-    {"q": "2:213; 5:48", "t": "Une seule religion, des lois multiples, concurrence aux œuvres", "refs": ["Jn 14:2 — « dans la maison de mon Père, beaucoup de demeures » (analogie)", "Ac 17:26-27 — les temps et les frontières ordonnés pour chercher Dieu"], "n": "La pluralité des shari'a pour une unique foi d'origine : grille de lecture pour le pluralisme des révélations."}
+    {
+      "q": "2:255",
+      "t": "Ayat al-Kursi — le Trône, le Vivant, l'Existant",
+      "refs": [
+        "Ex 3:14 — « Je suis celui qui suis » (nom divin, éternité)",
+        "Jn 10:28-29 — « nul ne les ravira de ma main »",
+        "Ps 121:4 — le Gardien d'Israël ne dort ni ne s'endort"
+      ],
+      "n": "Le verset du Trône affirme la vie absolue et la souveraineté sans sommeil ni fatigue : mise en regard classique avec le nom divin de l'Exode et la garde ininterrompue du Ps 121."
+    },
+    {
+      "q": "2:117",
+      "t": "Créateur du ciel et de la terre par une parole",
+      "refs": [
+        "Gn 1:3 — « Que la lumière soit »",
+        "Ps 33:9 — il parle, et cela existe",
+        "Heb 11:3 — les mondes ont été formés par la parole de Dieu"
+      ],
+      "n": "La formule coranique « Kun fa-yakûn » rejoint le motif biblique de la création par la seule parole divine."
+    },
+    {
+      "q": "2:286",
+      "t": "Dieu n'impose à aucune âme plus qu'elle ne peut porter",
+      "refs": [
+        "1 Co 10:13 — Dieu fournit le chemin de sortie dans l'épreuve",
+        "Mt 6:13 — « ne nous soumets pas à la tentation »"
+      ],
+      "n": "Thème commun de la proportion entre épreuve et capacité."
+    },
+    {
+      "q": "2:111, 3:42-43",
+      "t": "Marie choisie et purifiée",
+      "refs": [
+        "Lc 1:26-38 — l'ange Gabriel annonce à Marie",
+        "Es 7:14 — la jeune mère et l'enfant Emmanouel"
+      ],
+      "n": "Les titres de Marie (élue, purifiée, soumise) rejoignent le portrait lucanique de la servante du Seigneur."
+    },
+    {
+      "q": "3:35-37",
+      "t": "Marie enfant consacrée au Temple, nourrie par Dieu",
+      "refs": [
+        "1 S 1:22-28 — Samuel confié au sanctuaire par Anne",
+        "Lc 2:36-38 — la prophétesse Anne au Temple"
+      ],
+      "n": "La scène de l'enfant livrée au sanctuaire nourri d'en haut rappelle le cycle de Samuel, parallèle souvent relevé."
+    },
+    {
+      "q": "3:45-47",
+      "t": "Annonce de la naissance virginale de Jésus",
+      "refs": [
+        "Lc 1:26-38 — « l'Esprit-Saint viendra sur toi »",
+        "Mt 1:18-23 — conception par l'Esprit-Saint",
+        "Es 7:14 — la vierge enceinte"
+      ],
+      "n": "Le Coran affirme explicitement la conception sans homme par décret divin : convergence remarquable avec Mt-Lc."
+    },
+    {
+      "q": "3:49",
+      "t": "Les miracles de Jésus : guérisons et ressuscitations",
+      "refs": [
+        "Mt 11:4-5 — les aveugles voient, les morts se relèvent",
+        "Jn 9 — guérison de l'aveugle-né à la boue"
+      ],
+      "n": "La liste coranique des signes suit de près le résumé du ministère en Mt 11 (réponse de Jésus à Jean)."
+    },
+    {
+      "q": "3:59",
+      "t": "Jésus comme Adam : créé par un décret de Dieu",
+      "refs": [
+        "Gn 2:7 — Adam formé du sol, souffle de vie",
+        "Rm 5:12-19 — Adam figure de celui qui vient",
+        "1 Co 15:22, 45 — le dernier Adam, esprit vivifiant"
+      ],
+      "n": "L'argument a fortiori coranique croise la typologie paulinienne Adam/Christ, avec des conclusions théologiques différentes."
+    },
+    {
+      "q": "4:157-158",
+      "t": "La crucifixion « niée » — il fut élevé vers Dieu",
+      "refs": [
+        "Mt 27; Mc 15; Lc 23; Jn 19 — les récits de la Passion",
+        "1 Co 15:3-8 — « mort, enseveli, ressuscité le troisième jour »"
+      ],
+      "n": "Le verset le plus discuté du dialogue islamo-chrétien : la substitution ou l'élévation contre le témoignage unanime des Évangiles. Lecture à faire avec les exégèses musulmanes diverses (substitut, ascension sans mort, apparence)."
+    },
+    {
+      "q": "5:27-31",
+      "t": "Caïn et Abel : le premier meurtre",
+      "refs": [
+        "Gn 4:1-16 — Caïn, Abel et le sang qui crie"
+      ],
+      "n": "Récit harmonique avec Gn 4 ; le corbeau qui montre comment ensevelir est un détail propre au Coran."
+    },
+    {
+      "q": "5:32",
+      "t": "« Quiconque tue un être humain… c'est comme s'il tuait toute l'humanité »",
+      "refs": [
+        "Gn 9:6 — le sang de l'homme, l'image de Dieu",
+        "Mishna Sanhédrin 4:5 — « qui sauve une âme sauve un monde entier »"
+      ],
+      "n": "La dépendance littérale de la Mishna (Sifra Emor aussi) est quasi certaine : cas célèbre d'emprunt juif assumé."
+    },
+    {
+      "q": "5:110",
+      "t": "Jésus donne vie aux morts et crée l'oiseau d'argile",
+      "refs": [
+        "Jn 9:6-7 — l'aveugle guéri avec de la boue",
+        "Mt 11:5 — les morts se relèvent"
+      ],
+      "n": "L'oiseau d'argile qui s'envole provient des Évangiles de l'enfance (Thomas 2, Pseudo-Matthieu) : paralittérature chrétienne entrée dans le Coran."
+    },
+    {
+      "q": "6:85-87",
+      "t": "Zacharie, Jean, Jésus, Élie, Isaïe… les justes guidés",
+      "refs": [
+        "Lc 1 — Zacharie, Élisabeth, Jean",
+        "1 R 17-19; 2 R 2 — Élie, Élisée"
+      ],
+      "n": "Catalogue prophétique correspondant au canon biblique ; utile pour la christologie comparée des titres (prophète/verbe)."
+    },
+    {
+      "q": "7:40",
+      "t": "« Ils n'entreront au Paradis qu'aussi aisément qu'un chameau par le chas de l'aiguille »",
+      "refs": [
+        "Mt 19:24; Mc 10:25; Lc 18:25 — l'éléphant ou le chameau par le chas de l'aiguille"
+      ],
+      "n": "Hyperbole partagée presque mot à mot (le mot arabe jmal peut se lire jumal « câble épais »), question de richesse et de salut."
+    },
+    {
+      "q": "7:54",
+      "t": "Six jours, puis Il s'est établi sur le Trône",
+      "refs": [
+        "Gn 1:1-2:3 — les six jours",
+        "Ex 20:11 — six jours et le repos",
+        "Ps 104:2-3 — les cieux tendus comme une tente"
+      ],
+      "n": "Chronologie créatrice commune ; la théologie du Trône (istiwa') fait débat en islam comme l'anthropomorphisme en exégèse biblique."
+    },
+    {
+      "q": "7:172",
+      "t": "L'alliance primordiale : « Ne suis-je pas votre Seigneur ? »",
+      "refs": [
+        "Rm 1:19-20 — connaissance innée de Dieu par le créé",
+        "Jn 1:9 — la lumière vraie éclaire tout homme venant au monde"
+      ],
+      "n": "Le « jour des alliances » coranique résonne avec l'idée d'une connaissance de Dieu antérieure à l'histoire (graine de la théologie naturelle)."
+    },
+    {
+      "q": "11:71-73",
+      "t": "Annonce d'Isaac, le rire de Sara",
+      "refs": [
+        "Gn 17:15-19 — Isaac « il rira »",
+        "Gn 18:9-15 — Sara rit à la porte de la tente"
+      ],
+      "n": "Le rire de la femme stérile annoncée mère est repris fidèlement, étymologie d'Isaac incluse."
+    },
+    {
+      "q": "12:4-100",
+      "t": "Joseph : songe des astres, trahison, éminence, pardon",
+      "refs": [
+        "Gn 37-50 — le cycle de Joseph",
+        "Gn 37:9-10 — les onze astres prosternés",
+        "Gn 42:6 — les frères prosternés devant Joseph"
+      ],
+      "n": "Le récit coranique le plus développé sur une figure biblique : mêmes structures, accents moraux propres (pudicitie de Joseph, pardon final)."
+    },
+    {
+      "q": "15:28-29",
+      "t": "Adam et l'esprit soufflé",
+      "refs": [
+        "Gn 2:7 — « Il souffla dans ses narines un souffle de vie »"
+      ],
+      "n": "Le souffle divin comme marque de dignité de l'homme ; enjeu anthropologique commun."
+    },
+    {
+      "q": "18:9-26",
+      "t": "Les jeunes gens endormis dans la grotte, trois cents ans et plus",
+      "refs": [
+        "Rm 6:4; Gn? — voir plutôt : Actes de Sept Dormants d'Éphèse (Gens 7:31-8:1, BHL 2317)"
+      ],
+      "n": "Les Sept Dormants d'Éphèse : légende chrétienne très répandue (Syrie, Araméen) avant l'islam — le Coran en donne une version autonome avec le chien."
+    },
+    {
+      "q": "18:60-82",
+      "t": "Moïse suit le Serviteur de Dieu (al-Khidr) et ses actes énigmatiques",
+      "refs": [
+        "Josèphe, Antiquités II — Elie? — plutôt : aggadah de R. Joshua b. Levi (Talmud, Berakhot 7a b.)"
+      ],
+      "n": "Le voyage de l'initiation aux actes divins opaques a des parallèles dans l'aggadah ; al-Khidr devient en islam le patron des initiés."
+    },
+    {
+      "q": "18:83-98",
+      "t": "Dhû-l-Qarnayn, « le deux-cornes », jusqu'aux deux soleil couchants",
+      "refs": [
+        "1 M 1:1-8 — Alexandre le Grand",
+        "Dn 8:5-21 — le bouc aux deux cornes"
+      ],
+      "n": "La légende syriaque d'Alexandre (Néhishtah de Jacques de Saroug) explique les cornes (Ammon), le mur et Gog-Magog."
+    },
+    {
+      "q": "19:16-33",
+      "t": "Marie sous le palmier, l'annonce, « parle aux gens du berceau »",
+      "refs": [
+        "Lc 1:26-38 — l'annonciation",
+        "Pseudo-Matthieu 20-21; Évangile de l'enfance arabe — Marie et le palmier, la nourriture miraculeuse"
+      ],
+      "n": "Composition unique où parallèles canoniques et apocryphes s'entrelacent ; le Jésus nouveau-né parlant vient des récits d'enfance."
+    },
+    {
+      "q": "19:7-10",
+      "t": "Zacharie privé de parole trois jours",
+      "refs": [
+        "Lc 1:20-22 — Zacharie muet jusqu'à la naissance de Jean"
+      ],
+      "n": "Même motif, durée différente (3 jours vs 9 mois) — bon exemple d'adaptation narrative."
+    },
+    {
+      "q": "20:88-97",
+      "t": "Le veau d'or de Samiri, Samarie",
+      "refs": [
+        "Ex 32 — le veau d'or, Aaron",
+        "1 R 12:28-30 — les veaux de Jéroboam à Bethel et Samarie"
+      ],
+      "n": "Le nom « Samiri » provient d'une contamination entre Ex 32 et la Samarie de 1 R 12 — cas d'école de relecture coranique."
+    },
+    {
+      "q": "21:51-70",
+      "t": "Abraham brise les idoles, la catapulte et le feu",
+      "refs": [
+        "Gn 11:27-12:3 — sortie d'Our",
+        "Bereshit Rabba 38; Gens 6 (Abraham, idoles) — Abraham détruit les idoles de Térah"
+      ],
+      "n": "Le feu qui ne brûle pas et la brisure des idoles proviennent du midrash juif, transmis au Coran puis à la tradition islamique."
+    },
+    {
+      "q": "21:105",
+      "t": "« Mes serviteurs justes hériteront de la terre »",
+      "refs": [
+        "Ps 37:11 — « les doux posséderont le pays »",
+        "Mt 5:5 — bienheureux les doux, ils hériteront la terre"
+      ],
+      "n": "Citation quasi littérale des Psaumes, présentée comme parole de la Torah à venir dans les Psaumes de David."
+    },
+    {
+      "q": "21:87-88",
+      "t": "Dhû-n-Nûn (Jonas) dans les ténèbres, sa prière, son sauvetage",
+      "refs": [
+        "Jon 1-2 — Jonas englouti, prière depuis le poisson"
+      ],
+      "n": "La prière de Jonas dans le ventre du poisson est l'un des emprunts les plus nets ; J 21:87 fournit la prière type du prophète acculé."
+    },
+    {
+      "q": "24:35",
+      "t": "Le Verset de la Lumière — Dieu est lumière des cieux et de la terre",
+      "refs": [
+        "Jn 8:12 — « Je suis la lumière du monde »",
+        "1 Jn 1:5 — Dieu est lumière",
+        "Ex 27:20 — la lampe du sanctuaire (huile qui éclaire sans se toucher)"
+      ],
+      "n": "Parabole de la niche et de la lampe : sommet mystique coranique à comparer aux théologies bibliques et patristiques de la lumière."
+    },
+    {
+      "q": "27:15-44",
+      "t": "Salomon, la fourmi, la huppe et la reine de Saba",
+      "refs": [
+        "1 R 10; 2 Ch 9 — la reine de Saba",
+        "Ps 72 — le règne universel du fils de David"
+      ],
+      "n": "Le récit amplifie 1 R 10 avec des traits du midrash (langage des animaux, trône) et une fin de conversion de la reine."
+    },
+    {
+      "q": "28:3-42",
+      "t": "Moïse : l'enfant sauvé du Nil, Pharaon, la mer",
+      "refs": [
+        "Ex 2-15 — l'enfance de Moïse, l'Exode",
+        "Ex 14 — la mer se fend"
+      ],
+      "n": "Trame harmonique ; les ajouts (le berceau préservé du fait d'être allaité par sa mère, le corps de Pharaon préservé en signe) sont propres au Coran et au midrash."
+    },
+    {
+      "q": "29:14",
+      "t": "Noé demeura mille ans moins cinquante parmi son peuple",
+      "refs": [
+        "Gn 5:32; 7:6 — Noé âgé de 600 ans au déluge, 950 ans de vie"
+      ],
+      "n": "Chronologie harmonisée : « mille moins cinquante » = 950 ans, chiffre exact de Gn 5:32 (lumière sur la méthode coranique d'arithmétique biblique)."
+    },
+    {
+      "q": "32:9; 38:71-72",
+      "t": "Le souffle de l'esprit d'Adam",
+      "refs": [
+        "Gn 2:7 — le souffle de vies",
+        "Sg 15:11 — l'esprit vital soufflé en l'homme"
+      ],
+      "n": "Reprise du motif du souffle : l'anthropologie coranique y ancre la dignité et le péché de l'orgueil."
+    },
+    {
+      "q": "33:72",
+      "t": "Le dépôt (amâna) offert aux cieux, à la terre et à l'homme",
+      "refs": [
+        "Dt 33:4? — la Torah confiée; voir plutôt 4 Macabées? — mieux : Eccl? — thème du dépôt"
+      ],
+      "n": "Le « dépôt » confié à l'homme que cieux et terre refusent : thème d'origine rabbinique (dépôt de la Torah, Sifre Dt 343) transposé en anthropologie universelle."
+    },
+    {
+      "q": "37:97-113",
+      "t": "Abraham soumis au sacrifice de son fils",
+      "refs": [
+        "Gn 22 — le sacrifice d'Isaac (Aqédah)"
+      ],
+      "n": "L'Aqédah reprise : le Coran ne nomme pas le fils avec certitude (l'exégèse majoritaire dira Ismaël) ; le rachat par une bête est commun (Gn 22:13)."
+    },
+    {
+      "q": "41:9-12",
+      "t": "Création en six jours, sept cieux",
+      "refs": [
+        "Gn 1 — six jours",
+        "2 Co 12:2 — le troisième ciel",
+        "1 R 8:27 — les cieux ne peuvent te contenir"
+      ],
+      "n": "Structure hexaémérique commune ; le pluriel des cieux (sab' samawât) rejoint la cosmologie biblique à étages."
+    },
+    {
+      "q": "43:59-65",
+      "t": "Jésus, serviteur et signe, « adorons un seul Seigneur »",
+      "refs": [
+        "Mc 10:45 — le Fils de l'homme venu pour servir",
+        "Jn 17:3 — connaître l'unique vrai Dieu"
+      ],
+      "n": "Le Coran retient Jésus comme serviteur et messager : cœur du désaccord théologique, à lire avec les christologies du Nouveau Testament."
+    },
+    {
+      "q": "44:30-32",
+      "t": "Israël délivré de Pharaon, élu au-dessus des mondes",
+      "refs": [
+        "Ex 14 — la traversée de la mer",
+        "Dt 7:6 — Israël peuple élu"
+      ],
+      "n": "L'élection d'Israël est affirmée dans le Coran ; clé du dialogue judéo-islamique."
+    },
+    {
+      "q": "51:24-30",
+      "t": "Les hôtes d'Abraham, l'annonce au vieillard et à sa femme stérile",
+      "refs": [
+        "Gn 18:1-15 — les trois visiteurs de Mambré"
+      ],
+      "n": "Hospitalité d'Abraham et rires de Sara repris en une seule scène condensée."
+    },
+    {
+      "q": "57:27",
+      "t": "Monachisme qu'ils ont inventé, non prescrit",
+      "refs": [
+        "Mt 19:21 — vendre ses biens et suivre Jésus",
+        "1 Tm 4:1-3 — les règles d'abstinence sévères"
+      ],
+      "n": "Jugement coranique sur la vie monastique chrétienne : conversation à mener avec l'ascétisme évangélique et ses dérives dénoncés dans l'Église elle-même."
+    },
+    {
+      "q": "66:10-12",
+      "t": "Épouses de Noé et de Lot (infirmes) vs Marie (croyante parfaite)",
+      "refs": [
+        "Gn 6-9; Gn 19 — les familles de Noé et de Lot",
+        "Lc 1:38 — Marie, servante du Seigneur"
+      ],
+      "n": "Le salut n'est pas héréditaire : exempla féminins opposés, Marie close du tableau."
+    },
+    {
+      "q": "89:27-30",
+      "t": "« Ô âme apaisée, retourne vers ton Seigneur, satisfaite et agréée »",
+      "refs": [
+        "Mt 11:28-30 — « Venez à moi… et je vous procurerai du repos »",
+        "Ph 4:7 — la paix qui surpasse toute intelligence"
+      ],
+      "n": "L'âme satisfaite (mutma'inna) : point de contact mystique entre béatitudes et paix chrétienne."
+    },
+    {
+      "q": "96:1-5",
+      "t": "« Lis ! » — la première révélation au nom du Seigneur créateur",
+      "refs": [
+        "Ex 3:4 — « Moïse, Moïse » : la vocation du prophète",
+        "Es 6:8 — « Envois-moi » : la vocation d'Isaïe"
+      ],
+      "n": "Schéma prophétique biblique de la vocation (appel par le nom, mission paradoxale) appliqué à Muhammad par le Coran lui-même."
+    },
+    {
+      "q": "105",
+      "t": "L'Éléphant — l'armée détruite par des oiseaux jetant des pierres",
+      "refs": [
+        "2 R 19:35 — l'ange de l'Éternel frappe l'armée d'Assyrie",
+        "Ex 12:29 — plaie nocturne"
+      ],
+      "n": "Miracle protecteur de la Kaaba (année de la naissance de Muhammad selon la tradition) sur le modèle des interventions angéliques bibliques."
+    },
+    {
+      "q": "2:213; 5:48",
+      "t": "Une seule religion, des lois multiples, concurrence aux œuvres",
+      "refs": [
+        "Jn 14:2 — « dans la maison de mon Père, beaucoup de demeures » (analogie)",
+        "Ac 17:26-27 — les temps et les frontières ordonnés pour chercher Dieu"
+      ],
+      "n": "La pluralité des shari'a pour une unique foi d'origine : grille de lecture pour le pluralisme des révélations."
+    },
+    {
+      "q": "1:1-7",
+      "t": "Al-Fatiha — louange et prière de direction",
+      "refs": [
+        "Mt 6:9-13 — le Notre Père : louange puis demande de conduite",
+        "Ps 145 — « que ta gloire soit célébrée »"
+      ],
+      "n": "Les deux prières les plus récitées du monde : même architecture (louange des attributs, soumission, demande de guidage)."
+    },
+    {
+      "q": "1:5",
+      "t": "« Guide-nous dans le droit chemin »",
+      "refs": [
+        "Mt 6:13 — « ne nous soumets pas à la tentation, délivre-nous »",
+        "Ps 25:4-5 — « fais-moi connaître tes chemins »"
+      ],
+      "n": "La demande de direction morale commune aux deux prières modèles."
+    },
+    {
+      "q": "2:30",
+      "t": "L'homme « vice-roi » (khalîfa) sur la terre",
+      "refs": [
+        "Gn 1:26-28 — l'homme à l'image de Dieu, dominion sur la création",
+        "Ps 8:5-8 — « tu l'as couronné de gloire », tout sous ses pieds"
+      ],
+      "n": "Les deux traditions fondent la dignité et la responsabilité de l'homme sur une charge reçue du Créateur."
+    },
+    {
+      "q": "2:37",
+      "t": "« Adam reçut des mots de son Seigneur » : pardon après la faute",
+      "refs": [
+        "Gn 3:16-21 — Dieu habille Adam et promet",
+        "1 Jn 1:9 — si nous confessons, il pardonne"
+      ],
+      "n": "Premier pardon de l'histoire humaine : le motif de la miséricorde qui suit la chute est commun."
+    },
+    {
+      "q": "2:62; 5:69",
+      "t": "« Juifs, chrétiens, sabéens — quiconque croit en Dieu et au Jugement »",
+      "refs": [
+        "Ac 10:34-35 — « en toute nation, celui qui le craint et pratique la justice lui est agréé »",
+        "Mi 6:8 — ce que le Seigneur exige"
+      ],
+      "n": "Versets d'ouverture coraniques au salut des autres communautés monothéistes : pivot du dialogue interreligieux."
+    },
+    {
+      "q": "2:67-74",
+      "t": "La vache à sacrifier (le nom de la sourate)",
+      "refs": [
+        "Dt 21:1-9 — la génisse dénouée sur le cadavre non identifié",
+        "Nb 19 — la vache rousse de purification"
+      ],
+      "n": "L'épisode de la vache, unique dans le Coran, éclaire mieux les rites de la génisse en Dt-Nb (traditions sacerdotales)."
+    },
+    {
+      "q": "3:3-4",
+      "t": "« Il a fait descendre la Torah et l'Évangile avant, comme guidage »",
+      "refs": [
+        "Lc 24:44 — « la Loi, les Prophètes et les Psaumes » attestés par Jésus",
+        "Jn 10:35 — « l'Écriture ne peut être abolie »"
+      ],
+      "n": "Le Coran se place dans la continuité des Écritures : point d'entrée de la théologie des religions dans le Coran."
+    },
+    {
+      "q": "3:8",
+      "t": "« Seigneur, ne fais pas dévier nos cœurs après nous avoir guidés »",
+      "refs": [
+        "Ps 141:4 — « ne laisse pas mon cœur se porter vers le mal »",
+        "Jr 24:7 — Dieu donne un cœur pour le connaître"
+      ],
+      "n": "Prière de persévérance commune ; le don de la constance appartient à Dieu."
+    },
+    {
+      "q": "4:1",
+      "t": "« Créés d'une seule âme, d'elle son épouse »",
+      "refs": [
+        "Gn 2:21-24 — la côte, « os de mes os »",
+        "Mal 2:10 — « n'avons-nous qu'un seul père ? un seul Dieu nous a créés »"
+      ],
+      "n": "Unité d'origine de l'humanité et fraternité qui en découle : rapprochement anthropologique fort."
+    },
+    {
+      "q": "5:8",
+      "t": "« Jugez avec équité… la haine d'un peuple ne doit pas vous pousser à l'injustice »",
+      "refs": [
+        "Dt 16:19-20 — « tu ne t'inclineras pas devant le parti pris »",
+        "Jn 7:24 — « jugez avec justice, non selon l'apparence »"
+      ],
+      "n": "Éthique du jugement impartial commune aux trois traditions."
+    },
+    {
+      "q": "5:75",
+      "t": "« Le Messie fils de Marie mangeait de la nourriture »",
+      "refs": [
+        "Lc 24:41-43 — Jésus mange du poisson devant les siens"
+      ],
+      "n": "L'argument coranique (celui qui mange n'est pas divin) répond au débat christologique : lire avec les définitions de Chalcédoine."
+    },
+    {
+      "q": "6:103",
+      "t": "« Les regards ne l'atteignent pas, et lui atteint les regards »",
+      "refs": [
+        "Ex 33:20 — « nul ne peut me voir et vivre »",
+        "Jn 1:18 — nul n'a jamais vu Dieu",
+        "1 Tm 6:16 — que nul n'a vu ni ne peut voir"
+      ],
+      "n": "L'invisibilité divine est un point de convergence majeur des théologies biblique et coranique (voir aussi 7:143)."
+    },
+    {
+      "q": "7:143",
+      "t": "Moïse demande la vision ; la montagne s'écroule, il s'évanouit",
+      "refs": [
+        "Ex 33:18-23 — « montre-moi ta gloire… tu me verras par derrière »"
+      ],
+      "n": "Parallèle le plus serré : Moïse, demandeur de vision, homme de la montagne — le Coran en dramatise l'impossibilité absolue."
+    },
+    {
+      "q": "9:31",
+      "t": "« Ils ont pris leurs rabbis et leurs moines comme seigneurs »",
+      "refs": [
+        "Mt 23:8-12 — « n'appelez personne maître… un seul est votre Père »"
+      ],
+      "n": "Critique partagée du clergé : le Coran reprend un reproche que Jésus adressait lui-même aux docteurs."
+    },
+    {
+      "q": "10:94",
+      "t": "« Si tu doutes, demande à ceux qui lisent le Livre avant toi »",
+      "refs": [
+        "Lc 1:1-4 — enquête « sur les choses accomplies parmi nous »",
+        "Lc 2:46 — Jésus interrogeant les docteurs"
+      ],
+      "n": "Invitation coranique à consulter les gens du Livre : verset-clé pour l'herméneutique comparée."
+    },
+    {
+      "q": "11:45-49",
+      "t": "Le fils de Noé refuse l'arche et périt malgré son père prophète",
+      "refs": [
+        "Gn 9:20-27 — l'ivresse de Noé et Canaan",
+        "Ez 18:20 — chacun meurt de son propre péché"
+      ],
+      "n": "Le Coran illustre la désolidarisation des destins (nul ne porte le péché d'autrui) par un épisode que Gn ne raconte pas ainsi."
+    },
+    {
+      "q": "14:35-41",
+      "t": "Les prières d'Abraham pour La Mecque et pour sa descendance",
+      "refs": [
+        "Gn 18:23-32 — Abraham plaide pour Sodome",
+        "Gn 17:18 — « puisse Ismaël vivre devant toi »"
+      ],
+      "n": "Abraham intercesseur : figure commune, topoi de la prière prophétique pour les siens."
+    },
+    {
+      "q": "15:73-74",
+      "t": "« Nous fîmes pleuvoir sur eux une pluie de pierres » sur le peuple de Lot",
+      "refs": [
+        "Gn 19:24-25 — soufre et feu de l'Éternel sur Sodome"
+      ],
+      "n": "Châtiment par pluie du ciel : récit harmonique."
+    },
+    {
+      "q": "17:1",
+      "t": "Le voyage nocturne jusqu'au « sanctuaire le plus lointain » (Isra)",
+      "refs": [
+        "2 Co 12:2-4 — un homme enlevé jusqu'au troisième ciel",
+        "1 R 19:4-8 — Élie nourri puis marchant jusqu'à Horeb",
+        "Ez 1 — les visions de l'ouverture des cieux"
+      ],
+      "n": "Le Mi'raj se compare aux expériences d'enlèvement prophétiques bibliques (et à la littérature du Char d'Ézéchiel) : ascension, audition ineffable, retour."
+    },
+    {
+      "q": "17:23-24",
+      "t": "« Ton Seigneur a décrété : n'adorez que lui, et la bonté avec le père et la mère »",
+      "refs": [
+        "Ex 20:12 — honore ton père et ta mère",
+        "Lv 19:3, Dt 5:16 — parallèles directs"
+      ],
+      "n": "Le Coran attache le premier commandement social à la piété filiale, avec la même formulation de décret."
+    },
+    {
+      "q": "19:54-55",
+      "t": "Ismaël « fidèle à la prière et à la zakat, agréé de son Seigneur »",
+      "refs": [
+        "Gn 16:11-12; 21:20 — Ismaël, arc en main, habite le désert"
+      ],
+      "n": "Portrait coranique d'Ismaël prophète : réévaluation d'une figure restée marginale dans Gn."
+    },
+    {
+      "q": "20:25-28",
+      "t": "« Élargis ma poitrine, facilite ma tâche, délie le nœud de ma langue »",
+      "refs": [
+        "Ex 4:10-12 — « je suis lent de bouche… qui fait la bouche de l'homme ? »"
+      ],
+      "n": "La prière de Moïse bègue : les mots coraniques traduisent exactement la scène de Ex 4."
+    },
+    {
+      "q": "21:96-98",
+      "t": "Gog et Magog relâchés à la fin des temps",
+      "refs": [
+        "Ez 38-39 — Gog, prince de Magog",
+        "Ap 20:7-10 — Satan relâché, Gog et Magog, feu du ciel"
+      ],
+      "n": "L'eschatologie coranique hérite de l'apocalyptique d'Ezéchiel et de Jean."
+    },
+    {
+      "q": "24:40",
+      "t": "« Ténèbres sur des flots profonds… vague sur vague, au-dessus des nuages »",
+      "refs": [
+        "Ps 107:23-30 — les marins dans la tempête qui crient vers Dieu"
+      ],
+      "n": "Imaginaire de l'abîme et de l'appel vers Dieu : psaume de tempête et verset de la profondeur."
+    },
+    {
+      "q": "25:63",
+      "t": "« Les serviteurs du Miséricordieux marchent humblement sur terre »",
+      "refs": [
+        "Mi 6:8 — « marcher avec humilité avec ton Dieu »",
+        "Mt 5:5, 5:9 — les doux, les artisans de paix"
+      ],
+      "n": "Portrait éthique du croyant : humilité comme marque commune des béatitudes et de Michée."
+    },
+    {
+      "q": "28:7-13",
+      "t": "La mère de Moïse inspirée, l'enfant rendu à sa mère par Pharaon lui-même",
+      "refs": [
+        "Ex 2:1-10 — le panier de roseaux, la sœur qui veille, la nourrice"
+      ],
+      "n": "Ironie dramatique partagée : l'enfant menacé nourri par la maison de son persécuteur."
+    },
+    {
+      "q": "36:78-79",
+      "t": "« Qui fera revivre des os complètement décomposés ? »",
+      "refs": [
+        "Ez 37:1-14 — la vallée des ossements desséchés qui se recouvrent de chair"
+      ],
+      "n": "La réponse coranique à l'objection contre la résurrection est l'Ézéchiel visionnaire : Dieu qui a créé la première fois recrée."
+    },
+    {
+      "q": "37:139-148",
+      "t": "Jonas avalé, sa plainte, le plant de courge",
+      "refs": [
+        "Jon 1:17; 2:1-10; 4:6-8 — le grand poisson, la prière, la kikaion"
+      ],
+      "n": "Sourate entière dédiée : Jonas est le prophète au miracle de survie le plus explicitement partagé."
+    },
+    {
+      "q": "41:37",
+      "t": "« Le soleil et la lune sont des signes : ne vous prosternez pas devant eux »",
+      "refs": [
+        "Gn 1:14-16 — les luminaires, non pour être adorés",
+        "2 R 23:5 — Josie supprime le culte du soleil"
+      ],
+      "n": "Le Coran prolonge la dé-sacralisation biblique des astres : créatures-signes, non divinités."
+    },
+    {
+      "q": "50:37",
+      "t": "« Il y a là un rappel pour quiconque a un cœur ou prête l'oreille en témoin »",
+      "refs": [
+        "Ez 12:2 — « ils ont des yeux pour voir et ne voient pas »",
+        "Mt 13:15-16 — bienheureux vos yeux parce qu'ils voient"
+      ],
+      "n": "Théologie de l'écoute intérieure : la révélation n'agit que sur un cœur disposé."
+    },
+    {
+      "q": "61:6",
+      "t": "Jésus annonce « un messager venant après moi, dont le nom est Ahmad »",
+      "refs": [
+        "Jn 1:20-21 — Jean nie être le Messie ni Élie",
+        "Jn 14:16, 26 — le Paraclet que le Père enverra"
+      ],
+      "n": "Verset-pivot du dialogue islamo-chrétien : la lecture musulmane voit Muhammad annoncé, la lecture chrétienne le Paraclet de Jn 14. À manier avec les deux exégèses."
+    },
+    {
+      "q": "69:13-16",
+      "t": "« Quand on soufflera dans la trompette, un seul souffle, la terre et les montagnes sont soulevées »",
+      "refs": [
+        "1 Co 15:52 — à la dernière trompette, les morts ressusciteront",
+        "1 Th 4:16 — l'archange et la trompette de Dieu",
+        "Ap 11:15 — la septième trompette"
+      ],
+      "n": "Eschatologie de la trompette : structure identique, iconographie partagée."
+    },
+    {
+      "q": "81:1-14",
+      "t": "« Quand le soleil sera enveloppé, les étoiles éteintes, les montagnes déplacées »",
+      "refs": [
+        "Mt 24:29 — le soleil obscurci, les étoiles qui tombent",
+        "Jl 2:10 — la terre tremble, astres privés d'éclat",
+        "Ap 6:12-14 — la sixième sceau"
+      ],
+      "n": "Petit apocalyptique coranique qui se lit comme les listes de signes synoptiques et johanniques."
+    },
+    {
+      "q": "82:1-4",
+      "t": "« Quand le ciel se fendra, les étoiles se disperseront, les tombeaux seront renversés »",
+      "refs": [
+        "Ap 6:12-14 — le ciel se retire comme un parchemin",
+        "Is 34:4 — les cieux roulés comme un livre"
+      ],
+      "n": "Vocabulaire apocalyptique commun du dévoilement final."
+    },
+    {
+      "q": "86:13",
+      "t": "« Ceci est une parole décisive, ce n'est pas une plaisanterie »",
+      "refs": [
+        "Heb 4:12 — la parole de Dieu, vive, efficace, plus tranchante qu'une épée"
+      ],
+      "n": "Le poids performatif de la Parole divine : auto-déclaration scripturaire commune."
+    },
+    {
+      "q": "99:7-8",
+      "t": "« Un atome de bien : il le verra. Un atome de mal : il le verra »",
+      "refs": [
+        "Mt 10:42 — un verre d'eau froide donné en mon nom",
+        "Mt 25:40 — ce que vous avez fait au plus petit"
+      ],
+      "n": "La comptabilité eschatologique des plus petits gestes : théologie des œuvres minuscules partagée."
+    }
   ]
 }
