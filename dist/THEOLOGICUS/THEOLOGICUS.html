@@ -34705,7 +34705,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.369';
+  var STAMPED = '2.0.372';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -40728,7 +40728,10 @@ window.continueTradApart = async function (msgId) {
   btn.className = 'hud-btn'; btn.id = 'v158-aa-btn'; btn.type = 'button';
   btn.title = 'Taille de lecture des conversations'; btn.innerHTML = 'Aa';
   wrap.appendChild(btn);
-  right.insertBefore(wrap, wordBtn || right.firstChild);
+  /* v203b — WORD vit désormais dans le menu « ⋯ Plus » (v6, section Outils) :
+     ne l'utiliser comme repère que s'il est ENCORE enfant de .header-right,
+     sinon NotFoundError (insertBefore) + bandeau rouge et bouton Aa perdu */
+  right.insertBefore(wrap, (wordBtn && wordBtn.parentNode === right) ? wordBtn : right.firstChild);
 
   var panel = document.createElement('div'); panel.id = 'v158-aa-panel';
   panel.innerHTML =
