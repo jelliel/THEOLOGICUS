@@ -265,6 +265,57 @@ def activer_drapeaux_gpu() -> str | None:
     return drapeaux
 
 
+# v199 — barre flottante injectee dans les fenetres natives apres CHAQUE
+# chargement de page. WebView2 ExecuteScriptAsync n'est pas soumis a la CSP
+# de la page : l'injection passe meme sur les sites stricts. La barre donne
+# aux fenetres natives ce que les extensions Edge ne peuvent pas y apporter
+# (traduction instantanee, copie d'URL) ; elle se re-injecte apres chaque
+# navigation (translate.google.com inclus).
+NAV_BAR_JS = """
+(function(){
+  function inject(){
+    try {
+      if (window.__theoNativeBar) return;
+      if (!document.body) { setTimeout(inject, 200); return; }
+      window.__theoNativeBar = true;
+      var d = document.createElement('div');
+      d.id = 'theo-nbar';
+      d.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483647;display:flex;gap:6px;align-items:center;background:#0d1626;border:1px solid rgba(79,142,247,.55);border-radius:12px;padding:6px 8px;box-shadow:0 10px 34px rgba(0,0,0,.5);font:600 12px Consolas,monospace;color:#bfd4ff';
+      function btn(label, title, fn){
+        var b = document.createElement('button');
+        b.textContent = label; b.title = title;
+        b.style.cssText = 'background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:5px 9px;font:700 11px Consolas,monospace;cursor:pointer;white-space:nowrap';
+        b.addEventListener('mouseenter', function(){ b.style.borderColor = '#4f8ef7'; b.style.color = '#fff'; });
+        b.addEventListener('mouseleave', function(){ b.style.borderColor = 'rgba(79,142,247,.35)'; b.style.color = '#bfd4ff'; });
+        b.addEventListener('click', function(ev){ ev.stopPropagation(); fn(b); });
+        return b;
+      }
+      d.appendChild(btn('\\ud83c\\udf10 FR', 'Traduire cette page en français (Google Traduction)', function(){
+        location.href = 'https://translate.google.com/translate?sl=auto&tl=fr&u=' + encodeURIComponent(location.href);
+      }));
+      d.appendChild(btn('\\u21bb', 'Recharger la page', function(){ location.reload(); }));
+      d.appendChild(btn('\\ud83d\\udccb URL', "Copier l'adresse de la page", function(b){
+        var url = location.href;
+        function ok(){ b.textContent = '\\u2713 copié'; setTimeout(function(){ b.textContent = '\\ud83d\\udccb URL'; }, 1200); }
+        function fallback(){
+          var t = document.createElement('textarea');
+          t.value = url; t.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(t); t.select();
+          try { document.execCommand('copy'); ok(); } catch (e) {}
+          t.remove();
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(ok, fallback);
+        } else { fallback(); }
+      }));
+      document.body.appendChild(d);
+    } catch (e) {}
+  }
+  inject();
+})();
+"""
+
+
 class DesktopApi:
     """API exposee au JavaScript sous `window.pywebview.api` (v74).
 
@@ -354,7 +405,7 @@ class DesktopApi:
         if not webview.windows:
             raise RuntimeError("pas de fenetre principale")
         try:
-            webview.create_window(
+            win = webview.create_window(
                 "THEOLOGICUS — " + t,
                 u,
                 width=1200,
@@ -364,6 +415,18 @@ class DesktopApi:
             )
         except Exception as e:  # fenetre impossible : le JS retombera sur l'externe
             raise RuntimeError("fenetre impossible : %s" % e)
+        # v199 — barre flottante (traduire / recharger / copier l'URL) injectee
+        # a chaque chargement de page de cette fenetre native. Re-injectee
+        # apres chaque navigation (le drapeau __theoNativeBar est par page).
+        try:
+            def _inject(*_a, **_k):
+                try:
+                    win.evaluate_js(NAV_BAR_JS)
+                except Exception:
+                    pass
+            win.events.loaded += _inject
+        except Exception:
+            pass  # pywebview ancien : barre absente, sans crash
         return {"ok": True}
 
     def browser_external(self, url):
