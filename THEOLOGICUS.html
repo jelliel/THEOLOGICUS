@@ -44941,7 +44941,7 @@ window.continueTradApart = async function (msgId) {
   function sameSn(container, sel, t){
     var list = container.querySelectorAll(sel);
     for (var i = 0; i < list.length; i++) {
-      if ((list[i].dataset.sn || '') === t) return true;
+      if (((list[i].dataset.sn || '').trim()) === t) return true;
     }
     return false;
   }
@@ -44953,11 +44953,10 @@ window.continueTradApart = async function (msgId) {
       var t = (el.textContent || '').trim();
       if (!foreign(t)) return;
       var block = el.closest('.v167-item, .v170-wit, .v180-r, .v167-grp, .v170-arg') || el.parentElement;
-      var hasFr = false, hasAi = false;
-      if (block) {
-        hasFr = sameSn(block, '.v167-tr:not(.v193-ai)', t);
-        hasAi = sameSn(block, '.v193-ai', t);
-      }
+      /* Pas de doublon : un bouton IA ou FR (peu importe son data-sn) dans le
+         même bloc suffit — v193Enhance ne copie pas toujours data-sn. */
+      var hasFr = block ? !!block.querySelector('.v167-tr:not(.v193-ai)') : false;
+      var hasAi = block ? !!block.querySelector('.v193-ai') : false;
       var row = document.createElement('span');
       row.className = 'v201-row';
       row.style.cssText = 'display:inline-flex;gap:6px;margin:6px 0;vertical-align:top';
@@ -45001,7 +45000,18 @@ window.continueTradApart = async function (msgId) {
     process(b);
   }
   function boot(){
-    ['v167-body', 'v183-body', 'v170-body', 'v180-body'].forEach(watch);
+    /* Les corps de panneaux sont créés à la volée (openPanel) : on retente
+       jusqu'à ce que les quatre observateurs soient attachés. */
+    var ids = ['v167-body', 'v183-body', 'v170-body', 'v180-body'];
+    var iv = setInterval(function(){
+      var left = 0;
+      ids.forEach(function(id){
+        var b = document.getElementById(id);
+        if (!b || !b.dataset.v201w) { left++; watch(id); }
+      });
+      if (!left) clearInterval(iv);
+    }, 1200);
+    ids.forEach(watch);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
