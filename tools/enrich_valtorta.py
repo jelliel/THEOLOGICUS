@@ -47,8 +47,9 @@ def fetch(url, tries=3):
 
 
 def parse_page(md):
-    out = {"refs": [], "d": None}
+    out = {"refs": [], "cit": [], "d": None}
     md_ = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", md)     # images
+    # 1) references OFFICIELLES : bloc « Evangile : » de l'en-tete
     m = EV_RE.search(md_)
     if m:
         seen = set()
@@ -62,6 +63,21 @@ def parse_page(md):
             seen.add(k)
             out["refs"].append(r)
     out["refs"] = expand_refs(out["refs"])
+    # 2) references CITEES dans le recit et les notes (liens AELF du corps) :
+    #    elles etoffent la concordance des versets que le site ne met pas en
+    #    en-tete. Donnee du site, marquee « citee » pour ne pas la confondre.
+    off = set((r["b"], r["c"], r["v1"], r["v2"]) for r in out["refs"])
+    cit, seen_c = [], set()
+    for mr in AELF_RE.finditer(md_):
+        r = parse_ref(mr.group(1))
+        if not r:
+            continue
+        k = (r["b"], r["c"], r["v1"], r["v2"])
+        if k in off or k in seen_c:
+            continue
+        seen_c.add(k)
+        cit.append(r)
+    out["cit"] = expand_refs(cit)[:60]
     md_ = re.sub(r"\s+", " ", md_)
     m = DATE_RE.search(md_)
     if m:
@@ -88,7 +104,8 @@ def parse_page(md):
 def main():
     d = json.load(open(OUT, encoding="utf-8"))
     eps = d["episodes"]
-    todo = [e for e in eps if not e.get("d") or not e["refs"] or not e.get("ev")]
+    todo = [e for e in eps if not e.get("d") or not e["refs"] or not e.get("ev")
+            or not e.get("cit")]
     print("a enrichir : %d recits" % len(todo), flush=True)
     # etendre les plages de chapitres deja presentes (« Jean 13,1 jusqu'a 17,26 »)
     for e in eps:
@@ -112,16 +129,27 @@ def main():
                 if k not in seen:
                     seen.add(k)
                     e["refs"].append(r)
+        if got["cit"]:
+            e.setdefault("cit", [])
+            seen = set((r["b"], r["c"], r["v1"], r["v2"]) for r in e["cit"])
+            for r in got["cit"]:
+                k = (r["b"], r["c"], r["v1"], r["v2"])
+                if k not in seen:
+                    seen.add(k)
+                    e["cit"].append(r)
         done += 1
-        print("  %3d/%d %s vision=%s evenement=%s refs=%d" % (done, len(todo), e["fid"],
-              (got["d"] or "-")[:20], (got.get("ev") or "-")[:22], len(got["refs"])), flush=True)
+        print("  %3d/%d %s vision=%s evenement=%s refs=%d citees=%d" % (
+            done, len(todo), e["fid"], (got["d"] or "-")[:18],
+            (got.get("ev") or "-")[:20], len(got["refs"]), len(got["cit"])), flush=True)
         if done % 25 == 0:
             with_refs = sum(1 for x in eps if x["refs"])
-            print("  --- dates vision %d, evenements %d, avec refs %d (%.0fs)"
+            ncit = sum(len(x.get("cit", [])) for x in eps)
+            print("  --- vision %d, evenements %d, avec refs %d, citees %d (%.0fs)"
                   % (sum(1 for x in eps if x.get("d")), sum(1 for x in eps if x.get("ev")),
-                     with_refs, time.time() - t0), flush=True)
+                     with_refs, ncit, time.time() - t0), flush=True)
             d["meta"]["avec_refs"] = with_refs
             d["meta"]["refs"] = sum(len(x["refs"]) for x in eps)
+            d["meta"]["citees"] = ncit
             json.dump(d, open(OUT, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
         time.sleep(PAUSE)
 
@@ -129,13 +157,15 @@ def main():
     d["episodes"] = eps
     d["meta"]["avec_refs"] = sum(1 for x in eps if x["refs"])
     d["meta"]["refs"] = sum(len(x["refs"]) for x in eps)
+    d["meta"]["citees"] = sum(len(x.get("cit", [])) for x in eps)
     d["meta"]["dates"] = sum(1 for x in eps if x.get("d"))
     d["meta"]["evenements"] = sum(1 for x in eps if x.get("ev"))
     d["meta"]["enrichi"] = time.strftime("%Y-%m-%d")
     json.dump(d, open(OUT, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print("OK : %d recits, %d avec refs, %d refs, %d dates de vision, %d dates d'evenement — %.0fs"
-          % (len(eps), d["meta"]["avec_refs"], d["meta"]["refs"], d["meta"]["dates"],
-             d["meta"]["evenements"], time.time() - t0))
+    print("OK : %d recits, %d avec refs (%d refs) + %d citees, %d dates de vision, "
+          "%d dates d'evenement — %.0fs"
+          % (len(eps), d["meta"]["avec_refs"], d["meta"]["refs"], d["meta"]["citees"],
+             d["meta"]["dates"], d["meta"]["evenements"], time.time() - t0))
 
 
 if __name__ == "__main__":

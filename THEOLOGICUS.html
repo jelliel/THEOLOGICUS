@@ -42875,25 +42875,39 @@ window.continueTradApart = async function (msgId) {
     }
     var eps = VDATA.episodes;
     var h = '', shown = 0, i;
+    /* les refs etendues (« jusqu'à ») repetent le meme libelle : on dedoublonne */
+    function raws(list, max){
+      var out = [], seen = {};
+      (list || []).forEach(function(r){
+        if (seen[r.raw]) return;
+        seen[r.raw] = 1;
+        out.push(r.raw);
+      });
+      return { txt: out.slice(0, max || 99).join(' · '), n: out.length };
+    }
     function item(e){
-      var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
+      var ro = raws(e.refs), rc = raws(e.cit, 8);
       return '<div class="v170-item"><span class="v167-au">🌊 ' + (e.emv ? 'EMV ' + e.emv : e.fid) + '</span>'
          + '<span class="v167-ti">— ' + esc(e.t || e.title || '') + '</span>'
          + (e.ev ? '<div style="font-size:11.5px;color:#9fd0a0">📅 ' + esc(e.ev)
               + (e.lieu ? ' — ' + esc(e.lieu) : '')
               + (e.evj ? ' <span style="opacity:.5">(' + esc(e.evj) + ')</span>' : '') + '</div>' : '')
          + (e.d ? '<div style="font-size:11px;opacity:.6">🖋 vision du ' + esc(e.d) + '</div>' : '')
-         + (refs ? '<div class="v167-sn">📖 Évangile : ' + esc(refs) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique directe</div>')
+         + (ro.n ? '<div class="v167-sn">📖 Évangile : ' + esc(ro.txt) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique en tête</div>')
+         + (rc.n ? '<div class="v167-sn" style="opacity:.7">🔎 cités dans le texte (' + rc.n + ') : ' + esc(rc.txt) + (rc.n > 8 ? '…' : '') + '</div>' : '')
          + '<button type="button" class="v170-vopen" data-vfid="' + e.fid + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir le récit ↗</button></div>';
     }
+    function hay(e){
+      return norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + raws(e.refs).txt + ' '
+        + raws(e.cit).txt + ' emv ' + (e.emv || '') + ' ' + e.fid + ' ' + (e.ev || '') + ' '
+        + (e.evj || '') + ' ' + (e.lieu || ''));
+    }
     var st = document.getElementById('v170-status');
-    /* filtre saisi : recherche sur les DIX tomes (titre, date, référence d'Évangile, EMV) */
+    /* filtre saisi : recherche sur les DIX tomes (titre, date, lieu, référence, EMV) */
     if (q){
       eps.forEach(function(e){
         if (shown >= 80) return;
-        var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
-        if (norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' ' + e.fid
-                 + ' ' + (e.ev || '') + ' ' + (e.evj || '') + ' ' + (e.lieu || '')).indexOf(q) < 0) return;
+        if (hay(e).indexOf(q) < 0) return;
         shown++; h += item(e);
       });
       if (st) st.textContent = shown + ' récit(s) pour « ' + q + ' »' + (shown >= 80 ? ' — affichage limité aux 80 premiers' : '');
@@ -43410,12 +43424,21 @@ window.continueTradApart = async function (msgId) {
         if (nq.length < 2) return [];
         C.vlt.episodes.forEach(function(e){
           if (out.length >= 8) return;
-          var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
+          var seenR = {}, rl = [];
+          (e.refs || []).concat(e.cit || []).forEach(function(r){
+            if (seenR[r.raw]) return;
+            seenR[r.raw] = 1; rl.push(r.raw);
+          });
+          var refs = rl.join(' · ');
           var hay = norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' tome ' + e.tome + ' ' + e.fid
                          + ' ' + (e.ev || '') + ' ' + (e.evj || '') + ' ' + (e.lieu || ''));
           if (hay.indexOf(nq) < 0) return;
+          var ro = (e.refs || []).length, rc = (e.cit || []).length;
           out.push({ h: '🌊 ' + esc(e.t || e.title) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : ''),
-                     sn: (e.d ? e.d + ' — ' : '') + (refs ? 'Évangile : ' + refs : 'Récit sans référence évangélique directe'),
+                     sn: (e.ev ? '📅 ' + esc(e.ev) + (e.lieu ? ' — ' + esc(e.lieu) : '') + ' · ' : '')
+                         + (e.d ? 'vision ' + esc(e.d) + ' · ' : '')
+                         + (ro ? '📖 ' + esc(refs) : 'récit sans référence en tête')
+                         + (rc ? ' · 🔎 ' + rc + ' réf. citée(s)' : ''),
                      go: { vlt: e.fid + '|' + ('0' + e.tome).slice(-2) } });
         });
         return out;
@@ -45272,17 +45295,19 @@ window.continueTradApart = async function (msgId) {
     jd:'65', ap:'66'
   };
 
-  var IDX = null;   /* 'numLivre:chapitre' -> [{e, r}] */
+  var IDX = null;   /* 'numLivre:chapitre' -> [{e, r, off}] */
   function buildIndex(){
     if (IDX || !V) return IDX;
     IDX = {};
+    function add(e, r, off){
+      var n = BOOKN[r.b];
+      if (!n) return;
+      var k = n + ':' + r.c;
+      (IDX[k] = IDX[k] || []).push({ e: e, r: r, off: off });
+    }
     V.episodes.forEach(function(e){
-      (e.refs || []).forEach(function(r){
-        var n = BOOKN[r.b];
-        if (!n) return;
-        var k = n + ':' + r.c;
-        (IDX[k] = IDX[k] || []).push({ e: e, r: r });
-      });
+      (e.refs || []).forEach(function(r){ add(e, r, 1); });   /* en-tête du site */
+      (e.cit  || []).forEach(function(r){ add(e, r, 0); });   /* cités dans le texte */
     });
     return IDX;
   }
@@ -45293,10 +45318,15 @@ window.continueTradApart = async function (msgId) {
     (ix[p.book + ':' + p.ch] || []).forEach(function(h){
       var v2p = p.v2 || p.v1;
       if (h.r.v1 <= v2p && h.r.v2 >= p.v1) {
-        var k = h.e.fid + '|' + h.r.raw;
-        if (!seen[k]) { seen[k] = 1; out.push(h); }
+        var k = h.e.fid;
+        if (seen[k]) { if (h.off) seen[k].off = 1; return; }
+        var it = { e: h.e, r: h.r, off: h.off };
+        seen[k] = it;
+        out.push(it);
       }
     });
+    /* une référence d'en-tête passe avant une simple citation */
+    out.sort(function(a, b){ return (b.off ? 1 : 0) - (a.off ? 1 : 0); });
     return out;
   }
 
@@ -45314,8 +45344,8 @@ window.continueTradApart = async function (msgId) {
       out += '<div class="v204-chip" data-u="' + esc(e.u) + '" data-t="Valtorta — ' + esc(t) + '" '
         + 'style="pointer-events:auto;cursor:pointer;margin:2px 0;padding:4px 8px;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.35);border-radius:8px;font-size:11.5px;color:#bfd4ff">'
         + '🌊 ' + esc(t) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : '')
-        + (e.ev ? ' <span style="opacity:.55">· 📅 ' + esc(e.ev) + '</span>' : '')
-        + (h.r.raw ? ' <span style="opacity:.55">· ' + esc(h.r.raw) + '</span>' : '')
+        + (e.ev ? ' <span style="opacity:.55">· 📅 ' + esc(e.ev) + (e.lieu ? ', ' + esc(e.lieu) : '') + '</span>' : '')
+        + (h.r.raw ? ' <span style="opacity:.55">· ' + (h.off ? '📖 ' : '🔎 cité ') + esc(h.r.raw) + '</span>' : '')
         + '</div>';
     });
     if (hs.length > 4) out += '<div style="font-size:10.5px;opacity:.55;margin-top:2px">+ ' + (hs.length - 4) + ' autre(s) récit(s) — onglet 🌊 VALTORTA</div>';
