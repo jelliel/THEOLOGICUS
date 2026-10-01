@@ -1,2 +1,5 @@
 cph/api/*
 sefaria/cache/*
+quranx/cache/*
+corpus/cache/*
+dist/THEOLOGICUS/THEOLOGICUS.log

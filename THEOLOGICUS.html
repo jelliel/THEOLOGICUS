@@ -43323,5 +43323,261 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v183-quran-script">
+/* ═══════════════════════════════════════════════════════════════════════
+   v183 — PANNEAU DE VERSET CORANIQUE : Tafsirs · Hadiths · Lexique arabe
+   L'équivalent coranique du panneau « ☻ Pères & homélies » (v167) :
+   1) Rangée #v183-row injectée dans la fiche de verset coranique
+      (#quran-verse-tip) : 📖 Tafsirs · 📜 Hadiths · 🔤 Lexique.
+   2) Données locales lazy par sourate (tradition/qtafsir|qhadith|qwbw/s<p>.js,
+      construites par tools/build_quranx.py + tools/build_qwbw.py depuis
+      quranx.com et corpus.quran.com) :
+        __qtafsirX[s] = {"<v>": [{s, n, x}]}          — tafsirs (EN)
+        __qhadithX[s] = {"<v>": [{c, r, u, x, ar}]}   — hadiths (EN + AR)
+        __qwbwX[s]    = {"<v>": [{w, tr, g, seg, d, ar, q, img}]} — mot à mot
+   3) Panneau #v183-pat : sections § Tafsirs / § Hadiths attribués /
+      § Lexique arabe mot à mot, boutons 🌐 FR partagés (cache v171),
+      liens profonds quranx.com + corpus.quran.com → navigateur interne v179.
+   ═══════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__theoV183) return; window.__theoV183 = true;
+
+  /* ── CSS (le contenu réutilise les classes v167 déjà globales) ── */
+  var st = document.createElement('style');
+  st.textContent =
+    '#v183-row{margin-top:7px;padding-top:6px;border-top:1px dashed rgba(245,197,66,.45);display:flex;align-items:center;gap:6px;flex-wrap:wrap}' +
+    '.v183-btn{background:rgba(245,197,66,.12);color:#f5c542;border:1px solid rgba(245,197,66,.5);padding:4px 9px;font-weight:800;font-size:11px;border-radius:6px;cursor:pointer;font-family:Consolas,Monaco,monospace}' +
+    '.v183-btn:hover{filter:brightness(1.35)}' +
+    '.v183-cnt{font-size:10px;color:#f5c542;opacity:.75;font-weight:700}' +
+    '#v183-pat{position:fixed;inset:0;z-index:130000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.62);backdrop-filter:blur(4px)}' +
+    '#v183-pat.open{display:flex}' +
+    '#v183-box{width:min(700px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(245,197,66,.4);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);overflow:hidden}' +
+    '#v183-head{padding:12px 16px;font-weight:900;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.25);display:flex;justify-content:space-between;align-items:center;gap:8px}' +
+    '#v183-close{background:none;border:none;color:#f5c542;font-size:16px;cursor:pointer;padding:2px 6px}' +
+    '#v183-status{padding:8px 16px;font-size:11px;color:var(--text-dim,#8aa)}' +
+    '#v183-body{overflow:auto;padding:6px 16px 16px;font-size:12.5px;line-height:1.55}' +
+    '.v183-arab{direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-top:4px}' +
+    '.v183-w{border:1px solid rgba(245,197,66,.16);border-radius:9px;margin:7px 0;padding:7px 10px;background:rgba(255,255,255,.03)}' +
+    '.v183-w .wt{font-weight:800;color:#f5c542;font-size:13px}' +
+    '.v183-w .wg{color:var(--text,#dbe6f4)}' +
+    '.v183-w .wseg{display:inline-block;background:rgba(79,142,247,.14);color:var(--cyan,#4f8ef7);border-radius:4px;font-size:10px;font-weight:800;padding:1px 6px;margin-left:6px}' +
+    '.v183-w .wd{opacity:.8;font-size:11.5px;margin-top:2px}' +
+    '.v183-w img{max-height:34px;vertical-align:middle;margin-left:8px;border-radius:4px;background:rgba(255,255,255,.9);padding:1px 3px}' +
+    '.v183-hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+    'details.v183-det{margin-top:4px}details.v183-det summary{cursor:pointer;color:var(--cyan,#4f8ef7);font-size:11px}';
+  document.head.appendChild(st);
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+  var KINDS = { t: ['__qtafsirX', 'qtafsir'], h: ['__qhadithX', 'qhadith'], w: ['__qwbwX', 'qwbw'] };
+  function ensure(kind, p) {
+    var k = KINDS[kind][0], dir = KINDS[kind][1];
+    if (window[k] && window[k][p]) return Promise.resolve(true);
+    return new Promise(function (res) {
+      var sc = document.createElement('script');
+      sc.src = 'tradition/' + dir + '/s' + p + '.js';
+      sc.onload = function () { res(!!(window[k] && window[k][p])); };
+      sc.onerror = function () { res(false); };
+      document.head.appendChild(sc);
+    });
+  }
+  function getData(kind, s) {
+    return (window[KINDS[kind][0]] || {})[s] || null;
+  }
+  function collect(kind, s, v1, v2) {
+    var map = getData(kind, s), out = [];
+    if (!map) return out;
+    var hi = v2 || v1;
+    for (var v = v1; v <= hi; v++) {
+      var e = map[String(v)];
+      if (e) out = out.concat(e);
+    }
+    return out;
+  }
+
+  /* ── FR partagé (cache v171 + LibreTranslate) ── */
+  function frOf(sn) {
+    return (typeof window.__v167TrGet === 'function') ? window.__v167TrGet(sn) : null;
+  }
+  function frDivHtml(t) {
+    return '<div class="v167-sn" style="color:#7fdfff">🇫🇷 ' + esc(t) + '</div>';
+  }
+  function frBtn(sn) {
+    var cached = frOf(sn);
+    if (cached) return frDivHtml(cached);
+    return '<button type="button" class="v167-tr" data-sn="' + esc(sn) + '">🌐 FR</button>';
+  }
+  function snip(t, n) {
+    t = String(t || '');
+    return t.length > n ? t.slice(0, n) + '…' : t;
+  }
+
+  /* ── panneaux ── */
+  var cur = { s: 0, v1: 0, v2: 0, ref: '' };
+
+  function tafsirHtml(t) {
+    var u = 'https://quranx.com/Tafsirs/' + cur.s + '.' + cur.v1;
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(t.s || 'Tafsir') + '</span>' +
+      '<span class="v167-ti">— ' + esc(t.n || '') + '</span>' +
+      '<div class="v167-sn">' + esc(t.x || '') + '</div>' +
+      frBtn(snip(t.x, 1200)) +
+      '<a class="v167-lk" href="' + u + '" target="_blank" rel="noopener">quranx.com ↗</a></div>';
+  }
+  function hadithHtml(h, i) {
+    var ar = h.ar ? '<details class="v183-det"><summary>‏Texte arabe</summary><div class="v183-arab">' + esc(h.ar) + '</div></details>' : '';
+    var lk = h.u ? ' <a class="v167-lk" href="' + esc(h.u) + '" target="_blank" rel="noopener">quranx.com ↗</a>' : '';
+    return '<div class="v167-item">' +
+      '<span class="v167-au">' + esc(h.c || 'Hadith') + '</span>' +
+      '<span class="v167-ti">— ' + esc(h.r || '') + '</span>' +
+      '<div class="v167-sn">' + esc(h.x || '') + '</div>' +
+      ar + frBtn(snip(h.x, 1200)) + lk + '</div>';
+  }
+  function wordHtml(wd, s, v) {
+    var img = wd.img ? ' <img loading="lazy" src="https://corpus.quran.com/wordimage?id=' + wd.img + '" alt="" onerror="this.remove()">' : '';
+    var morph = 'https://corpus.quran.com/wordmorphology.jsp?location=(' + s + ':' + v + ':' + (wd.w || 0) + ')';
+    var dict = wd.q ? ' · <a class="v167-lk" href="https://corpus.quran.com/qurandictionary.jsp?q=' + encodeURIComponent(wd.q) + '" target="_blank" rel="noopener">lexique ↗</a>' : '';
+    return '<div class="v183-w">' +
+      '<div class="v183-hdr"><span class="wt">' + esc(wd.tr || '—') + '</span>' +
+      '<span class="wg">' + esc(wd.g || '') + '</span>' +
+      (wd.seg ? '<span class="wseg">' + esc(wd.seg) + '</span>' : '') + img + '</div>' +
+      (wd.d ? '<div class="wd">' + esc(wd.d) + '</div>' : '') +
+      (wd.ar ? '<div class="v183-arab">' + esc(wd.ar) + '</div>' : '') +
+      '<div style="margin-top:3px"><a class="v167-lk" href="' + morph + '" target="_blank" rel="noopener">morphologie ↗</a>' + dict +
+      ' ' + frBtn(snip((wd.d || '') + ' ' + (wd.g || ''), 300)) + '</div>' +
+      '</div>';
+  }
+
+  function renderBody() {
+    var body = document.getElementById('v183-body');
+    if (!body) return;
+    var s = cur.s, v1 = cur.v1, v2 = cur.v2 || cur.v1;
+    var ts = collect('t', s, v1, v2);
+    var hs = collect('h', s, v1, v2);
+    var h = '';
+    if (ts.length) {
+      h += '<div class="v167-grp">§ Tafsirs (' + ts.length + ')</div>' + ts.map(tafsirHtml).join('');
+    }
+    if (hs.length) {
+      h += '<div class="v167-grp">§ Hadiths attribués (' + hs.length + ')</div>' + hs.map(hadithHtml).join('');
+    }
+    /* lexique mot à mot, verset par verset */
+    var lex = [];
+    for (var v = v1; v <= v2; v++) lex.push({ v: v, ws: collect('w', s, v, v) });
+    lex = lex.filter(function (x) { return x.ws.length; });
+    if (lex.length) {
+      h += '<div class="v167-grp">§ Lexique arabe — mot à mot (corpus.quran.com)</div>';
+      lex.forEach(function (x) {
+        if (cur.v2) h += '<div style="font-weight:800;color:#f5c542;margin:8px 0 2px">Verset ' + x.v + '</div>';
+        h += x.ws.map(function (wd) { return wordHtml(wd, s, x.v); }).join('');
+      });
+    }
+    if (!ts.length && !hs.length && !lex.length) {
+      h += '<div style="opacity:.75;padding:14px 0">Aucun tafsir, hadith ni lexique indexé localement pour ce verset. ' +
+        '<a class="v167-lk" href="https://quranx.com/tafsirs/' + cur.s + '.' + cur.v1 + '" target="_blank" rel="noopener">chercher sur quranx.com ↗</a></div>';
+    } else if (!ts.length) {
+      h += '<div style="opacity:.6;padding:8px 0">Pas de tafsir indexé pour ce verset — <a class="v167-lk" href="https://quranx.com/tafsirs/' + cur.s + '.' + cur.v1 + '" target="_blank" rel="noopener">voir sur quranx.com ↗</a></div>';
+    }
+    body.innerHTML = h;
+  }
+
+  function openPanel(s, v1, v2) {
+    cur = { s: s, v1: v1, v2: v2 || null, ref: s + ':' + v1 + (v2 && v2 !== v1 ? '-' + v2 : '') };
+    var p = document.getElementById('v183-pat');
+    if (!p) {
+      p = document.createElement('div');
+      p.id = 'v183-pat';
+      p.innerHTML = '<div id="v183-box"><div id="v183-head"><span id="v183-title">📖 Coran</span><button id="v183-close" aria-label="Fermer">✕</button></div><div id="v183-status"></div><div id="v183-body"></div></div>';
+      document.body.appendChild(p);
+      p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+      p.querySelector('#v183-close').addEventListener('click', function () { p.classList.remove('open'); });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
+      });
+      p.querySelector('#v183-body').addEventListener('click', function (ev) {
+        var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
+        if (!b || b.dataset.busy) return;
+        ev.preventDefault();
+        if (typeof window.__v167Translate === 'function')
+          window.__v167Translate(b.dataset.sn || '', b, document.getElementById('v183-status'));
+      });
+    }
+    p.querySelector('#v183-title').textContent = '📖 Coran — Sourate ' + cur.s + ' : ' + cur.v1 + (cur.v2 && cur.v2 !== cur.v1 ? '-' + cur.v2 : '');
+    var body = p.querySelector('#v183-body');
+    body.innerHTML = '<div style="opacity:.7;padding:10px 0">⏳ Chargement des corpus coraniques…</div>';
+    p.classList.add('open');
+    Promise.all([ensure('t', cur.s), ensure('h', cur.s), ensure('w', cur.s)])
+      .then(function () {
+        if (!p.classList.contains('open')) return;
+        if (!cur.s) return;
+        renderBody();
+      });
+  }
+
+  /* ── rangée de boutons dans la fiche de verset coranique ── */
+  function mountRow(tip, ref) {
+    var key = ref.s + ':' + (ref.v2 || ref.v1);
+    var row = tip.querySelector('#v183-row');
+    if (row && row.dataset.ref === key) return;
+    if (row) row.remove();
+    row = document.createElement('div');
+    row.id = 'v183-row';
+    row.innerHTML =
+      '<button type="button" class="v183-btn" data-k="t">📖 Tafsirs <span class="v183-cnt" data-c="t"></span></button>' +
+      '<button type="button" class="v183-btn" data-k="h">📜 Hadiths <span class="v183-cnt" data-c="h"></span></button>' +
+      '<button type="button" class="v183-btn" data-k="w">🔤 Lexique <span class="v183-cnt" data-c="w"></span></button>';
+    row.dataset.ref = key;
+    row.addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('.v183-btn') : null;
+      if (!b) return;
+      ev.preventDefault(); ev.stopPropagation();
+      openPanel(ref.s, ref.v1, ref.v2);
+    });
+    tip.appendChild(row);
+    if (tip.style.pointerEvents !== 'auto') tip.style.pointerEvents = 'auto';
+    /* chargement des 3 corpus de la sourate + compteurs */
+    Promise.all([ensure('t', ref.s), ensure('h', ref.s), ensure('w', ref.s)]).then(function () {
+      if (!row.isConnected || row.dataset.ref !== key) return;
+      var hi = ref.v2 || ref.v1;
+      function n(kind, fn) {
+        var tot = 0;
+        for (var v = ref.v1; v <= hi; v++) tot += fn(collect(kind, ref.s, v, v));
+        return tot;
+      }
+      var ct = row.querySelector('[data-c="t"]'), ch = row.querySelector('[data-c="h"]'), cw = row.querySelector('[data-c="w"]');
+      var nt = n('t', function (a) { return a.length; });
+      var nh = n('h', function (a) { return a.length; });
+      var nw = n('w', function (a) { return a.length; });
+      if (ct) ct.textContent = nt ? '(' + nt + ')' : '';
+      if (ch) ch.textContent = nh ? '(' + nh + ')' : '';
+      if (cw) cw.textContent = nw ? '(' + nw + ' mots)' : '';
+    });
+  }
+
+  function refreshTip() {
+    var tip = document.getElementById('quran-verse-tip');
+    if (!tip || tip.style.display === 'none' || tip.style.opacity === '0') return;
+    /* l'en-tête de la fiche contient « CORAN — Sourate S : V(-V) » */
+    var hd = tip.querySelector('div');
+    if (!hd) return;
+    var m = (hd.textContent || '').match(/Sourate\s+(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?/);
+    if (!m) return;
+    var ref = { s: parseInt(m[1], 10), v1: parseInt(m[2], 10), v2: m[3] ? parseInt(m[3], 10) : null };
+    if (!ref.s || !ref.v1) return;
+    mountRow(tip, ref);
+  }
+  var lastRun = 0, pending = null;
+  function queueTip() {
+    var now = Date.now();
+    if (now - lastRun >= 400) { lastRun = now; refreshTip(); }
+    else if (!pending) {
+      pending = setTimeout(function () { pending = null; lastRun = Date.now(); refreshTip(); }, 400 - (now - lastRun));
+    }
+  }
+  new MutationObserver(queueTip).observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+
 </body>
 </html>
