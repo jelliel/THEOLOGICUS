@@ -40728,7 +40728,10 @@ window.continueTradApart = async function (msgId) {
   btn.className = 'hud-btn'; btn.id = 'v158-aa-btn'; btn.type = 'button';
   btn.title = 'Taille de lecture des conversations'; btn.innerHTML = 'Aa';
   wrap.appendChild(btn);
-  right.insertBefore(wrap, wordBtn || right.firstChild);
+  /* v203b — WORD vit désormais dans le menu « ⋯ Plus » (v6, section Outils) :
+     ne l'utiliser comme repère que s'il est ENCORE enfant de .header-right,
+     sinon NotFoundError (insertBefore) + bandeau rouge et bouton Aa perdu */
+  right.insertBefore(wrap, (wordBtn && wordBtn.parentNode === right) ? wordBtn : right.firstChild);
 
   var panel = document.createElement('div'); panel.id = 'v158-aa-panel';
   panel.innerHTML =
