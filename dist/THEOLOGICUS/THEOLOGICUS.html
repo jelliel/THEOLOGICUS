@@ -30129,6 +30129,9 @@ body{ margin:0; }
   moveTo('clear-chat', null, true);
   section('Diagnostic');
   moveTo('open-stats-modal', null);
+  /* v203 — WORD et ÉTUDE déplacés dans le menu (libération de place header) */
+  section('Outils');
+  moveTo('export-word-btn', null);
 
   document.body.appendChild(menu);
 
@@ -30715,15 +30718,10 @@ body{ margin:0; }
       var ring = mk('div','ring'); ring.id='v8-ring'; ring.title='Contexte utilisé';
       ring.innerHTML='<span id="v8-ring-lbl">0</span>';
       var dot = mk('div','dot'); dot.id='v8-dot'; dot.title='État de l’API';
-      var av = mk('div','avatar','FA'); av.title='ambassa2ur';
-      var refsT = mk('button','v6-iconbtn','<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h7v16H4zM13 4h7v16h-7z"/></svg>');
-      refsT.title='Références'; refsT.setAttribute('aria-label','Références');
-      var notesT = mk('button','v6-iconbtn','<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 4M12 17.5h.01"/></svg>');
-      notesT.title='Notes de conception'; notesT.setAttribute('aria-label','Notes');
-      // insérer avant le bouton "Plus" (dernier .v6-iconbtn) s'il existe
-      var more = bar.querySelector('#v6-more') || bar.lastElementChild;
-      var anchor = more && more.previousSibling ? more : null;
-      [ring, dot, refsT, notesT, av].forEach(function(n){ bar.appendChild(n); });
+      /* v203 — boutons RÉFÉRENCES et Notes de conception + avatar FA retirés
+         du header (libération de place pour de futures fonctionnalités).
+         Le panneau Références reste accessible via les cartes du rail. */
+      [ring, dot].forEach(function(n){ bar.appendChild(n); });
 
       function syncRing(){
         var lbl = $('context-label'); var t = lbl ? lbl.textContent.replace('%','').trim() : '0';
@@ -30732,9 +30730,6 @@ body{ margin:0; }
         dot.className = off ? 'dot' : 'dot ok'; dot.title = off ? 'API hors ligne' : 'API connectée';
       }
       syncRing(); setInterval(syncRing, 2000);
-
-      refsT.onclick = function(e){ if(e) e.stopPropagation(); var b=$('references-btn'); if(b) b.click(); };
-      notesT.onclick = function(){ var n=$('v8-notes'); if(n) n.classList.toggle('open'); };
     }
 
     /* ── 2. SECTIONS RÉFÉRENCES + CORPUS dans le rail ── */
@@ -31253,7 +31248,8 @@ body{ margin:0; }
 (function(){
   var titleEl = document.getElementById('v7-conv-title');
   if (!titleEl) return;
-  titleEl.title = 'Double-clic pour renommer';
+  /* v203 — plus d'infobulle « Double-clic pour renommer » (demande utilisateur) ;
+     le double-clic reste fonctionnel discrètement */
   var editing = false, prev = '';
 
   function startEdit(){
@@ -34709,7 +34705,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.365';
+  var STAMPED = '2.0.369';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -44560,14 +44556,18 @@ window.continueTradApart = async function (msgId) {
   /* ── bouton HUD ── */
   function addHudButton(){
     if (document.getElementById('open-etude-modal')) return;
-    var anchor = document.getElementById('open-gsearch');
-    if (!anchor) return;
     var b = document.createElement('button');
     b.className = 'hud-btn';
     b.id = 'open-etude-modal';
     b.title = "Feuille d'étude — panier de sélections (🧺 dans la bulle), notes d'étude (📝) et sauvegarde/restauration de tes données locales";
     b.textContent = '🧺 ÉTUDE';
     b.addEventListener('click', function(){ openPanel('basket'); });
+    /* v203 — ÉTUDE rejoint le menu « Plus d'actions » (⋯), section Outils,
+       à côté de WORD — libération de place dans le header */
+    var menu = document.getElementById('v6-more-menu');
+    if (menu) { menu.appendChild(b); return; }
+    var anchor = document.getElementById('open-gsearch');
+    if (!anchor) return;
     anchor.insertAdjacentElement('afterend', b);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addHudButton);
