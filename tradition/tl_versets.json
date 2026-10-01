@@ -1,0 +1,1125 @@
+{
+ "note": "v197 — chronologies interactives des versets : composition des livres bibliques (numérotation SCH_BOOKS 1-66), révélation des sourates (chronologie égyptienne) et événements de la transmission des textes.",
+ "bible": {
+  "1": {
+   "nom": "Genèse",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "2": {
+   "nom": "Exode",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "3": {
+   "nom": "Lévitique",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "4": {
+   "nom": "Nombres",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "5": {
+   "nom": "Deutéronome",
+   "c1": -700,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-700 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "6": {
+   "nom": "Josué",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "7": {
+   "nom": "Juges",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "8": {
+   "nom": "Ruth",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "9": {
+   "nom": "1 Samuel",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "10": {
+   "nom": "2 Samuel",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "11": {
+   "nom": "1 Rois",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "12": {
+   "nom": "2 Rois",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "13": {
+   "nom": "1 Chroniques",
+   "c1": -400,
+   "c2": -350,
+   "t": "AT",
+   "info": "Rédaction env. 350-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "14": {
+   "nom": "2 Chroniques",
+   "c1": -400,
+   "c2": -350,
+   "t": "AT",
+   "info": "Rédaction env. 350-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "15": {
+   "nom": "Esdras",
+   "c1": -400,
+   "c2": -350,
+   "t": "AT",
+   "info": "Rédaction env. 350-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "16": {
+   "nom": "Néhémie",
+   "c1": -400,
+   "c2": -350,
+   "t": "AT",
+   "info": "Rédaction env. 350-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "17": {
+   "nom": "Esther",
+   "c1": -400,
+   "c2": -300,
+   "t": "AT",
+   "info": "Rédaction env. 300-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "18": {
+   "nom": "Job",
+   "c1": -600,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-600 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "19": {
+   "nom": "Psaumes",
+   "c1": -600,
+   "c2": -300,
+   "t": "AT",
+   "info": "Rédaction env. 300-600 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "20": {
+   "nom": "Proverbes",
+   "c1": -700,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-700 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "21": {
+   "nom": "Ecclésiaste",
+   "c1": -300,
+   "c2": -200,
+   "t": "AT",
+   "info": "Rédaction env. 200-300 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "22": {
+   "nom": "Cantique des Cantiques",
+   "c1": -400,
+   "c2": -300,
+   "t": "AT",
+   "info": "Rédaction env. 300-400 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "23": {
+   "nom": "Ésaïe",
+   "c1": -740,
+   "c2": -480,
+   "t": "AT",
+   "info": "Rédaction env. 480-740 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "24": {
+   "nom": "Jérémie",
+   "c1": -627,
+   "c2": -580,
+   "t": "AT",
+   "info": "Rédaction env. 580-627 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "25": {
+   "nom": "Lamentations",
+   "c1": -586,
+   "c2": -520,
+   "t": "AT",
+   "info": "Rédaction env. 520-586 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "26": {
+   "nom": "Ézéchiel",
+   "c1": -593,
+   "c2": -571,
+   "t": "AT",
+   "info": "Rédaction env. 571-593 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "27": {
+   "nom": "Daniel",
+   "c1": -167,
+   "c2": -164,
+   "t": "AT",
+   "info": "Rédaction env. 164-167 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "28": {
+   "nom": "Osée",
+   "c1": -750,
+   "c2": -720,
+   "t": "AT",
+   "info": "Rédaction env. 720-750 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "29": {
+   "nom": "Joël",
+   "c1": -500,
+   "c2": -350,
+   "t": "AT",
+   "info": "Rédaction env. 350-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "30": {
+   "nom": "Amos",
+   "c1": -760,
+   "c2": -750,
+   "t": "AT",
+   "info": "Rédaction env. 750-760 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "31": {
+   "nom": "Abdias",
+   "c1": -550,
+   "c2": -500,
+   "t": "AT",
+   "info": "Rédaction env. 500-550 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "32": {
+   "nom": "Jonas",
+   "c1": -500,
+   "c2": -400,
+   "t": "AT",
+   "info": "Rédaction env. 400-500 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "33": {
+   "nom": "Michée",
+   "c1": -740,
+   "c2": -680,
+   "t": "AT",
+   "info": "Rédaction env. 680-740 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "34": {
+   "nom": "Nahum",
+   "c1": -650,
+   "c2": -620,
+   "t": "AT",
+   "info": "Rédaction env. 620-650 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "35": {
+   "nom": "Habacuc",
+   "c1": -610,
+   "c2": -605,
+   "t": "AT",
+   "info": "Rédaction env. 605-610 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "36": {
+   "nom": "Sophonie",
+   "c1": -640,
+   "c2": -620,
+   "t": "AT",
+   "info": "Rédaction env. 620-640 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "37": {
+   "nom": "Aggée",
+   "c1": -520,
+   "c2": -520,
+   "t": "AT",
+   "info": "Rédaction vers -520 — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "38": {
+   "nom": "Zacharie",
+   "c1": -520,
+   "c2": -480,
+   "t": "AT",
+   "info": "Rédaction env. 480-520 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "39": {
+   "nom": "Malachie",
+   "c1": -480,
+   "c2": -450,
+   "t": "AT",
+   "info": "Rédaction env. 450-480 av. J.-C. — datation de la recherche biblique (consensus, fourchette large). Livre de l'Ancien Testament (Tanakh), canon juif puis chrétien."
+  },
+  "40": {
+   "nom": "Matthieu",
+   "c1": 70,
+   "c2": 90,
+   "t": "NT",
+   "info": "Rédaction env. 70-90 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "41": {
+   "nom": "Marc",
+   "c1": 65,
+   "c2": 75,
+   "t": "NT",
+   "info": "Rédaction env. 65-75 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "42": {
+   "nom": "Luc",
+   "c1": 80,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 80-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "43": {
+   "nom": "Jean",
+   "c1": 90,
+   "c2": 110,
+   "t": "NT",
+   "info": "Rédaction env. 90-110 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "44": {
+   "nom": "Actes des Apôtres",
+   "c1": 80,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 80-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "45": {
+   "nom": "Romains",
+   "c1": 57,
+   "c2": 57,
+   "t": "NT",
+   "info": "Rédaction vers 57 — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "46": {
+   "nom": "1 Corinthiens",
+   "c1": 54,
+   "c2": 55,
+   "t": "NT",
+   "info": "Rédaction env. 54-55 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "47": {
+   "nom": "2 Corinthiens",
+   "c1": 55,
+   "c2": 56,
+   "t": "NT",
+   "info": "Rédaction env. 55-56 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "48": {
+   "nom": "Galates",
+   "c1": 48,
+   "c2": 55,
+   "t": "NT",
+   "info": "Rédaction env. 48-55 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "49": {
+   "nom": "Éphésiens",
+   "c1": 60,
+   "c2": 90,
+   "t": "NT",
+   "info": "Rédaction env. 60-90 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "50": {
+   "nom": "Philippiens",
+   "c1": 61,
+   "c2": 61,
+   "t": "NT",
+   "info": "Rédaction vers 61 — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "51": {
+   "nom": "Colossiens",
+   "c1": 61,
+   "c2": 80,
+   "t": "NT",
+   "info": "Rédaction env. 61-80 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "52": {
+   "nom": "1 Thessaloniciens",
+   "c1": 50,
+   "c2": 51,
+   "t": "NT",
+   "info": "Rédaction env. 50-51 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "53": {
+   "nom": "2 Thessaloniciens",
+   "c1": 51,
+   "c2": 51,
+   "t": "NT",
+   "info": "Rédaction vers 51 — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "54": {
+   "nom": "1 Timothée",
+   "c1": 62,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 62-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "55": {
+   "nom": "2 Timothée",
+   "c1": 62,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 62-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "56": {
+   "nom": "Tite",
+   "c1": 62,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 62-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "57": {
+   "nom": "Philémon",
+   "c1": 61,
+   "c2": 61,
+   "t": "NT",
+   "info": "Rédaction vers 61 — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "58": {
+   "nom": "Hébreux",
+   "c1": 60,
+   "c2": 90,
+   "t": "NT",
+   "info": "Rédaction env. 60-90 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "59": {
+   "nom": "Jacques",
+   "c1": 60,
+   "c2": 90,
+   "t": "NT",
+   "info": "Rédaction env. 60-90 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "60": {
+   "nom": "1 Pierre",
+   "c1": 62,
+   "c2": 64,
+   "t": "NT",
+   "info": "Rédaction env. 62-64 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "61": {
+   "nom": "2 Pierre",
+   "c1": 80,
+   "c2": 110,
+   "t": "NT",
+   "info": "Rédaction env. 80-110 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "62": {
+   "nom": "1 Jean",
+   "c1": 90,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 90-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "63": {
+   "nom": "2 Jean",
+   "c1": 90,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 90-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "64": {
+   "nom": "3 Jean",
+   "c1": 90,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 90-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "65": {
+   "nom": "Jude",
+   "c1": 65,
+   "c2": 85,
+   "t": "NT",
+   "info": "Rédaction env. 65-85 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  },
+  "66": {
+   "nom": "Apocalypse",
+   "c1": 95,
+   "c2": 100,
+   "t": "NT",
+   "info": "Rédaction env. 95-100 ap. J.-C. — datation de la recherche biblique (consensus, fourchette large). Écrit du Nouveau Testament, reçu par l'Église dans le canon de 27 livres."
+  }
+ },
+ "coran": {
+  "1": {
+   "lieu": "mecque",
+   "info": "Sourate 1, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "2": {
+   "lieu": "medine",
+   "info": "Sourate 2, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "3": {
+   "lieu": "medine",
+   "info": "Sourate 3, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "4": {
+   "lieu": "medine",
+   "info": "Sourate 4, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "5": {
+   "lieu": "medine",
+   "info": "Sourate 5, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "6": {
+   "lieu": "mecque",
+   "info": "Sourate 6, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "7": {
+   "lieu": "mecque",
+   "info": "Sourate 7, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "8": {
+   "lieu": "medine",
+   "info": "Sourate 8, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "9": {
+   "lieu": "medine",
+   "info": "Sourate 9, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "10": {
+   "lieu": "mecque",
+   "info": "Sourate 10, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "11": {
+   "lieu": "mecque",
+   "info": "Sourate 11, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "12": {
+   "lieu": "mecque",
+   "info": "Sourate 12, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "13": {
+   "lieu": "medine",
+   "info": "Sourate 13, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "14": {
+   "lieu": "mecque",
+   "info": "Sourate 14, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "15": {
+   "lieu": "mecque",
+   "info": "Sourate 15, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "16": {
+   "lieu": "mecque",
+   "info": "Sourate 16, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "17": {
+   "lieu": "mecque",
+   "info": "Sourate 17, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "18": {
+   "lieu": "mecque",
+   "info": "Sourate 18, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "19": {
+   "lieu": "mecque",
+   "info": "Sourate 19, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "20": {
+   "lieu": "mecque",
+   "info": "Sourate 20, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "21": {
+   "lieu": "mecque",
+   "info": "Sourate 21, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "22": {
+   "lieu": "medine",
+   "info": "Sourate 22, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "23": {
+   "lieu": "mecque",
+   "info": "Sourate 23, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "24": {
+   "lieu": "medine",
+   "info": "Sourate 24, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "25": {
+   "lieu": "mecque",
+   "info": "Sourate 25, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "26": {
+   "lieu": "mecque",
+   "info": "Sourate 26, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "27": {
+   "lieu": "mecque",
+   "info": "Sourate 27, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "28": {
+   "lieu": "mecque",
+   "info": "Sourate 28, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "29": {
+   "lieu": "mecque",
+   "info": "Sourate 29, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "30": {
+   "lieu": "mecque",
+   "info": "Sourate 30, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "31": {
+   "lieu": "mecque",
+   "info": "Sourate 31, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "32": {
+   "lieu": "mecque",
+   "info": "Sourate 32, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "33": {
+   "lieu": "medine",
+   "info": "Sourate 33, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "34": {
+   "lieu": "mecque",
+   "info": "Sourate 34, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "35": {
+   "lieu": "mecque",
+   "info": "Sourate 35, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "36": {
+   "lieu": "mecque",
+   "info": "Sourate 36, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "37": {
+   "lieu": "mecque",
+   "info": "Sourate 37, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "38": {
+   "lieu": "mecque",
+   "info": "Sourate 38, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "39": {
+   "lieu": "mecque",
+   "info": "Sourate 39, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "40": {
+   "lieu": "mecque",
+   "info": "Sourate 40, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "41": {
+   "lieu": "mecque",
+   "info": "Sourate 41, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "42": {
+   "lieu": "mecque",
+   "info": "Sourate 42, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "43": {
+   "lieu": "mecque",
+   "info": "Sourate 43, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "44": {
+   "lieu": "mecque",
+   "info": "Sourate 44, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "45": {
+   "lieu": "mecque",
+   "info": "Sourate 45, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "46": {
+   "lieu": "mecque",
+   "info": "Sourate 46, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "47": {
+   "lieu": "medine",
+   "info": "Sourate 47, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "48": {
+   "lieu": "medine",
+   "info": "Sourate 48, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "49": {
+   "lieu": "medine",
+   "info": "Sourate 49, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "50": {
+   "lieu": "mecque",
+   "info": "Sourate 50, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "51": {
+   "lieu": "mecque",
+   "info": "Sourate 51, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "52": {
+   "lieu": "mecque",
+   "info": "Sourate 52, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "53": {
+   "lieu": "mecque",
+   "info": "Sourate 53, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "54": {
+   "lieu": "mecque",
+   "info": "Sourate 54, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "55": {
+   "lieu": "medine",
+   "info": "Sourate 55, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "56": {
+   "lieu": "mecque",
+   "info": "Sourate 56, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "57": {
+   "lieu": "medine",
+   "info": "Sourate 57, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "58": {
+   "lieu": "medine",
+   "info": "Sourate 58, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "59": {
+   "lieu": "medine",
+   "info": "Sourate 59, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "60": {
+   "lieu": "medine",
+   "info": "Sourate 60, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "61": {
+   "lieu": "medine",
+   "info": "Sourate 61, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "62": {
+   "lieu": "medine",
+   "info": "Sourate 62, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "63": {
+   "lieu": "medine",
+   "info": "Sourate 63, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "64": {
+   "lieu": "medine",
+   "info": "Sourate 64, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "65": {
+   "lieu": "medine",
+   "info": "Sourate 65, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "66": {
+   "lieu": "medine",
+   "info": "Sourate 66, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "67": {
+   "lieu": "mecque",
+   "info": "Sourate 67, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "68": {
+   "lieu": "mecque",
+   "info": "Sourate 68, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "69": {
+   "lieu": "mecque",
+   "info": "Sourate 69, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "70": {
+   "lieu": "mecque",
+   "info": "Sourate 70, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "71": {
+   "lieu": "mecque",
+   "info": "Sourate 71, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "72": {
+   "lieu": "mecque",
+   "info": "Sourate 72, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "73": {
+   "lieu": "mecque",
+   "info": "Sourate 73, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "74": {
+   "lieu": "mecque",
+   "info": "Sourate 74, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "75": {
+   "lieu": "mecque",
+   "info": "Sourate 75, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "76": {
+   "lieu": "medine",
+   "info": "Sourate 76, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "77": {
+   "lieu": "mecque",
+   "info": "Sourate 77, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "78": {
+   "lieu": "mecque",
+   "info": "Sourate 78, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "79": {
+   "lieu": "mecque",
+   "info": "Sourate 79, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "80": {
+   "lieu": "mecque",
+   "info": "Sourate 80, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "81": {
+   "lieu": "mecque",
+   "info": "Sourate 81, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "82": {
+   "lieu": "mecque",
+   "info": "Sourate 82, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "83": {
+   "lieu": "mecque",
+   "info": "Sourate 83, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "84": {
+   "lieu": "mecque",
+   "info": "Sourate 84, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "85": {
+   "lieu": "mecque",
+   "info": "Sourate 85, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "86": {
+   "lieu": "mecque",
+   "info": "Sourate 86, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "87": {
+   "lieu": "mecque",
+   "info": "Sourate 87, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "88": {
+   "lieu": "mecque",
+   "info": "Sourate 88, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "89": {
+   "lieu": "mecque",
+   "info": "Sourate 89, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "90": {
+   "lieu": "mecque",
+   "info": "Sourate 90, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "91": {
+   "lieu": "mecque",
+   "info": "Sourate 91, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "92": {
+   "lieu": "mecque",
+   "info": "Sourate 92, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "93": {
+   "lieu": "mecque",
+   "info": "Sourate 93, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "94": {
+   "lieu": "mecque",
+   "info": "Sourate 94, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "95": {
+   "lieu": "mecque",
+   "info": "Sourate 95, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "96": {
+   "lieu": "mecque",
+   "info": "Sourate 96, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "97": {
+   "lieu": "mecque",
+   "info": "Sourate 97, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "98": {
+   "lieu": "medine",
+   "info": "Sourate 98, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "99": {
+   "lieu": "medine",
+   "info": "Sourate 99, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "100": {
+   "lieu": "mecque",
+   "info": "Sourate 100, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "101": {
+   "lieu": "mecque",
+   "info": "Sourate 101, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "102": {
+   "lieu": "mecque",
+   "info": "Sourate 102, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "103": {
+   "lieu": "mecque",
+   "info": "Sourate 103, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "104": {
+   "lieu": "mecque",
+   "info": "Sourate 104, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "105": {
+   "lieu": "mecque",
+   "info": "Sourate 105, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "106": {
+   "lieu": "mecque",
+   "info": "Sourate 106, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "107": {
+   "lieu": "mecque",
+   "info": "Sourate 107, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "108": {
+   "lieu": "mecque",
+   "info": "Sourate 108, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "109": {
+   "lieu": "mecque",
+   "info": "Sourate 109, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "110": {
+   "lieu": "medine",
+   "info": "Sourate 110, révélée à Médine (622-632) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 627
+  },
+  "111": {
+   "lieu": "mecque",
+   "info": "Sourate 111, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "112": {
+   "lieu": "mecque",
+   "info": "Sourate 112, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "113": {
+   "lieu": "mecque",
+   "info": "Sourate 113, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  },
+  "114": {
+   "lieu": "mecque",
+   "info": "Sourate 114, révélée à La Mecque (610-622) (chronologie égyptienne standard) entre 610 et 632.",
+   "y": 615
+  }
+ },
+ "coran_evt": [
+  {
+   "y": 632,
+   "l": "Mort de Muhammad",
+   "i": "La révélation est complète : le texte est transmis oralement (les qurrâ') et sur des supports dispersés (omoplates, pierres, palmes)."
+  },
+  {
+   "y": 634,
+   "l": "Compilation d'Abû Bakr",
+   "i": "Zayd ibn Thâbit rassemble les fragments écrits et les témoignages mémoriels en un codex unique, conservé à Médine (rapporté par al-Bukhârî)."
+  },
+  {
+   "y": 650,
+   "l": "Codex standard de 'Uthmân",
+   "i": "'Uthmân fait établir une recension unique et envoye des copies aux grandes villes (Mecque, Koufa, Bassora, Damas) pour uniformiser la lecture."
+  },
+  {
+   "y": 645,
+   "l": "Folios de Birmingham",
+   "i": "Des feuillets (radiocarbone 568-645 cal.) parmi les plus anciens manuscrits coraniques connus, en écriture hijâzî."
+  },
+  {
+   "y": 700,
+   "l": "Palimpseste de Sanaa",
+   "i": "Sous le texte supérieur (VIIe s.), une couche inférieure montre des variantes de codex — précieuse pour l'histoire du texte."
+  },
+  {
+   "y": 780,
+   "l": "Vocalisation complète",
+   "i": "Mise au point du pointage et des signes de vocalisation : fixation de la lecture dans les qirâ'ât canoniques."
+  },
+  {
+   "y": 923,
+   "l": "Tabari — Jâmi' al-bayân",
+   "i": "Le grand tafsir de Tabari (m. 923) fixe la méthode du commentaire : transmission d'Ibn 'Abbâs, grammairiens, consensus."
+  }
+ ],
+ "at_evt": [
+  {
+   "y": -250,
+   "l": "Septante (LXX)",
+   "i": "Traduction grecque d'Alexandrie pour la diaspora juive ; la Bible des auteurs du NT et des Pères grecs."
+  },
+  {
+   "y": -150,
+   "l": "Qumrân (mer Morte)",
+   "i": "Manuscrits hébreux de la secte de Qumrân (env. -250 à 70) : plus de 1000 rouleaux, attestant la stabilité du texte massorétique sur mille ans."
+  },
+  {
+   "y": 335,
+   "l": "Codex Sinaiticus & Vaticanus",
+   "i": "Les deux grands onciaux grecs (IVe s.) : bibliothèques complètes de la Bible en un codex."
+  },
+  {
+   "y": 400,
+   "l": "Vulgate de Jérôme",
+   "i": "Jérôme traduit la Bible en latin depuis l'hébreu et le grec — la Bible de l'Occident pour mille ans."
+  },
+  {
+   "y": 1008,
+   "l": "Codex de Leningrad (B19A)",
+   "i": "Plus ancien manuscrit complet du texte massorétique (Beno Asher), base des éditions modernes."
+  }
+ ],
+ "nt_evt": [
+  {
+   "y": 125,
+   "l": "P52 — papyrus Rylands",
+   "i": "Plus ancien fragment connu du NT (Jean 18), égyptien — le texte se diffuse déjà loin de sa rédaction."
+  },
+  {
+   "y": 200,
+   "l": "Papyri Bodmer & Chester Beatty",
+   "i": "P46 (Paul), P66/P75 (Jean et Luc) : des ensembles substantiels du NT en papyrus, c. 175-250."
+  },
+  {
+   "y": 335,
+   "l": "Codex Sinaiticus & Vaticanus",
+   "i": "Les deux grands onciaux grecs (IVe s.) : Bible complète en codex, texte alexandrin."
+  },
+  {
+   "y": 400,
+   "l": "Vulgate de Jérôme",
+   "i": "Jérôme traduit le NT en latin — révisé par rapport aux Vieille Latines sur des manuscrits grecs anciens."
+  }
+ ]
+}
