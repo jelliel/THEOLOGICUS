@@ -43943,8 +43943,8 @@ window.continueTradApart = async function (msgId) {
   /* ── styles ── */
   var style = document.createElement('style');
   style.textContent =
-    '#v189-etude{position:fixed;inset:0;z-index:140000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
-    '#v189-etude.open{display:flex}' +
+    '#v189-pan{position:fixed;inset:0;z-index:140000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
+    '#v189-pan.open{display:flex}' +
     '#v189-box{width:min(720px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-card,#0d1626);border:1px solid rgba(79,142,247,.45);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}' +
     '#v189-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(79,142,247,.25);color:#d6e4ff;font-weight:800;font-size:14px}' +
     '#v189-close{background:none;border:none;color:#8fa8d8;font-size:15px;cursor:pointer}' +
@@ -43971,10 +43971,10 @@ window.continueTradApart = async function (msgId) {
   /* ── panneau Étude ── */
   var VIEW = 'basket';
   function ensurePanel(){
-    var p = document.getElementById('v189-etude');
+    var p = document.getElementById('v189-pan');
     if (p) return p;
     p = document.createElement('div');
-    p.id = 'v189-etude';
+    p.id = 'v189-pan';
     p.innerHTML = '<div id="v189-box">'
       + '<div id="v189-head"><span>🧺 Feuille d\'étude — sélections, notes &amp; sauvegarde</span><button id="v189-close" aria-label="Fermer">✕</button></div>'
       + '<div id="v189-tabs"><button data-v="basket" class="on">🧺 Panier</button><button data-v="notes">📝 Notes</button><button data-v="backup">💾 Sauvegarde</button></div>'

@@ -27012,8 +27012,8 @@ initTafsirVerseTooltip();
     }
     return null;
   }
-  function wrapPanelRange(range, id, color){
-    try {
+  window.__v187PanelKeyFromRange = panelKeyFromRange;   /* v189 — notes d'étude */
+  function wrapPanelRange(range, id, color){    try {
       const span = document.createElement('span');
       span.className = 'atc-mark mk-' + color;
       span.dataset.markId = id; span.dataset.color = color;
@@ -27256,12 +27256,18 @@ initTafsirVerseTooltip();
     if (b) return b;
     b = document.createElement('div');
     b.id = 'atc-bubble';
-    b.innerHTML = '<span class="atc-main">💬 Add to chat</span><span class="atc-main atc-note-btn">📝 Note</span><span class="atc-sep"></span><span class="atc-act" data-act="google" title="Rechercher sur Google">🔍</span><span class="atc-act" data-act="wikipedia" title="Rechercher sur Wikipédia">📚</span><span class="atc-act" data-act="bible" title="Rechercher sur BibleGateway">📖</span><span class="atc-act" data-act="biblehub" title="Bible Hub — versions, interlinéaire, commentaires">🏺</span><span class="atc-act" data-act="hl" title="Surligner la sélection">✏️</span><span class="atc-sep"></span><span class="atc-share" title="Partager cette sélection">📤</span><span class="atc-act atc-del-ann" data-act="delann" title="Supprimer ce commentaire" style="display:none">🗑</span><span class="atc-act" data-act="insert" title="Insérer une forme autour de la sélection">📐</span><span class="atc-act atc-speak-sel" data-act="speak" title="Lire la sélection à voix">🔊</span><span class="atc-act atc-ask-btn" data-act="ask" title="Poser une question sur cette sélection">❓</span><span class="atc-act" data-act="translate" title="Traduire la sélection via LibreTranslate">🌐</span>';
+    b.innerHTML = '<span class="atc-main">💬 Add to chat</span><span class="atc-main atc-note-btn">📝 Note</span><span class="atc-sep"></span><span class="atc-act" data-act="basket" title="Ajouter à la feuille d\'étude (v189)">🧺</span><span class="atc-act" data-act="google" title="Rechercher sur Google">🔍</span><span class="atc-act" data-act="wikipedia" title="Rechercher sur Wikipédia">📚</span><span class="atc-act" data-act="bible" title="Rechercher sur BibleGateway">📖</span><span class="atc-act" data-act="biblehub" title="Bible Hub — versions, interlinéaire, commentaires">🏺</span><span class="atc-act" data-act="hl" title="Surligner la sélection">✏️</span><span class="atc-sep"></span><span class="atc-share" title="Partager cette sélection">📤</span><span class="atc-act atc-del-ann" data-act="delann" title="Supprimer ce commentaire" style="display:none">🗑</span><span class="atc-act" data-act="insert" title="Insérer une forme autour de la sélection">📐</span><span class="atc-act atc-speak-sel" data-act="speak" title="Lire la sélection à voix">🔊</span><span class="atc-act atc-ask-btn" data-act="ask" title="Poser une question sur cette sélection">❓</span><span class="atc-act" data-act="translate" title="Traduire la sélection via LibreTranslate">🌐</span>';
     document.body.appendChild(b);
     b.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     b.addEventListener('mouseup', function(e){ e.stopPropagation(); });
     b.querySelector('.atc-main').addEventListener('click', onAddToChat);
-    b.querySelector('.atc-note-btn').addEventListener('click', onAddPersonalNote);
+    /* v189 — hors message : la note ouvre l'éditeur d'étude (panneau v189)
+       au lieu du flux de note de chat (qui exige un message porteur). */
+    b.querySelector('.atc-note-btn').addEventListener('click', function(){
+      const s = window._atcSel;
+      if ((!s || !s.msgTs) && window.__v189NoteEditor) { window.__v189NoteEditor(s); return; }
+      onAddPersonalNote();
+    });
     b.querySelector('.atc-share').addEventListener('click', function(){
       const s = window._atcSel; if (!s) return;
       hideBubble();
@@ -27278,6 +27284,11 @@ initTafsirVerseTooltip();
     b.querySelectorAll('.atc-act').forEach(function(act){
       act.addEventListener('click', function(){
         const s = window._atcSel; if (!s) return;
+        if (act.dataset.act === 'basket') {
+          hideBubble();
+          if (window.__v189BasketAdd) window.__v189BasketAdd(s);
+          return;
+        }
         if (act.dataset.act === 'delann') {
           hideBubble();
           if (s.hlId) removeAnnotation(s.hlId, s.msgTs);
@@ -27342,10 +27353,11 @@ initTafsirVerseTooltip();
     b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
       .forEach(function(n){ n.style.display = ''; });
     /* Sélection hors message (mode universel) : on masque les actions qui
-       exigent un message porteur (note, formes). v187 — ✏️ Surligner reste
+       exigent un message porteur (formes). v187 — ✏️ Surligner reste
        visible : la marque vit alors dans le PANNEAU (magasin local
-       theo_panel_marks_v1), pas dans un message. */
-    const hideIfUniversal = ['.atc-note-btn', '.atc-act[data-act="insert"]'];
+       theo_panel_marks_v1), pas dans un message. v189 — 📝 Note aussi :
+       dans un panneau, elle ouvre l'éditeur de note d'étude (v189). */
+    const hideIfUniversal = ['.atc-act[data-act="insert"]'];
     hideIfUniversal.forEach(function(q){
       const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
     });
@@ -34676,7 +34688,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.337';
+  var STAMPED = '2.0.338';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42064,6 +42076,7 @@ window.continueTradApart = async function (msgId) {
     }
     body.innerHTML = h;
     try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
+    try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
     /* v168 — citations FR de traditionapostolique.fr (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-ta"></div>');
     loadTA().then(function (ta) {
@@ -42077,6 +42090,7 @@ window.continueTradApart = async function (msgId) {
       else if (t.book && t.book.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même livre)</div>' + t.book.map(taHtml).join('');
       tsec.innerHTML = th;
       try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
+      try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
     });
     /* v172 — extraits EN de historicalchristian.faith (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-hcf"></div>');
@@ -42088,6 +42102,7 @@ window.continueTradApart = async function (msgId) {
       if (lst.length) {
         hsec.innerHTML = '<div class="v167-grp">§ Historical Christian — en (' + lst.length + ')</div>' + lst.map(hcfHtml).join('');
         try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
+        try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
       } else {
         hsec.remove();
       }
@@ -42107,6 +42122,8 @@ window.continueTradApart = async function (msgId) {
           + '<span class="v167-ti">Aucun commentaire rabbinique indexé localement pour ce verset.</span> '
           + '<a class="v167-lk" href="https://www.sefaria.org/search?q=' + encodeURIComponent(curRefStr || '') + '" target="_blank" rel="noopener">chercher sur sefaria.org ↗</a></div>';
       }
+      try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
+      try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
     });
   }
 
@@ -43634,6 +43651,33 @@ window.continueTradApart = async function (msgId) {
     return t.length > n ? t.slice(0, n) + '…' : t;
   }
 
+  /* ── v190 — parallèles biblique-coraniques (tradition/paralleles.json) ── */
+  var PARA = null;
+  function loadPara() {
+    if (PARA !== null) return Promise.resolve(PARA);
+    return fetch('tradition/paralleles.json').then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { PARA = (j && j.paralleles) ? j.paralleles : false; return PARA; })
+      .catch(function () { PARA = false; return PARA; });
+  }
+  function paraHits(list, s, v1, v2) {
+    var out = [];
+    (list || []).forEach(function (p) {
+      var m = /^(\d+):(\d+)(?:-(\d+))?$/.exec(p.q || '');
+      if (!m) return;
+      var ps = +m[1], pv1 = +m[2], pv2 = m[3] ? +m[3] : pv1;
+      if (ps === s && pv1 <= v2 && pv2 >= v1) out.push(p);
+    });
+    return out;
+  }
+  function paraHtml(p, s, v1) {
+    var u = 'https://quranx.com/Tafsirs/' + s + '.' + v1;
+    var h = '<div class="v167-item"><span class="v167-au">📖↔️ ' + esc(p.q) + '</span><span class="v167-ti">— ' + esc(p.t || '') + '</span>'
+      + '<div class="v167-sn">' + esc(p.n || '') + '</div>';
+    (p.refs || []).forEach(function (r) { h += '<div class="v167-sn" style="opacity:.9">• ' + esc(r) + '</div>'; });
+    h += '<a class="v167-lk" href="' + u + '" target="_blank" rel="noopener">quranx.com ↗</a></div>';
+    return h;
+  }
+
   /* ── panneaux ── */
   var cur = { s: 0, v1: 0, v2: 0, ref: '' };
   var CITE = [];   /* v185b — citations par item (tafsirs/hadiths), index = data-ci */
@@ -43723,6 +43767,20 @@ window.continueTradApart = async function (msgId) {
     }
     body.innerHTML = h;
     try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
+    try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
+    /* v190 — § Parallèles bibliques (rempli de façon asynchrone) */
+    var para = document.createElement('div');
+    para.id = 'v183-para';
+    body.appendChild(para);
+    loadPara().then(function (list) {
+      var box = document.getElementById('v183-para');
+      if (!box || !box.isConnected) return;
+      var hits = paraHits(list, s, v1, v2);
+      if (!hits.length) return;
+      box.innerHTML = '<div class="v167-grp">§ Parallèles bibliques (' + hits.length + ')</div>' + hits.map(function (p) { return paraHtml(p, s, v1); }).join('');
+      try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
+      try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}
+    });
   }
 
   function openPanel(s, v1, v2) {
@@ -43851,6 +43909,403 @@ window.continueTradApart = async function (msgId) {
     }
   }
   new MutationObserver(queueTip).observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+
+<script id="v189-etude">
+/* ═══════════════════════════════════════════════════════════════════
+   v189 — 🧺 FEUILLE D'ÉTUDE (panier + notes + sauvegarde/restauration)
+   - 🧺 Panier : toute sélection (chat, panneaux, tafsirs…) peut être
+     ajoutée à la feuille d'étude (action 🧺 de la bulle de sélection).
+   - 📝 Notes d'étude : hors message, la note s'attache au PANNEAU
+     (clé = clé de panneau v187), chip 📌 réappliqué au rendu.
+   - 💾 Sauvegarde : export/import JSON de toutes les données
+     utilisateur locales (surlignages de panneaux, notes, panier,
+     cache de traduction).
+   - Export de la feuille : Word (.doc) et Markdown.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__theoV189) return;
+  window.__theoV189 = true;
+
+  var BASKET = 'theo_basket_v1', NOTES = 'theo_panel_notes_v1';
+  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr'];
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function ld(k){ try { var a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
+  function sv(k, a){ try { localStorage.setItem(k, JSON.stringify(a)); } catch(e){} }
+  function toast(msg, kind){ if (window.toast) window.toast(msg, kind || 'info'); }
+  function srcLabel(key){
+    if (!key) return 'Sélection';
+    return String(key).replace(/^v183#/, 'Coran ').replace(/^v167#/, 'Bible ');
+  }
+
+  /* ── styles ── */
+  var style = document.createElement('style');
+  style.textContent =
+    '#v189-pan{position:fixed;inset:0;z-index:140000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
+    '#v189-pan.open{display:flex}' +
+    '#v189-box{width:min(720px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-card,#0d1626);border:1px solid rgba(79,142,247,.45);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}' +
+    '#v189-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid rgba(79,142,247,.25);color:#d6e4ff;font-weight:800;font-size:14px}' +
+    '#v189-close{background:none;border:none;color:#8fa8d8;font-size:15px;cursor:pointer}' +
+    '#v189-tabs{display:flex;gap:6px;padding:10px 16px 0}' +
+    '#v189-tabs button{flex:0 0 auto;background:rgba(12,20,36,.7);color:#8fa8d8;border:1px solid rgba(79,142,247,.25);border-radius:8px;padding:7px 12px;font:700 11px Consolas,monospace;cursor:pointer}' +
+    '#v189-tabs button.on{color:#bfd4ff;border-color:#4f8ef7;background:rgba(28,58,120,.55)}' +
+    '#v189-body{overflow:auto;padding:10px 16px 16px;font-size:12.5px;line-height:1.5;color:#e8e6df}' +
+    '.v189-item{padding:9px 4px;border-bottom:1px dashed rgba(79,142,247,.15)}' +
+    '.v189-item b{color:#bfd4ff;font-size:11px;letter-spacing:.4px}' +
+    '.v189-item .tx{margin:4px 0;white-space:pre-wrap}' +
+    '.v189-item button{background:none;border:1px solid rgba(79,142,247,.3);color:#8fa8d8;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;margin-right:4px}' +
+    '#v189-actions{display:flex;gap:8px;padding:10px 0}' +
+    '#v189-actions button{background:rgba(28,58,120,.55);border:1px solid rgba(79,142,247,.4);color:#bfd4ff;border-radius:8px;padding:7px 12px;font:700 11px Consolas,monospace;cursor:pointer}' +
+    '#v189-note-ed{position:fixed;z-index:149000;display:none;width:min(460px,92vw);background:rgba(13,22,38,.97);border:1px solid rgba(79,142,247,.5);border-radius:12px;padding:12px;box-shadow:0 16px 50px rgba(0,0,0,.65)}' +
+    '#v189-note-ed textarea{width:100%;box-sizing:border-box;min-height:110px;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:8px;font:13px/1.5 inherit;resize:vertical}' +
+    '#v189-note-ed .row{display:flex;gap:8px;margin-top:8px;align-items:center}' +
+    '#v189-note-ed button{background:rgba(28,58,120,.55);border:1px solid rgba(79,142,247,.4);color:#bfd4ff;border-radius:8px;padding:6px 12px;font:700 11px Consolas,monospace;cursor:pointer}' +
+    '#v189-note-ed button.danger{border-color:rgba(255,51,102,.5);color:#f0a0a0}' +
+    '#v189-note-ed .anchor{font-size:11px;opacity:.6;margin-bottom:6px;font-style:italic}' +
+    '.v189-nchip{display:inline-block;margin:4px 0 0;background:rgba(79,142,247,.18);border:1px solid rgba(79,142,247,.4);color:#bfd4ff;border-radius:7px;padding:2px 8px;font-size:11px;cursor:pointer;max-width:100%}' +
+    '.v189-empty{opacity:.6;padding:18px 0}';
+  document.head.appendChild(style);
+
+  /* ── panneau Étude ── */
+  var VIEW = 'basket';
+  function ensurePanel(){
+    var p = document.getElementById('v189-pan');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v189-pan';
+    p.innerHTML = '<div id="v189-box">'
+      + '<div id="v189-head"><span>🧺 Feuille d\'étude — sélections, notes &amp; sauvegarde</span><button id="v189-close" aria-label="Fermer">✕</button></div>'
+      + '<div id="v189-tabs"><button data-v="basket" class="on">🧺 Panier</button><button data-v="notes">📝 Notes</button><button data-v="backup">💾 Sauvegarde</button></div>'
+      + '<div id="v189-body"></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function(e){ if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v189-close').addEventListener('click', function(){ p.classList.remove('open'); });
+    p.querySelectorAll('#v189-tabs button').forEach(function(b){
+      b.addEventListener('click', function(){
+        VIEW = b.dataset.v;
+        p.querySelectorAll('#v189-tabs button').forEach(function(x){ x.classList.toggle('on', x === b); });
+        render();
+      });
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
+    });
+    return p;
+  }
+  function render(){
+    var body = document.getElementById('v189-body');
+    if (!body) return;
+    if (VIEW === 'basket') renderBasket(body);
+    else if (VIEW === 'notes') renderNotes(body);
+    else renderBackup(body);
+  }
+  function openPanel(v){
+    VIEW = v || VIEW;
+    var p = ensurePanel();
+    p.classList.add('open');
+    p.querySelectorAll('#v189-tabs button').forEach(function(x){ x.classList.toggle('on', x.dataset.v === VIEW); });
+    render();
+  }
+
+  /* ── panier ── */
+  function renderBasket(body){
+    var arr = ld(BASKET);
+    var h = '<div id="v189-actions">'
+      + '<button id="v189-word">⬇ Word (.doc)</button>'
+      + '<button id="v189-md">⬇ Markdown</button>'
+      + (arr.length ? '<button id="v189-empty-basket" style="border-color:rgba(255,51,102,.5);color:#f0a0a0">🗑 Vider</button>' : '')
+      + '</div>';
+    if (!arr.length) h += '<div class="v189-empty">Le panier est vide. Sélectionne un passage (tafsir, Père, Bible, chat…) puis clique 🧺 dans la bulle de sélection.</div>';
+    else arr.forEach(function(it){
+      h += '<div class="v189-item"><b>' + esc(it.src || 'Sélection') + '</b>'
+        + '<div class="tx">' + esc(String(it.text || '').slice(0, 600)) + (String(it.text || '').length > 600 ? '…' : '') + '</div>'
+        + '<button data-copy="' + it.id + '">📋 Copier</button><button data-del="' + it.id + '">🗑 Retirer</button></div>';
+    });
+    body.innerHTML = h;
+    body.querySelector('#v189-word').addEventListener('click', exportWord);
+    body.querySelector('#v189-md').addEventListener('click', exportMD);
+    var eb = body.querySelector('#v189-empty-basket');
+    if (eb) eb.addEventListener('click', function(){ if (confirm('Vider tout le panier ?')) { sv(BASKET, []); render(); } });
+    body.querySelectorAll('[data-del]').forEach(function(b){
+      b.addEventListener('click', function(){
+        sv(BASKET, ld(BASKET).filter(function(x){ return x.id !== b.dataset.del; }));
+        render();
+      });
+    });
+    body.querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = ld(BASKET).find(function(x){ return x.id === b.dataset.copy; });
+        if (!it) return;
+        var ta = document.getElementById('user-input');
+        if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + it.text + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Inséré dans le champ de message', 'success'); }
+      });
+    });
+  }
+
+  /* ── notes ── */
+  function renderNotes(body){
+    var arr = ld(NOTES).slice().reverse();
+    var h = '<div class="v189-empty" style="padding:6px 0 10px">Notes attachées aux passages des panneaux (tafsirs, Pères…). Clic 📝 sur une sélection pour en créer.</div>';
+    if (!arr.length) h += '<div class="v189-empty">Aucune note pour l\'instant.</div>';
+    else arr.forEach(function(n){
+      h += '<div class="v189-item"><b>' + esc(srcLabel(n.key)) + '</b>'
+        + '<div class="tx" style="opacity:.7;font-style:italic">📌 ' + esc(String(n.anchor || '').slice(0, 140)) + '…</div>'
+        + '<div class="tx">' + esc(n.note || '') + '</div>'
+        + '<button data-copy="' + n.id + '">📋 Copier</button><button data-del="' + n.id + '">🗑 Supprimer</button></div>';
+    });
+    body.innerHTML = h;
+    body.querySelectorAll('[data-del]').forEach(function(b){
+      b.addEventListener('click', function(){
+        sv(NOTES, ld(NOTES).filter(function(x){ return x.id !== b.dataset.del; }));
+        render();
+      });
+    });
+    body.querySelectorAll('[data-copy]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var n = ld(NOTES).find(function(x){ return x.id === b.dataset.copy; });
+        if (!n) return;
+        var ta = document.getElementById('user-input');
+        if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + '📌 ' + srcLabel(n.key) + '\n> ' + (n.anchor || '') + '\n\n' + (n.note || '') + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Note insérée dans le champ de message', 'success'); }
+      });
+    });
+  }
+
+  /* ── sauvegarde ── */
+  function renderBackup(body){
+    body.innerHTML = '<div id="v189-actions"><button id="v189-save">💾 Exporter mes données</button><button id="v189-load">♻️ Restaurer un fichier</button><input type="file" id="v189-file" accept=".json" style="display:none"></div>'
+      + '<div style="opacity:.75;line-height:1.7">'
+      + '<p>Cet export inclut <b>toutes tes données locales</b> :</p>'
+      + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>🌐 cache des traductions</li></ul>'
+      + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>';
+    body.querySelector('#v189-save').addEventListener('click', saveAll);
+    body.querySelector('#v189-load').addEventListener('click', function(){ body.querySelector('#v189-file').click(); });
+    body.querySelector('#v189-file').addEventListener('change', function(ev){
+      var f = ev.target.files && ev.target.files[0];
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function(){ restoreAll(String(fr.result)); };
+      fr.readAsText(f);
+    });
+  }
+  function saveAll(){
+    var out = { app: 'THEOLOGICUS', version: 1, exported: new Date().toISOString(), data: {} };
+    BACKUP_KEYS.forEach(function(k){ out.data[k] = localStorage.getItem(k); });
+    var meta = { done: '' };
+    try { meta.done = ''; } catch(e) {}
+    dl('theo_backup_' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(out, null, 2), 'application/json');
+    toast('💾 Sauvegarde téléchargée', 'success');
+  }
+  function restoreAll(txt){
+    try {
+      var j = JSON.parse(txt);
+      if (!j || !j.data) { toast('Fichier de sauvegarde invalide', 'error'); return; }
+      var n = 0;
+      BACKUP_KEYS.forEach(function(k){
+        if (typeof j.data[k] === 'string' && j.data[k]) {
+          try { JSON.parse(j.data[k]); localStorage.setItem(k, j.data[k]); n++; } catch(e) {}
+        }
+      });
+      toast('♻️ ' + n + ' collection(s) restaurée(s)', 'success');
+      render();
+    } catch(e) { toast('Fichier illisible', 'error'); }
+  }
+  function dl(name, content, mime){
+    var blob = new Blob([content], { type: mime || 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  }
+  window.__v189dl = dl;
+
+  /* ── exports Word / Markdown ── */
+  function collectAll(){
+    var basket = ld(BASKET);
+    var notes = ld(NOTES);
+    var marks = ld('theo_panel_marks_v1');
+    return { basket: basket, notes: notes, marks: marks };
+  }
+  function wordHtml(){
+    var d = collectAll();
+    var now = new Date().toLocaleDateString('fr-FR');
+    var h = '<html><head><meta charset="utf-8"><title>Feuille d\'étude</title></head>'
+      + '<body style="font-family:Georgia,serif;max-width:740px;margin:auto">'
+      + '<h1 style="font-size:20px;border-bottom:2px solid #888">Feuille d\'étude</h1>'
+      + '<p style="color:#666;font-size:12px">THEOLOGICUS — ' + now + '</p>';
+    if (d.basket.length) {
+      h += '<h2 style="font-size:16px">🧺 Sélections</h2>';
+      d.basket.forEach(function(it){
+        h += '<p style="margin:10px 0 2px"><b style="font-size:11px;letter-spacing:1px;color:#444">' + esc(it.src || 'Sélection') + '</b></p>'
+          + '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(it.text || '') + '</blockquote>';
+      });
+    }
+    if (d.notes.length) {
+      h += '<h2 style="font-size:16px">📝 Notes</h2>';
+      d.notes.forEach(function(n){
+        h += '<p style="margin:10px 0 2px"><b>' + esc(srcLabel(n.key)) + '</b> <i style="color:#777">— « ' + esc(String(n.anchor || '').slice(0, 120)) + '… »</i></p>'
+          + '<p style="margin:2px 0 8px;white-space:pre-wrap">' + esc(n.note || '') + '</p>';
+      });
+    }
+    if (d.marks.length) {
+      h += '<h2 style="font-size:16px">🖍 Surlignages</h2><ul style="margin:4px 0 10px 20px">';
+      d.marks.forEach(function(m){
+        h += '<li style="margin:4px 0"><b>' + esc(srcLabel(m.key)) + '</b> — ' + esc(String(m.text || '').slice(0, 300)) + '</li>';
+      });
+      h += '</ul>';
+    }
+    if (!d.basket.length && !d.notes.length && !d.marks.length) h += '<p style="color:#888">Vide — ajoute des passages avec 🧺 et 📝.</p>';
+    h += '</body></html>';
+    return h;
+  }
+  function mdText(){
+    var d = collectAll();
+    var h = '# Feuille d\'étude\n\n_THEOLOGICUS — ' + new Date().toLocaleDateString('fr-FR') + '_\n';
+    if (d.basket.length) {
+      h += '\n## 🧺 Sélections\n';
+      d.basket.forEach(function(it){ h += '\n**' + (it.src || 'Sélection') + '**\n\n> ' + String(it.text || '').replace(/\n/g, '\n> ') + '\n'; });
+    }
+    if (d.notes.length) {
+      h += '\n## 📝 Notes\n';
+      d.notes.forEach(function(n){ h += '\n**' + srcLabel(n.key) + '** — « ' + String(n.anchor || '').slice(0, 120) + '… »\n\n' + (n.note || '') + '\n'; });
+    }
+    if (d.marks.length) {
+      h += '\n## 🖍 Surlignages\n';
+      d.marks.forEach(function(m){ h += '\n- **' + srcLabel(m.key) + '** — ' + String(m.text || '').slice(0, 300) + (String(m.text || '').length > 300 ? '…' : '') + '\n'; });
+    }
+    return h + '\n';
+  }
+  function exportWord(){ window.__v189dl('feuille-etude_' + new Date().toISOString().slice(0, 10) + '.doc', '\ufeff' + wordHtml(), 'application/msword'); toast('📄 Feuille d\'étude Word téléchargée', 'success'); }
+  function exportMD(){ window.__v189dl('feuille-etude_' + new Date().toISOString().slice(0, 10) + '.md', mdText(), 'text/markdown'); toast('📄 Feuille d\'étude Markdown téléchargée', 'success'); }
+
+  /* ── ajouter au panier (action 🧺 de la bulle) ── */
+  window.__v189BasketAdd = function(s){
+    if (!s) return;
+    var key = (window.__v187PanelKeyFromRange && s.range) ? window.__v187PanelKeyFromRange(s.range) : null;
+    var arr = ld(BASKET);
+    arr.push({ id: 'bk-' + Date.now(), ts: Date.now(), src: srcLabel(key) || 'Sélection', text: (s.text || '').slice(0, 8000) });
+    sv(BASKET, arr);
+    toast('🧺 Ajouté à la feuille d\'étude (' + arr.length + ')', 'success');
+  };
+
+  /* ── éditeur de note (panneau) ── */
+  var ED = null;
+  window.__v189NoteEditor = function(s, existing){
+    if (!s && !existing) return;
+    var key = existing ? existing.key : ((window.__v187PanelKeyFromRange && s.range) ? window.__v187PanelKeyFromRange(s.range) : null);
+    var anchor = existing ? (existing.anchor || '') : (s && s.text ? s.text.slice(0, 200) : '');
+    if (!ED) {
+      ED = document.createElement('div');
+      ED.id = 'v189-note-ed';
+      ED.innerHTML = '<div class="anchor"></div><textarea placeholder="Ta note d\'étude…"></textarea>'
+        + '<div class="row"><button class="save">💾 Enregistrer</button><button class="danger del" style="display:none">🗑 Supprimer</button><button class="cancel">✕ Annuler</button><span style="flex:1"></span></div>';
+      document.body.appendChild(ED);
+      ED.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      ED.querySelector('.cancel').addEventListener('click', function(){ ED.style.display = 'none'; });
+      ED.querySelector('.save').addEventListener('click', function(){
+        var note = ED.querySelector('textarea').value.trim();
+        var id = ED.dataset.noteId;
+        var arr = ld(NOTES);
+        if (id) {
+          var mk = arr.find(function(x){ return x.id === id; });
+          if (!note) { sv(NOTES, arr.filter(function(x){ return x.id !== id; })); toast('Note supprimée', 'success'); }
+          else { mk.note = note; sv(NOTES, arr); toast('✓ Note mise à jour', 'success'); }
+        } else {
+          if (!note) { toast('Note vide — rien à enregistrer', 'info'); return; }
+          arr.push({ id: 'pn-' + Date.now(), key: ED.dataset.noteKey, anchor: ED.dataset.noteAnchor, note: note, ts: Date.now() });
+          sv(NOTES, arr);
+          toast('✓ Note enregistrée' + (ED.dataset.noteKey ? '' : ' (hors corpus : sans ancre)'), 'success');
+        }
+        ED.style.display = 'none';
+        applyNotesEverywhere();
+      });
+      ED.querySelector('.del').addEventListener('click', function(){
+        var id = ED.dataset.noteId;
+        if (!id) return;
+        sv(NOTES, ld(NOTES).filter(function(x){ return x.id !== id; }));
+        ED.style.display = 'none';
+        toast('Note supprimée', 'success');
+        applyNotesEverywhere();
+      });
+      document.addEventListener('mousedown', function(e){
+        if (ED.style.display === 'block' && !e.target.closest('#v189-note-ed')) ED.style.display = 'none';
+      });
+    }
+    ED.dataset.noteId = existing ? existing.id : '';
+    ED.dataset.noteKey = key || '';
+    ED.dataset.noteAnchor = anchor;
+    ED.querySelector('.anchor').textContent = anchor ? '📌 « ' + anchor.slice(0, 120) + (anchor.length > 120 ? '…' : '') + ' »' : '';
+    ED.querySelector('textarea').value = existing ? (existing.note || '') : '';
+    ED.querySelector('.del').style.display = existing ? '' : 'none';
+    ED.style.display = 'block';
+    ED.style.left = Math.max(10, Math.min(window.innerWidth / 2 - 230, window.innerWidth - 480)) + 'px';
+    ED.style.top = '90px';
+    ED.querySelector('textarea').focus();
+  };
+
+  /* ── réapplication des chips 📌 au rendu des panneaux ── */
+  function applyNotesEverywhere(){
+    ['#v183-body', '#v167-body'].forEach(function(sel){
+      var el = document.querySelector(sel);
+      if (el) window.__v189ApplyPanelNotes(el);
+    });
+  }
+  window.__v189ApplyPanelNotes = function(rootEl){
+    if (!rootEl) return;
+    var pat = rootEl.closest ? rootEl.closest('#v167-pat, #v183-pat') : null;
+    var key = pat && pat.dataset && pat.dataset.markKey ? pat.dataset.markKey : (pat ? pat.id : null);
+    if (!key) return;
+    var notes = ld(NOTES).filter(function(n){ return n.key === key; });
+    if (!notes.length) return;
+    notes.forEach(function(n){
+      if (!n.anchor || n.anchor.length < 3) return;
+      var walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+        acceptNode: function(t){
+          if (!t.nodeValue || !t.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          var p = t.parentElement;
+          if (p && (p.closest('.atc-mark') || p.closest('.v189-nchip') || p.closest('button') || p.closest('a'))) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var tn, hit = null;
+      while ((tn = walker.nextNode())) {
+        if (tn.nodeValue.indexOf(String(n.anchor).slice(0, 80)) >= 0) { hit = tn; break; }
+      }
+      if (!hit) return;
+      var host = hit.parentElement;
+      var block = host && host.closest ? (host.closest('.v167-item, .v183-w, .v170-wit, .v167-sn') || host) : null;
+      if (!block || !block.parentNode) return;
+      if (block.querySelector('[data-note-chip="' + n.id + '"]')) return;
+      var chip = document.createElement('span');
+      chip.className = 'v189-nchip';
+      chip.dataset.noteChip = n.id;
+      chip.title = n.note || '';
+      chip.textContent = '📌 Note : ' + String(n.note || '').slice(0, 60) + (String(n.note || '').length > 60 ? '…' : '');
+      chip.addEventListener('click', function(ev){
+        ev.preventDefault(); ev.stopPropagation();
+        window.__v189NoteEditor(null, n);
+      });
+      block.appendChild(chip);
+    });
+  };
+
+  /* ── bouton HUD ── */
+  function addHudButton(){
+    if (document.getElementById('open-etude-modal')) return;
+    var anchor = document.getElementById('open-gsearch');
+    if (!anchor) return;
+    var b = document.createElement('button');
+    b.className = 'hud-btn';
+    b.id = 'open-etude-modal';
+    b.title = "Feuille d'étude — panier de sélections (🧺 dans la bulle), notes d'étude (📝) et sauvegarde/restauration de tes données locales";
+    b.textContent = '🧺 ÉTUDE';
+    b.addEventListener('click', function(){ openPanel('basket'); });
+    anchor.insertAdjacentElement('afterend', b);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addHudButton);
+  else addHudButton();
 })();
 </script>
 
