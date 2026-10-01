@@ -83,7 +83,9 @@
    "refs": [],
    "src_tome": "01",
    "d": "mercredi 23 août 1944",
-   "ev": "Lundi 1 octobre -22"
+   "ev": "Lundi 1 octobre -22",
+   "evj": "24 Tishri 3740",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "01-004",
@@ -141,7 +143,9 @@
      "v1": 14,
      "v2": 15
     }
-   ]
+   ],
+   "evj": "Nisan 3740",
+   "lieu": "Nazareth"
   },
   {
    "fid": "01-007",
@@ -168,7 +172,9 @@
      "v1": 7,
      "v2": 13
     }
-   ]
+   ],
+   "evj": "10 Tishri 3741",
+   "lieu": "Nazareth"
   },
   {
    "fid": "01-008",
@@ -217,7 +223,9 @@
     }
    ],
    "src_tome": "01",
-   "ev": "Mardi 25 novembre -21"
+   "ev": "Mardi 25 novembre -21",
+   "evj": "30 Kisleu 3741",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "01-010",
@@ -280,7 +288,9 @@
      "v1": 3,
      "v2": 3
     }
-   ]
+   ],
+   "evj": "Ab 3743",
+   "lieu": "Nazareth"
   },
   {
    "fid": "01-012",
@@ -323,7 +333,9 @@
      "v1": 5,
      "v2": 5
     }
-   ]
+   ],
+   "evj": "10 Tishri 3744",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "01-014",
@@ -423,7 +435,8 @@
      "v1": 1,
      "v2": 21
     }
-   ]
+   ],
+   "evj": "4 Tébeth 3755"
   },
   {
    "fid": "01-020",
@@ -534,7 +547,9 @@
      "v1": 26,
      "v2": 38
     }
-   ]
+   ],
+   "evj": "15 Adar I 3756",
+   "lieu": "Nazareth"
   },
   {
    "fid": "01-024",
@@ -924,7 +939,9 @@
     }
    ],
    "src_tome": "01",
-   "d": "mardi 6 juin 1944"
+   "d": "mardi 6 juin 1944",
+   "evj": "13 Tébeth 3757",
+   "lieu": "Bethléem de Judée"
   },
   {
    "fid": "01-049",
@@ -1759,7 +1776,8 @@
    ],
    "src_tome": "01",
    "d": "dimanche 15 octobre 1944",
-   "ev": "lundi 15 mars 27"
+   "ev": "lundi 15 mars 27",
+   "lieu": "Capharnaüm puis"
   },
   {
    "fid": "02-013",
@@ -2263,7 +2281,8 @@
    "src_tome": "01",
    "d": "jeudi 28 décembre 1944",
    "ev": "Mercredi 2 juin 27",
-   "evj": "11 Siwan 3787"
+   "evj": "11 Siwan 3787",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "02-030",
@@ -7506,7 +7525,8 @@
    "refs": [],
    "src_tome": "04",
    "ev": "Mercredi 31 mai 28",
-   "evj": "20 siwan 3788"
+   "evj": "20 siwan 3788",
+   "lieu": "Capharnaüm"
   },
   {
    "fid": "04-093",
@@ -7773,7 +7793,8 @@
    "refs": [],
    "src_tome": "04",
    "ev": "Mercredi 7 juin 28",
-   "evj": "27 siwan 3788"
+   "evj": "27 siwan 3788",
+   "lieu": "Capharnaüm"
   },
   {
    "fid": "04-104",
@@ -8270,7 +8291,8 @@
      "v1": 17,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Césarée Maritime"
   },
   {
    "fid": "04-119",
@@ -8309,7 +8331,8 @@
    "src_tome": "04",
    "d": "dimanche 19 août 1945",
    "ev": "Vendredi 30 juin 28",
-   "evj": "20 Tammouz 3788"
+   "evj": "20 Tammouz 3788",
+   "lieu": "Mont Carmel"
   },
   {
    "fid": "04-121",
@@ -8358,7 +8381,8 @@
      "v1": 16,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Mont Carmel"
   },
   {
    "fid": "04-123",
@@ -8399,7 +8423,8 @@
    "src_tome": "04",
    "d": "jeudi 23 août 1945",
    "ev": "Lundi 3 juillet 28",
-   "evj": "23 Tammouz 3788"
+   "evj": "23 Tammouz 3788",
+   "lieu": "Plaine d'Esdrelon"
   },
   {
    "fid": "04-125",
@@ -8605,7 +8630,8 @@
    "src_tome": "04",
    "d": "vendredi 31 août 1945",
    "ev": "Dimanche 6 août 28",
-   "evj": "28 Ab 3788"
+   "evj": "28 Ab 3788",
+   "lieu": "Chorazeïn (Corozaïn) =>\")"
   },
   {
    "fid": "04-131",
@@ -8822,7 +8848,8 @@
      "v1": 7,
      "v2": 7
     }
-   ]
+   ],
+   "lieu": "Tarichée"
   },
   {
    "fid": "04-136",
@@ -9220,7 +9247,8 @@
    "refs": [],
    "src_tome": "04",
    "d": "dimanche 23 septembre 1945",
-   "ev": "Jeudi 12 octobre 28"
+   "ev": "Jeudi 12 octobre 28",
+   "lieu": "Béthanie"
   },
   {
    "fid": "04-149",
@@ -9307,7 +9335,8 @@
      "v1": 7,
      "v2": 8
     }
-   ]
+   ],
+   "lieu": "Ramot"
   },
   {
    "fid": "04-151",
@@ -9363,7 +9392,8 @@
    "refs": [],
    "src_tome": "04",
    "d": "vendredi 28 septembre 1945",
-   "ev": "Samedi 21 octobre 28"
+   "ev": "Samedi 21 octobre 28",
+   "lieu": "Gérasa"
   },
   {
    "fid": "04-154",
@@ -9462,7 +9492,8 @@
      "v1": 1,
      "v2": 2
     }
-   ]
+   ],
+   "lieu": "Bozra"
   },
   {
    "fid": "04-158",
@@ -9506,7 +9537,8 @@
      "v1": 27,
      "v2": 28
     }
-   ]
+   ],
+   "lieu": "Arbel"
   },
   {
    "fid": "04-160",
@@ -9528,7 +9560,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "dimanche 7 octobre 1945",
-   "ev": "Jeudi 2 novembre 28"
+   "ev": "Jeudi 2 novembre 28",
+   "lieu": "Aëra"
   },
   {
    "fid": "04-162",
@@ -9700,7 +9733,8 @@
      "v1": 44,
      "v2": 49
     }
-   ]
+   ],
+   "lieu": "Bethsaïdepuis"
   },
   {
    "fid": "04-166",
@@ -9813,7 +9847,8 @@
      "v1": 13,
      "v2": 13
     }
-   ]
+   ],
+   "lieu": "Naïm"
   },
   {
    "fid": "04-167",
@@ -9893,7 +9928,8 @@
    "src_tome": "05",
    "d": "lundi 15 octobre 1945",
    "ev": "Jeudi 9 novembre 28",
-   "evj": "5 Kisleu 3789"
+   "evj": "5 Kisleu 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "04-170",
@@ -9948,7 +9984,8 @@
    "src_tome": "05",
    "d": "vendredi 19 octobre 1945",
    "ev": "Lundi 13 novembre 28",
-   "evj": "9 Kisleu 3789"
+   "evj": "9 Kisleu 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "04-174",
@@ -9971,7 +10008,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "dimanche 21 octobre 1945",
-   "evj": "15 Kisleu 3789"
+   "evj": "15 Kisleu 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "04-176",
@@ -9983,7 +10021,8 @@
    "src_tome": "05",
    "d": "lundi 22 octobre 1945",
    "ev": "Jeudi 30 novembre 28",
-   "evj": "26 Kisleu 3789"
+   "evj": "26 Kisleu 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "04-177",
@@ -10077,7 +10116,8 @@
      "v1": 12,
      "v2": 15
     }
-   ]
+   ],
+   "lieu": "Jiphtaël"
   },
   {
    "fid": "05-006",
@@ -10133,7 +10173,8 @@
    "refs": [],
    "src_tome": "05",
    "ev": "Mardi 19 décembre 28",
-   "evj": "16 Tébeth 3789"
+   "evj": "16 Tébeth 3789",
+   "lieu": "Séleucie"
   },
   {
    "fid": "05-010",
@@ -10144,7 +10185,8 @@
    "refs": [],
    "src_tome": "05",
    "ev": "Mardi 19 décembre 28",
-   "evj": "16 Téveth 3789"
+   "evj": "16 Téveth 3789",
+   "lieu": "Antioche"
   },
   {
    "fid": "05-011",
@@ -10155,7 +10197,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "mercredi 7 novembre 1945",
-   "evj": "17 Tébeth 3789"
+   "evj": "17 Tébeth 3789",
+   "lieu": "Antigonea"
   },
   {
    "fid": "05-012",
@@ -10250,7 +10293,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "samedi 10 novembre 1945",
-   "evj": "26 Tébeth 3789"
+   "evj": "26 Tébeth 3789",
+   "lieu": "Ptolemaïs puis"
   },
   {
    "fid": "05-014",
@@ -10261,7 +10305,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "dimanche 11 novembre 1945",
-   "evj": "28 Tébeth 3789"
+   "evj": "28 Tébeth 3789",
+   "lieu": "Aczib"
   },
   {
    "fid": "05-015",
@@ -10284,7 +10329,8 @@
    "src_tome": "05",
    "d": "lundi 12 novembre 1945",
    "ev": "Lundi 15 janvier 29",
-   "evj": "14 Scébat 3789"
+   "evj": "14 Scébat 3789",
+   "lieu": "Alexandroscène"
   },
   {
    "fid": "05-017",
@@ -10643,7 +10689,8 @@
      "v2": 37
     }
    ],
-   "ev": "Lundi 5 février 29"
+   "ev": "Lundi 5 février 29",
+   "lieu": "Haut de page"
   },
   {
    "fid": "05-030",
@@ -10854,7 +10901,8 @@
    "refs": [],
    "src_tome": "05",
    "d": "jeudi 29 novembre 1945",
-   "ev": "Mercredi 7 février 29"
+   "ev": "Mercredi 7 février 29",
+   "lieu": "Césarée de Philippe =>\")"
   },
   {
    "fid": "05-034",
@@ -11385,7 +11433,8 @@
      "v1": 15,
      "v2": 15
     }
-   ]
+   ],
+   "lieu": "Capharnaüm"
   },
   {
    "fid": "05-046",
@@ -11471,7 +11520,8 @@
      "v1": 10,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Jabès-Galaad"
   },
   {
    "fid": "05-050",
@@ -11608,7 +11658,8 @@
    "refs": [],
    "src_tome": "06",
    "d": "mardi 22 janvier 1946",
-   "ev": "Jeudi 8 mars 29"
+   "ev": "Jeudi 8 mars 29",
+   "lieu": "Gethsémani"
   },
   {
    "fid": "05-057",
@@ -11619,7 +11670,8 @@
    "refs": [],
    "src_tome": "06",
    "d": "mercredi 23 janvier 1946",
-   "ev": "Jeudi 15 mars 29"
+   "ev": "Jeudi 15 mars 29",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "05-058",
@@ -11651,7 +11703,8 @@
      "v1": 33,
      "v2": 57
     }
-   ]
+   ],
+   "lieu": "Jérusalem"
   },
   {
    "fid": "05-060",
@@ -11726,7 +11779,8 @@
      "v1": 17,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "05-064",
@@ -11849,7 +11903,8 @@
      "v1": 51,
      "v2": 51
     }
-   ]
+   ],
+   "lieu": "Béthanie"
   },
   {
    "fid": "05-068",
@@ -11916,7 +11971,8 @@
      "v1": 17,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Montée d'Adomin"
   },
   {
    "fid": "05-070",
@@ -11951,7 +12007,8 @@
      "v1": 7,
      "v2": 8
     }
-   ]
+   ],
+   "lieu": "Carit"
   },
   {
    "fid": "05-071",
@@ -12141,7 +12198,8 @@
      "v1": 11,
      "v2": 11
     }
-   ]
+   ],
+   "lieu": "Gué du Jourdain"
   },
   {
    "fid": "05-074",
@@ -12178,7 +12236,8 @@
    "refs": [],
    "src_tome": "06",
    "ev": "Mercredi 11 avril 29",
-   "evj": "11 Nissan 3789"
+   "evj": "11 Nissan 3789",
+   "lieu": "Village de Salomon, puis"
   },
   {
    "fid": "06-077",
@@ -12232,7 +12291,8 @@
    "src_tome": "06",
    "d": "mercredi 20 février 1946",
    "ev": "Vendredi 13 avril 29",
-   "evj": "13 Nissan 3789"
+   "evj": "13 Nissan 3789",
+   "lieu": "Engaddi"
   },
   {
    "fid": "06-080",
@@ -12275,7 +12335,8 @@
    "src_tome": "06",
    "d": "lundi 25 février 1946",
    "ev": "Dimanche 15 avril 29",
-   "evj": "15 Nissan 3789"
+   "evj": "15 Nissan 3789",
+   "lieu": "Massada"
   },
   {
    "fid": "06-083",
@@ -12329,7 +12390,8 @@
      "v1": 9,
      "v2": 9
     }
-   ]
+   ],
+   "lieu": "Yutta"
   },
   {
    "fid": "06-087",
@@ -12402,7 +12464,8 @@
    "src_tome": "06",
    "d": "mardi 12 mars 1946",
    "ev": "Jeudi 26 avril 29",
-   "evj": "26 Nissan 3789"
+   "evj": "26 Nissan 3789",
+   "lieu": "Béther"
   },
   {
    "fid": "06-090",
@@ -12423,7 +12486,8 @@
      "v1": 21,
      "v2": 21
     }
-   ]
+   ],
+   "lieu": "Béther"
   },
   {
    "fid": "06-091",
@@ -12467,7 +12531,8 @@
      "v1": 12,
      "v2": 12
     }
-   ]
+   ],
+   "lieu": "Emmaüs de la Plaine"
   },
   {
    "fid": "06-094",
@@ -13064,7 +13129,8 @@
      "v1": 52,
      "v2": 52
     }
-   ]
+   ],
+   "lieu": "Jérusalem"
   },
   {
    "fid": "06-104",
@@ -13075,7 +13141,8 @@
    "refs": [],
    "src_tome": "06",
    "d": "jeudi 11 avril 1946",
-   "ev": "Mardi 8 mai 29"
+   "ev": "Mardi 8 mai 29",
+   "lieu": "Béthanie"
   },
   {
    "fid": "06-105",
@@ -13173,7 +13240,8 @@
    "refs": [],
    "src_tome": "06",
    "d": "samedi 13 avril 1946",
-   "ev": "Jeudi 17 mai 29"
+   "ev": "Jeudi 17 mai 29",
+   "lieu": "Village de Salomon"
   },
   {
    "fid": "06-110",
@@ -13383,7 +13451,8 @@
    "src_tome": "06",
    "d": "mardi 30 avril 1946",
    "ev": "Jeudi 14 juin 29",
-   "evj": "16 Siwan 3789"
+   "evj": "16 Siwan 3789",
+   "lieu": "Césarée Maritime"
   },
   {
    "fid": "06-117",
@@ -13395,7 +13464,8 @@
    "src_tome": "06",
    "d": "mercredi 1 er mai 1946",
    "ev": "Jeudi 14 juin 29",
-   "evj": "16 Siwan 3789"
+   "evj": "16 Siwan 3789",
+   "lieu": "Césarée Maritime"
   },
   {
    "fid": "06-118",
@@ -13465,7 +13535,8 @@
      "v1": 6,
      "v2": 7
     }
-   ]
+   ],
+   "lieu": "Plaine d'Esdrelon"
   },
   {
    "fid": "06-122",
@@ -13606,7 +13677,8 @@
    "src_tome": "07",
    "d": "lundi 13 mai 1946",
    "ev": "Vendredi 6 juillet 29",
-   "evj": "8 Tamouz 3789"
+   "evj": "8 Tamouz 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-128",
@@ -13641,7 +13713,8 @@
      "v1": 35,
      "v2": 35
     }
-   ]
+   ],
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-129",
@@ -13653,7 +13726,8 @@
    "src_tome": "07",
    "d": "mercredi 15 mai 1946",
    "ev": "Dimanche 15 juillet 29",
-   "evj": "17 Tamouz 3789"
+   "evj": "17 Tamouz 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-130",
@@ -13674,7 +13748,8 @@
      "v1": 20,
      "v2": 20
     }
-   ]
+   ],
+   "lieu": "Tibériade"
   },
   {
    "fid": "06-131",
@@ -13709,7 +13784,8 @@
      "v1": 17,
      "v2": 22
     }
-   ]
+   ],
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-132",
@@ -13721,7 +13797,8 @@
    "src_tome": "07",
    "d": "mardi 21 mai 1946",
    "ev": "Vendredi 20 juillet 29",
-   "evj": "22 Tamouz 3789"
+   "evj": "22 Tamouz 3789",
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-133",
@@ -13733,7 +13810,8 @@
    "src_tome": "07",
    "d": "mercredi 22 mai 1946",
    "ev": "Samedi 21 juillet 29",
-   "evj": "23 Tamouz 3789"
+   "evj": "23 Tamouz 3789",
+   "lieu": "Nazareth puis aux environs de Jafia"
   },
   {
    "fid": "06-134",
@@ -13754,7 +13832,8 @@
      "v1": 36,
      "v2": 37
     }
-   ]
+   ],
+   "lieu": "Nazareth"
   },
   {
    "fid": "06-135",
@@ -13766,7 +13845,8 @@
    "src_tome": "07",
    "d": "samedi 25 mai 1946",
    "ev": "Dimanche 29 juillet 29",
-   "evj": "2 Ab 3789"
+   "evj": "2 Ab 3789",
+   "lieu": "Plaine d’Esdrelon"
   },
   {
    "fid": "06-136",
@@ -13790,7 +13870,8 @@
    "src_tome": "07",
    "d": "lundi 3 juin 1946",
    "ev": "Jeudi 2 août 29",
-   "evj": "6 Ab 3789"
+   "evj": "6 Ab 3789",
+   "lieu": "Tibériade"
   },
   {
    "fid": "06-138",
@@ -13871,7 +13952,8 @@
      "v1": 13,
      "v2": 17
     }
-   ]
+   ],
+   "lieu": "Capharnaüm"
   },
   {
    "fid": "06-140",
@@ -13896,7 +13978,8 @@
    "src_tome": "07",
    "d": "mardi 25 juin 1946",
    "ev": "Dimanche 5 août 29",
-   "evj": "9 Ab 3789"
+   "evj": "9 Ab 3789",
+   "lieu": "Capharnaüm"
   },
   {
    "fid": "06-142",
@@ -14006,7 +14089,8 @@
      "v1": 23,
      "v2": 33
     }
-   ]
+   ],
+   "lieu": "Hippos"
   },
   {
    "fid": "06-146",
@@ -14251,7 +14335,8 @@
      "v1": 34,
      "v2": 34
     }
-   ]
+   ],
+   "lieu": "Aphéqa"
   },
   {
    "fid": "06-150",
@@ -14279,7 +14364,8 @@
      "v1": 25,
      "v2": 25
     }
-   ]
+   ],
+   "lieu": "Guerguesa"
   },
   {
    "fid": "06-151",
@@ -14404,7 +14490,8 @@
      "v1": 23,
      "v2": 23
     }
-   ]
+   ],
+   "lieu": "Tibériade"
   },
   {
    "fid": "06-154",
@@ -14416,7 +14503,8 @@
    "src_tome": "07",
    "d": "vendredi 26 juillet 1946",
    "ev": "Samedi 11 août 29",
-   "evj": "15 Ab 3789"
+   "evj": "15 Ab 3789",
+   "lieu": "Thermes d'Emmaüs de Tibériade"
   },
   {
    "fid": "06-155",
@@ -14473,7 +14561,8 @@
      "v1": 10,
      "v2": 12
     }
-   ]
+   ],
+   "lieu": "Tarichée"
   },
   {
    "fid": "07-156",
@@ -15077,7 +15166,8 @@
     }
    ],
    "src_tome": "07",
-   "d": "lundi 2 septembre 1946"
+   "d": "lundi 2 septembre 1946",
+   "lieu": "Béthanie"
   },
   {
    "fid": "07-181",
@@ -15222,7 +15312,8 @@
    "src_tome": "07",
    "d": "jeudi 5 septembre 1946",
    "ev": "Mardi 18 septembre 29",
-   "evj": "22 Eloul 3789"
+   "evj": "22 Eloul 3789",
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-184",
@@ -15383,7 +15474,8 @@
      "v1": 1,
      "v2": 1
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-187",
@@ -15394,7 +15486,8 @@
    "refs": [],
    "src_tome": "07",
    "d": "samedi 14 septembre 1946",
-   "evj": "24 Eloul 3789"
+   "evj": "24 Eloul 3789",
+   "lieu": "Béthanie, l'après-midi"
   },
   {
    "fid": "07-188",
@@ -15468,7 +15561,8 @@
     }
    ],
    "src_tome": "07",
-   "evj": "25 Eloul 3789"
+   "evj": "25 Eloul 3789",
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-190",
@@ -15738,7 +15832,8 @@
    "src_tome": "08",
    "d": "jeudi 26 septembre 1946",
    "ev": "Vendredi 5 octobre 29",
-   "evj": "11 Tishri 3790"
+   "evj": "11 Tishri 3790",
+   "lieu": "Gué du Jourdain"
   },
   {
    "fid": "07-202",
@@ -15774,7 +15869,8 @@
      "v1": 18,
      "v2": 20
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-203",
@@ -15823,7 +15919,8 @@
      "v1": 7,
      "v2": 8
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-204",
@@ -15879,7 +15976,8 @@
      "v1": 13,
      "v2": 14
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple, dans l'après-midi"
   },
   {
    "fid": "07-205",
@@ -15890,7 +15988,8 @@
    "refs": [],
    "src_tome": "08",
    "ev": "Vendredi 12 octobre 29",
-   "evj": "18 Tishri 3790"
+   "evj": "18 Tishri 3790",
+   "lieu": "Jérusalem, fin d'après-midi"
   },
   {
    "fid": "07-206",
@@ -15931,7 +16030,8 @@
      "v1": 12,
      "v2": 12
     }
-   ]
+   ],
+   "lieu": "Jérusalem, fin d'après-midi"
   },
   {
    "fid": "07-207",
@@ -15951,7 +16051,8 @@
    "src_tome": "08",
    "d": "jeudi 10 octobre 1946",
    "ev": "Samedi 13 octobre 29",
-   "evj": "19 Tishri 3790"
+   "evj": "19 Tishri 3790",
+   "lieu": "Jérusalem"
   },
   {
    "fid": "07-208",
@@ -16057,7 +16158,8 @@
      "v1": 4,
      "v2": 4
     }
-   ]
+   ],
+   "lieu": "Emmaüs de la montagne"
   },
   {
    "fid": "07-211",
@@ -16085,7 +16187,8 @@
      "v1": 14,
      "v2": 19
     }
-   ]
+   ],
+   "lieu": "Bétéron"
   },
   {
    "fid": "07-212",
@@ -16180,7 +16283,8 @@
      "v1": 7,
      "v2": 7
     }
-   ]
+   ],
+   "lieu": "Gabaon, fin de journée"
   },
   {
    "fid": "07-214",
@@ -16314,7 +16418,8 @@
      "v1": 19,
      "v2": 21
     }
-   ]
+   ],
+   "lieu": "Jérusalem"
   },
   {
    "fid": "07-216",
@@ -16341,7 +16446,8 @@
      "v1": 33,
      "v2": 53
     }
-   ]
+   ],
+   "lieu": "Béthanie"
   },
   {
    "fid": "07-217",
@@ -16383,7 +16489,8 @@
      "v1": 1,
      "v2": 12
     }
-   ]
+   ],
+   "lieu": "Técua"
   },
   {
    "fid": "07-218",
@@ -16662,7 +16769,8 @@
      "v1": 2,
      "v2": 6
     }
-   ]
+   ],
+   "lieu": "Nobé"
   },
   {
    "fid": "07-228",
@@ -16683,7 +16791,8 @@
      "v1": 24,
      "v2": 24
     }
-   ]
+   ],
+   "lieu": "Nobé"
   },
   {
    "fid": "07-229",
@@ -16695,7 +16804,8 @@
    "src_tome": "08",
    "d": "jeudi 21 novembre 1946",
    "ev": "Lundi 19 novembre 29",
-   "evj": "26 Marhechwân 3790"
+   "evj": "26 Marhechwân 3790",
+   "lieu": "Nobé"
   },
   {
    "fid": "07-230",
@@ -16782,7 +16892,8 @@
    "refs": [],
    "src_tome": "08",
    "d": "lundi 2 décembre 1946",
-   "evj": "6 Kislev 3790"
+   "evj": "6 Kislev 3790",
+   "lieu": "Jérusalem, maison de campagne de Caïphe"
   },
   {
    "fid": "07-233",
@@ -16856,7 +16967,8 @@
      "v1": 10,
      "v2": 16
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Temple"
   },
   {
    "fid": "07-235",
@@ -16889,7 +17001,8 @@
    "refs": [],
    "src_tome": "08",
    "d": "samedi 14 décembre 1946",
-   "evj": "10 kislev 3790"
+   "evj": "10 kislev 3790",
+   "lieu": "Bethléem de Judée, dans la grotte de la Nativité"
   },
   {
    "fid": "07-237",
@@ -16973,7 +17086,8 @@
    "d": "mercredi 18 décembre 1946",
    "refs": [],
    "ev": "Mardi 22 janvier 30",
-   "evj": "2 Scébat 3790"
+   "evj": "2 Scébat 3790",
+   "lieu": "Béthanie"
   },
   {
    "fid": "08-002",
@@ -16984,7 +17098,8 @@
    "emv": 2,
    "d": "jeudi 19 décembre 1946",
    "refs": [],
-   "ev": "Mercredi 22 janvier 30"
+   "ev": "Mercredi 22 janvier 30",
+   "lieu": "Béthanie"
   },
   {
    "fid": "08-003",
@@ -17388,7 +17503,8 @@
      "v1": 5,
      "v2": 5
     }
-   ]
+   ],
+   "lieu": "Béthanie"
   },
   {
    "fid": "08-012",
@@ -17422,7 +17538,8 @@
      "v1": 62,
      "v2": 62
     }
-   ]
+   ],
+   "lieu": "Jéricho, puis"
   },
   {
    "fid": "08-013",
@@ -17442,7 +17559,8 @@
      "v1": 54,
      "v2": 54
     }
-   ]
+   ],
+   "lieu": "Éphraïm"
   },
   {
    "fid": "08-014",
@@ -17469,7 +17587,8 @@
      "v1": 23,
      "v2": 28
     }
-   ]
+   ],
+   "lieu": "Éphraïm"
   },
   {
    "fid": "08-015",
@@ -17510,7 +17629,8 @@
      "v1": 10,
      "v2": 15
     }
-   ]
+   ],
+   "lieu": "Éphraïm"
   },
   {
    "fid": "08-016",
@@ -17544,7 +17664,8 @@
      "v1": 19,
      "v2": 19
     }
-   ]
+   ],
+   "lieu": "Éphraïm"
   },
   {
    "fid": "08-017",
@@ -17774,7 +17895,8 @@
      "v1": 12,
      "v2": 12
     }
-   ]
+   ],
+   "lieu": "Goféna"
   },
   {
    "fid": "08-023",
@@ -17963,7 +18085,8 @@
    "emv": 570,
    "title": "À Lébona. La parabole des personnes mal conseillées",
    "d": "vendredi 28 février 1947",
-   "ev": "Mardi 19 mars 30"
+   "ev": "Mardi 19 mars 30",
+   "lieu": "Lébona"
   },
   {
    "fid": "08-032",
@@ -17990,7 +18113,8 @@
      "v1": 15,
      "v2": 21
     }
-   ]
+   ],
+   "lieu": "Sichem"
   },
   {
    "fid": "08-033",
@@ -18010,7 +18134,8 @@
      "v1": 34,
      "v2": 34
     }
-   ]
+   ],
+   "lieu": "Sichem"
   },
   {
    "fid": "08-034",
@@ -18031,7 +18156,8 @@
      "v1": 2,
      "v2": 3
     }
-   ]
+   ],
+   "lieu": "Sichem"
   },
   {
    "fid": "08-035",
@@ -18150,7 +18276,8 @@
    "src_tome": "09",
    "d": "mardi 11 mars 1947",
    "ev": "Mardi 26 mars 30",
-   "evj": "6 Nissan 3790"
+   "evj": "6 Nissan 3790",
+   "lieu": "Jéricho"
   },
   {
    "fid": "08-040",
@@ -18486,7 +18613,8 @@
      "v1": 27,
      "v2": 27
     }
-   ]
+   ],
+   "lieu": "Béthanie"
   },
   {
    "fid": "09-007",
@@ -18817,7 +18945,8 @@
      "v1": 41,
      "v2": 47
     }
-   ]
+   ],
+   "lieu": "Bethphagé puis"
   },
   {
    "fid": "09-010",
@@ -19049,7 +19178,8 @@
      "v1": 5,
      "v2": 5
     }
-   ]
+   ],
+   "lieu": "Jérusalem"
   },
   {
    "fid": "09-014",
@@ -19098,7 +19228,8 @@
      "v1": 4,
      "v2": 4
     }
-   ]
+   ],
+   "lieu": "Jérusalem, dans le jardin de Joseph"
   },
   {
    "fid": "09-015",
@@ -19318,7 +19449,8 @@
    "u": "https://www.maria-valtorta.org/Publication/TOME%2009/09-018.htm",
    "refs": [],
    "src_tome": "09",
-   "ev": "Jeudi 4 avril 30"
+   "ev": "Jeudi 4 avril 30",
+   "lieu": "Jérusalem, au Cénacle"
   },
   {
    "fid": "09-019",
@@ -19508,7 +19640,8 @@
      "v1": 9,
      "v2": 9
     }
-   ]
+   ],
+   "lieu": "Jérusalem, le Cénacle"
   },
   {
    "fid": "09-021",
@@ -20184,7 +20317,8 @@
      "v1": 30,
      "v2": 30
     }
-   ]
+   ],
+   "lieu": "Béthanie, 9h00 environ"
   },
   {
    "fid": "10-008",
@@ -20196,7 +20330,8 @@
    "src_tome": "10",
    "d": "mercredi 4 avril 1945",
    "ev": "Dimanche 7 avril 30",
-   "evj": "18 Nissan 3790"
+   "evj": "18 Nissan 3790",
+   "lieu": "Jérusalem, matinée"
   },
   {
    "fid": "10-009",
@@ -20457,7 +20592,8 @@
      "v1": 28,
      "v2": 28
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Cénacle"
   },
   {
    "fid": "10-016",
@@ -20477,7 +20613,8 @@
      "v1": 1,
      "v2": 1
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Cénacle, en ville et au Gethsémani"
   },
   {
    "fid": "10-017",
@@ -20679,7 +20816,8 @@
      "v1": 7,
      "v2": 7
     }
-   ]
+   ],
+   "lieu": "Béthanie"
   },
   {
    "fid": "10-023",
@@ -20718,7 +20856,8 @@
     }
    ],
    "src_tome": "10",
-   "ev": "Jeudi 16 mai 30"
+   "ev": "Jeudi 16 mai 30",
+   "lieu": "Gethsémani"
   },
   {
    "fid": "10-024",
@@ -20745,7 +20884,8 @@
      "v1": 2,
      "v2": 2
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Cénacle"
   },
   {
    "fid": "10-025",
@@ -20787,7 +20927,8 @@
      "v1": 14,
      "v2": 14
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Cénacle"
   },
   {
    "fid": "10-026",
@@ -20883,7 +21024,8 @@
      "v1": 15,
      "v2": 18
     }
-   ]
+   ],
+   "lieu": "Jérusalem, au Gethsémani"
   },
   {
    "fid": "10-030",
@@ -21062,7 +21204,8 @@
    "src_tome": "10",
    "d": "samedi 8 décembre 1951",
    "ev": "Mardi 15 août 51",
-   "evj": "21 Ab 3811"
+   "evj": "21 Ab 3811",
+   "lieu": "Gethsémani"
   },
   {
    "fid": "10-037",

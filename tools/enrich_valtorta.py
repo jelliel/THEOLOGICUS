@@ -18,6 +18,7 @@ from scan_valtorta import parse_ref, AELF_RE, clean_title, expand_refs  # noqa: 
 OUT = os.path.join(ROOT, "tradition", "valtorta.json")
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) THEOLOGICUS-indexer/1.0"}
 PAUSE = 3.3          # relais : 20 req/min
+MODE = os.environ.get("VLT_MODE", "full")   # 'full' | 'lieu'
 
 DATE_RE = re.compile(
     r"Le\s+((?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)[^\n<>]{3,70}?\d{4})", re.I)
@@ -28,7 +29,13 @@ EVENT_RE = re.compile(
     r"(?:janvier|f[eé]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|"
     r"d[eé]cembre)\s+-?\d{1,2})(?!\d)", re.I)
 JEW_RE = re.compile(r"_\((\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{3,4})\)_")
-LIEU_RE = re.compile(r"_\([^)]*\)_\[([^\]]{2,40})\]")
+# Deux mises en page selon les tomes :
+#   tomes 2+ : « _(15 Nissan 3790)_  [Jérusalem](url), le Cénacle »
+#   tome 1   : « DATE. Calendrier actuel: _Lundi 1 octobre -22._ ... Calendrier
+#                juif: _24 Tishri 3740._ LIEU.[Jérusalem](url). »
+JEW_RE2 = re.compile(r"Calendrier\s+juif\s*:\s*_([^_]{3,40})_", re.I)
+LIEU_RE = re.compile(r"_\([^)]*\)_\s*\[([^\]]{2,40})\]\([^)]*\)([^\n\[]{0,40})")
+LIEU_RE2 = re.compile(r"LIEU\s*\.\s*\[([^\]]{2,40})\]\([^)]*\)([^\n\[]{0,40})", re.I)
 # bloc d'en-tete : « Evangile: ... » jusqu'a la regle horizontale suivante
 EV_RE = re.compile(r"gile\s*:(.{0,3000}?)(?:\n\s*\*\s*\*\s*\*|$)", re.S | re.I)
 
@@ -90,23 +97,33 @@ def parse_page(md):
         ev = re.sub(r"\s+", " ", m.group(1)).strip(" ._-–—")
         if 6 <= len(ev) <= 40:
             out["ev"] = ev
-    m = JEW_RE.search(md_)
-    if m:
-        out["evj"] = re.sub(r"\s+", " ", m.group(1)).strip()
-    m = LIEU_RE.search(md_)
-    if m:
-        lieu = re.sub(r"\s+", " ", m.group(1)).strip(" ._-–—")
-        if 2 <= len(lieu) <= 40 and "aelf" not in lieu.lower() and "http" not in lieu.lower():
+    for rx in (JEW_RE, JEW_RE2):
+        m = rx.search(md_)
+        if m:
+            out["evj"] = re.sub(r"\s+", " ", m.group(1)).strip(" ._-–—")
+            break
+    for rx in (LIEU_RE, LIEU_RE2):
+        m = rx.search(md_)
+        if not m:
+            continue
+        tail = re.split(r"\s\*|\||\[|Accueil", m.group(2) or "")[0]
+        lieu = re.sub(r"\s+", " ", (m.group(1) + tail)).strip(" .,;:-–—")
+        lieu = re.sub(r"\s*\([^)]*$", "", lieu).strip()
+        if 2 <= len(lieu) <= 48 and "aelf" not in lieu.lower() and "http" not in lieu.lower():
             out["lieu"] = lieu
+            break
     return out
 
 
 def main():
     d = json.load(open(OUT, encoding="utf-8"))
     eps = d["episodes"]
-    todo = [e for e in eps if not e.get("d") or not e["refs"] or not e.get("ev")
-            or not e.get("cit")]
-    print("a enrichir : %d recits" % len(todo), flush=True)
+    if MODE == "lieu":
+        todo = [e for e in eps if not e.get("lieu") or not e.get("evj")]
+    else:
+        todo = [e for e in eps if not e.get("d") or not e["refs"] or not e.get("ev")
+                or not e.get("cit")]
+    print("a enrichir : %d recits (mode %s)" % (len(todo), MODE), flush=True)
     # etendre les plages de chapitres deja presentes (« Jean 13,1 jusqu'a 17,26 »)
     for e in eps:
         e["refs"] = expand_refs(e["refs"])
