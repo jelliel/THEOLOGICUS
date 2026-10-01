@@ -7654,6 +7654,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
+    <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -42679,6 +42680,27 @@ window.continueTradApart = async function (msgId) {
     render();
   }
 
+  /* v180 — ouverture profonde depuis la recherche globale */
+  window.__v170Open = function (view, q) {
+    var p = ensurePanel();
+    p.classList.add('open');
+    setView(view);
+    if (q) {
+      var inp = document.getElementById('v170-q');
+      if (inp) inp.value = q;
+    }
+    render();
+  };
+  window.__v170LibOpen = function (ci, wi) {
+    var p = ensurePanel();
+    p.classList.add('open');
+    setView('l');
+    LSEL = ci; LWI = wi; LUNIT = null;
+    load();
+    render();
+    openLWork();
+  };
+
   function boot(){
     var b = document.getElementById('open-ta-sujets');
     if (!b || b.dataset.v170wired) return;
@@ -42802,6 +42824,285 @@ window.continueTradApart = async function (msgId) {
     e.stopPropagation();
     openNav(href, (a.textContent || '').trim().slice(0, 60));
   }, true);
+})();
+</script>
+
+<script id="v180-gsearch-script">
+/* ═══ v180 — recherche globale unifiée ═══
+   Une seule requête (bouton 🔎 BIBLIOTHÈQUES ou Ctrl+K) interroge TOUTES les
+   bibliothèques hors-ligne, résultats groupés par source :
+     Citations des Pères · Doctrines · Arguments · Articles CPH ·
+     Commentaires Sefaria (par verset) · Bibliothèque (Talmud, Mishna, Philon).
+   Les résultats-texte s'expandent sur place (boutons 🌐 FR partagés v167) ;
+   les résultats-navigation ouvrent le bon panneau au bon endroit (v170).
+   Interne d'abord : tout est consulté hors-ligne. ═══ */
+(function(){
+  'use strict';
+  if (window.__theoV180) return;
+  window.__theoV180 = true;
+
+  var st = document.createElement('style');
+  st.textContent =
+    '#v180-gs{position:fixed;inset:0;z-index:140000;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
+    '#v180-gs.open{display:flex}' +
+    '#v180-box{width:min(860px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--bg-card,#0d1626);border:1px solid rgba(79,142,247,.45);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}' +
+    '#v180-head{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid rgba(79,142,247,.25);color:#d6e4ff;font-weight:800;letter-spacing:.4px;font-size:13px}' +
+    '#v180-head small{opacity:.55;font-weight:400;margin-left:8px}' +
+    '#v180-close{background:none;border:none;color:#8fa8d8;font-size:15px;cursor:pointer}' +
+    '#v180-close:hover{color:#fff}' +
+    '#v180-q{padding:11px 16px;border-bottom:1px solid rgba(79,142,247,.2)}' +
+    '#v180-q input{width:100%;box-sizing:border-box;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:9px 12px;font:13px Consolas,monospace}' +
+    '#v180-status{padding:6px 16px 0;font-size:11px;opacity:.6;color:#d6e4ff;min-height:17px}' +
+    '#v180-body{overflow:auto;padding:6px 10px 16px}' +
+    '.v180-g{border:1px solid rgba(79,142,247,.18);border-radius:10px;margin:8px 4px;background:rgba(12,20,36,.6)}' +
+    '.v180-g>summary{cursor:pointer;padding:9px 12px;font-weight:700;color:#bfd4ff;font-size:12.5px;list-style:none}' +
+    '.v180-g>summary::-webkit-details-marker{display:none}' +
+    '.v180-g[open]>summary{border-bottom:1px solid rgba(79,142,247,.18)}' +
+    '.v180-r{padding:9px 14px;border-bottom:1px dashed rgba(79,142,247,.10)}' +
+    '.v180-r:last-child{border-bottom:none}' +
+    '.v180-r>b{color:#9fe3b8;font-size:12.5px}' +
+    '.v180-r .v167-sn{margin-top:3px}' +
+    '.v180-go{color:#f5c542;cursor:pointer;font-size:11.5px;font-weight:700;background:none;border:none;padding:0;text-decoration:underline}' +
+    '.v180-hint{padding:16px;opacity:.6;font-size:12px}';
+  document.head.appendChild(st);
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
+
+  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null };
+
+  function jget(url, cb){
+    fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
+  }
+  function loadAll(cb){
+    var need = 0, done = 0;
+    function one(k, url, mk){
+      if (C[k] !== null) return;               /* déjà chargé */
+      need++;
+      jget(url, function(j){ C[k] = mk(j); done++; if (done === need) cb(); });
+    }
+    one('ta',  'tradition/ta_sujets.json',   function(j){ return (j && j.topics && j.topics.length) ? j : false; });
+    one('d',   'tradition/doctrines.json',   function(j){ return (j && j.ds && j.ds.length) ? j : false; });
+    one('b',   'tradition/beliefmap.json',   function(j){ return (j && j.pages && j.pages.length) ? j : false; });
+    one('cp',  'tradition/cph_idx.json',     function(j){ return (j && j.ps && j.ps.length) ? j : false; });
+    one('sef', 'tradition/sefaria_idx.json', function(j){ return (j && j.idx) ? j : false; });
+    one('lib', 'tradition/sefaria_lib.json', function(j){ return (j && j.colls && j.colls.length) ? j : false; });
+    if (!need) cb();
+  }
+
+  /* ── moteurs de recherche par source : fn(q) -> liste de résultats ── */
+  var SNIP = 220;
+  function cut(s){ s = String(s || ''); return s.length > SNIP ? s.slice(0, SNIP) + '…' : s; }
+  function frBtn(sn){
+    var trGet = window.__v167TrGet, frDiv = window.__v167FrDiv;
+    var t = trGet && trGet(sn);
+    if (t) return frDiv(t);
+    return '<button type="button" class="v167-tr" data-sn="' + esc(sn) + '">🌐 FR</button>';
+  }
+
+  var ENGINES = [
+    { key: 'ta', label: '📖 Citations des Pères', src: 'traditionapostolique.fr',
+      run: function(q){
+        if (!C.ta) return [];
+        var out = [];
+        C.ta.topics.forEach(function(t){
+          t.qs.forEach(function(x){
+            if (out.length >= 8) return;
+            if (norm(x.a + ' ' + x.w + ' ' + x.q + ' ' + t.t).indexOf(q) >= 0)
+              out.push({ h: esc(x.a) + ' <span style="opacity:.6">— ' + esc(x.w) + (x.ch ? ' · ' + esc(x.ch) : '') + '</span>',
+                         sn: cut(x.q), fr: x.q });
+          });
+        });
+        return out;
+      } },
+    { key: 'd', label: '🏛️ Doctrines', src: 'historicalchristian.faith',
+      run: function(q){
+        if (!C.d) return [];
+        var out = [];
+        C.d.ds.forEach(function(d){
+          if (out.length >= 8) return;
+          var hit = norm(d.t + ' ' + d.q + ' ' + d.s);
+          if (hit.indexOf(q) < 0) {
+            var tl = (d.tl || []).map(function(x){ return x.w + ' ' + x.t; }).join(' ');
+            var ar = (d.ar || []).map(function(x){ return x.q + ' ' + x.c; }).join(' ');
+            if (norm(tl + ' ' + ar).indexOf(q) < 0) return;
+          }
+          out.push({ h: esc(d.t), sn: cut(d.q || d.s || ''), fr: d.q || d.s || '',
+                     go: { view: 'd', q: d.t } });
+        });
+        return out;
+      } },
+    { key: 'b', label: '⚔️ Arguments (beliefmap.org)', src: 'beliefmap.org',
+      run: function(q){
+        if (!C.b) return [];
+        var out = [];
+        C.b.pages.forEach(function(p){
+          if (out.length >= 8) return;
+          if (norm(p.q + ' ' + (p.g || '')).indexOf(q) < 0) {
+            var pts = (p.stances || []).map(function(s){ return (s.points || []).map(function(x){ return x.h + ' ' + x.c; }).join(' '); }).join(' ');
+            if (norm(pts + ' ' + (p.orient || '')).indexOf(q) < 0) return;
+          }
+          out.push({ h: esc(p.q) + ' <span style="opacity:.6">(' + esc(p.g || '') + ')</span>',
+                     sn: cut(p.orient || p.q), fr: p.orient || p.q,
+                     go: { view: 'a', q: p.q } });
+        });
+        return out;
+      } },
+    { key: 'cp', label: '📰 Articles (CPH)', src: 'christianpublishinghouse.co',
+      run: function(q){
+        if (!C.cp) return [];
+        var out = [];
+        C.cp.ps.forEach(function(p){
+          if (out.length >= 8) return;
+          if (norm(p[1] + ' ' + p[3] + ' ' + p[4]).indexOf(q) < 0) return;
+          out.push({ h: esc(p[1]) + ' <span style="opacity:.6">(' + esc(p[2]) + ')</span>',
+                     sn: cut(p[4]), link: p[5],
+                     go: { view: 'p', q: p[1] } });
+        });
+        return out;
+      } },
+    { key: 'sef', label: '📜 Commentaires rabbins (Sefaria)', src: 'sefaria.org',
+      run: function(q){
+        if (!C.sef) return [];
+        var out = [], idx = C.sef.idx;
+        for (var k in idx) {
+          if (out.length >= 10) break;
+          var arr = idx[k];
+          for (var i = 0; i < arr.length; i++) {
+            if (norm(arr[i].c + ' ' + arr[i].w + ' ' + arr[i].sn).indexOf(q) >= 0) {
+              out.push({ h: esc(arr[i].c) + ' <span style="opacity:.6">— ' + esc(arr[i].w) + '</span>',
+                         sn: cut(arr[i].sn), fr: arr[i].sn, link: arr[i].u });
+              break;
+            }
+          }
+        }
+        return out;
+      } },
+    { key: 'lib', label: '📚 Bibliothèque — Talmud, Mishna, Philon', src: 'sefaria.org',
+      run: function(q){
+        if (!C.lib) return [];
+        var out = [];
+        C.lib.colls.forEach(function(c, ci){
+          c.works.forEach(function(w, wi){
+            if (out.length >= 8) return;
+            if (!w.f) return;
+            if (norm(w.t + ' ' + (w.seder || '') + ' ' + c.name).indexOf(q) < 0) return;
+            out.push({ h: esc(w.t) + ' <span style="opacity:.6">(' + esc(c.name) + (w.seder ? ' · ' + esc(w.seder) : '') + ' · ' + w.n + ' unités)</span>',
+                       go: { lib: ci, wi: wi } });
+          });
+        });
+        return out;
+      } }
+  ];
+
+  function ensurePanel(){
+    var p = document.getElementById('v180-gs');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v180-gs';
+    p.innerHTML = '<div id="v180-box">'
+      + '<div id="v180-head"><span>🔎 Recherche globale<small>Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon</small></span>'
+      + '<button id="v180-close" aria-label="Fermer">✕</button></div>'
+      + '<div id="v180-q"><input id="v180-qin" placeholder="Un mot, un auteur, un thème, une œuvre… (Ctrl+K)" /></div>'
+      + '<div id="v180-status"></div>'
+      + '<div id="v180-body"><div class="v180-hint">Tapez une recherche : toutes les bibliothèques hors-ligne sont interrogées d\u2019un coup, résultats groupés par source. Les textes s\u2019affichent sur place avec traduction FR ; « ouvrir » plonge dans le panneau correspondant.</div></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function(e){ if (e.target === p) close(); });
+    p.querySelector('#v180-close').addEventListener('click', close);
+    /* traduction FR partagée v167 */
+    p.querySelector('#v180-body').addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
+      if (!b || b.dataset.busy) return;
+      ev.preventDefault();
+      if (typeof window.__v167Translate === 'function')
+        window.__v167Translate(b.dataset.sn || '', b, document.getElementById('v180-status'));
+    });
+    /* ouverture profonde */
+    p.querySelector('#v180-body').addEventListener('click', function (ev) {
+      var g = ev.target.closest ? ev.target.closest('.v180-go') : null;
+      if (!g) return;
+      var d = g.dataset;
+      close();
+      if (d.libCi !== undefined) { window.__v170LibOpen(+d.libCi, +d.libWi); return; }
+      if (d.view) window.__v170Open(d.view, d.q || '');
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && p.classList.contains('open')) close();
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault(); open();
+      }
+    });
+    var tm = null;
+    p.querySelector('#v180-qin').addEventListener('input', function(){
+      if (tm) clearTimeout(tm);
+      tm = setTimeout(runSearch, 260);
+    });
+    return p;
+  }
+  function close(){
+    var p = document.getElementById('v180-gs');
+    if (p) p.classList.remove('open');
+  }
+  function open(){
+    var p = ensurePanel();
+    p.classList.add('open');
+    var stat = document.getElementById('v180-status');
+    if (stat) stat.textContent = 'chargement des bibliothèques…';
+    loadAll(function(){
+      var st1 = document.getElementById('v180-status');
+      if (st1) st1.textContent = '';
+      var qin = document.getElementById('v180-qin');
+      if (qin && qin.value.trim()) runSearch();
+      else if (qin) qin.focus();
+    });
+  }
+
+  function runSearch(){
+    var body = document.getElementById('v180-body');
+    var stat = document.getElementById('v180-status');
+    if (!body) return;
+    var q = norm((document.getElementById('v180-qin') || {}).value || '').trim();
+    if (q.length < 2) {
+      body.innerHTML = '<div class="v180-hint">Tapez au moins 2 caractères…</div>';
+      if (stat) stat.textContent = '';
+      return;
+    }
+    var total = 0, h = '';
+    ENGINES.forEach(function(en){
+      var rs;
+      try { rs = en.run(q); } catch (e) { rs = []; }
+      if (!C[en.key]) {
+        h += '<details class="v180-g"><summary>' + en.label + ' <span style="opacity:.5">(indisponible)</span></summary></details>';
+        return;
+      }
+      if (!rs.length) return;
+      total += rs.length;
+      h += '<details class="v180-g" open><summary>' + en.label + ' <span style="opacity:.55">(' + rs.length + ')</span>'
+         + ' <span style="opacity:.4;font-weight:400">— ' + en.src + '</span></summary>';
+      rs.forEach(function(r){
+        h += '<div class="v180-r"><b>' + r.h + '</b>'
+           + (r.sn ? '<div class="v167-sn">' + esc(r.sn) + '</div>' : '')
+           + (r.fr ? frBtn(r.fr) : '')
+           + (r.link ? ' <a class="v167-lk" href="' + esc(r.link) + '" target="_blank" rel="noopener">source ↗</a>' : '')
+           + (r.go ? ' <button type="button" class="v180-go" data-view="' + esc(r.go.view || '') + '" data-q="' + esc(r.go.q || '')
+                    + (r.go.lib !== undefined ? '" data-lib-ci="' + r.go.lib + '" data-lib-wi="' + r.go.wi : '')
+                    + '">ouvrir ↗</button>' : '')
+           + '</div>';
+      });
+      h += '</details>';
+    });
+    body.innerHTML = h || '<div class="v180-hint">Aucun résultat dans les bibliothèques hors-ligne.</div>';
+    if (stat) stat.textContent = total ? total + ' résultats — internes, hors-ligne' : '';
+  }
+
+  function boot(){
+    var b = document.getElementById('open-gsearch');
+    if (!b || b.dataset.v180wired) return;
+    b.dataset.v180wired = '1';
+    b.addEventListener('click', open);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 </script>
 
