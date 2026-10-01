@@ -56,6 +56,7 @@ _lock = threading.Lock()
 _done = 0
 _err = 0
 _t0 = time.time()
+_ban_until = [0.0]   # epoch : pause WAF commune a tous les workers
 
 
 def log(msg):
@@ -82,6 +83,8 @@ def fetch(url, referer, dest):
             pass
     if os.path.exists(dest + '.404'):
         return 'empty'
+    while time.time() < _ban_until[0]:
+        time.sleep(5)
     h = dict(HDRS)
     h['Referer'] = referer
     last = None
@@ -104,13 +107,17 @@ def fetch(url, referer, dest):
                 # pas de contenu pour ce verset (ex. /Hadiths/S.V sans hadith)
                 open(dest + '.404', 'w').close()
                 return 'empty'
+            if e.code == 403:
+                # WAF : bannissement temporaire — pause longue commune
+                if _ban_until[0] < time.time():
+                    _ban_until[0] = time.time() + 600
+                return None
             last = e
             time.sleep(1.5 * (attempt + 1))
         except Exception as e:                     # noqa: BLE001
             last = e
             time.sleep(1.5 * (attempt + 1))
-    log('  !! FETCH %s : %s' % (url, last))
-    return None
+    return None   # echec apès retries : compté via _err, pas de print worker
 
 
 # ── parsing tafsirs ─────────────────────────────────────────────────────────
@@ -205,26 +212,24 @@ def parse_hadiths(page):
 
 
 def do_verse(s, v):
+    # PAS de print / lock ici (deadlock pipe+lock, cf. commentaire build_qwbw)
     global _done, _err
     url_base = 'https://quranx.com'
     ref = '%d.%d' % (s, v)
     tp = os.path.join(T_DIR, '%d_%d.html' % (s, v))
     hp = os.path.join(H_DIR, '%d_%d.html' % (s, v))
-    ok = True
-    tp_ = fetch(url_base + '/Tafsirs/' + ref, url_base + '/' + ref, tp)
-    hp_ = fetch(url_base + '/Hadiths/' + ref, url_base + '/' + ref, hp)
+    t_cached = (os.path.exists(tp) and os.path.getsize(tp) > 500) or os.path.exists(tp + '.404')
+    h_cached = (os.path.exists(hp) and os.path.getsize(hp) > 500) or os.path.exists(hp + '.404')
+    if t_cached and h_cached:
+        _done += 1          # deja en cache : ni fetch ni delai
+        return True
+    tp_ = t_cached or fetch(url_base + '/Tafsirs/' + ref, url_base + '/' + ref, tp)
+    hp_ = h_cached or fetch(url_base + '/Hadiths/' + ref, url_base + '/' + ref, hp)
     if tp_ is None or hp_ is None:
-        with _lock:
-            _err += 1
-        ok = False
-    with _lock:
-        _done += 1
-        if _done % 250 == 0:
-            el = time.time() - _t0
-            log('[%5d/6236] %5.1f versets/min — erreurs %d' %
-                (_done, _done * 60.0 / max(el, 1), _err))
-    time.sleep(0.15)   # politeness : ~4 req/s max par domaine
-    return ok
+        _err += 1
+    _done += 1
+    time.sleep(0.3)    # politeness : ~5 req/s max par domaine
+    return tp_ is not None and hp_ is not None
 
 
 def main():
@@ -233,10 +238,21 @@ def main():
     counts = verse_counts()
     jobs = [(int(s), v) for s, n in counts.items() for v in range(1, n + 1)]
     log('build_quranx : %d versets à couvrir' % len(jobs))
-    with cf.ThreadPoolExecutor(max_workers=8) as ex:
+    prog = open(os.path.join(CACHE, '..', 'build_quranx_progress.log'), 'a', encoding='utf-8')
+    def prog_log(m):
+        prog.write('[%s] %s\n' % (time.strftime('%H:%M:%S'), m))
+        prog.flush()
+    with cf.ThreadPoolExecutor(max_workers=2) as ex:
         futs = [ex.submit(do_verse, s, v) for s, v in jobs]
+        last = 0
         for f in cf.as_completed(futs):
             f.result()
+            if _done - last >= 250:
+                last = _done
+                el = time.time() - _t0
+                prog_log('[%5d/6236] %5.1f versets/min — erreurs %d'
+                         % (_done, _done * 60.0 / max(el, 1), _err))
+    prog.close()
 
     # ── agrégation depuis le cache ──
     tafsir_by = {}
@@ -245,7 +261,7 @@ def main():
     for s in sorted(counts, key=int):
         s = int(s)
         tmap, hmap = {}, {}
-        for v in range(1, counts[s] + 1):
+        for v in range(1, counts[str(s)] + 1):
             tp = os.path.join(T_DIR, '%d_%d.html' % (s, v))
             if os.path.exists(tp) and os.path.getsize(tp) > 500:
                 try:

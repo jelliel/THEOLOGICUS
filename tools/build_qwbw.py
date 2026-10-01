@@ -42,6 +42,7 @@ _lock = threading.Lock()
 _done = 0
 _err = 0
 _t0 = time.time()
+_ban_until = [0.0]   # epoch : pause WAF commune a tous les workers
 
 
 def log(msg):
@@ -64,6 +65,8 @@ def fetch(url, dest):
             pass
     if os.path.exists(dest + '.404'):
         return 'empty'
+    while time.time() < _ban_until[0]:
+        time.sleep(5)
     last = None
     for attempt in range(3):
         try:
@@ -83,13 +86,16 @@ def fetch(url, dest):
             if e.code == 404:
                 open(dest + '.404', 'w').close()
                 return 'empty'
+            if e.code in (403, 429):
+                if _ban_until[0] < time.time():
+                    _ban_until[0] = time.time() + 600
+                return None
             last = e
             time.sleep(1.5 * (attempt + 1))
         except Exception as e:                              # noqa: BLE001
             last = e
             time.sleep(1.5 * (attempt + 1))
-    log('  !! FETCH %s : %s' % (url, last))
-    return None
+    return None   # echec apès retries : compté via _err, pas de print worker
 
 
 LOC_RE = re.compile(r'<span class="location">\((\d+):(\d+):(\d+)\)</span>')
@@ -158,20 +164,19 @@ def parse_wbw(page):
 
 
 def do_verse(s, v):
+    # PAS de print / lock ici : un print de worker qui bloque sur le pipe
+    # stdout en gardant _lock deadlockait tout le pool (gel a done=250).
     global _done, _err
     url = 'https://corpus.quran.com/wordbyword.jsp?chapter=%d&verse=%d' % (s, v)
     dest = os.path.join(CACHE, '%d_%d.html' % (s, v))
+    if os.path.exists(dest) and os.path.getsize(dest) > 500:
+        _done += 1          # deja en cache : ni fetch ni delai
+        return True
     page = fetch(url, dest)
     if page is None:
-        with _lock:
-            _err += 1
-    with _lock:
-        _done += 1
-        if _done % 250 == 0:
-            el = time.time() - _t0
-            log('[%5d/6236] %5.1f versets/min — erreurs %d' %
-                (_done, _done * 60.0 / max(el, 1), _err))
-    time.sleep(0.15)
+        _err += 1
+    _done += 1
+    time.sleep(0.3)
     return page is not None
 
 
@@ -180,17 +185,28 @@ def main():
     counts = verse_counts()
     jobs = [(int(s), v) for s, n in counts.items() for v in range(1, n + 1)]
     log('build_qwbw : %d versets à couvrir' % len(jobs))
-    with cf.ThreadPoolExecutor(max_workers=8) as ex:
+    prog = open(os.path.join(CACHE, '..', 'build_qwbw_progress.log'), 'a', encoding='utf-8')
+    def prog_log(m):
+        prog.write('[%s] %s\n' % (time.strftime('%H:%M:%S'), m))
+        prog.flush()
+    with cf.ThreadPoolExecutor(max_workers=2) as ex:
         futs = [ex.submit(do_verse, s, v) for s, v in jobs]
+        last = 0
         for f in cf.as_completed(futs):
             f.result()
+            if _done - last >= 250:
+                last = _done
+                el = time.time() - _t0
+                prog_log('[%5d/6236] %5.1f versets/min — erreurs %d'
+                         % (_done, _done * 60.0 / max(el, 1), _err))
+    prog.close()
 
     total_w = 0
     nver = 0
     for s in sorted(counts, key=int):
         s = int(s)
         wmap = {}
-        for v in range(1, counts[s] + 1):
+        for v in range(1, counts[str(s)] + 1):
             dest = os.path.join(CACHE, '%d_%d.html' % (s, v))
             if not (os.path.exists(dest) and os.path.getsize(dest) > 500):
                 continue
