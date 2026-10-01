@@ -334,6 +334,46 @@ class DesktopApi:
             "hote": "exe" if getattr(sys, "frozen", False) else "script",
         }
 
+    # ── v179 — navigateur interne ─────────────────────────────────────────
+    # La fenetre principale reste sur l'application ; les liens externes
+    # s'ouvrent dans une DEUXIEME fenetre native (meme moteur WebView2, donc
+    # tous les sites passent, meme ceux qui refusent l'iframe). Le JavaScript
+    # retombe sur le navigateur systeme si cette API est absente (mode script,
+    # Android, exe anterieur a v179).
+
+    def open_browser(self, url, titre=""):
+        """Ouvre une fenetre native WebView2 dediee au site demande."""
+        u = str(url or "").strip()
+        if not u.startswith(("http://", "https://")):
+            raise ValueError("URL refusee : " + u[:100])
+        t = (str(titre or "").strip() or "Navigateur").replace("\n", " ")[:70]
+        try:
+            import webview
+        except ImportError:
+            raise RuntimeError("pywebview manquant")
+        if not webview.windows:
+            raise RuntimeError("pas de fenetre principale")
+        try:
+            webview.create_window(
+                "THEOLOGICUS — " + t,
+                u,
+                width=1200,
+                height=860,
+                min_size=(700, 500),
+                text_select=True,
+            )
+        except Exception as e:  # fenetre impossible : le JS retombera sur l'externe
+            raise RuntimeError("fenetre impossible : %s" % e)
+        return {"ok": True}
+
+    def browser_external(self, url):
+        """Ouvre l'URL dans le navigateur systeme (repli explicite)."""
+        u = str(url or "").strip()
+        if not u.startswith(("http://", "https://")):
+            raise ValueError("URL refusee : " + u[:100])
+        os.startfile(u)  # noqa: S606 - ouverture navigateur voulu
+        return {"ok": True}
+
 
 def main() -> int:
     base = app_dir()

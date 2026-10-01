@@ -41958,7 +41958,10 @@ window.continueTradApart = async function (msgId) {
       if (lst.length) {
         ssec.innerHTML = '<div class="v167-grp">§ Sefaria — commentaires rabbins — en (' + lst.length + ')</div>' + lst.map(sefHtml).join('');
       } else {
-        ssec.remove();
+        /* v179 — repli en ligne : le lien s'ouvre dans le navigateur interne */
+        ssec.innerHTML = '<div class="v167-grp">§ Sefaria</div><div class="v167-item">'
+          + '<span class="v167-ti">Aucun commentaire rabbinique indexé localement pour ce verset.</span> '
+          + '<a class="v167-lk" href="https://www.sefaria.org/search?q=' + encodeURIComponent(curRefStr || '') + '" target="_blank" rel="noopener">chercher sur sefaria.org ↗</a></div>';
       }
     });
   }
@@ -42502,6 +42505,7 @@ window.continueTradApart = async function (msgId) {
       LDATA.colls.forEach(function(c, ci){
         c.works.forEach(function(w, wi){
           if (shown >= 80) return;
+          if (!w.f) return; /* pas d'anglais : visible seulement dans sa collection */
           if (norm(w.t + ' ' + (w.seder || '') + ' ' + c.name).indexOf(q) < 0) return;
           shown++;
           h += '<div class="v170-cat" data-lcoll="' + ci + '" data-lwi="' + wi + '">' + esc(w.t)
@@ -42520,7 +42524,7 @@ window.continueTradApart = async function (msgId) {
          + ' œuvres intégrales en anglais (sefaria.org) — texte chargé à la demande. Choisissez une collection :</div>';
       LDATA.colls.forEach(function(c, ci){
         h += '<div class="v170-cat" data-lcoll="' + ci + '">' + esc(c.name)
-           + ' <span class="v170-n">(' + c.nworks + ' œuvres)</span></div>';
+           + ' <span class="v170-n">(' + c.nworks + ' en anglais' + (c.nworksTotal > c.nworks ? ' / ' + c.nworksTotal + ' œuvres' : '') + ')</span></div>';
       });
       body.innerHTML = h;
       if (st) st.textContent = tot + ' œuvres — Talmud, Mishna & Philon';
@@ -42534,6 +42538,13 @@ window.continueTradApart = async function (msgId) {
       coll.works.forEach(function(w, wi){
         if (q && norm(w.t).indexOf(q) < 0) return;
         shownW++;
+        if (!w.f) {
+          /* v179 — pas d'anglais localement : repli en ligne (navigateur interne) */
+          h += '<div class="v170-cat" style="opacity:.6">' + esc(w.t)
+             + ' <span class="v170-n">(pas d\u2019anglais — <a class="v167-lk" style="color:#f5c542" href="https://www.sefaria.org/'
+             + encodeURIComponent(w.t.replace(/ /g, '_')) + '" target="_blank" rel="noopener">sefaria.org ↗</a>)</span></div>';
+          return;
+        }
         h += '<div class="v170-cat" data-lwi="' + wi + '">' + esc(w.t)
            + (w.seder && w.seder !== coll.name ? ' <span class="v170-n">[' + esc(w.seder) + ']</span>' : '')
            + ' <span class="v170-n">(' + w.n + ' unités)</span></div>';
@@ -42543,6 +42554,7 @@ window.continueTradApart = async function (msgId) {
       return;
     }
     var w = coll.works[LWI];
+    if (!w || !w.f) { LWI = null; return renderL(q); }
     var wd = LDONE[w.f];
     /* chargement paresseux du texte */
     if (!wd) {
@@ -42675,6 +42687,120 @@ window.continueTradApart = async function (msgId) {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
+})();
+</script>
+
+<script id="v179-nav">
+/* ═══ v179 — navigateur interne ═══
+   Tous les liens http(s) EXTERNES s'ouvrent en PRIORITÉ dans un visualiseur
+   interne (modal iframe). Si le site refuse l'encapsulation, bouton
+   « ⧉ Fenêtre native » → webview.create_window via window.pywebview.api
+   (moteur WebView2 complet : tous les sites passent). Sans API native
+   (mode script, Android, exe antérieur) → navigateur système en repli. ═══ */
+(function(){
+  'use strict';
+  if (window.__theoV179) return;
+  window.__theoV179 = true;
+
+  var st = document.createElement('style');
+  st.textContent =
+    '#v179-nav{position:fixed;inset:0;z-index:150000;display:none;flex-direction:column;background:rgba(2,6,12,.72);backdrop-filter:blur(3px)}' +
+    '#v179-nav.open{display:flex}' +
+    '#v179-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0d1626;border-bottom:1px solid rgba(79,142,247,.45);color:#d6e4ff;font:600 12px Consolas,monospace}' +
+    '#v179-ttl{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '#v179-bar button{background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:5px 10px;font:700 11px Consolas,monospace;cursor:pointer;white-space:nowrap}' +
+    '#v179-bar button:hover{border-color:#4f8ef7;color:#fff}' +
+    '#v179-hint{padding:4px 12px;background:rgba(245,197,66,.10);color:#f5c542;font:11px Consolas,monospace}' +
+    '#v179-frame{flex:1;background:#fff;border:none;width:100%}';
+  document.head.appendChild(st);
+
+  var CUR = null;
+
+  function ensureNav(){
+    var m = document.getElementById('v179-nav');
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = 'v179-nav';
+    m.innerHTML = '<div id="v179-bar">'
+      + '<span id="v179-ttl">…</span>'
+      + '<button id="v179-rl" title="Recharger">⟳</button>'
+      + '<button id="v179-nv" title="Moteur complet — tous les sites passent">⧉ Fenêtre native</button>'
+      + '<button id="v179-ex" title="Ouvrir dans le navigateur système">🌐 Externe</button>'
+      + '<button id="v179-x" title="Fermer">✕</button></div>'
+      + '<div id="v179-hint">Si la page reste vide, le site refuse l\u2019encapsulation — utilisez « ⧉ Fenêtre native » ou « 🌐 Externe ».</div>'
+      + '<iframe id="v179-frame" referrerpolicy="no-referrer"></iframe>';
+    document.body.appendChild(m);
+    m.addEventListener('click', function(e){ if (e.target === m) close(); });
+    m.querySelector('#v179-x').addEventListener('click', close);
+    m.querySelector('#v179-rl').addEventListener('click', function(){
+      var f = m.querySelector('#v179-frame');
+      if (CUR) f.src = CUR.u;
+    });
+    m.querySelector('#v179-nv').addEventListener('click', function(){
+      if (CUR) native(CUR.u, CUR.t);
+    });
+    m.querySelector('#v179-ex').addEventListener('click', function(){
+      if (CUR) externe(CUR.u);
+    });
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && m.classList.contains('open')) close();
+    });
+    return m;
+  }
+  function close(){
+    var m = document.getElementById('v179-nav');
+    if (m) {
+      m.classList.remove('open');
+      var f = m.querySelector('#v179-frame');
+      if (f) f.src = 'about:blank';
+    }
+    CUR = null;
+  }
+  function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : null; }
+  function native(u, t){
+    var a = api();
+    if (a && typeof a.open_browser === 'function') {
+      a.open_browser(u, t || '').catch(function(){ window.open(u, '_blank'); });
+      return true;
+    }
+    return false;
+  }
+  function externe(u){
+    var a = api();
+    if (a && typeof a.browser_external === 'function') {
+      a.browser_external(u).catch(function(){ window.open(u, '_blank'); });
+    } else {
+      window.open(u, '_blank');
+    }
+    close();
+  }
+  function openNav(u, t){
+    CUR = { u: u, t: t || '' };
+    var m = ensureNav();
+    m.querySelector('#v179-ttl').textContent = (t ? t + ' — ' : '') + u;
+    m.classList.add('open');
+    m.querySelector('#v179-frame').src = u;
+  }
+  window.__theoOpenNav = openNav;
+  window.__theoCloseNav = close;
+  window.__theoNavNative = native;
+  window.__theoNavExterne = externe;
+
+  /* Intercepteur global (phase capture, avant les autres handlers) :
+     tout lien <a> http(s) EXTERNE s'ouvre en interne. Les liens de même
+     origine et les clics modifiés (Ctrl = nouvel onglet système) passent. */
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0
+        || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!/^https?:\/\//i.test(href)) return;
+    if (href.indexOf(location.origin + '/') === 0 || href === location.origin) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openNav(href, (a.textContent || '').trim().slice(0, 60));
+  }, true);
 })();
 </script>
 

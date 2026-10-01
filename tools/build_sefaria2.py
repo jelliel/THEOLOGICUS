@@ -197,11 +197,13 @@ def main():
         works = json.load(open(os.path.join(CACHE, works_file), encoding='utf-8'))
         works = [w for w in works if isinstance(w.get('t'), str) and w['t'].strip()]
         entries = process(key, dirname, coll_name, works, daf_labels)
-        ok = [e for e in entries if e['f']]
+        # v179 : TOUTES les œuvres dans l'index (f:'' = pas d'anglais →
+        # l'UI propose le repli en ligne vers sefaria.org).
         lib['colls'].append({'name': coll_name, 'dir': dirname,
-                             'works': ok, 'nworks': len(ok),
+                             'works': entries,
+                             'nworks': len([e for e in entries if e['f']]),
                              'nworksTotal': len(entries)})
-        print('=== %s : %d/%d œuvres EN' % (coll_name, len(ok), len(entries)), flush=True)
+        print('=== %s : %d/%d œuvres EN' % (coll_name, lib['colls'][-1]['nworks'], len(entries)), flush=True)
     out = os.path.join(ROOT, 'tradition', 'sefaria_lib.json')
     json.dump(lib, open(out, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print('OK %s (%.1f Mo)' % (out, os.path.getsize(out) / 1e6), flush=True)
