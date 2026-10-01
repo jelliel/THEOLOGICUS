@@ -7653,7 +7653,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
-    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) — consultables hors-ligne">📚 SUJETS</button>
+    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -42136,7 +42136,8 @@ window.continueTradApart = async function (msgId) {
   if (window.__theoV170) return;
   window.__theoV170 = true;
 
-  var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null, LOADING = false, VIEW = 'q';
+  var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
+      LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q';
 
   var style = document.createElement('style');
   style.textContent =
@@ -42186,13 +42187,14 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v170-sujets';
     p.innerHTML = '<div id="v170-box">'
-      + '<div id="v170-head"><span id="v170-title">📚 Sujets, Doctrines, Arguments &amp; Articles</span>'
+      + '<div id="v170-head"><span id="v170-title">📚 Sujets, Doctrines, Arguments, Articles &amp; Bibliothèque</span>'
       + '<button id="v170-close" aria-label="Fermer">✕</button></div>'
       + '<div id="v170-bar"><div id="v170-tabs">'
       + '<button id="v170-tab-q" class="on">CITATIONS DES PÈRES</button>'
       + '<button id="v170-tab-d">DOCTRINES</button>'
       + '<button id="v170-tab-a">ARGUMENTS (beliefmap.org)</button>'
       + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
+      + '<button id="v170-tab-l">BIBLIOTHÈQUE</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
@@ -42204,6 +42206,7 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-d').addEventListener('click', function(){ setView('d'); });
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
     document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
+    document.getElementById('v170-tab-l').addEventListener('click', function(){ setView('l'); });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -42214,13 +42217,42 @@ window.continueTradApart = async function (msgId) {
         window.__v167Translate(sn, b, document.getElementById('v170-status'));
       }
     });
-    /* v176 — navigation par catégories des ARTICLES (CPH) */
+    /* v176/v178 — navigation catégories ARTICLES (CPH) + collections BIBLIOTHÈQUE */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var c = ev.target.closest ? ev.target.closest('.v170-cat') : null;
       if (!c) return;
-      var cat = c.getAttribute('data-cat');
-      CPCAT = (cat === '__back') ? null : cat;
-      render();
+      if (c.hasAttribute('data-cat')) {
+        var cat = c.getAttribute('data-cat');
+        CPCAT = (cat === '__back') ? null : cat;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-lcoll')) {
+        LSEL = parseInt(c.getAttribute('data-lcoll'), 10);
+        LWI = c.hasAttribute('data-lwi') ? parseInt(c.getAttribute('data-lwi'), 10) : null;
+        LUNIT = null;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-lwi')) {
+        LWI = parseInt(c.getAttribute('data-lwi'), 10);
+        LUNIT = null;
+        openLWork();
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-lunit')) {
+        LUNIT = parseInt(c.getAttribute('data-lunit'), 10);
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-lback')) {
+        var bk = c.getAttribute('data-lback');
+        if (bk === 'root') { LSEL = null; LWI = null; LUNIT = null; }
+        else if (bk === 'coll') { LWI = null; LUNIT = null; }
+        else { LUNIT = null; }
+        render();
+      }
     });
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
@@ -42234,10 +42266,12 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-d').classList.toggle('on', v === 'd');
     document.getElementById('v170-tab-a').classList.toggle('on', v === 'a');
     document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
+    document.getElementById('v170-tab-l').classList.toggle('on', v === 'l');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
-                       : 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…';
+           : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
+                       : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
     CPCAT = null;
@@ -42440,6 +42474,116 @@ window.continueTradApart = async function (msgId) {
                                    + (CPFULL ? '' : ' — textes intégraux en cours de chargement…') : '';
   }
 
+  /* ── vue Bibliothèque (v178 — Talmud Bavli & Yerushalmi, Mishna, Philon — sefaria.org) ── */
+  function openLWork(){
+    var coll = LDATA && LDATA.colls[LSEL];
+    if (!coll) return;
+    var w = coll.works[LWI];
+    if (!w || !w.f) return;
+    if (LDONE[w.f]) { render(); return; }
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = 'chargement de ' + w.t + '…';
+    fetch('tradition/' + coll.dir + '/' + w.f).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        LDONE[w.f] = (j && j.units && j.units.length) ? j : false;
+        LOADING = false;
+        if (!LDONE[w.f]) { LWI = null; if (st) st.textContent = '⚠ texte indisponible (tradition/' + coll.dir + '/' + w.f + ')'; }
+        render();
+      })
+      .catch(function(){ LDONE[w.f] = false; LOADING = false; LWI = null; render();
+        if (st) st.textContent = '⚠ chargement impossible (tradition/' + coll.dir + '/' + w.f + ').'; });
+  }
+  function renderL(q){
+    var body = document.getElementById('v170-body');
+    var h = '', st = document.getElementById('v170-status');
+    /* recherche globale d'œuvres (avant navigation) */
+    if (q && LSEL == null) {
+      var shown = 0;
+      LDATA.colls.forEach(function(c, ci){
+        c.works.forEach(function(w, wi){
+          if (shown >= 80) return;
+          if (norm(w.t + ' ' + (w.seder || '') + ' ' + c.name).indexOf(q) < 0) return;
+          shown++;
+          h += '<div class="v170-cat" data-lcoll="' + ci + '" data-lwi="' + wi + '">' + esc(w.t)
+             + ' <span class="v170-n">(' + esc(c.name) + ' · ' + w.n + ' unités)</span></div>';
+        });
+      });
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucune œuvre ne correspond au filtre.</div>';
+      if (st) st.textContent = shown >= 80 ? shown + '+ œuvres — affinez le filtre' : (shown ? shown + ' œuvres' : '');
+      return;
+    }
+    /* niveau 1 : collections */
+    if (LSEL == null) {
+      var tot = 0;
+      LDATA.colls.forEach(function(c){ tot += c.nworks; });
+      h += '<div style="padding:6px 14px 2px;opacity:.6;font-size:11px">' + tot
+         + ' œuvres intégrales en anglais (sefaria.org) — texte chargé à la demande. Choisissez une collection :</div>';
+      LDATA.colls.forEach(function(c, ci){
+        h += '<div class="v170-cat" data-lcoll="' + ci + '">' + esc(c.name)
+           + ' <span class="v170-n">(' + c.nworks + ' œuvres)</span></div>';
+      });
+      body.innerHTML = h;
+      if (st) st.textContent = tot + ' œuvres — Talmud, Mishna & Philon';
+      return;
+    }
+    var coll = LDATA.colls[LSEL];
+    /* niveau 2 : œuvres de la collection */
+    if (LWI == null) {
+      h += '<div class="v170-cat" data-lback="root" style="color:#f5c542">← Toutes les collections</div>';
+      var shownW = 0;
+      coll.works.forEach(function(w, wi){
+        if (q && norm(w.t).indexOf(q) < 0) return;
+        shownW++;
+        h += '<div class="v170-cat" data-lwi="' + wi + '">' + esc(w.t)
+           + (w.seder && w.seder !== coll.name ? ' <span class="v170-n">[' + esc(w.seder) + ']</span>' : '')
+           + ' <span class="v170-n">(' + w.n + ' unités)</span></div>';
+      });
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucune œuvre.</div>';
+      if (st) st.textContent = coll.name + ' — ' + shownW + ' œuvres';
+      return;
+    }
+    var w = coll.works[LWI];
+    var wd = LDONE[w.f];
+    /* chargement paresseux du texte */
+    if (!wd) {
+      openLWork();
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de ' + esc(w.t) + '…</div>';
+      return;
+    }
+    /* niveau 3 : unités (dafim / chapitres / livres) */
+    if (LUNIT == null) {
+      h += '<div class="v170-cat" data-lback="coll" style="color:#f5c542">← ' + esc(coll.name) + '</div>';
+      var shownU = 0;
+      wd.units.forEach(function(u, ui){
+        if (q) {
+          var hay = norm(u.u + ' ' + (u.lines[0] || '') + ' ' + (u.lines[1] || ''));
+          if (hay.indexOf(q) < 0) return;
+        }
+        shownU++;
+        var prev = u.lines[0] ? (u.lines[0].slice(0, 90) + (u.lines[0].length > 90 ? '…' : '')) : '';
+        h += '<div class="v170-cat" data-lunit="' + ui + '"><b>' + esc(w.t) + ' ' + esc(u.u) + '</b>'
+           + ' <span class="v170-n">(' + u.lines.length + ' §)</span>'
+           + '<div style="opacity:.55;font-size:11px;margin-top:2px">' + esc(prev) + '</div></div>';
+      });
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucune unité.</div>';
+      if (st) st.textContent = w.t + ' — ' + shownU + ' unités' + (q ? ' (filtrées)' : '');
+      return;
+    }
+    /* niveau 4 : texte intégral de l'unité */
+    var u = wd.units[LUNIT];
+    h += '<div class="v170-cat" data-lback="unit" style="color:#f5c542">← ' + esc(w.t) + ' — unités</div>';
+    h += '<div class="v170-doc-h" style="font-size:13px;text-transform:none;letter-spacing:.3px">' + esc(w.t) + ' ' + esc(u.u)
+       + ' <span class="v170-n">(' + esc(coll.name) + (w.seder ? ' · ' + esc(w.seder) : '') + ' · ' + u.lines.length + ' §)</span></div>';
+    h += '<div style="padding:2px 14px 6px"><a class="v167-lk" href="https://www.sefaria.org/'
+       + encodeURIComponent(w.t.replace(/ /g, '_')) + '.' + encodeURIComponent(u.u)
+       + '" target="_blank" rel="noopener">sefaria.org ↗</a></div>';
+    u.lines.forEach(function(l){
+      h += '<div class="v170-wit"><div class="v167-sn">' + esc(l) + '</div>' + trBlock(l) + '</div>';
+    });
+    body.innerHTML = h;
+    if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
+  }
+
   function render(){
     var body = document.getElementById('v170-body');
     if (!body) return;
@@ -42459,8 +42603,13 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du catalogue…</div>';
       return;
     }
+    if (VIEW === 'l' && !LDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de la bibliothèque…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
-    if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q); else renderP(q);
+    if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q);
+    else if (VIEW === 'l') renderL(q); else renderP(q);
   }
 
   function load(){
@@ -42500,6 +42649,12 @@ window.continueTradApart = async function (msgId) {
         .catch(function(){ CPDATA = false; LOADING = false; render();
           var st = document.getElementById('v170-status');
           if (st) st.textContent = '⚠ Catalogue indisponible (tradition/cph_idx.json introuvable).'; });
+    } else if (VIEW === 'l' && !LDATA){
+      fetch('tradition/sefaria_lib.json').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ LDATA = (j && j.colls && j.colls.length) ? j : false; LOADING = false; render(); })
+        .catch(function(){ LDATA = false; LOADING = false; render();
+          var st = document.getElementById('v170-status');
+          if (st) st.textContent = '⚠ Bibliothèque indisponible (tradition/sefaria_lib.json introuvable).'; });
     } else {
       LOADING = false;
     }
