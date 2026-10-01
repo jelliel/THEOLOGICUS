@@ -41838,30 +41838,11 @@ window.continueTradApart = async function (msgId) {
          (endpoints /libretranslate/* du proxy exe, cf. module v59) +
          auto-traduction dès que les modèles sont chargés. */
       function translateSnippet(sn, b) {
-        /* v171 — déjà traduit ? on réaffiche la traduction enregistrée */
-        var cached = trGet(sn);
-        if (cached) { b.outerHTML = frDiv(cached); return Promise.resolve(); }
-        if (!(window.__LT && window.__LT.resolve)) {
-          b.outerHTML = '<div class="v167-sn" style="opacity:.6">LibreTranslate indisponible dans ce contexte.</div>';
-          return Promise.resolve();
-        }
-        b.dataset.busy = '1';
-        b.textContent = '⏳ traduction…';
-        return window.__LT.resolve().then(function (ep) {
-          if (!ep) throw new Error('no-server');
-          return fetch(ep + '/translate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: sn, source: 'en', target: 'fr', format: 'text' })
-          }).then(function (r) { return r.json(); });
-        }).then(function (d) {
-          var t = d && d.translatedText;
-          if (t) {
-            trPut(sn, t);   /* v171 — mémoriser pour les prochaines ouvertures */
-            b.outerHTML = frDiv(t);
-          } else {
-            b.outerHTML = '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>';
-          }
-        });
+        /* v188 — délègue à shTranslate (découpage des textes longs en
+           tronçons) ; le repli « serveur arrêté » est géré par shLtStart
+           via __v167Translate. Le .catch(offerLtStart) des appelants reste
+           sans effet (jamais rejeté) — conservé par prudence. */
+        return window.__v167Translate(sn, b, document.getElementById('v167-status'));
       }
       /* v169 — propose de démarrer le serveur LOCALEMENT, dans le panneau */
       function offerLtStart(stat, sn, b) {
@@ -42216,6 +42197,27 @@ window.continueTradApart = async function (msgId) {
      mêmes boutons 🌐 FR, même cache de traductions, même offre de démarrage
      LibreTranslate. v175 : implémentation autonome — translateSnippet et
      offerLtStart sont imbriquées dans openPanel, donc inaccessibles ici. */
+  /* v188 — texte long : découpe en tronçons (~1800 c., coupure de phrase)
+     traduits l'un après l'autre. Une requête unique était refusée/vidée par
+     LibreTranslate sur les longs tafsirs — et v183 n'envoyait que les 1200
+     premiers caractères (snip), d'où des traductions incomplètes. */
+  function chunkText(t, max) {
+    max = max || 1800;
+    t = String(t || '');
+    if (t.length <= max) return [t];
+    var parts = [], i = 0;
+    while (i < t.length && parts.length < 200) {
+      var end = Math.min(i + max, t.length);
+      if (end < t.length) {
+        var zone = t.slice(i, end);
+        var cut = Math.max(zone.lastIndexOf('. '), zone.lastIndexOf('.\n'), zone.lastIndexOf('\n'));
+        if (cut > max * 0.5) end = i + cut + 1;
+      }
+      parts.push(t.slice(i, end));
+      i = end;
+    }
+    return parts;
+  }
   function shTranslate(sn, b) {
     var cached = trGet(sn);
     if (cached) { b.outerHTML = frDiv(cached); return Promise.resolve(); }
@@ -42224,16 +42226,28 @@ window.continueTradApart = async function (msgId) {
       return Promise.resolve();
     }
     b.dataset.busy = '1';
-    b.textContent = '⏳ traduction…';
+    var chunks = chunkText(sn);
     return window.__LT.resolve().then(function (ep) {
       if (!ep) throw new Error('no-server');
-      return fetch(ep + '/translate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: sn, source: 'en', target: 'fr', format: 'text' })
-      }).then(function (r) { return r.json(); });
+      function one(q) {
+        return fetch(ep + '/translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: q, source: 'en', target: 'fr', format: 'text' })
+        }).then(function (r) { return r.json(); });
+      }
+      /* séquentiel : l'ordre des tronçons doit être conservé */
+      var out = [];
+      var p = Promise.resolve();
+      chunks.forEach(function (q, k) {
+        p = p.then(function () {
+          b.textContent = chunks.length > 1 ? '⏳ traduction… ' + (k + 1) + '/' + chunks.length : '⏳ traduction…';
+          return one(q).then(function (d) { out.push((d && d.translatedText) || ''); });
+        });
+      });
+      return p.then(function () { return { translatedText: out.join(' ').trim() }; });
     }).then(function (d) {
       var t = d && d.translatedText;
-      if (t) { trPut(sn, t); b.outerHTML = frDiv(t); }
+      if (t && t.trim()) { trPut(sn, t); b.outerHTML = frDiv(t); }
       else { b.outerHTML = '<div class="v167-sn" style="opacity:.6">Traduction vide.</div>'; }
     });
   }
@@ -43642,7 +43656,7 @@ window.continueTradApart = async function (msgId) {
       '<span class="v167-au">' + esc(t.s || 'Tafsir') + '</span>' +
       '<span class="v167-ti">— ' + esc(t.n || '') + '</span>' +
       '<div class="v167-sn">' + esc(t.x || '') + '</div>' +
-      frBtn(snip(t.x, 1200)) +
+      frBtn(t.x || '') +   /* v188 — texte ENTIERS au traducteur (avant : snip 1200) */
       '<button type="button" class="v183-q" data-ci="' + ci + '" title="Citer ce commentaire dans le message">📋</button>' +
       '<a class="v167-lk" href="' + u + '" target="_blank" rel="noopener">quranx.com ↗</a></div>';
   }
@@ -43655,7 +43669,7 @@ window.continueTradApart = async function (msgId) {
       '<span class="v167-au">' + esc(h.c || 'Hadith') + '</span>' +
       '<span class="v167-ti">— ' + esc(h.r || '') + '</span>' +
       '<div class="v167-sn">' + esc(h.x || '') + '</div>' +
-      ar + frBtn(snip(h.x, 1200)) +
+      ar + frBtn(h.x || '') +   /* v188 — texte ENTIERS au traducteur (avant : snip 1200) */
       '<button type="button" class="v183-q" data-ci="' + ci + '" title="Citer ce hadith dans le message">📋</button>' + lk + '</div>';
   }
   function wordHtml(wd, s, v) {
@@ -43669,7 +43683,7 @@ window.continueTradApart = async function (msgId) {
       (wd.d ? '<div class="wd">' + esc(wd.d) + '</div>' : '') +
       (wd.ar ? '<div class="v183-arab">' + esc(wd.ar) + '</div>' : '') +
       '<div style="margin-top:3px"><a class="v167-lk" href="' + morph + '" target="_blank" rel="noopener">morphologie ↗</a>' + dict +
-      ' ' + frBtn(snip((wd.d || '') + ' ' + (wd.g || ''), 300)) + '</div>' +
+      ' ' + frBtn((wd.d || '') + ' ' + (wd.g || '')) + '</div>' +   /* v188 — plus de snip 300 */
       '</div>';
   }
 
