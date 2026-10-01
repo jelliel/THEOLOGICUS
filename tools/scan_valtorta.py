@@ -93,6 +93,35 @@ def clean_title(s):
     return s
 
 
+# plage de chapitres : « Jean 13,1 jusqu'à 17,26 » -> un ref par chapitre
+RANGE_RE = re.compile(r"(\d{1,3})\s*,\s*\d{1,3}\s*jusqu'?\s*[àa]\s*(\d{1,3})\s*,\s*(\d{1,3})", re.I)
+
+
+def expand_refs(refs):
+    """Etend les references du type « Jean 13,1 jusqu'à 17,26 » en un ref par
+    chapitre (sinon la concordance ignore Jean 14 a 17). Idempotent : le
+    resultat est dedoublonne sur (livre, chapitre, v1, v2)."""
+    out, seen = [], set()
+    for r in refs:
+        m = RANGE_RE.search(r.get("raw") or "")
+        if m:
+            c1, c2, v2 = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 0 < c1 < c2 <= 150 and (c2 - c1) <= 30:
+                for c in range(c1, c2 + 1):
+                    cand = {"raw": r["raw"], "b": r["b"], "c": c, "v1": 1,
+                            "v2": v2 if c == c2 else 999}
+                    k = (cand["b"], cand["c"], cand["v1"], cand["v2"])
+                    if k not in seen:
+                        seen.add(k)
+                        out.append(cand)
+                continue
+        k = (r["b"], r["c"], r["v1"], r["v2"])
+        if k not in seen:
+            seen.add(k)
+            out.append(r)
+    return out
+
+
 def fetch(url, tries=4):
     """Relais r.jina.ai (le site bloque l'acces direct)."""
     for i in range(tries):

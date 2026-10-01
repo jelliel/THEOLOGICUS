@@ -42505,7 +42505,7 @@ window.continueTradApart = async function (msgId) {
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
            : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
-           : v === 'v' ? "Rechercher un récit de Valtorta (titre, date, référence d'Évangile, numéro EMV)…"
+           : v === 'v' ? "Rechercher un récit de Valtorta (titre, date de l'événement, lieu, référence d'Évangile, numéro EMV)…"
                        : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
@@ -42879,7 +42879,10 @@ window.continueTradApart = async function (msgId) {
       var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
       return '<div class="v170-item"><span class="v167-au">🌊 ' + (e.emv ? 'EMV ' + e.emv : e.fid) + '</span>'
          + '<span class="v167-ti">— ' + esc(e.t || e.title || '') + '</span>'
-         + (e.d ? '<div style="font-size:11px;opacity:.6">' + esc(e.d) + '</div>' : '')
+         + (e.ev ? '<div style="font-size:11.5px;color:#9fd0a0">📅 ' + esc(e.ev)
+              + (e.lieu ? ' — ' + esc(e.lieu) : '')
+              + (e.evj ? ' <span style="opacity:.5">(' + esc(e.evj) + ')</span>' : '') + '</div>' : '')
+         + (e.d ? '<div style="font-size:11px;opacity:.6">🖋 vision du ' + esc(e.d) + '</div>' : '')
          + (refs ? '<div class="v167-sn">📖 Évangile : ' + esc(refs) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique directe</div>')
          + '<button type="button" class="v170-vopen" data-vfid="' + e.fid + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir le récit ↗</button></div>';
     }
@@ -42889,7 +42892,8 @@ window.continueTradApart = async function (msgId) {
       eps.forEach(function(e){
         if (shown >= 80) return;
         var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
-        if (norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' ' + e.fid).indexOf(q) < 0) return;
+        if (norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' ' + e.fid
+                 + ' ' + (e.ev || '') + ' ' + (e.evj || '') + ' ' + (e.lieu || '')).indexOf(q) < 0) return;
         shown++; h += item(e);
       });
       if (st) st.textContent = shown + ' récit(s) pour « ' + q + ' »' + (shown >= 80 ? ' — affichage limité aux 80 premiers' : '');
@@ -43407,7 +43411,8 @@ window.continueTradApart = async function (msgId) {
         C.vlt.episodes.forEach(function(e){
           if (out.length >= 8) return;
           var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
-          var hay = norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' tome ' + e.tome + ' ' + e.fid);
+          var hay = norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' tome ' + e.tome + ' ' + e.fid
+                         + ' ' + (e.ev || '') + ' ' + (e.evj || '') + ' ' + (e.lieu || ''));
           if (hay.indexOf(nq) < 0) return;
           out.push({ h: '🌊 ' + esc(e.t || e.title) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : ''),
                      sn: (e.d ? e.d + ' — ' : '') + (refs ? 'Évangile : ' + refs : 'Récit sans référence évangélique directe'),
@@ -45309,6 +45314,7 @@ window.continueTradApart = async function (msgId) {
       out += '<div class="v204-chip" data-u="' + esc(e.u) + '" data-t="Valtorta — ' + esc(t) + '" '
         + 'style="pointer-events:auto;cursor:pointer;margin:2px 0;padding:4px 8px;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.35);border-radius:8px;font-size:11.5px;color:#bfd4ff">'
         + '🌊 ' + esc(t) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : '')
+        + (e.ev ? ' <span style="opacity:.55">· 📅 ' + esc(e.ev) + '</span>' : '')
         + (h.r.raw ? ' <span style="opacity:.55">· ' + esc(h.r.raw) + '</span>' : '')
         + '</div>';
     });
