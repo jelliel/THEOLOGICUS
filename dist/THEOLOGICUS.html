@@ -1306,7 +1306,7 @@
   --z-modal-lg: 2000;
   --z-modal: 3000;
   --z-popup: 5000;
-  --z-toast: 10000;
+  --z-toast: 147500;
   /* ── Panneaux de contenu et fiches de mot (v96) ──────────────────────
      Cette zone etait en dur et incoherente : les panneaux de verset
      (Bible, Coran, Tafsir) vivaient a 99999, la bulle d'annotation a
@@ -1347,12 +1347,30 @@
      corriger, deplace d'un cran.
      Ordre definitif : panneau (9000) < carte (9800) < fiche de mot (9900).
      L'invariant « toute fiche domine tout panneau » est ainsi preserve, et
-     la carte gagne sur le panneau — ce que l'utilisateur demandait. */
-  --z-panneau: 9000;
-  --z-carte: 9800;
-  --z-mot: 9900;
-  --z-bulle: 100000;
-  --z-au-dessus: 100002;
+     la carte gagne sur le panneau — ce que l'utilisateur demandait.
+
+     v186 — LE TRIO NOMME PASSE AU-DESSUS DES GRANDES MODALES.
+     Depuis v167/v180/v181/v183, les grandes fenetres (Peres, homelies,
+     commentaires rabbiniques, tafsirs, recherche globale, citations)
+     vivent a 120000-150000 en dur. Les infobulles de verset
+     (--z-panneau 9000) et les fiches de mot (--z-mot 9900) naitrant
+     DANS ces fenetres passaient DERRIERE elles : survoler un mot arabe
+     dans un tafsir ne montrait rien — la fiche etait peinte sous la
+     fenetre qui l'a fait naitre, le defaut historique de la v96 revenu
+     par le haut. On remonte donc le trio nomme EN BLOC au-dessus des
+     modales, en conservant strictement l'ordre interne :
+       --z-carte 144000 < --z-panneau 145000 < --z-mot 146000
+       < --z-toast 147500 < --z-bulle 148000 < --z-au-dessus 149000.
+     #verse-mini-tip (bulle+2) et #atc-tip (bulle+1) suivent par calcul.
+     Tout reste SOUS v179 (150000, iframe : son contenu ne peut pas faire
+     naitre de fiche dans le document parent) et sous les overlays
+     systeme (999999 et plus : auth, mises a jour). Bonus : les toasts
+     (147500) ne sont plus prisonniers des fenetres a 130000+. */
+  --z-panneau: 145000;
+  --z-carte: 144000;
+  --z-mot: 146000;
+  --z-bulle: 148000;
+  --z-au-dessus: 149000;
 
   /* ── PERFORMANCE ───────────────────────────────────────── */
   --gpu-layer: translateZ(0);
@@ -34530,7 +34548,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.332';
+  var STAMPED = '2.0.335';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
