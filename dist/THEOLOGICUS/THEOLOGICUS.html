@@ -34688,7 +34688,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.353';
+  var STAMPED = '2.0.356';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42983,9 +42983,10 @@ window.continueTradApart = async function (msgId) {
       + '<span id="v179-ttl">…</span>'
       + '<button id="v179-rl" title="Recharger">⟳</button>'
       + '<button id="v179-nv" title="Moteur complet — tous les sites passent">⧉ Fenêtre native</button>'
+      + '<button id="v179-tr" title="Traduire cette page en français — Google Traduction dans la fenêtre native (équivalent de l\u2019extension Translate)">🌍 Traduire</button>'
       + '<button id="v179-ex" title="Ouvrir dans le navigateur système">🌐 Externe</button>'
       + '<button id="v179-x" title="Fermer">✕</button></div>'
-      + '<div id="v179-hint">Si la page reste vide, le site refuse l\u2019encapsulation — utilisez « ⧉ Fenêtre native » ou « 🌐 Externe ».</div>'
+      + '<div id="v179-hint">Si la page reste vide, le site refuse l\u2019encapsulation — utilisez « ⧉ Fenêtre native », « 🌍 Traduire » ou « 🌐 Externe ».</div>'
       + '<iframe id="v179-frame" referrerpolicy="no-referrer"></iframe>';
     document.body.appendChild(m);
     m.addEventListener('click', function(e){ if (e.target === m) close(); });
@@ -42996,6 +42997,9 @@ window.continueTradApart = async function (msgId) {
     });
     m.querySelector('#v179-nv').addEventListener('click', function(){
       if (CUR) native(CUR.u, CUR.t);
+    });
+    m.querySelector('#v179-tr').addEventListener('click', function(){
+      if (CUR) traduire(CUR.u, CUR.t);
     });
     m.querySelector('#v179-ex').addEventListener('click', function(){
       if (CUR) externe(CUR.u);
@@ -43016,6 +43020,7 @@ window.continueTradApart = async function (msgId) {
   }
   function api(){ return (window.pywebview && window.pywebview.api) ? window.pywebview.api : null; }
   function native(u, t){
+    try { localStorage.setItem('theo_last_url_v1', u); } catch (e) {}   /* v198 — dernière page, pour 🌍 Traduire */
     var a = api();
     if (a && typeof a.open_browser === 'function') {
       a.open_browser(u, t || '').catch(function(){ window.open(u, '_blank'); });
@@ -43024,6 +43029,19 @@ window.continueTradApart = async function (msgId) {
     window.open(u, '_blank');
     return false;
   }
+  /* v198 — traduire la page en français via Google Traduction, fenêtre native
+     (WebView2 ne charge pas les extensions Edge ; on remplace l'extension
+     Translate par le service lui-même, dans le même moteur complet) */
+  function traduire(u, t){
+    var tu = 'https://translate.google.com/translate?sl=auto&tl=fr&u=' + encodeURIComponent(u);
+    native(tu, 'Traduction — ' + (t || ''));
+  }
+  window.__theoNavTraduire = traduire;
+  /* v198 — mode d'ouverture persistant : auto (iframe d'abord) / native / external */
+  function linkMode(){
+    try { return localStorage.getItem('theo_link_mode_v1') || 'auto'; } catch (e) { return 'auto'; }
+  }
+  window.__theoLinkMode = linkMode;
   function externe(u){
     var a = api();
     if (a && typeof a.browser_external === 'function') {
@@ -43034,6 +43052,12 @@ window.continueTradApart = async function (msgId) {
     close();
   }
   function openNav(u, t){
+    /* v198 — selon le mode choisi (HUD « 🔗 Liens »), tout peut passer
+       directement par la fenêtre native ou le navigateur système */
+    var mode = linkMode();
+    try { localStorage.setItem('theo_last_url_v1', u); } catch (e) {}
+    if (mode === 'native') { native(u, t); return; }
+    if (mode === 'external') { externe(u); return; }
     CUR = { u: u, t: t || '' };
     var m = ensureNav();
     m.querySelector('#v179-ttl').textContent = (t ? t + ' — ' : '') + u;
@@ -44803,6 +44827,65 @@ window.continueTradApart = async function (msgId) {
       box.innerHTML = '<div class="v167-grp" style="margin-top:10px">📜 Chronologie du livre — cliquez sur un point</div>' + window.__theoTLsvg(evs);
     });
   };
+})();
+</script>
+
+<script id="v198-links">
+/* ═══ v198 — mode d'ouverture des liens externes + traduction rapide ═══
+   Les fenêtres natives WebView2 (pywebview) ne peuvent pas charger les
+   extensions Edge (Translate…). Réponse en deux boutons HUD :
+   • « 🔗 Liens » : cycle Interne d'abord → FENÊTRE NATIVE (tout passe par
+     le moteur complet) → navigateur système. Persisté (theo_link_mode_v1).
+   • « 🌍 Traduire » : rouvre la dernière page externe via Google Traduction
+     dans la fenêtre native — remplace l'extension Translate. ═══ */
+(function(){
+  'use strict';
+  if (window.__theoV198) return;
+  window.__theoV198 = true;
+
+  var MODES = ['auto', 'native', 'external'];
+  var LABELS = { auto: '🔗 Liens : Interne', native: '🔗 Liens : Native', external: '🔗 Liens : Système' };
+  var TITLES = {
+    auto: 'Liens externes : visualiseur interne d\u2019abord, puis fenêtre native (cliquer pour changer)',
+    native: 'Liens externes : TOUJOURS la fenêtre native WebView2 — tous les sites passent (cliquer pour changer)',
+    external: 'Liens externes : navigateur système (cliquer pour changer)'
+  };
+  function getMode(){
+    try { return localStorage.getItem('theo_link_mode_v1') || 'auto'; } catch (e) { return 'auto'; }
+  }
+  function addHud(btn, afterId){
+    var ref = document.getElementById(afterId);
+    if (ref && ref.parentNode) ref.parentNode.insertBefore(btn, ref.nextSibling);
+    else document.body.appendChild(btn);
+  }
+
+  var bm = document.createElement('button');
+  bm.id = 'open-linkmode'; bm.className = 'hud-btn';
+  bm.addEventListener('click', function(){
+    var m = MODES[(MODES.indexOf(getMode()) + 1) % MODES.length];
+    try { localStorage.setItem('theo_link_mode_v1', m); } catch (e) {}
+    paint();
+    if (window.toast) window.toast('Liens externes : ' + LABELS[m].replace('🔗 Liens : ', '') + (m === 'native' ? ' — tout passe par la fenêtre native' : ''), 'success');
+  });
+  function paint(){ bm.textContent = LABELS[getMode()]; bm.title = TITLES[getMode()]; }
+  paint();
+  addHud(bm, 'open-gsearch');
+
+  var bt = document.createElement('button');
+  bt.id = 'open-translate'; bt.className = 'hud-btn';
+  bt.textContent = '🌍 Traduire';
+  bt.title = 'Traduire la dernière page externe ouverte en français — Google Traduction dans la fenêtre native WebView2';
+  bt.addEventListener('click', function(){
+    var last = null;
+    try { last = localStorage.getItem('theo_last_url_v1'); } catch (e) {}
+    if (!last) {
+      if (window.toast) window.toast('Ouvrez d\u2019abord une page externe, puis cliquez ici pour la traduire', 'error');
+      return;
+    }
+    if (typeof window.__theoNavTraduire === 'function') window.__theoNavTraduire(last, 'page');
+    else if (window.toast) window.toast('Indisponible hors application', 'error');
+  });
+  addHud(bt, 'open-linkmode');
 })();
 </script>
 
