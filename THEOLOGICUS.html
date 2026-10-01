@@ -26289,6 +26289,9 @@ function initBibleVerseTooltip() {
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
     /* v89 — emplacement du mot a mot hebreu, rempli a la volee. */
     html += '<div id="hb-slot"></div>';
+    /* v204 — récits de Maria Valtorta concordés avec le passage (chips
+       cliquables, pointer-events:auto sur les chips : le panneau est none) */
+    if (window.__v204TipHtml) html += window.__v204TipHtml(p);
     tip.innerHTML = html;
     tip.style.display = 'block';
     tip.style.pointerEvents = 'none';
@@ -42346,7 +42349,8 @@ window.continueTradApart = async function (msgId) {
   window.__theoV170 = true;
 
   var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
-      LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q';
+      LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q',
+      VDATA = null, VSEE = null;   /* v204 — Valtorta : index + tome sélectionné */
 
   var style = document.createElement('style');
   style.textContent =
@@ -42404,6 +42408,7 @@ window.continueTradApart = async function (msgId) {
       + '<button id="v170-tab-a">ARGUMENTS (beliefmap.org)</button>'
       + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
       + '<button id="v170-tab-l">BIBLIOTHÈQUE</button>'
+      + '<button id="v170-tab-v">🌊 VALTORTA</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
@@ -42416,6 +42421,7 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
     document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
     document.getElementById('v170-tab-l').addEventListener('click', function(){ setView('l'); });
+    document.getElementById('v170-tab-v').addEventListener('click', function(){ setView('v'); });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -42455,6 +42461,16 @@ window.continueTradApart = async function (msgId) {
         render();
         return;
       }
+      if (c.hasAttribute('data-vsee')) {
+        VSEE = parseInt(c.getAttribute('data-vsee'), 10);
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vback')) {
+        VSEE = null;
+        render();
+        return;
+      }
       if (c.hasAttribute('data-lback')) {
         var bk = c.getAttribute('data-lback');
         if (bk === 'root') { LSEL = null; LWI = null; LUNIT = null; }
@@ -42462,6 +42478,14 @@ window.continueTradApart = async function (msgId) {
         else { LUNIT = null; }
         render();
       }
+    });
+    /* v204 — ouvrir un récit Valtorta depuis la vue 🌊 */
+    document.getElementById('v170-body').addEventListener('click', function (ev) {
+      var vo = ev.target.closest ? ev.target.closest('.v170-vopen') : null;
+      if (!vo) return;
+      var vf = vo.getAttribute('data-vfid');
+      var ve = (VDATA && VDATA.episodes) ? VDATA.episodes.filter(function(x){ return x.fid === vf; })[0] : null;
+      if (ve) openVlt(ve);
     });
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
@@ -42476,10 +42500,12 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-a').classList.toggle('on', v === 'a');
     document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
     document.getElementById('v170-tab-l').classList.toggle('on', v === 'l');
+    document.getElementById('v170-tab-v').classList.toggle('on', v === 'v');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
            : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
+           : v === 'v' ? "Rechercher un récit de Valtorta (titre, date, référence d'Évangile, numéro EMV)…"
                        : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
@@ -42833,6 +42859,65 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
   }
 
+  /* v204 — vue 🌊 Valtorta : 10 tomes -> épisodes concordés avec les Évangiles */
+  function vltUrl(e){ return 'https://www.maria-valtorta.org/Publication/TOME%20' + ('0' + e.tome).slice(-2) + '/' + e.fid + '.htm'; }
+  function openVlt(e){
+    var u = vltUrl(e);
+    if (typeof window.__theoOpenNav === 'function') window.__theoOpenNav(u, 'Valtorta — ' + (e.t || e.title || ''));
+    else window.open(u, '_blank');
+  }
+  function renderV(q){
+    var body = document.getElementById('v170-body');
+    if (!body) return;
+    if (!VDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">⚠ Index Valtorta indisponible.</div>';
+      return;
+    }
+    var eps = VDATA.episodes;
+    var h = '', shown = 0, i;
+    function item(e){
+      var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
+      return '<div class="v170-item"><span class="v167-au">🌊 ' + (e.emv ? 'EMV ' + e.emv : e.fid) + '</span>'
+         + '<span class="v167-ti">— ' + esc(e.t || e.title || '') + '</span>'
+         + (e.d ? '<div style="font-size:11px;opacity:.6">' + esc(e.d) + '</div>' : '')
+         + (refs ? '<div class="v167-sn">📖 Évangile : ' + esc(refs) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique directe</div>')
+         + '<button type="button" class="v170-vopen" data-vfid="' + e.fid + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir le récit ↗</button></div>';
+    }
+    var st = document.getElementById('v170-status');
+    /* filtre saisi : recherche sur les DIX tomes (titre, date, référence d'Évangile, EMV) */
+    if (q){
+      eps.forEach(function(e){
+        if (shown >= 80) return;
+        var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
+        if (norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' ' + e.fid).indexOf(q) < 0) return;
+        shown++; h += item(e);
+      });
+      if (st) st.textContent = shown + ' récit(s) pour « ' + q + ' »' + (shown >= 80 ? ' — affichage limité aux 80 premiers' : '');
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucun récit ne correspond au filtre.</div>';
+      return;
+    }
+    if (VSEE === null){
+      var tomes = [];
+      eps.forEach(function(e){ tomes[e.tome] = (tomes[e.tome] || 0) + 1; });
+      if (VDATA.meta && VDATA.meta.note)
+        h += '<div style="padding:8px 14px;font-size:11px;opacity:.65">' + esc(VDATA.meta.note) + '</div>';
+      for (i = 1; i <= 10; i++){
+        if (!tomes[i]) continue;
+        h += '<div class="v170-cat" data-vsee="' + i + '">🌊 <b>Tome ' + ('0' + i).slice(-2) + '</b> <span style="opacity:.5">— ' + tomes[i] + ' récits</span></div>';
+      }
+      if (st) st.textContent = eps.length + ' récits — concordance avec les Évangiles';
+      body.innerHTML = h;
+      return;
+    }
+    eps.forEach(function(e){
+      if (e.tome !== VSEE) return;
+      shown++; h += item(e);
+    });
+    body.innerHTML = '<div class="v170-cat" data-vback="1">← Les dix tomes</div>'
+      + (h || '<div style="opacity:.6;padding:16px">Aucun récit.</div>');
+    if (st) st.textContent = 'Tome ' + ('0' + VSEE).slice(-2) + ' — ' + shown + ' récits';
+  }
+
   function render(){
     var body = document.getElementById('v170-body');
     if (!body) return;
@@ -42856,9 +42941,13 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de la bibliothèque…</div>';
       return;
     }
+    if (VIEW === 'v' && VDATA === null){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de l\'index Valtorta…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
     if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q);
-    else if (VIEW === 'l') renderL(q); else renderP(q);
+    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q); else renderP(q);
   }
 
   function load(){
@@ -42904,6 +42993,12 @@ window.continueTradApart = async function (msgId) {
         .catch(function(){ LDATA = false; LOADING = false; render();
           var st = document.getElementById('v170-status');
           if (st) st.textContent = '⚠ Bibliothèque indisponible (tradition/sefaria_lib.json introuvable).'; });
+    } else if (VIEW === 'v' && VDATA === null){
+      fetch('tradition/valtorta.json').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ VDATA = (j && j.episodes && j.episodes.length) ? j : false; LOADING = false; render(); })
+        .catch(function(){ VDATA = false; LOADING = false; render();
+          var st = document.getElementById('v170-status');
+          if (st) st.textContent = '⚠ Index Valtorta indisponible (tradition/valtorta.json introuvable).'; });
     } else {
       LOADING = false;
     }
@@ -43196,7 +43291,7 @@ window.continueTradApart = async function (msgId) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
 
-  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, qur: 'loading' };
+  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, vlt: null, qur: 'loading' };
 
   function jget(url, cb){
     fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
@@ -43215,6 +43310,7 @@ window.continueTradApart = async function (msgId) {
     one('sef', 'tradition/sefaria_idx.json', function(j){ return (j && j.idx) ? j : false; });
     one('lib', 'tradition/sefaria_lib.json', function(j){ return (j && j.colls && j.colls.length) ? j : false; });
     one('thm', 'tradition/themes.json',      function(j){ return (j && j.themes && j.themes.length) ? j.themes : false; }); /* v195 */
+    one('vlt', 'tradition/valtorta.json',    function(j){ return (j && j.episodes && j.episodes.length) ? j : false; });   /* v204 */
     if (!need) cb();
   }
 
@@ -43300,6 +43396,23 @@ window.continueTradApart = async function (msgId) {
             }
           }
         }
+        return out;
+      } },
+    /* v204 — moteur 🌊 Valtorta : concordance des récits avec les Évangiles */
+    { key: 'vlt', label: "🌊 Valtorta — L'Évangile tel qu'il m'a été révélé", src: 'maria-valtorta.org',
+      run: function(q){
+        if (!C.vlt) return [];
+        var out = [], nq = norm(q);
+        if (nq.length < 2) return [];
+        C.vlt.episodes.forEach(function(e){
+          if (out.length >= 8) return;
+          var refs = (e.refs || []).map(function(r){ return r.raw; }).join(' · ');
+          var hay = norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' tome ' + e.tome + ' ' + e.fid);
+          if (hay.indexOf(nq) < 0) return;
+          out.push({ h: '🌊 ' + esc(e.t || e.title) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : ''),
+                     sn: (e.d ? e.d + ' — ' : '') + (refs ? 'Évangile : ' + refs : 'Récit sans référence évangélique directe'),
+                     go: { vlt: e.fid + '|' + ('0' + e.tome).slice(-2) } });
+        });
         return out;
       } },
     { key: 'ta', label: '📖 Citations des Pères', src: 'traditionapostolique.fr',
@@ -43445,6 +43558,13 @@ window.continueTradApart = async function (msgId) {
       if (d.libCi !== undefined) { window.__v170LibOpen(+d.libCi, +d.libWi); return; }
       /* v184 — résultat coranique : ouvre le panneau Tafsirs/Hadiths/Lexique */
       if (d.q183s) { if (window.__v183Open) window.__v183Open(+d.q183s, +d.q183v); return; }
+      /* v204 — récit Valtorta : page officielle dans le navigateur interne */
+      if (d.vlt) {
+        var vp = d.vlt.split('|');
+        var vu = 'https://www.maria-valtorta.org/Publication/TOME%20' + vp[1] + '/' + vp[0] + '.htm';
+        if (window.__theoOpenNav) window.__theoOpenNav(vu, 'Valtorta'); else window.open(vu, '_blank');
+        return;
+      }
       if (d.view) window.__v170Open(d.view, d.q || '');
     });
     document.addEventListener('keydown', function(e){
@@ -43509,6 +43629,7 @@ window.continueTradApart = async function (msgId) {
            + (r.go ? ' <button type="button" class="v180-go" data-view="' + esc(r.go.view || '') + '" data-q="' + esc(r.go.q || '')
                     + (r.go.lib !== undefined ? '" data-lib-ci="' + r.go.lib + '" data-lib-wi="' + r.go.wi : '')
                     + (r.go.q183s ? '" data-q183s="' + r.go.q183s + '" data-q183v="' + r.go.q183v : '')
+                    + (r.go.vlt ? '" data-vlt="' + esc(r.go.vlt) : '')
                     + '">ouvrir ↗</button>' : '')
            + '</div>';
       });
@@ -45107,5 +45228,109 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v204-valtorta">
+/* ═════════════════════════════════════════════════════════════════════
+   v204 — MARIA VALTORTA : concordance récits ↔ versets bibliques
+   Index tradition/valtorta.json (numéros EMV, titres, dates de vision,
+   références évangéliques extraites des pages maria-valtorta.org).
+   Les TEXTES restent sur le site officiel (œuvre sous droits CEV) :
+   chaque chip / bouton ouvre le récit dans le navigateur interne (v179).
+   1. Chips 🌊 dans l'infobulle d'un verset (hook dans showTip v66).
+   2. Moteur de recherche dans BIBLIOTHÈQUES (v180) + onglet dédié (v170).
+   ═════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var V = null, LOADING = false, FAILED = false, QUEUE = [];
+  function load(cb){
+    if (V) { cb(V); return; }
+    if (FAILED) { cb(null); return; }
+    QUEUE.push(cb);
+    if (LOADING) return;
+    LOADING = true;
+    fetch('tradition/valtorta.json').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ V = (j && j.episodes && j.episodes.length) ? j : null; if (!V) FAILED = true; })
+      .catch(function(){ V = null; FAILED = true; })
+      .then(function(){ LOADING = false; var v = V; QUEUE.splice(0).forEach(function(c){ c(v); }); });
+  }
+
+  /* codes livres AELF (site) -> numéro de livre de l'app (BOOK_NUM, v66) */
+  var BOOKN = {
+    gn:'1', ex:'2', lv:'3', nb:'4', dt:'5', jos:'6', jg:'7', rt:'8',
+    '1s':'9', '2s':'10', '1r':'11', '2r':'12', '1ch':'13', '2ch':'14',
+    esd:'15', ne:'16', et:'17', jb:'18', ps:'19', pr:'20', ec:'21', ct:'22',
+    is:'23', jr:'24', lm:'25', ez:'26', dn:'27', os:'28', jl:'29', am:'30',
+    ab:'31', jo:'32', mi:'33', na:'34', ha:'35', so:'36', ag:'37', za:'38', ml:'39',
+    mt:'40', mc:'41', lc:'42', jn:'43', ac:'44', rm:'45',
+    '1co':'46', '2co':'47', ga:'48', ep:'49', ph:'50', col:'51',
+    '1th':'52', '2th':'53', '1ti':'54', '2ti':'55', ti:'56', phm:'57',
+    hb:'58', jc:'59', '1p':'60', '2p':'61', '1jn':'62', '2jn':'63', '3jn':'64',
+    jd:'65', ap:'66'
+  };
+
+  var IDX = null;   /* 'numLivre:chapitre' -> [{e, r}] */
+  function buildIndex(){
+    if (IDX || !V) return IDX;
+    IDX = {};
+    V.episodes.forEach(function(e){
+      (e.refs || []).forEach(function(r){
+        var n = BOOKN[r.b];
+        if (!n) return;
+        var k = n + ':' + r.c;
+        (IDX[k] = IDX[k] || []).push({ e: e, r: r });
+      });
+    });
+    return IDX;
+  }
+  function hits(p){
+    var ix = buildIndex();
+    if (!ix) return [];
+    var out = [], seen = {};
+    (ix[p.book + ':' + p.ch] || []).forEach(function(h){
+      var v2p = p.v2 || p.v1;
+      if (h.r.v1 <= v2p && h.r.v2 >= p.v1) {
+        var k = h.e.fid + '|' + h.r.raw;
+        if (!seen[k]) { seen[k] = 1; out.push(h); }
+      }
+    });
+    return out;
+  }
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* chips de l'infobulle verset — pointer-events:auto (le panneau est none) */
+  window.__v204TipHtml = function(p){
+    if (!V){ load(function(){}); return ''; }   /* 1er survol : lance le chargement, chips au survol suivant */
+    var hs = hits(p);
+    if (!hs.length) return '';
+    var out = '<div style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(79,142,247,.35)">'
+      + '<div style="color:#f0a020;font-size:10.5px;letter-spacing:1px;margin-bottom:4px;">🌊 MARIA VALTORTA — L\'ÉVANGILE TEL QU\'IL M\'A ÉTÉ RÉVÉLÉ</div>';
+    hs.slice(0, 4).forEach(function(h){
+      var e = h.e, t = e.t || e.title || ('Récit ' + e.fid);
+      out += '<div class="v204-chip" data-u="' + esc(e.u) + '" data-t="Valtorta — ' + esc(t) + '" '
+        + 'style="pointer-events:auto;cursor:pointer;margin:2px 0;padding:4px 8px;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.35);border-radius:8px;font-size:11.5px;color:#bfd4ff">'
+        + '🌊 ' + esc(t) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : '')
+        + (h.r.raw ? ' <span style="opacity:.55">· ' + esc(h.r.raw) + '</span>' : '')
+        + '</div>';
+    });
+    if (hs.length > 4) out += '<div style="font-size:10.5px;opacity:.55;margin-top:2px">+ ' + (hs.length - 4) + ' autre(s) récit(s) — onglet 🌊 VALTORTA</div>';
+    out += '</div>';
+    return out;
+  };
+
+  /* clic sur un chip → récit officiel dans le navigateur interne (v179) */
+  document.addEventListener('click', function(e){
+    var c = e.target.closest ? e.target.closest('.v204-chip') : null;
+    if (!c) return;
+    var u = c.getAttribute('data-u');
+    if (!u) return;
+    if (typeof window.__theoOpenNav === 'function') window.__theoOpenNav(u, c.getAttribute('data-t') || 'Valtorta');
+    else window.open(u, '_blank');
+  });
+
+  /* préchargement différé (148 Ko) — l'infobulle doit répondre dès le 1er survol */
+  function boot(){ setTimeout(function(){ load(function(){}); }, 2500); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 </body>
 </html>
