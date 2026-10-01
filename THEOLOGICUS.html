@@ -43419,6 +43419,8 @@ window.continueTradApart = async function (msgId) {
     '.v183-w .wd{opacity:.8;font-size:11.5px;margin-top:2px}' +
     '.v183-w img{max-height:34px;vertical-align:middle;margin-left:8px;border-radius:4px;background:rgba(255,255,255,.9);padding:1px 3px}' +
     '.v183-hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}' +
+    '.v183-q{background:rgba(245,197,66,.12);color:#f5c542;border:1px solid rgba(245,197,66,.45);border-radius:5px;font-size:10px;font-weight:800;padding:2px 7px;cursor:pointer}' +
+    '.v183-q:hover{filter:brightness(1.35)}' +
     'details.v183-det{margin-top:4px}details.v183-det summary{cursor:pointer;color:var(--cyan,#4f8ef7);font-size:11px}';
   document.head.appendChild(st);
 
@@ -43469,24 +43471,41 @@ window.continueTradApart = async function (msgId) {
 
   /* ── panneaux ── */
   var cur = { s: 0, v1: 0, v2: 0, ref: '' };
+  var CITE = [];   /* v185b — citations par item (tafsirs/hadiths), index = data-ci */
+
+  function insertRaw(txt) {
+    if (!txt) return;
+    var ta = document.getElementById('user-input');
+    if (!ta) return;
+    ta.value = ta.value ? (ta.value.replace(/\s+$/, '') + '\n\n' + txt) : txt;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+    if (window.toast) window.toast('Citation insérée', 'success');
+  }
 
   function tafsirHtml(t) {
     var u = 'https://quranx.com/Tafsirs/' + cur.s + '.' + cur.v1;
+    var ci = CITE.length;
+    CITE.push('📖 Tafsir ' + (t.s || '') + (t.n ? ' (' + t.n + ')' : '') + ' — Coran ' + cur.s + ':' + cur.v1 + '\n\n> ' + String(t.x || '').slice(0, 1200) + '\n');
     return '<div class="v167-item">' +
       '<span class="v167-au">' + esc(t.s || 'Tafsir') + '</span>' +
       '<span class="v167-ti">— ' + esc(t.n || '') + '</span>' +
       '<div class="v167-sn">' + esc(t.x || '') + '</div>' +
       frBtn(snip(t.x, 1200)) +
+      '<button type="button" class="v183-q" data-ci="' + ci + '" title="Citer ce commentaire dans le message">📋</button>' +
       '<a class="v167-lk" href="' + u + '" target="_blank" rel="noopener">quranx.com ↗</a></div>';
   }
   function hadithHtml(h, i) {
     var ar = h.ar ? '<details class="v183-det"><summary>‏Texte arabe</summary><div class="v183-arab">' + esc(h.ar) + '</div></details>' : '';
     var lk = h.u ? ' <a class="v167-lk" href="' + esc(h.u) + '" target="_blank" rel="noopener">quranx.com ↗</a>' : '';
+    var ci = CITE.length;
+    CITE.push('📜 Hadith — ' + (h.c || '') + (h.r ? ' ' + h.r : '') + ' (rapporté pour Coran ' + cur.s + ':' + cur.v1 + ')\n\n> ' + String(h.x || '').slice(0, 1200) + '\n' + (h.ar ? '\n> ' + String(h.ar).slice(0, 600) : '') + '\n');
     return '<div class="v167-item">' +
       '<span class="v167-au">' + esc(h.c || 'Hadith') + '</span>' +
       '<span class="v167-ti">— ' + esc(h.r || '') + '</span>' +
       '<div class="v167-sn">' + esc(h.x || '') + '</div>' +
-      ar + frBtn(snip(h.x, 1200)) + lk + '</div>';
+      ar + frBtn(snip(h.x, 1200)) +
+      '<button type="button" class="v183-q" data-ci="' + ci + '" title="Citer ce hadith dans le message">📋</button>' + lk + '</div>';
   }
   function wordHtml(wd, s, v) {
     var img = wd.img ? ' <img loading="lazy" src="https://corpus.quran.com/wordimage?id=' + wd.img + '" alt="" onerror="this.remove()">' : '';
@@ -43506,6 +43525,7 @@ window.continueTradApart = async function (msgId) {
   function renderBody() {
     var body = document.getElementById('v183-body');
     if (!body) return;
+    CITE = [];   /* v185b — reconstruit les index de citation à chaque rendu */
     var s = cur.s, v1 = cur.v1, v2 = cur.v2 || cur.v1;
     var ts = collect('t', s, v1, v2);
     var hs = collect('h', s, v1, v2);
@@ -43555,6 +43575,9 @@ window.continueTradApart = async function (msgId) {
         if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
       });
       p.querySelector('#v183-body').addEventListener('click', function (ev) {
+        /* v185b — 📋 par item (tafsir/hadith) */
+        var q = ev.target.closest ? ev.target.closest('.v183-q') : null;
+        if (q) { ev.preventDefault(); ev.stopPropagation(); insertRaw(CITE[+q.dataset.ci] || ''); return; }
         var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
         if (!b || b.dataset.busy) return;
         ev.preventDefault();
@@ -43592,16 +43615,7 @@ window.continueTradApart = async function (msgId) {
     return '🕌 ' + ref + ' (' + (su.nomPhon || '') + ')\n\n' + parts.join('\n\n') + '\n';
   }
   function insertCitation() {
-    function doIns() {
-      var txt = buildCitation();
-      if (!txt) return;
-      var ta = document.getElementById('user-input');
-      if (!ta) return;
-      ta.value = ta.value ? (ta.value.replace(/\s+$/, '') + '\n\n' + txt) : txt;
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-      ta.focus();
-      if (window.toast) window.toast('Citation coranique insérée', 'success');
-    }
+    function doIns() { insertRaw(buildCitation()); }
     if (!(window.__quranSurahs && window.__quranSurahs[cur.s])) {
       if (window.__ensureQuranSurah) window.__ensureQuranSurah(cur.s).then(doIns);
     } else doIns();
