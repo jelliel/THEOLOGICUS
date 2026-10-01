@@ -43012,7 +43012,7 @@ window.continueTradApart = async function (msgId) {
           var st = document.getElementById('v170-status');
           if (st) st.textContent = '⚠ Bibliothèque indisponible (tradition/sefaria_lib.json introuvable).'; });
     } else if (VIEW === 'v' && VDATA === null){
-      fetch('tradition/valtorta.json').then(function(r){ return r.ok ? r.json() : null; })
+      fetch('tradition/valtorta.json', { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : null; })
         .then(function(j){ VDATA = (j && j.episodes && j.episodes.length) ? j : false; LOADING = false; render(); })
         .catch(function(){ VDATA = false; LOADING = false; render();
           var st = document.getElementById('v170-status');
@@ -45275,7 +45275,7 @@ window.continueTradApart = async function (msgId) {
     QUEUE.push(cb);
     if (LOADING) return;
     LOADING = true;
-    fetch('tradition/valtorta.json').then(function(r){ return r.ok ? r.json() : null; })
+    fetch('tradition/valtorta.json', { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : null; })
       .then(function(j){ V = (j && j.episodes && j.episodes.length) ? j : null; if (!V) FAILED = true; })
       .catch(function(){ V = null; FAILED = true; })
       .then(function(){ LOADING = false; var v = V; QUEUE.splice(0).forEach(function(c){ c(v); }); });
