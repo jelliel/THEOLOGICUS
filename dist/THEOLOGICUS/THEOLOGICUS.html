@@ -34530,7 +34530,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.325';
+  var STAMPED = '2.0.329';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42880,7 +42880,7 @@ window.continueTradApart = async function (msgId) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
 
-  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null };
+  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, qur: 'loading' };
 
   function jget(url, cb){
     fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
@@ -42899,6 +42899,36 @@ window.continueTradApart = async function (msgId) {
     one('sef', 'tradition/sefaria_idx.json', function(j){ return (j && j.idx) ? j : false; });
     one('lib', 'tradition/sefaria_lib.json', function(j){ return (j && j.colls && j.colls.length) ? j : false; });
     if (!need) cb();
+  }
+
+  /* v184 — texte coranique complet (quran/q1..q114.js, 2,6 Mo) : chargé en
+     tâche de fond à l'ouverture du modal, pour le moteur « Coran » */
+  var _qurStarted = false;
+  function ensureQuranText(cb){
+    if (C.qur === true) { if (cb) cb(); return; }
+    if (!_qurStarted) {
+      _qurStarted = true;
+      var left = 114;
+      for (var p = 1; p <= 114; p++) {
+        (function(p){
+          var sc = document.createElement('script');
+          sc.src = 'quran/q' + p + '.js';
+          sc.onload = sc.onerror = function(){
+            left--;
+            if (!left && C.qur === 'loading') {
+              C.qur = window.__quranSurahs ? true : false;
+              if (cb) cb();
+            }
+          };
+          document.head.appendChild(sc);
+        })(p);
+      }
+    } else {
+      /* chargement déjà en cours : rappeler cb quand C.qur bascule */
+      var iv = setInterval(function(){
+        if (C.qur !== 'loading') { clearInterval(iv); if (cb) cb(); }
+      }, 300);
+    }
   }
 
   /* ── moteurs de recherche par source : fn(q) -> liste de résultats ── */
@@ -43003,6 +43033,24 @@ window.continueTradApart = async function (msgId) {
           });
         });
         return out;
+      } },
+    { key: 'qur', label: '🕌 Coran — versets', src: 'texte local · tafsirs quranx.com',
+      run: function(q){
+        if (C.qur !== true || !window.__quranSurahs) return [];
+        var out = [];
+        for (var s = 1; s <= 114 && out.length < 10; s++) {
+          var su = window.__quranSurahs[s];
+          if (!su || !su.versets) continue;
+          for (var v in su.versets) {
+            if (out.length >= 10) break;
+            var vt = su.versets[v];
+            if (norm((vt.text || '') + ' ' + (vt.arabe || '')).indexOf(q) >= 0)
+              out.push({ h: 'Coran ' + s + ':' + v + ' <span style="opacity:.6">(' + esc(su.nomPhon || '') + ')</span>',
+                         sn: cut(vt.text),
+                         go: { q183s: s, q183v: +v } });
+          }
+        }
+        return out;
       } }
   ];
 
@@ -43012,7 +43060,7 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v180-gs';
     p.innerHTML = '<div id="v180-box">'
-      + '<div id="v180-head"><span>🔎 Recherche globale<small>Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon</small></span>'
+      + '<div id="v180-head"><span>🔎 Recherche globale<small>Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon · Coran</small></span>'
       + '<button id="v180-close" aria-label="Fermer">✕</button></div>'
       + '<div id="v180-q"><input id="v180-qin" placeholder="Un mot, un auteur, un thème, une œuvre… (Ctrl+K)" /></div>'
       + '<div id="v180-status"></div>'
@@ -43035,6 +43083,8 @@ window.continueTradApart = async function (msgId) {
       var d = g.dataset;
       close();
       if (d.libCi !== undefined) { window.__v170LibOpen(+d.libCi, +d.libWi); return; }
+      /* v184 — résultat coranique : ouvre le panneau Tafsirs/Hadiths/Lexique */
+      if (d.q183s) { if (window.__v183Open) window.__v183Open(+d.q183s, +d.q183v); return; }
       if (d.view) window.__v170Open(d.view, d.q || '');
     });
     document.addEventListener('keydown', function(e){
@@ -43059,6 +43109,7 @@ window.continueTradApart = async function (msgId) {
     p.classList.add('open');
     var stat = document.getElementById('v180-status');
     if (stat) stat.textContent = 'chargement des bibliothèques…';
+    ensureQuranText();               /* v184 — texte coranique en tâche de fond */
     loadAll(function(){
       var st1 = document.getElementById('v180-status');
       if (st1) st1.textContent = '';
@@ -43097,6 +43148,7 @@ window.continueTradApart = async function (msgId) {
            + (r.link ? ' <a class="v167-lk" href="' + esc(r.link) + '" target="_blank" rel="noopener">source ↗</a>' : '')
            + (r.go ? ' <button type="button" class="v180-go" data-view="' + esc(r.go.view || '') + '" data-q="' + esc(r.go.q || '')
                     + (r.go.lib !== undefined ? '" data-lib-ci="' + r.go.lib + '" data-lib-wi="' + r.go.wi : '')
+                    + (r.go.q183s ? '" data-q183s="' + r.go.q183s + '" data-q183v="' + r.go.q183v : '')
                     + '">ouvrir ↗</button>' : '')
            + '</div>';
       });
@@ -43514,6 +43566,9 @@ window.continueTradApart = async function (msgId) {
         renderBody();
       });
   }
+
+  /* v184 — ouverture directe du panneau (recherche globale v180) */
+  window.__v183Open = openPanel;
 
   /* ── rangée de boutons dans la fiche de verset coranique ── */
   function mountRow(tip, ref) {
