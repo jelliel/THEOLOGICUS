@@ -26107,10 +26107,10 @@ function initBibleVerseTooltip() {
     'gn': '1', 'genèse': '1', 'ex': '2', 'exode': '2', 'lv': '3', 'lévitique': '3', 'nb': '4', 'nombres': '4', 'dt': '5', 'deutéronome': '5',
     'jos': '6', 'josué': '6', 'jg': '7', 'juges': '7', 'rt': '8', 'ruth': '8', '1s': '9', '1 samuel': '9', '2s': '10', '2 samuel': '10',
     '1r': '11', '1 rois': '11', '2r': '12', '2 rois': '12', '1ch': '13', '1 chroniques': '13', '2ch': '14', '2 chroniques': '14',
-    'es': '15', 'esdras': '15', 'ne': '16', 'néhémie': '16', 'et': '17', 'esther': '17', 'jb': '18', 'job': '18', 'ps': '19', 'psaume': '19', 'psaumes': '19',
-    'pr': '20', 'proverbes': '20', 'ec': '21', 'ecclésiaste': '21', 'ct': '22', 'cantique': '22', 'cantique des cantiques': '22', 'is': '23', 'ésaïe': '23', 'ésaie': '23',
+    'esd': '15', 'esdras': '15', 'ne': '16', 'néhémie': '16', 'et': '17', 'esther': '17', 'jb': '18', 'job': '18', 'ps': '19', 'psaume': '19', 'psaumes': '19',
+    'pr': '20', 'proverbes': '20', 'ec': '21', 'ecclésiaste': '21', 'ct': '22', 'cantique': '22', 'cantique des cantiques': '22', 'is': '23', 'es': '23', 'esa': '23', 'isaie': '23', 'ésaïe': '23', 'ésaie': '23', 'esaie': '23',
     'jr': '24', 'jérémie': '24', 'lm': '25', 'lamentations': '25', 'ez': '26', 'ézéchiel': '26', 'dn': '27', 'daniel': '27', 'os': '28', 'osée': '28',
-    'jl': '29', 'joël': '29', 'am': '30', 'amos': '30', 'ab': '31', 'abdias': '31', 'jo': '32', 'jonas': '32', 'mi': '33', 'michée': '33', 'na': '34', 'nahum': '34',
+    'jl': '29', 'joël': '29', 'joel': '29', 'am': '30', 'amos': '30', 'ab': '31', 'abdias': '31', 'jo': '32', 'jon': '32', 'jonas': '32', 'mi': '33', 'michée': '33', 'michee': '33', 'na': '34', 'nahum': '34',
     'ha': '35', 'habacuc': '35', 'so': '36', 'sophonie': '36', 'ag': '37', 'aggée': '37', 'za': '38', 'zacharie': '38', 'ml': '39', 'malachie': '39',
     'mt': '40', 'matthieu': '40', 'mc': '41', 'marc': '41', 'lc': '42', 'luc': '42', 'jn': '43', 'jean': '43', 'ac': '44', 'actes': '44', 'rm': '45', 'romains': '45',
     '1co': '46', '1 corinthiens': '46', '2co': '47', '2 corinthiens': '47', 'ga': '48', 'galates': '48', 'ep': '49', 'éphésiens': '49', 'ph': '50', 'philippiens': '50',
@@ -27165,7 +27165,13 @@ initTafsirVerseTooltip();
         const build = ACT_URLS[act.dataset.act];
         if (!build) return;
         hideBubble();
-        window.open(build(s.text.slice(0, 300)), '_blank', 'noopener');
+        /* v182 — ouvrir en INTERNE (navigateur interne v179), externe en repli */
+        const _u = build(s.text.slice(0, 300));
+        if (typeof window.__theoOpenNav === 'function') {
+          window.__theoOpenNav(_u, act.title || 'Recherche');
+        } else {
+          window.open(_u, '_blank', 'noopener');
+        }
       });
     });
     const hlBtn = b.querySelector('.atc-act[data-act="hl"]');
@@ -29399,12 +29405,12 @@ const idx = fullM.norm.indexOf(txtM.norm);
     'deuteronome':5,'dt':5,'josue':6,'jos':6,'juges':7,'jg':7,'ruth':8,'rt':8,
     '1 samuel':9,'1s':9,'2 samuel':10,'2s':10,'1 rois':11,'1r':11,'2 rois':12,'2r':12,
     '1 chroniques':13,'1ch':13,'2 chroniques':14,'2ch':14,'esdras':15,'esd':15,'ezr':15,
-    'nehemie':16,'ne':16,'neh':16,'esther':17,'est':17,'job':18,
+    'nehemie':16,'ne':16,'neh':16,'esther':17,'est':17,'et':17,'job':18,'jb':18,
     'psaumes':19,'psaume':19,'ps':19,'psa':19,'proverbes':20,'pr':20,'prov':20,
-    'ecclesiaste':21,'ec':21,'qohelet':21,'qo':21,'cantique':22,'ct':22,'canti':22,
-    'isaie':23,'is':23,'esa':23,'jeremie':24,'jr':24,'jer':24,'lamentations':25,'lm':25,'lam':25,
+    'ecclesiaste':21,'ec':21,'qohelet':21,'qo':21,'cantique':22,'ct':22,'canti':22,'cantique des cantiques':22,
+    'isaie':23,'esaie':23,'es':23,'is':23,'esa':23,'jeremie':24,'jr':24,'jer':24,'lamentations':25,'lm':25,'lam':25,
     'ezechiel':26,'ez':26,'eze':26,'daniel':27,'dn':27,'dan':27,'osee':28,'os':28,'ose':28,
-    'joel':29,'jl':29,'amos':30,'am':30,'abdias':31,'ab':31,'abd':31,'jonas':32,'jon':32,
+    'joel':29,'jl':29,'amos':30,'am':30,'abdias':31,'ab':31,'abd':31,'jonas':32,'jon':32,'jo':32,
     'michee':33,'mi':33,'mic':33,'nahum':34,'na':34,'habacuc':35,'ha':35,'hab':35,
     'sophonie':36,'so':36,'sop':36,'aggee':37,'ag':37,'zacharie':38,'za':38,'zac':38,
     'malachie':39,'ml':39,'mal':39,
@@ -29413,7 +29419,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
     '1 corinthiens':46,'1co':46,'2 corinthiens':47,'2co':47,'galates':48,'ga':48,'gal':48,
     'ephesiens':49,'ep':49,'eph':49,'philippiens':50,'ph':50,'php':50,'colossiens':51,'col':51,
     '1 thessaloniciens':52,'1th':52,'2 thessaloniciens':53,'2th':53,
-    '1 timothee':54,'1tm':54,'2 timothee':55,'2tm':55,'tite':56,'tt':56,'tit':56,
+    '1 timothee':54,'1tm':54,'2 timothee':55,'2tm':55,'tite':56,'t':56,'tt':56,'tit':56,
     'philemon':57,'phm':57,'hebreux':58,'he':58,'heb':58,'jacques':59,'jc':59,'jas':59,
     '1 pierre':60,'1p':60,'2 pierre':61,'2p':61,
     '1 jean':62,'1jn':62,'2 jean':63,'2jn':63,'3 jean':64,'3jn':64,
@@ -29422,6 +29428,10 @@ const idx = fullM.norm.indexOf(txtM.norm);
   function schResolveBook(name){
     var key = String(name || '').toLowerCase()
       .replace(/[\.']/g, '')
+      /* v182 — les accents empêchaient la résolution : « Genèse », « Ésaïe »,
+         « Néhémie », « Ézéchiel », « Joël », « Michée »… ne matchaient jamais
+         les clés non accentuées → rangée Pères jamais montée pour ces refs. */
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
     return SCH_BOOKS[key] || null;
