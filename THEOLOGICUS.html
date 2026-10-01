@@ -26983,6 +26983,116 @@ initTafsirVerseTooltip();
     { key:'pink',   css:'#ff96c8', label:'Rose' },
     { key:'red',    css:'#ff8c8c', label:'Rouge' }
   ];
+
+  /* ═══ v187 — SURLIGNAGE DANS LES PANNEAUX (tafsirs, Pères, homélies) ═══
+     Dans un panneau (#v183-pat, #v167-pat), une sélection n'a pas de
+     message porteur (msgTs null) : la bulle passait en « mode universel »
+     et cachait le bouton ✏️ Surligner. Or la marque de chat exige un
+     message (msg.marks). On ajoute un magasin local clé par panneau :
+     la marque vit dans le PANNEAU, pas dans un message. Ré-application
+     au rendu via window.__applyPanelMarks(body), appelée en fin de
+     renderPanel (v167) et renderBody (v183). */
+  const PANEL_MARKS_STORE = 'theo_panel_marks_v1';
+  function panelMarksLoad(){
+    try { const a = JSON.parse(localStorage.getItem(PANEL_MARKS_STORE) || '[]'); return Array.isArray(a) ? a : []; }
+    catch(e){ return []; }
+  }
+  function panelMarksSave(a){ try { localStorage.setItem(PANEL_MARKS_STORE, JSON.stringify(a)); } catch(e){} }
+  /* Clé de panneau : on remonte du conteneur de la sélection jusqu'à la
+     racine du panneau ; la clé fine (v183#2:255, v167#Jn 3:5) est posée
+     par le module lui-même dans dataset.markKey à chaque rendu. */
+  function panelKeyFromRange(range){
+    let n = range && range.commonAncestorContainer;
+    if (!n) return null;
+    if (n.nodeType === 3) n = n.parentElement;
+    while (n && n !== document.body) {
+      if (n.id === 'v183-pat' || n.id === 'v167-pat')
+        return (n.dataset && n.dataset.markKey) || n.id;
+      n = n.parentElement;
+    }
+    return null;
+  }
+  function wrapPanelRange(range, id, color){
+    try {
+      const span = document.createElement('span');
+      span.className = 'atc-mark mk-' + color;
+      span.dataset.markId = id; span.dataset.color = color;
+      span.dataset.panelMark = '1';
+      range.surroundContents(span);
+    } catch(e) { /* sélection multi-éléments : repli silencieux */ }
+  }
+  function highlightPanelSelection(s, color){
+    const key = panelKeyFromRange(s.range);
+    const id = 'pm-' + Date.now();
+    wrapPanelRange(s.range, id, color);
+    if (!key) { toast('✓ Passage surligné (hors corpus : non enregistré)', 'success'); return; }
+    const arr = panelMarksLoad();
+    arr.push({ id: id, key: key, text: s.text, color: color });
+    panelMarksSave(arr);
+    toast('✓ Passage surligné · Enregistré', 'success');
+  }
+  function panelMarkSpans(id){
+    return Array.prototype.slice.call(document.querySelectorAll('.atc-mark[data-mark-id="' + id + '"][data-panel-mark="1"]'));
+  }
+  function removePanelMark(id){
+    panelMarksSave(panelMarksLoad().filter(function(m){ return m.id !== id; }));
+    panelMarkSpans(id).forEach(function(sp){
+      const parent = sp.parentNode;
+      if (!parent) return;
+      while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+      parent.removeChild(sp);
+      parent.normalize();
+    });
+  }
+  function changePanelMarkColor(id, color){
+    const arr = panelMarksLoad();
+    const mk = arr.find(function(m){ return m.id === id; });
+    if (!mk) return;
+    mk.color = color;
+    panelMarksSave(arr);
+    panelMarkSpans(id).forEach(function(sp){ sp.className = 'atc-mark mk-' + color; sp.dataset.color = color; });
+  }
+  /* Ré-application au rendu : cherche chaque marque (texte exact, dans un
+     seul nœud texte — le cas multi-nœuds reste visuel seulement) parmi les
+     nœuds texte du panneau HORS surlignages déjà posés, boutons et liens. */
+  window.__applyPanelMarks = function(rootEl){
+    if (!rootEl) return;
+    const pat = rootEl.closest ? rootEl.closest('#v167-pat, #v183-pat') : null;
+    const key = pat && pat.dataset && pat.dataset.markKey ? pat.dataset.markKey : (pat ? pat.id : null);
+    if (!key) return;
+    const marks = panelMarksLoad().filter(function(m){ return m.key === key; });
+    if (!marks.length) return;
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        const p = n.parentElement;
+        if (p && (p.closest('.atc-mark') || p.closest('button') || p.closest('a'))) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes = []; let tn;
+    while ((tn = walker.nextNode())) nodes.push(tn);
+    marks.forEach(function(mk){
+      if (!mk.text || mk.text.length < 3) return;
+      for (let i = 0; i < nodes.length; i++) {
+        if (!nodes[i]) continue;
+        const idx = nodes[i].nodeValue.indexOf(mk.text);
+        if (idx < 0) continue;
+        const range = document.createRange();
+        range.setStart(nodes[i], idx);
+        range.setEnd(nodes[i], idx + mk.text.length);
+        try {
+          const span = document.createElement('span');
+          span.className = 'atc-mark mk-' + (mk.color || 'yellow');
+          span.dataset.markId = mk.id; span.dataset.color = mk.color || 'yellow';
+          span.dataset.panelMark = '1';
+          range.surroundContents(span);
+          nodes[i] = null;   /* consommé : un seul enveloppement par nœud */
+        } catch(e) {}
+        break;
+      }
+    });
+  };
   function ensureColorMenu(){
     let m = document.getElementById('atc-color-menu');
     if (m) return m;
@@ -27051,6 +27161,8 @@ initTafsirVerseTooltip();
   function highlightSelection(s, color){
     if (!s || !s.text) return;
     color = color || window._atcColor || 'yellow';
+    /* v187 — sélection hors message (panneau v167/v183) : marque de panneau */
+    if (!s.msgTs) { highlightPanelSelection(s, color); return; }
     const msg = (state.messages || []).find(m => m.ts === s.msgTs);
     if (!msg) { toast('Message introuvable', 'error'); return; }
     const id = 'mk-' + Date.now();
@@ -27085,11 +27197,15 @@ initTafsirVerseTooltip();
       atcPersist(); }
   }
   function removeMarkById(id, ts){
+    /* v187 — marque de panneau (pas de message porteur) */
+    if (!ts) { removePanelMark(id); return; }
     const msg = (state.messages || []).find(m => m.ts === ts);
     if (msg) removeMarkFromMsg(msg, id);
     renderMessagesSafe();
   }
   function changeMarkColor(id, ts, color){
+    /* v187 — marque de panneau (pas de message porteur) */
+    if (!ts) { changePanelMarkColor(id, color); return; }
     const msg = (state.messages || []).find(m => m.ts === ts);
     if (!msg || !msg.marks) return;
     const mk = msg.marks.find(function(m){ return m.id === id; });
@@ -27216,8 +27332,10 @@ initTafsirVerseTooltip();
     b.querySelectorAll('.atc-sep, .atc-act, .atc-share, .atc-note-btn')
       .forEach(function(n){ n.style.display = ''; });
     /* Sélection hors message (mode universel) : on masque les actions qui
-       exigent un message porteur (annotation, note, surlignage, formes). */
-    const hideIfUniversal = ['.atc-note-btn', '.atc-act[data-act="hl"]', '.atc-act[data-act="insert"]'];
+       exigent un message porteur (note, formes). v187 — ✏️ Surligner reste
+       visible : la marque vit alors dans le PANNEAU (magasin local
+       theo_panel_marks_v1), pas dans un message. */
+    const hideIfUniversal = ['.atc-note-btn', '.atc-act[data-act="insert"]'];
     hideIfUniversal.forEach(function(q){
       const n = b.querySelector(q); if (n) n.style.display = universal ? 'none' : '';
     });
@@ -41940,6 +42058,8 @@ window.continueTradApart = async function (msgId) {
     }
     stat.textContent = '';
     var res = lookup(curRef);
+    /* v187 — clé de surlignage de panneau (marques persistées par référence) */
+    p.dataset.markKey = 'v167#' + (curRefStr || '');
     var h = '';
     if (res.exact.length) {
       var hom = res.exact.filter(function (e) { return e.h; });
@@ -41952,6 +42072,7 @@ window.continueTradApart = async function (msgId) {
       h += '<div style="opacity:.7;padding:20px 0">Aucun passage patristique indexé pour cette référence. Les 120 œuvres du corpus sont couvertes — essaie un verset voisin.</div>';
     }
     body.innerHTML = h;
+    try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
     /* v168 — citations FR de traditionapostolique.fr (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-ta"></div>');
     loadTA().then(function (ta) {
@@ -41964,6 +42085,7 @@ window.continueTradApart = async function (msgId) {
       else if (t.near.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même chapitre)</div>' + t.near.map(taHtml).join('');
       else if (t.book && t.book.length) th = '<div class="v167-grp">§ Tradition apostolique — fr (même livre)</div>' + t.book.map(taHtml).join('');
       tsec.innerHTML = th;
+      try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
     });
     /* v172 — extraits EN de historicalchristian.faith (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-hcf"></div>');
@@ -41974,6 +42096,7 @@ window.continueTradApart = async function (msgId) {
       var lst = lookupHCF(curRef);
       if (lst.length) {
         hsec.innerHTML = '<div class="v167-grp">§ Historical Christian — en (' + lst.length + ')</div>' + lst.map(hcfHtml).join('');
+        try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
       } else {
         hsec.remove();
       }
@@ -43545,6 +43668,9 @@ window.continueTradApart = async function (msgId) {
     if (!body) return;
     CITE = [];   /* v185b — reconstruit les index de citation à chaque rendu */
     var s = cur.s, v1 = cur.v1, v2 = cur.v2 || cur.v1;
+    /* v187 — clé de surlignage de panneau (marques persistées par verset) */
+    var _pat = document.getElementById('v183-pat');
+    if (_pat) _pat.dataset.markKey = 'v183#' + cur.ref;
     var ts = collect('t', s, v1, v2);
     var hs = collect('h', s, v1, v2);
     var h = '';
@@ -43572,6 +43698,7 @@ window.continueTradApart = async function (msgId) {
       h += '<div style="opacity:.6;padding:8px 0">Pas de tafsir indexé pour ce verset — <a class="v167-lk" href="https://quranx.com/tafsirs/' + cur.s + '.' + cur.v1 + '" target="_blank" rel="noopener">voir sur quranx.com ↗</a></div>';
     }
     body.innerHTML = h;
+    try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}   /* v187 */
   }
 
   function openPanel(s, v1, v2) {
