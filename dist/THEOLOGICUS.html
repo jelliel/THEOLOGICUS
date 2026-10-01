@@ -34530,7 +34530,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.329';
+  var STAMPED = '2.0.331';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -43407,6 +43407,8 @@ window.continueTradApart = async function (msgId) {
     '#v183-box{width:min(700px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(245,197,66,.4);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);overflow:hidden}' +
     '#v183-head{padding:12px 16px;font-weight:900;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.25);display:flex;justify-content:space-between;align-items:center;gap:8px}' +
     '#v183-close{background:none;border:none;color:#f5c542;font-size:16px;cursor:pointer;padding:2px 6px}' +
+    '#v183-cite{background:rgba(245,197,66,.14);color:#f5c542;border:1px solid rgba(245,197,66,.5);border-radius:6px;font-size:11px;font-weight:800;padding:3px 9px;cursor:pointer;font-family:Consolas,Monaco,monospace}' +
+    '#v183-cite:hover{filter:brightness(1.35)}' +
     '#v183-status{padding:8px 16px;font-size:11px;color:var(--text-dim,#8aa)}' +
     '#v183-body{overflow:auto;padding:6px 16px 16px;font-size:12.5px;line-height:1.55}' +
     '.v183-arab{direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-top:4px}' +
@@ -43540,10 +43542,15 @@ window.continueTradApart = async function (msgId) {
     if (!p) {
       p = document.createElement('div');
       p.id = 'v183-pat';
-      p.innerHTML = '<div id="v183-box"><div id="v183-head"><span id="v183-title">📖 Coran</span><button id="v183-close" aria-label="Fermer">✕</button></div><div id="v183-status"></div><div id="v183-body"></div></div>';
+      p.innerHTML = '<div id="v183-box"><div id="v183-head"><span id="v183-title">📖 Coran</span><span style="display:flex;gap:6px;align-items:center"><button id="v183-cite" title="Insérer la citation dans le champ de message">📋 Citer</button><button id="v183-close" aria-label="Fermer">✕</button></span></div><div id="v183-status"></div><div id="v183-body"></div></div>';
       document.body.appendChild(p);
       p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
       p.querySelector('#v183-close').addEventListener('click', function () { p.classList.remove('open'); });
+      /* v185 — citation coranique dans le champ de message (pattern v181) */
+      p.querySelector('#v183-cite').addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        insertCitation();
+      });
       document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
       });
@@ -43569,6 +43576,36 @@ window.continueTradApart = async function (msgId) {
 
   /* v184 — ouverture directe du panneau (recherche globale v180) */
   window.__v183Open = openPanel;
+
+  /* ── v185 — citation coranique : 🕌 Coran S:V (nom) + blockquote FR/AR ── */
+  function buildCitation() {
+    var su = (window.__quranSurahs || {})[cur.s];
+    if (!su || !su.versets) return '';
+    var hi = cur.v2 || cur.v1, parts = [];
+    for (var v = cur.v1; v <= hi && parts.length < 5; v++) {
+      var vt = su.versets[String(v)];
+      if (!vt) continue;
+      parts.push('> ' + (vt.text || '') + '\n>\n> ' + (vt.arabe || ''));
+    }
+    if (!parts.length) return '';
+    var ref = 'Coran ' + cur.s + ':' + cur.v1 + (cur.v2 && cur.v2 !== cur.v1 ? '-' + cur.v2 : '');
+    return '🕌 ' + ref + ' (' + (su.nomPhon || '') + ')\n\n' + parts.join('\n\n') + '\n';
+  }
+  function insertCitation() {
+    function doIns() {
+      var txt = buildCitation();
+      if (!txt) return;
+      var ta = document.getElementById('user-input');
+      if (!ta) return;
+      ta.value = ta.value ? (ta.value.replace(/\s+$/, '') + '\n\n' + txt) : txt;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus();
+      if (window.toast) window.toast('Citation coranique insérée', 'success');
+    }
+    if (!(window.__quranSurahs && window.__quranSurahs[cur.s])) {
+      if (window.__ensureQuranSurah) window.__ensureQuranSurah(cur.s).then(doIns);
+    } else doIns();
+  }
 
   /* ── rangée de boutons dans la fiche de verset coranique ── */
   function mountRow(tip, ref) {
