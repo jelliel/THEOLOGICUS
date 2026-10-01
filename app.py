@@ -308,6 +308,87 @@ NAV_BAR_JS = """
           navigator.clipboard.writeText(url).then(ok, fallback);
         } else { fallback(); }
       }));
+      /* v200 — recherche dans la page (window.find natif Chromium) */
+      d.appendChild(btn('\\ud83d\\udd0d', 'Rechercher dans la page', function(){
+        var f = document.getElementById('theo-nfind');
+        if (f) { f.remove(); return; }
+        f = document.createElement('div');
+        f.id = 'theo-nfind';
+        f.style.cssText = 'position:fixed;right:14px;bottom:58px;z-index:2147483647;display:flex;gap:6px;align-items:center;background:#0d1626;border:1px solid rgba(79,142,247,.55);border-radius:10px;padding:6px 8px;box-shadow:0 10px 34px rgba(0,0,0,.5)';
+        var inp = document.createElement('input');
+        inp.placeholder = 'Chercher dans la page…';
+        inp.style.cssText = 'width:180px;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:5px 8px;font:12px Consolas,monospace;outline:none';
+        function doFind(back){
+          var q = inp.value;
+          if (!q) return;
+          try { window.find(q, false, !!back, true, false, false, false); } catch (e) {}
+        }
+        inp.addEventListener('keydown', function(ev){ if (ev.key === 'Enter') { ev.preventDefault(); doFind(ev.shiftKey); } });
+        f.appendChild(inp);
+        f.appendChild(btn('\\u2191', 'Occurrence précédente (Maj+Entrée)', function(){ doFind(true); }));
+        f.appendChild(btn('\\u2193', 'Occurrence suivante (Entrée)', function(){ doFind(false); }));
+        f.appendChild(btn('\\u2715', 'Fermer la recherche', function(){ f.remove(); }));
+        document.body.appendChild(f);
+        inp.focus();
+      }));
+      /* v200 — mode lecture : extrait le texte (article/main/p), overlay épuré */
+      d.appendChild(btn('\\ud83d\\udcd6', 'Mode lecture — texte épuré, police ajustable', function(){
+        var o = document.getElementById('theo-nread');
+        if (o) { o.remove(); return; }
+        var root = document.querySelector('article') || document.querySelector('main') || document.body;
+        var parts = [];
+        root.querySelectorAll('h1,h2,h3,p,li,blockquote').forEach(function(el){
+          var t = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+          if (!t) return;
+          var isH = /^H[123]$/.test(el.tagName);
+          if (t.length < 40 && !isH) return;
+          parts.push([isH ? 'h' : 'p', t]);
+        });
+        if (parts.length < 3) {
+          parts = [['p', (root.innerText || '').replace(/\\n{3,}/g, '\\n\\n')]];
+        }
+        if (parts.length < 1) return;
+        o = document.createElement('div');
+        o.id = 'theo-nread';
+        o.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#101828;color:#dce6f5;overflow:auto;padding:36px 0;font:17px/1.75 Georgia,serif';
+        var inner = document.createElement('div');
+        inner.style.cssText = 'max-width:720px;margin:0 auto;padding:0 24px;box-sizing:border-box;font-size:17px';
+        var top = document.createElement('div');
+        top.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:18px';
+        var ttl = document.createElement('b');
+        ttl.textContent = '\\ud83d\\udcd6 Lecture';
+        ttl.style.cssText = 'font-size:14px;color:#9cc0ff;font-family:Consolas,monospace';
+        var ctl = document.createElement('div');
+        function mkb(l, fn){
+          var b = document.createElement('button');
+          b.textContent = l;
+          b.style.cssText = 'background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:4px 9px;margin-left:6px;cursor:pointer;font:700 11px Consolas,monospace';
+          b.addEventListener('click', fn);
+          return b;
+        }
+        ctl.appendChild(mkb('A\\u2212', function(){ var s = parseInt(inner.style.fontSize) || 17; inner.style.fontSize = Math.max(12, s - 2) + 'px'; }));
+        ctl.appendChild(mkb('A+', function(){ var s = parseInt(inner.style.fontSize) || 17; inner.style.fontSize = Math.min(26, s + 2) + 'px'; }));
+        ctl.appendChild(mkb('\\u2715 Fermer', function(){ o.remove(); }));
+        top.appendChild(ttl); top.appendChild(ctl);
+        inner.appendChild(top);
+        parts.forEach(function(pr){
+          var el = document.createElement(pr[0] === 'h' ? 'h2' : 'p');
+          el.textContent = pr[1];
+          if (pr[0] === 'h') { el.style.cssText = 'font-size:20px;color:#9cc0ff;margin:26px 0 12px;line-height:1.4'; }
+          else { el.style.cssText = 'margin:0 0 14px'; }
+          inner.appendChild(el);
+        });
+        o.appendChild(inner);
+        document.body.appendChild(o);
+      }));
+      /* v200 — fermer la fenêtre native = retour à l'app (close_current via js_api) */
+      d.appendChild(btn('\\u2715', 'Fermer cette fenêtre — retour à THEOLOGICUS', function(){
+        try {
+          var a = window.pywebview && window.pywebview.api;
+          if (a && typeof a.close_current === 'function') { a.close_current(); return; }
+        } catch (e) {}
+        window.close();
+      }));
       document.body.appendChild(d);
     } catch (e) {}
   }
@@ -404,6 +485,22 @@ class DesktopApi:
             raise RuntimeError("pywebview manquant")
         if not webview.windows:
             raise RuntimeError("pas de fenetre principale")
+        # v200 — js_api dédié à cette fenêtre : bouton ✕ de la barre flottante.
+        # La fenêtre n'existe pas encore au moment de créer l'api : on passe
+        # par un conteneur rempli juste après create_window.
+        holder = {}
+
+        class _ChildApi:
+            def close_current(self):
+                w = holder.get("win")
+                if w is not None:
+                    try:
+                        w.destroy()
+                        return {"ok": True}
+                    except Exception as e:  # fenêtre déjà détruite, etc.
+                        return {"ok": False, "error": str(e)}
+                return {"ok": False, "error": "fenetre inconnue"}
+
         try:
             win = webview.create_window(
                 "THEOLOGICUS — " + t,
@@ -412,9 +509,11 @@ class DesktopApi:
                 height=860,
                 min_size=(700, 500),
                 text_select=True,
+                js_api=_ChildApi(),
             )
         except Exception as e:  # fenetre impossible : le JS retombera sur l'externe
             raise RuntimeError("fenetre impossible : %s" % e)
+        holder["win"] = win
         # v199 — barre flottante (traduire / recharger / copier l'URL) injectee
         # a chaque chargement de page de cette fenetre native. Re-injectee
         # apres chaque navigation (le drapeau __theoNativeBar est par page).
