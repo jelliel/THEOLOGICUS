@@ -30600,41 +30600,21 @@ body{ margin:0; }
     var chatAcc = side.querySelector('.tpai-accordion[data-acc="chat"]');
     if (chatAcc) chatAcc.style.display = 'none';
 
-    /* ── 5. titre de conversation vivant, colle a l'item actif ── */
-    var bar = $('v6-topbar');
-    if (bar && !$('v7-conv')) {
-      var wrap = document.createElement('div');
-      wrap.id = 'v7-conv';
-      var t = document.createElement('span');
-      t.id = 'v7-conv-title';
-      t.textContent = 'Nouvelle conversation';
-      var m = document.createElement('span');
-      m.id = 'v7-conv-meta';
-      wrap.appendChild(t); wrap.appendChild(m);
-      var brand = $('v6-brand');
-      if (brand && brand.nextSibling) bar.insertBefore(wrap, brand.nextSibling);
-      else bar.appendChild(wrap);
-    }
-
-    function syncTitle(){
-      var el = $('v7-conv-title'), meta = $('v7-conv-meta');
-      if (!el) return;
-      var act = document.querySelector('.archive-item.active-chat .archive-item-title');
-      if (act && act.textContent.trim()) el.textContent = act.textContent.trim();
+    /* ── 5. v203c — plus de nom de conversation dans le header (demande
+       utilisateur : « plus de nom dans le header ») : le bloc
+       #v7-conv / #v7-conv-title n'est plus créé. Le compteur de
+       conversations du rail (v7-conv-count) continue d'être tenu à jour. ── */
+    function syncCount(){
       var n = document.querySelectorAll('.archive-item').length;
       var c = $('v7-conv-count');
       if (c) c.textContent = n ? String(n) : '';
-      if (meta) {
-        var am = document.querySelector('.archive-item.active-chat .archive-item-meta');
-        meta.textContent = am ? am.textContent.replace(/\s+/g, ' ').trim() : '';
-      }
     }
-    syncTitle();
+    syncCount();
     var list = document.querySelector('.archives-list');
     if (list && window.MutationObserver) {
-      new MutationObserver(syncTitle).observe(list, {childList:true, subtree:true, attributes:true});
+      new MutationObserver(syncCount).observe(list, {childList:true, subtree:true, attributes:true});
     }
-    setInterval(syncTitle, 2000);
+    setInterval(syncCount, 2000);
 
     console.log('[v7] design de la maquette applique');
   }
