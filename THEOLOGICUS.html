@@ -42508,6 +42508,68 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* ── vue Doctrines (v173) ── */
+  /* v196 — frise chronologique SVG des témoins d'une doctrine (dates extraites de tl[].w) */
+  function tlYear(w){
+    var s = String(w || ''), re = /(\d{1,4})(?:st|nd|rd|th)?\s*(BC|AD)?/gi, m;
+    while ((m = re.exec(s))) {
+      var after = s.slice(m.index + m[1].length, m.index + m[1].length + 2).toLowerCase();
+      if (after === 'st' || after === 'nd' || after === 'rd' || after === 'th') continue; /* « 3rd », « 8th »… */
+      var n = +m[1];
+      if (n < 1 || n > 2100) continue;
+      return /BC/i.test(m[0] + s.substr(m.index + m[0].length, 3)) ? -n : n;
+    }
+    return null;
+  }
+  function tlLabel(w){
+    var s = String(w || '').replace(/\s*\([^)]*\)/g, '').trim() || String(w || '').trim();
+    return s.length > 30 ? s.slice(0, 29) + '…' : s;
+  }
+  function timelineSvg(tl){
+    try {
+      if (!tl || tl.length < 2) return '';
+      var pts = [], und = [];
+      tl.forEach(function(x){
+        var y = tlYear(x.w);
+        if (y === null) { und.push(x); return; }
+        pts.push({ y: y, w: String(x.w || ''), t: String(x.t || '') });
+      });
+      if (pts.length < 2) return '';
+      pts.sort(function(a, b){ return a.y - b.y; });
+      var min = pts[0].y, max = pts[pts.length - 1].y;
+      if (max === min) max = min + 1;
+      var W = 640, L = 70, R = 610, AY = 52;
+      var X = function(y){ return L + (y - min) / (max - min) * (R - L); };
+      var sv = '<svg viewBox="0 0 ' + W + ' 118" style="width:100%;height:auto;display:block;margin:6px 0 10px" role="img" aria-label="Frise chronologique des témoins">';
+      sv += '<line x1="' + L + '" y1="' + AY + '" x2="' + R + '" y2="' + AY + '" stroke="rgba(79,142,247,.45)" stroke-width="1.5"/>';
+      var span = max - min;
+      var step = span <= 60 ? 50 : span <= 150 ? 100 : span <= 400 ? 200 : span <= 800 ? 250 : 500;
+      for (var ty = Math.ceil(min / step) * step; ty <= max; ty += step) {
+        var tx = X(ty).toFixed(1);
+        sv += '<line x1="' + tx + '" y1="' + (AY - 3) + '" x2="' + tx + '" y2="' + (AY + 3) + '" stroke="rgba(79,142,247,.5)" stroke-width="1"/>';
+        sv += '<text x="' + tx + '" y="' + (AY + 15) + '" font-size="8.5" fill="rgba(191,212,255,.55)" text-anchor="middle">' + ty + (ty < 0 ? ' av' : '') + '</text>';
+      }
+      var n = pts.length, stride = n > 12 ? 2 : 1;
+      pts.forEach(function(p, i){
+        var cx = X(p.y).toFixed(1);
+        var col = p.y < 0 ? '#f5c542' : '#4f8ef7';
+        var tip = esc(p.w) + (p.t ? ' — ' + p.t.slice(0, 90) : '');
+        sv += '<circle cx="' + cx + '" cy="' + AY + '" r="4" fill="' + col + '" stroke="rgba(13,22,38,.9)" stroke-width="1"><title>' + tip + '</title></circle>';
+        if (i % stride === 0 || i === n - 1) {
+          var up = (i % (2 * stride) === 0);
+          var ly = up ? AY - 18 : AY + 26;
+          sv += '<line x1="' + cx + '" y1="' + (up ? AY - 4 : AY + 4) + '" x2="' + cx + '" y2="' + (up ? AY - 12 : AY + 12) + '" stroke="rgba(79,142,247,.3)" stroke-width="1"/>';
+          sv += '<text x="' + cx + '" y="' + ly + '" font-size="8.5" fill="#bfd4ff" text-anchor="middle">' + esc(tlLabel(p.w)) + '</text>';
+        }
+      });
+      if (und.length) {
+        var names = und.slice(0, 5).map(function(x){ return tlLabel(x.w); }).join(' · ');
+        sv += '<text x="8" y="108" font-size="9" fill="rgba(191,212,255,.5)">Sans date précise : ' + esc(names) + (und.length > 5 ? ' …' : '') + '</text>';
+      }
+      sv += '</svg>';
+      return sv;
+    } catch (e) { return ''; }
+  }
+
   function renderD(q){
     var body = document.getElementById('v170-body');
     var trGet = window.__v167TrGet, frDiv = window.__v167FrDiv;
@@ -42536,6 +42598,7 @@ window.continueTradApart = async function (msgId) {
       }
       if (tl.length) {
         h += '<div class="v170-doc-h">Timeline des témoins</div>';
+        h += timelineSvg(tl); /* v196 — frise visuelle */
         tl.forEach(function(x){
           h += '<div class="v170-wit"><b>' + esc(x.w) + '</b>'
              + '<div class="v167-sn" style="margin-top:4px">' + esc(x.t) + '</div>'
@@ -43067,7 +43130,7 @@ window.continueTradApart = async function (msgId) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
 
-  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, qur: 'loading' };
+  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, qur: 'loading' };
 
   function jget(url, cb){
     fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
@@ -43085,6 +43148,7 @@ window.continueTradApart = async function (msgId) {
     one('cp',  'tradition/cph_idx.json',     function(j){ return (j && j.ps && j.ps.length) ? j : false; });
     one('sef', 'tradition/sefaria_idx.json', function(j){ return (j && j.idx) ? j : false; });
     one('lib', 'tradition/sefaria_lib.json', function(j){ return (j && j.colls && j.colls.length) ? j : false; });
+    one('thm', 'tradition/themes.json',      function(j){ return (j && j.themes && j.themes.length) ? j.themes : false; }); /* v195 */
     if (!need) cb();
   }
 
@@ -43129,6 +43193,49 @@ window.continueTradApart = async function (msgId) {
   }
 
   var ENGINES = [
+    /* v195 — moteur thématique Bible-Coran : croise les mots-clés des deux corpus */
+    { key: 'thm', label: '💡 Thèmes Bible-Coran', src: 'thèmes croisés · hors-ligne',
+      run: function(q){
+        if (!C.thm) return [];
+        var out = [], nq = norm(q);
+        if (nq.length < 3) return [];
+        var first = null;
+        C.thm.forEach(function(th){
+          if (out.length >= 12) return;
+          var hit = false;
+          (th.kw || []).forEach(function(k){
+            if (hit) return;
+            var nk = norm(k);
+            if (nk.length < 3) return;
+            if (nq.indexOf(nk) >= 0 || nk.indexOf(nq) >= 0) hit = true;
+          });
+          if (!hit) return;
+          if (!first) first = th;
+          out.push({ h: '💡 ' + esc(th.label), sn: th.note || '' });
+          (th.bible || []).slice(0, 4).forEach(function(r){
+            out.push({ h: '&nbsp;&nbsp;&nbsp;📚 ' + esc(r) });
+          });
+        });
+        /* versets coraniques du premier thème trouvé */
+        if (first && C.qur === true && window.__quranSurahs) {
+          var kws = (first.kw || []).map(norm).filter(function(k){ return k.length >= 4; });
+          if (kws.length) {
+            for (var s = 1; s <= 114 && out.length < 12; s++) {
+              var su = window.__quranSurahs[s];
+              if (!su || !su.versets) continue;
+              for (var v in su.versets) {
+                if (out.length >= 12) break;
+                var vt = su.versets[v], tx = norm(vt.text || ''), found = false;
+                for (var ki = 0; ki < kws.length; ki++) { if (tx.indexOf(kws[ki]) >= 0) { found = true; break; } }
+                if (found)
+                  out.push({ h: '🕌 Coran ' + s + ':' + v + ' <span style="opacity:.6">(' + esc(su.nomPhon || '') + ')</span>',
+                             sn: cut(vt.text), go: { q183s: s, q183v: +v } });
+              }
+            }
+          }
+        }
+        return out;
+      } },
     { key: 'ta', label: '📖 Citations des Pères', src: 'traditionapostolique.fr',
       run: function(q){
         if (!C.ta) return [];
@@ -43247,7 +43354,7 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v180-gs';
     p.innerHTML = '<div id="v180-box">'
-      + '<div id="v180-head"><span>🔎 Recherche globale<small>Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon · Coran</small></span>'
+      + '<div id="v180-head"><span>🔎 Recherche globale<small>Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon · Coran · Thèmes</small></span>'
       + '<button id="v180-close" aria-label="Fermer">✕</button></div>'
       + '<div id="v180-q"><input id="v180-qin" placeholder="Un mot, un auteur, un thème, une œuvre… (Ctrl+K)" /></div>'
       + '<div id="v180-status"></div>'
@@ -43664,13 +43771,20 @@ window.continueTradApart = async function (msgId) {
       .then(function (j) { PARA = (j && j.paralleles) ? j.paralleles : false; return PARA; })
       .catch(function () { PARA = false; return PARA; });
   }
-  function paraHits(list, s, v1, v2) {
+  function paraHits(list, s, v1, v2) { /* v194b — multi-refs "2:111, 3:42-43" + sourate entiere "105" */
     var out = [];
     (list || []).forEach(function (p) {
-      var m = /^(\d+):(\d+)(?:-(\d+))?$/.exec(p.q || '');
-      if (!m) return;
-      var ps = +m[1], pv1 = +m[2], pv2 = m[3] ? +m[3] : pv1;
-      if (ps === s && pv1 <= v2 && pv2 >= v1) out.push(p);
+      var hit = false;
+      String(p.q || '').split(',').forEach(function (part) {
+        if (hit) return;
+        var m = /^\s*(\d+)(?::\s*(\d+)(?:\s*-\s*(\d+))?)?\s*$/.exec(part);
+        if (!m) return;
+        if (+m[1] !== s) return;
+        if (m[2] === undefined) { hit = true; return; }
+        var pv1 = +m[2], pv2 = m[3] ? +m[3] : pv1;
+        if (pv1 <= v2 && pv2 >= v1) hit = true;
+      });
+      if (hit) out.push(p);
     });
     return out;
   }
