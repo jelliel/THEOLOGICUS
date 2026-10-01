@@ -7714,6 +7714,7 @@ window.__ensureTafsirSurah = function(p){
     <button id="auto-continue-btn" title="Suite automatique: desactivee">🔁</button>
     <button id="chat-lt-btn" title="Traduire le texte saisi (LibreTranslate)">🌐</button>
     <button id="folder-upload-btn" title="Importer un dossier complet">📁</button>
+    <button id="v181-cite-btn" title="Citer un passage — Talmud, Mishna, Philon (inséré dans le message)">📜</button>
     <input type="file" id="file-input" accept="image/*,audio/*,.pdf,.doc,.docx,.txt,.zip" style="display:none">
     <input type="file" id="folder-input" webkitdirectory style="display:none">
     <button id="export-chat-btn" title="Exporter la conversation en fichier texte">📥 EXPORT</button>
@@ -43099,6 +43100,212 @@ window.continueTradApart = async function (msgId) {
     var b = document.getElementById('open-gsearch');
     if (!b || b.dataset.v180wired) return;
     b.dataset.v180wired = '1';
+    b.addEventListener('click', open);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+
+<script id="v181-cite-script">
+/* ═══ v181 — citer un passage dans la conversation ═══
+   Bouton 📜 dans la barre de saisie : parcourt la BIBLIOTHÈQUE hors-ligne
+   (Talmud de Babylone & de Jérusalem, Mishna, Philon — sefaria.org) et
+   insère une citation formatée (source + § en blockquote markdown) dans
+   le champ de message, pour que le modèle la lise. Texte chargé à la
+   demande depuis tradition/<dir>/<œuvre>.json. ═══ */
+(function(){
+  'use strict';
+  if (window.__theoV181) return;
+  window.__theoV181 = true;
+
+  var st = document.createElement('style');
+  st.textContent =
+    '#v181-cite{position:fixed;inset:0;z-index:140000;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
+    '#v181-cite.open{display:flex}' +
+    '#v181-box{width:min(720px,94vw);max-height:86vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--bg-card,#0d1626);border:1px solid rgba(79,142,247,.45);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}' +
+    '#v181-head{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid rgba(79,142,247,.25);color:#d6e4ff;font-weight:800;font-size:13px}' +
+    '#v181-x{background:none;border:none;color:#8fa8d8;font-size:15px;cursor:pointer}' +
+    '#v181-x:hover{color:#fff}' +
+    '#v181-q{margin:10px 16px 0;box-sizing:border-box;width:calc(100% - 32px);background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:8px 10px;font:12px Consolas,monospace}' +
+    '#v181-status{padding:6px 16px 0;font-size:11px;opacity:.6;color:#d6e4ff;min-height:16px}' +
+    '#v181-body{overflow:auto;padding:6px 10px 14px}' +
+    '#v181-body .row{padding:8px 14px;border-bottom:1px dashed rgba(79,142,247,.12);cursor:pointer;color:#bfd4ff;font-size:12.5px}' +
+    '#v181-body .row:hover{background:rgba(28,58,120,.4)}' +
+    '#v181-body .row small{opacity:.55}' +
+    '#v181-body .back{color:#f5c542;font-weight:700}' +
+    '#v181-prev{margin:8px 16px;padding:10px 12px;background:rgba(10,16,28,.7);border:1px solid rgba(79,142,247,.2);border-radius:8px;color:#eaf4ff;font:12px Consolas,monospace;max-height:26vh;overflow:auto;white-space:pre-wrap}' +
+    '#v181-ins{display:block;margin:0 16px 14px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:9px;font:700 12px Consolas,monospace;cursor:pointer;width:calc(100% - 32px);box-sizing:border-box}' +
+    '#v181-ins:hover{border-color:#4f8ef7;color:#fff}';
+  document.head.appendChild(st);
+
+  var LIB = null, CI = null, WI = null, UI = null, DONE = {}, TXT = '';
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
+
+  function ensurePanel(){
+    var p = document.getElementById('v181-cite');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v181-cite';
+    p.innerHTML = '<div id="v181-box">'
+      + '<div id="v181-head"><span>📜 Citer un passage — Talmud, Mishna, Philon</span><button id="v181-x">✕</button></div>'
+      + '<input id="v181-q" placeholder="Filtrer les œuvres ou les passages…" />'
+      + '<div id="v181-status"></div>'
+      + '<div id="v181-body"></div>'
+      + '<div id="v181-prev" style="display:none"></div>'
+      + '<button id="v181-ins" style="display:none">➕ Insérer dans la conversation</button></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function(e){ if (e.target === p) close(); });
+    p.querySelector('#v181-x').addEventListener('click', close);
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && p.classList.contains('open')) close();
+    });
+    p.querySelector('#v181-q').addEventListener('input', render);
+    p.querySelector('#v181-body').addEventListener('click', function(ev){
+      var r = ev.target.closest ? ev.target.closest('.row') : null;
+      if (!r) return;
+      var q = p.querySelector('#v181-q');
+      if (r.dataset.ci !== undefined) { CI = +r.dataset.ci; WI = null; UI = null; q.value = ''; render(); return; }
+      if (r.dataset.wi !== undefined) { WI = +r.dataset.wi; UI = null; loadWork(); return; }
+      if (r.dataset.ui !== undefined) { UI = +r.dataset.ui; TXT = ''; render(); return; }
+      if (r.dataset.back !== undefined) {
+        if (r.dataset.back === 'root') { CI = null; WI = null; UI = null; }
+        else if (r.dataset.back === 'coll') { WI = null; UI = null; }
+        else { UI = null; TXT = ''; }
+        render();
+      }
+    });
+    p.querySelector('#v181-ins').addEventListener('click', insert);
+    return p;
+  }
+  function close(){
+    var p = document.getElementById('v181-cite');
+    if (p) p.classList.remove('open');
+  }
+  function open(){
+    var p = ensurePanel();
+    p.classList.add('open');
+    if (!LIB) {
+      var stat = p.querySelector('#v181-status');
+      if (stat) stat.textContent = 'chargement de l\u2019index…';
+      fetch('tradition/sefaria_lib.json').then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          LIB = (j && j.colls && j.colls.length) ? j : false;
+          if (!LIB) { if (stat) stat.textContent = '⚠ index indisponible'; return; }
+          render();
+        }).catch(function(){ LIB = false; if (stat) stat.textContent = '⚠ index indisponible'; });
+    }
+    render();
+  }
+  function loadWork(){
+    var coll = LIB && LIB.colls[CI];
+    if (!coll) return;
+    var w = coll.works[WI];
+    if (!w || !w.f) return;
+    if (DONE[w.f]) { render(); return; }
+    var stat = document.getElementById('v181-status');
+    if (stat) stat.textContent = 'chargement de ' + w.t + '…';
+    fetch('tradition/' + coll.dir + '/' + w.f).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        DONE[w.f] = (j && j.units && j.units.length) ? j : false;
+        if (!DONE[w.f]) { if (stat) stat.textContent = '⚠ texte indisponible'; WI = null; }
+        render();
+      }).catch(function(){ DONE[w.f] = false; WI = null; render(); });
+  }
+  function render(){
+    var body = document.getElementById('v181-body');
+    var stat = document.getElementById('v181-status');
+    var prev = document.getElementById('v181-prev');
+    var ins = document.getElementById('v181-ins');
+    if (!body) return;
+    prev.style.display = 'none'; ins.style.display = 'none';
+    var q = norm((document.getElementById('v181-q') || {}).value || '').trim();
+    var h = '';
+    if (!LIB) { body.innerHTML = ''; return; }
+    if (CI === null) {
+      LIB.colls.forEach(function(c, ci){
+        h += '<div class="row" data-ci="' + ci + '">' + esc(c.name)
+           + ' <small>(' + c.nworks + ' œuvres en anglais)</small></div>';
+      });
+      body.innerHTML = h;
+      if (stat) stat.textContent = 'choisissez une collection';
+      return;
+    }
+    var coll = LIB.colls[CI];
+    if (WI === null) {
+      h += '<div class="row back" data-back="root">← Toutes les collections</div>';
+      coll.works.forEach(function(w, wi){
+        if (q && norm(w.t).indexOf(q) < 0) return;
+        if (!w.f) {
+          h += '<div class="row" style="opacity:.55">— ' + esc(w.t)
+             + ' <small>(pas d\u2019anglais)</small></div>';
+          return;
+        }
+        h += '<div class="row" data-wi="' + wi + '">' + esc(w.t)
+           + ' <small>(' + w.n + ' unités)</small></div>';
+      });
+      body.innerHTML = h;
+      if (stat) stat.textContent = coll.name;
+      return;
+    }
+    var w = coll.works[WI];
+    var wd = DONE[w.f];
+    if (!wd) {
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de ' + esc(w.t) + '…</div>';
+      loadWork();
+      return;
+    }
+    if (UI === null) {
+      h += '<div class="row back" data-back="coll">← ' + esc(coll.name) + '</div>';
+      wd.units.forEach(function(u, ui){
+        if (q) {
+          var hay = norm(u.u + ' ' + (u.lines[0] || ''));
+          if (hay.indexOf(q) < 0) return;
+        }
+        var pv = u.lines[0] ? (u.lines[0].slice(0, 80) + (u.lines[0].length > 80 ? '…' : '')) : '';
+        h += '<div class="row" data-ui="' + ui + '"><b>' + esc(u.u) + '</b>'
+           + ' <small>(' + u.lines.length + ' §) — ' + esc(pv) + '</small></div>';
+      });
+      body.innerHTML = h;
+      if (stat) stat.textContent = w.t;
+      return;
+    }
+    /* aperçu de l'unité */
+    var u = wd.units[UI];
+    TXT = buildCite(coll, w, u);
+    h += '<div class="row back" data-back="unit">← ' + esc(w.t) + ' — unités</div>';
+    body.innerHTML = h;
+    prev.textContent = TXT;
+    prev.style.display = 'block';
+    ins.style.display = 'block';
+    if (stat) stat.textContent = w.t + ' ' + u.u + ' — ' + u.lines.length + ' §';
+  }
+  function buildCite(coll, w, u){
+    var paras = [], tot = 0;
+    for (var i = 0; i < u.lines.length && paras.length < 2 && tot < 1200; i++) {
+      var l = u.lines[i];
+      paras.push(l);
+      tot += l.length;
+    }
+    return '📜 ' + w.t + ' ' + u.u + ' (' + coll.name + ' — sefaria.org)\n\n'
+      + paras.map(function(p){ return '> ' + p.replace(/\n/g, ' '); }).join('\n>\n') + '\n';
+  }
+  function insert(){
+    if (!TXT) return;
+    var ta = document.getElementById('user-input');
+    if (!ta) return;
+    ta.value = ta.value ? (ta.value.replace(/\s+$/, '') + '\n\n' + TXT) : TXT;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    ta.focus();
+    close();
+  }
+
+  function boot(){
+    var b = document.getElementById('v181-cite-btn');
+    if (!b || b.dataset.v181wired) return;
+    b.dataset.v181wired = '1';
     b.addEventListener('click', open);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
