@@ -34688,7 +34688,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.350';
+  var STAMPED = '2.0.353';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42078,6 +42078,13 @@ window.continueTradApart = async function (msgId) {
     try { window.__applyPanelMarks && window.__applyPanelMarks(body); } catch (e) {}
     try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}   /* v189 */
     try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
+    /* v197 — § Chronologie du livre biblique (frise interactive) */
+    try {
+      var tld197 = document.createElement('div');
+      tld197.id = 'v167-tl';
+      body.appendChild(tld197);
+      window.__theoTL197bible(curRef && curRef.b, tld197);
+    } catch (e) {}
     /* v168 — citations FR de traditionapostolique.fr (section asynchrone) */
     body.insertAdjacentHTML('beforeend', '<div id="v167-ta"></div>');
     loadTA().then(function (ta) {
@@ -42524,49 +42531,17 @@ window.continueTradApart = async function (msgId) {
     var s = String(w || '').replace(/\s*\([^)]*\)/g, '').trim() || String(w || '').trim();
     return s.length > 30 ? s.slice(0, 29) + '…' : s;
   }
-  function timelineSvg(tl){
+  function timelineSvg(tl){ /* v197 — délègue au SVG interactif (clic → carte d'info) */
     try {
-      if (!tl || tl.length < 2) return '';
-      var pts = [], und = [];
+      if (!tl || tl.length < 2 || !window.__theoTLsvg) return '';
+      var evs = [], und = [];
       tl.forEach(function(x){
         var y = tlYear(x.w);
-        if (y === null) { und.push(x); return; }
-        pts.push({ y: y, w: String(x.w || ''), t: String(x.t || '') });
+        if (y === null) { var l = tlLabel(x.w); if (l && und.indexOf(l) < 0 && und.length < 6) und.push(l); return; }
+        evs.push({ y: y, l: tlLabel(x.w), i: String(x.w || '') + (x.t ? ' — ' + x.t : '') });
       });
-      if (pts.length < 2) return '';
-      pts.sort(function(a, b){ return a.y - b.y; });
-      var min = pts[0].y, max = pts[pts.length - 1].y;
-      if (max === min) max = min + 1;
-      var W = 640, L = 70, R = 610, AY = 52;
-      var X = function(y){ return L + (y - min) / (max - min) * (R - L); };
-      var sv = '<svg viewBox="0 0 ' + W + ' 118" style="width:100%;height:auto;display:block;margin:6px 0 10px" role="img" aria-label="Frise chronologique des témoins">';
-      sv += '<line x1="' + L + '" y1="' + AY + '" x2="' + R + '" y2="' + AY + '" stroke="rgba(79,142,247,.45)" stroke-width="1.5"/>';
-      var span = max - min;
-      var step = span <= 60 ? 50 : span <= 150 ? 100 : span <= 400 ? 200 : span <= 800 ? 250 : 500;
-      for (var ty = Math.ceil(min / step) * step; ty <= max; ty += step) {
-        var tx = X(ty).toFixed(1);
-        sv += '<line x1="' + tx + '" y1="' + (AY - 3) + '" x2="' + tx + '" y2="' + (AY + 3) + '" stroke="rgba(79,142,247,.5)" stroke-width="1"/>';
-        sv += '<text x="' + tx + '" y="' + (AY + 15) + '" font-size="8.5" fill="rgba(191,212,255,.55)" text-anchor="middle">' + ty + (ty < 0 ? ' av' : '') + '</text>';
-      }
-      var n = pts.length, stride = n > 12 ? 2 : 1;
-      pts.forEach(function(p, i){
-        var cx = X(p.y).toFixed(1);
-        var col = p.y < 0 ? '#f5c542' : '#4f8ef7';
-        var tip = esc(p.w) + (p.t ? ' — ' + p.t.slice(0, 90) : '');
-        sv += '<circle cx="' + cx + '" cy="' + AY + '" r="4" fill="' + col + '" stroke="rgba(13,22,38,.9)" stroke-width="1"><title>' + tip + '</title></circle>';
-        if (i % stride === 0 || i === n - 1) {
-          var up = (i % (2 * stride) === 0);
-          var ly = up ? AY - 18 : AY + 26;
-          sv += '<line x1="' + cx + '" y1="' + (up ? AY - 4 : AY + 4) + '" x2="' + cx + '" y2="' + (up ? AY - 12 : AY + 12) + '" stroke="rgba(79,142,247,.3)" stroke-width="1"/>';
-          sv += '<text x="' + cx + '" y="' + ly + '" font-size="8.5" fill="#bfd4ff" text-anchor="middle">' + esc(tlLabel(p.w)) + '</text>';
-        }
-      });
-      if (und.length) {
-        var names = und.slice(0, 5).map(function(x){ return tlLabel(x.w); }).join(' · ');
-        sv += '<text x="8" y="108" font-size="9" fill="rgba(191,212,255,.5)">Sans date précise : ' + esc(names) + (und.length > 5 ? ' …' : '') + '</text>';
-      }
-      sv += '</svg>';
-      return sv;
+      if (evs.length < 2) return '';
+      return window.__theoTLsvg(evs, und);
     } catch (e) { return ''; }
   }
 
@@ -43902,6 +43877,13 @@ window.continueTradApart = async function (msgId) {
       try { window.__v189ApplyPanelNotes && window.__v189ApplyPanelNotes(body); } catch (e) {}
       try { window.__v193Enhance && window.__v193Enhance(body); } catch (e) {}   /* v193 */
     });
+    /* v197 — § Chronologie de la sourate (frise interactive) */
+    try {
+      var tld197 = document.createElement('div');
+      tld197.id = 'v183-tl';
+      body.appendChild(tld197);
+      window.__theoTL197surah(cur.s, tld197);
+    } catch (e) {}
   }
 
   function openPanel(s, v1, v2) {
@@ -44687,6 +44669,138 @@ window.continueTradApart = async function (msgId) {
         window.__v193Translate(sn, ai);
       });
       b.insertAdjacentElement('afterend', ai);
+    });
+  };
+})();
+</script>
+
+<script id="v197-tl">
+/* ═══ v197 — frises chronologiques INTERACTIVES (clic sur un point → carte d'info) ═══
+   • __theoTLsvg(evs, undNames) : SVG réutilisable, points cliquables (registre __theoTLdata).
+   • __theoTL197surah(s, box) : frise de la sourate (révélation + transmission du texte).
+   • __theoTL197bible(b, box) : frise du livre biblique (composition + manuscrits).
+   Données : tradition/tl_versets.json. Carte z-index 148500 (au-dessus des panneaux). ═══ */
+(function(){
+  'use strict';
+  if (window.__theoTL197) return;
+  window.__theoTL197 = true;
+
+  var stl = document.createElement('style');
+  stl.textContent = '.tl-dot:hover{stroke:#fff;stroke-width:1.5}.tl-lab:hover{fill:#fff}';
+  document.head.appendChild(stl);
+
+  var TLV = null;
+  function loadTLV(){
+    if (TLV !== null && TLV !== undefined) return Promise.resolve(TLV);
+    return fetch('tradition/tl_versets.json').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ TLV = j; return TLV; })
+      .catch(function(){ TLV = false; return TLV; });
+  }
+
+  var TLD = [];   /* registre des détails cliquables {y, l, i} */
+  window.__theoTLdata = TLD;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  window.__theoTLsvg = function(evs, undNames){
+    try {
+      if (!evs || evs.length < 2) return '';
+      evs = evs.slice().sort(function(a,b){ return a.y - b.y; });
+      var min = evs[0].y, max = evs[evs.length-1].y;
+      if (max === min) max = min + 1;
+      var W = 640, L = 74, R = 606, AY = 52;
+      var X = function(y){ return L + (y - min) / (max - min) * (R - L); };
+      var sv = '<svg viewBox="0 0 ' + W + ' 118" style="width:100%;height:auto;display:block;margin:6px 0 10px" role="img" aria-label="Frise chronologique interactive — cliquez sur un point">';
+      sv += '<line x1="'+L+'" y1="'+AY+'" x2="'+R+'" y2="'+AY+'" stroke="rgba(79,142,247,.45)" stroke-width="1.5"/>';
+      var span = max - min;
+      var step = span <= 60 ? 50 : span <= 150 ? 100 : span <= 400 ? 200 : span <= 800 ? 250 : 500;
+      for (var ty = Math.ceil(min/step)*step; ty <= max; ty += step) {
+        var tx = X(ty).toFixed(1);
+        sv += '<line x1="'+tx+'" y1="'+(AY-3)+'" x2="'+tx+'" y2="'+(AY+3)+'" stroke="rgba(79,142,247,.5)" stroke-width="1"/>';
+        sv += '<text x="'+tx+'" y="'+(AY+15)+'" font-size="8.5" fill="rgba(191,212,255,.55)" text-anchor="middle">'+ty+(ty<0?' av':'')+'</text>';
+      }
+      var n = evs.length, stride = n > 12 ? 2 : 1;
+      evs.forEach(function(p, i){
+        var idx = TLD.push(p) - 1;
+        var cx = X(p.y).toFixed(1);
+        var col = p.y < 0 ? '#f5c542' : '#4f8ef7';
+        sv += '<circle class="tl-dot" data-tli="'+idx+'" cx="'+cx+'" cy="'+AY+'" r="4.5" fill="'+col+'" stroke="rgba(13,22,38,.9)" stroke-width="1" style="cursor:pointer"><title>'+(p.l||'')+(p.i?' — '+p.i.slice(0,80):'')+'</title></circle>';
+        if (i % stride === 0 || i === n - 1) {
+          var up = (i % (2*stride) === 0);
+          var ly = up ? AY - 18 : AY + 26;
+          var lb = String(p.l||''); lb = lb.length > 30 ? lb.slice(0,29)+'…' : lb;
+          sv += '<line x1="'+cx+'" y1="'+(up?AY-4:AY+4)+'" x2="'+cx+'" y2="'+(up?AY-12:AY+12)+'" stroke="rgba(79,142,247,.3)" stroke-width="1"/>';
+          sv += '<text class="tl-lab" data-tli="'+idx+'" x="'+cx+'" y="'+ly+'" font-size="8.5" fill="#bfd4ff" text-anchor="middle" style="cursor:pointer">'+esc(lb)+'</text>';
+        }
+      });
+      if (undNames && undNames.length) {
+        var names = undNames.slice(0,4).join(' · ');
+        sv += '<text x="8" y="108" font-size="9" fill="rgba(191,212,255,.5)">Sans date précise : '+esc(names)+(undNames.length>4?' …':'')+'</text>';
+      }
+      sv += '</svg>';
+      return sv;
+    } catch (e) { return ''; }
+  };
+
+  /* carte d'info au clic */
+  function ensureCard(){
+    var c = document.getElementById('v197-tl-card');
+    if (c) return c;
+    c = document.createElement('div');
+    c.id = 'v197-tl-card';
+    c.style.cssText = 'position:fixed;display:none;z-index:148500;background:#0f1a30;border:1px solid rgba(79,142,247,.55);border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,.55);padding:10px 12px;color:#eaf4ff;font:12px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;cursor:default;max-width:340px';
+    document.body.appendChild(c);
+    return c;
+  }
+  function openCard(x, y, p){
+    var c = ensureCard();
+    c.innerHTML = '<b style="color:#9cc0ff">'+esc(p.l||'')+'</b>'+(p.i?'<div style="margin-top:5px;opacity:.92">'+esc(p.i)+'</div>':'')
+      + '<div style="margin-top:6px;text-align:right"><span id="v197-tl-x" style="opacity:.5;cursor:pointer;font-size:10px">✕ fermer</span></div>';
+    c.style.display = 'block';
+    var w = Math.min(340, window.innerWidth - 20);
+    c.style.left = Math.min(Math.max(8, x + 12), window.innerWidth - w - 8) + 'px';
+    c.style.top = Math.min(y + 14, window.innerHeight - 170) + 'px';
+    c.style.maxWidth = w + 'px';
+    var x1 = document.getElementById('v197-tl-x');
+    if (x1) x1.onclick = function(){ c.style.display = 'none'; };
+  }
+  document.addEventListener('click', function(e){
+    var t = e.target.closest ? e.target.closest('.tl-dot,.tl-lab') : null;
+    if (t) {
+      var p = TLD[+t.dataset.tli];
+      if (p) openCard(e.clientX, e.clientY, p);
+      return;
+    }
+    var c = document.getElementById('v197-tl-card');
+    if (c && !c.contains(e.target)) c.style.display = 'none';
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') { var c = document.getElementById('v197-tl-card'); if (c) c.style.display = 'none'; }
+  });
+
+  /* frise d'une sourate (s = numéro 1-114) */
+  window.__theoTL197surah = function(s, box){
+    loadTLV().then(function(d){
+      if (!box || !box.isConnected || !d || !d.coran) return;
+      var inf = d.coran[String(s)];
+      if (!inf) return;
+      var su = window.__quranSurahs && window.__quranSurahs[s];
+      var nv = su && su.versets ? Object.keys(su.versets).length : null;
+      var first = { y: inf.y, l: 'Révélation', i: inf.info + (nv ? ' — ' + nv + ' versets.' : '') };
+      var evs = [first].concat((d.coran_evt || []).map(function(e){ return { y: e.y, l: e.l, i: e.i }; }));
+      box.innerHTML = '<div class="v167-grp" style="margin-top:10px">📜 Chronologie de la sourate — cliquez sur un point</div>' + window.__theoTLsvg(evs);
+    });
+  };
+
+  /* frise d'un livre biblique (b = numéro SCH_BOOKS 1-66) */
+  window.__theoTL197bible = function(b, box){
+    loadTLV().then(function(d){
+      if (!box || !box.isConnected || !d || !d.bible) return;
+      var inf = d.bible[String(b)];
+      if (!inf) return;
+      var comp = { y: (inf.c1 + inf.c2) / 2, l: 'Composition — ' + inf.nom, i: inf.info };
+      var evs = [comp].concat((inf.t === 'AT' ? d.at_evt : d.nt_evt).map(function(e){ return { y: e.y, l: e.l, i: e.i }; }));
+      box.innerHTML = '<div class="v167-grp" style="margin-top:10px">📜 Chronologie du livre — cliquez sur un point</div>' + window.__theoTLsvg(evs);
     });
   };
 })();
