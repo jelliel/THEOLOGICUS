@@ -42690,7 +42690,7 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
-<script id="v179-nav">
+<script id="v179-nav-script">
 /* ═══ v179 — navigateur interne ═══
    Tous les liens http(s) EXTERNES s'ouvrent en PRIORITÉ dans un visualiseur
    interne (modal iframe). Si le site refuse l'encapsulation, bouton
@@ -42763,6 +42763,7 @@ window.continueTradApart = async function (msgId) {
       a.open_browser(u, t || '').catch(function(){ window.open(u, '_blank'); });
       return true;
     }
+    window.open(u, '_blank');
     return false;
   }
   function externe(u){
