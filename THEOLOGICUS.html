@@ -27093,6 +27093,16 @@ initTafsirVerseTooltip();
       }
     });
   };
+  /* Clic droit sur une marque de panneau -> menu couleurs (changer/supprimer).
+     Le handler du chat est branché sur le conteneur de chat seulement :
+     ici on couvre les panneaux v167/v183. */
+  document.addEventListener('contextmenu', function(e){
+    const mk = e.target.closest && e.target.closest('.atc-mark[data-panel-mark="1"]');
+    if (!mk || !mk.closest('#v183-pat, #v167-pat')) return;
+    e.preventDefault();
+    const r = mk.getBoundingClientRect();
+    openColorMenu({ markId: mk.dataset.markId, msgTs: null, x: r.left, y: r.top, rect: r });
+  });
   function ensureColorMenu(){
     let m = document.getElementById('atc-color-menu');
     if (m) return m;
