@@ -9238,6 +9238,7 @@ window.__ensureTafsirSurah = function(p){
       <button class="settings-tab" role="tab" data-onglet="keys" id="settings-tab-keys">💾 Sauvegarde</button>
       <button class="settings-tab" role="tab" data-onglet="cache" id="settings-tab-cache">🧹 Cache</button>
       <button class="settings-tab" role="tab" data-onglet="motion" id="settings-tab-motion">✨ Animations</button>
+      <button class="settings-tab" role="tab" data-onglet="browser" id="settings-tab-browser">🌐 Navigateur</button>
     </div>
     <div class="modal-body">
 
@@ -9566,6 +9567,26 @@ window.__ensureTafsirSurah = function(p){
           <button class="btn" id="vmt-reset-all" style="margin-top:6px;">Tout effacer</button>
         </div>
       </div><!-- /#settings-panneau-motion -->
+
+      <!-- ═══ v201 — ONGLET NAVIGATEUR : ouverture des liens + traduction de page
+           Les boutons « 🔗 Liens » et « 🌍 Traduire » quittent le header et
+           deviennent un réglage : le header reste lisible, le choix persiste. ═══ -->
+      <div class="settings-panneau" id="settings-panneau-browser" data-panneau="browser" hidden>
+        <div class="field-group">
+          <label class="field-label">🔗 Ouverture des liens externes <span class="studio-help" title="Choix du visualiseur pour les liens web externes. « Fenêtre native » ouvre tout dans le moteur complet WebView2 — tous les sites passent, même ceux qui refusent l'encapsulation.">?</span></label>
+          <select class="field-input field-select" id="set-linkmode">
+            <option value="auto">Visualiseur interne d'abord (repli : fenêtre native)</option>
+            <option value="native">Fenêtre native — tous les liens (moteur complet)</option>
+            <option value="external">Navigateur système (Edge, Chrome…)</option>
+          </select>
+          <div class="field-hint">▸ « Fenêtre native » : chaque page reçoit la barre flottante (traduire, recherche, mode lecture, fermer).</div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">🌍 Traduction de page web</label>
+          <div class="field-hint">Traduit la dernière page externe ouverte via Google Traduction, dans une fenêtre native — l'équivalent de l'extension « Translate », sans extension.</div>
+          <button type="button" class="btn" id="set-translate-last">🌍 Traduire la dernière page</button>
+        </div>
+      </div><!-- /#settings-panneau-browser -->
     </div><!-- /.modal-body -->
   </div><!-- /.modal-box -->
 </div><!-- /#settings-modal -->
@@ -12698,7 +12719,7 @@ function initSettingsModal() {
      bouton « Clés API ») doivent pouvoir ouvrir le modal DIRECTEMENT sur le bon
      onglet — sinon le correctif clavier retomberait sur « Modèle IA » et
      l'utilisateur chercherait la clé API à l'aveugle. */
-  const SETTINGS_ONGLETS = ['model', 'providers', 'tts', 'keys', 'cache', 'motion'];
+  const SETTINGS_ONGLETS = ['model', 'providers', 'tts', 'keys', 'cache', 'motion', 'browser'];
   function settingsOuvrirOnglet(nom) {
     if (SETTINGS_ONGLETS.indexOf(nom) < 0) nom = 'model';
     document.querySelectorAll('#settings-tabs .settings-tab').forEach(b => {
@@ -44831,61 +44852,159 @@ window.continueTradApart = async function (msgId) {
 </script>
 
 <script id="v198-links">
-/* ═══ v198 — mode d'ouverture des liens externes + traduction rapide ═══
+/* ═══ v198/v201 — mode d'ouverture des liens externes + traduction de page ═══
    Les fenêtres natives WebView2 (pywebview) ne peuvent pas charger les
-   extensions Edge (Translate…). Réponse en deux boutons HUD :
-   • « 🔗 Liens » : cycle Interne d'abord → FENÊTRE NATIVE (tout passe par
-     le moteur complet) → navigateur système. Persisté (theo_link_mode_v1).
-   • « 🌍 Traduire » : rouvre la dernière page externe via Google Traduction
-     dans la fenêtre native — remplace l'extension Translate. ═══ */
+   extensions Edge (Translate…). Deux réglages — désormais dans PARAMÈTRES →
+   « 🌐 Navigateur » (v201 : ils quittent le header pour le garder lisible) :
+   • Ouverture des liens : interne d'abord / FENÊTRE NATIVE (tout passe par
+     le moteur complet) / navigateur système. Persisté (theo_link_mode_v1).
+   • « 🌍 Traduire la dernière page » : rouvre la dernière page externe via
+     Google Traduction dans la fenêtre native — remplace l'extension. ═══ */
 (function(){
   'use strict';
   if (window.__theoV198) return;
   window.__theoV198 = true;
 
-  var MODES = ['auto', 'native', 'external'];
-  var LABELS = { auto: '🔗 Liens : Interne', native: '🔗 Liens : Native', external: '🔗 Liens : Système' };
-  var TITLES = {
-    auto: 'Liens externes : visualiseur interne d\u2019abord, puis fenêtre native (cliquer pour changer)',
-    native: 'Liens externes : TOUJOURS la fenêtre native WebView2 — tous les sites passent (cliquer pour changer)',
-    external: 'Liens externes : navigateur système (cliquer pour changer)'
-  };
   function getMode(){
     try { return localStorage.getItem('theo_link_mode_v1') || 'auto'; } catch (e) { return 'auto'; }
   }
-  function addHud(btn, afterId){
-    var ref = document.getElementById(afterId);
-    if (ref && ref.parentNode) ref.parentNode.insertBefore(btn, ref.nextSibling);
-    else document.body.appendChild(btn);
-  }
+  window.__theoV198Mode = getMode;
 
-  var bm = document.createElement('button');
-  bm.id = 'open-linkmode'; bm.className = 'hud-btn';
-  bm.addEventListener('click', function(){
-    var m = MODES[(MODES.indexOf(getMode()) + 1) % MODES.length];
-    try { localStorage.setItem('theo_link_mode_v1', m); } catch (e) {}
-    paint();
-    if (window.toast) window.toast('Liens externes : ' + LABELS[m].replace('🔗 Liens : ', '') + (m === 'native' ? ' — tout passe par la fenêtre native' : ''), 'success');
-  });
-  function paint(){ bm.textContent = LABELS[getMode()]; bm.title = TITLES[getMode()]; }
-  paint();
-  addHud(bm, 'open-gsearch');
-
-  var bt = document.createElement('button');
-  bt.id = 'open-translate'; bt.className = 'hud-btn';
-  bt.textContent = '🌍 Traduire';
-  bt.title = 'Traduire la dernière page externe ouverte en français — Google Traduction dans la fenêtre native WebView2';
-  bt.addEventListener('click', function(){
-    var last = null;
-    try { last = localStorage.getItem('theo_last_url_v1'); } catch (e) {}
-    if (!last) {
-      if (window.toast) window.toast('Ouvrez d\u2019abord une page externe, puis cliquez ici pour la traduire', 'error');
-      return;
+  function wire(){
+    var sel = document.getElementById('set-linkmode');
+    if (sel && !sel.dataset.v198w) {
+      sel.dataset.v198w = '1';
+      try { sel.value = getMode(); } catch (e) {}
+      sel.addEventListener('change', function(){
+        try { localStorage.setItem('theo_link_mode_v1', sel.value); } catch (e) {}
+        if (window.toast) window.toast('Liens externes : ' + sel.options[sel.selectedIndex].text, 'success');
+      });
     }
-    if (typeof window.__theoNavTraduire === 'function') window.__theoNavTraduire(last, 'page');
-    else if (window.toast) window.toast('Indisponible hors application', 'error');
-  });
-  addHud(bt, 'open-linkmode');
+    var bt = document.getElementById('set-translate-last');
+    if (bt && !bt.dataset.v198w) {
+      bt.dataset.v198w = '1';
+      bt.addEventListener('click', function(){
+        var last = null;
+        try { last = localStorage.getItem('theo_last_url_v1'); } catch (e) {}
+        if (!last) {
+          if (window.toast) window.toast('Ouvrez d\u2019abord une page externe, puis revenez ici pour la traduire', 'error');
+          return;
+        }
+        if (typeof window.__theoNavTraduire === 'function') window.__theoNavTraduire(last, 'page');
+      });
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire);
+  else wire();
+})();
+</script>
+
+<script id="v201-trad-auto">
+/* ═══ v201 — 🌐 FR + ✨ IA sur TOUT texte étranger des panneaux ═══
+   Observation des corps de panneaux (#v167-body Pères, #v183-body Coran,
+   #v170-body doctrines, #v180-body recherche) : tout bloc .v167-sn dont le
+   texte est étranger au français (ratio de mots français < seuil, ou
+   écriture arabe/hébraïque/grecque) reçoit les deux boutons de traduction :
+     🌐 FR  → LibreTranslate (pipeline v167/v188, cache permanent)
+     ✨ IA  → traduction par le modèle IA actif (v193, cache LRU)
+   Pas de doublon : si un bouton équivalent existe déjà dans le bloc, il
+   n'est pas ajouté. Détection à chaque rendu via MutationObserver. ═══ */
+(function(){
+  'use strict';
+  if (window.__theoV201) return;
+  window.__theoV201 = true;
+
+  var FRW = /\b(?:le|la|les|de|des|du|un|une|et|est|sont|que|qui|quoi|pour|dans|avec|sur|pas|plus|moins|ce|cet|cette|ces|il|elle|ils|elles|nous|vous|se|sa|son|ses|au|aux|par|mais|ou|où|donc|ni|ne|comme|etre|avoir|ete|fait|aussi|leur|leurs|nos|vos|mon|ma|mes|ton|ta|tes|en|y|si|tout|toute|tous|toutes|meme|bien|tres|peu|dont|ainsi|alors|car|quand|lorsque|afin|celui|celle|ceux|celles|entre|encore|deja|toujours|jamais|sans|sous|autre|autres|vers|chez|donne|dieu|seigneur)\b/gi;
+  function frRatio(t){
+    var w = t.split(/\s+/).filter(Boolean);
+    if (w.length < 8) return 1;              /* trop court : pas de boutons */
+    try { t = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) { t = t.toLowerCase(); }
+    return (t.match(FRW) || []).length / w.length;
+  }
+  function foreign(t){
+    t = (t || '').trim();
+    if (t.length < 60) return false;
+    if (/[\u0600-\u06FF\u0590-\u05FF\u0370-\u03FF]/.test(t)) return true;  /* arabe, hébreu, grec */
+    return frRatio(t) < 0.08;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  function statFor(el){
+    var box = el.closest('#v167-pat, #v183-pat, #v180-gs, #v170-box');
+    if (box) {
+      var s = box.querySelector('#v167-status, #v183-status, #v180-status, #v170-status');
+      if (s) return s;
+    }
+    return document.getElementById('v167-status') || document.getElementById('v183-status')
+        || document.getElementById('v180-status') || document.getElementById('v170-status');
+  }
+  function sameSn(container, sel, t){
+    var list = container.querySelectorAll(sel);
+    for (var i = 0; i < list.length; i++) {
+      if ((list[i].dataset.sn || '') === t) return true;
+    }
+    return false;
+  }
+  function process(root){
+    root.querySelectorAll('.v167-sn').forEach(function(el){
+      if (el.dataset.v201) return;
+      el.dataset.v201 = '1';
+      if (el.classList.contains('v193-aidiv')) return;   /* résultat IA déjà traduit */
+      var t = (el.textContent || '').trim();
+      if (!foreign(t)) return;
+      var block = el.closest('.v167-item, .v170-wit, .v180-r, .v167-grp, .v170-arg') || el.parentElement;
+      var hasFr = false, hasAi = false;
+      if (block) {
+        hasFr = sameSn(block, '.v167-tr:not(.v193-ai)', t);
+        hasAi = sameSn(block, '.v193-ai', t);
+      }
+      var row = document.createElement('span');
+      row.className = 'v201-row';
+      row.style.cssText = 'display:inline-flex;gap:6px;margin:6px 0;vertical-align:top';
+      if (!hasFr) {
+        var fr = document.createElement('button');
+        fr.type = 'button'; fr.className = 'v167-tr'; fr.textContent = '🌐 FR';
+        fr.title = 'Traduire en français (LibreTranslate, hors-ligne)';
+        fr.dataset.sn = t;
+        fr.addEventListener('click', function(ev){
+          ev.preventDefault(); ev.stopPropagation();
+          if (fr.dataset.busy) return; fr.dataset.busy = '1';
+          var p = window.__v167Translate(t, fr, statFor(el));
+          if (p && p.finally) p.finally(function(){ try { delete fr.dataset.busy; } catch (e) {} });
+        });
+        row.appendChild(fr);
+      }
+      if (!hasAi) {
+        var ai = document.createElement('button');
+        ai.type = 'button'; ai.className = 'v167-tr v193-ai'; ai.textContent = '✨ IA';
+        ai.title = 'Traduire avec le modèle IA actif (qualité supérieure sur les textes théologiques)';
+        ai.dataset.sn = t;
+        ai.addEventListener('click', function(ev){
+          ev.preventDefault(); ev.stopPropagation();
+          if (ai.dataset.busy) return; ai.dataset.busy = '1';
+          try { window.__v193Translate(t, ai); } catch (e) {}
+        });
+        row.appendChild(ai);
+      }
+      if (row.childNodes.length) el.insertAdjacentElement('afterend', row);
+    });
+  }
+  function watch(id){
+    var b = document.getElementById(id);
+    if (!b || b.dataset.v201w) return;
+    b.dataset.v201w = '1';
+    var tm = null;
+    new MutationObserver(function(){
+      if (tm) return;
+      tm = setTimeout(function(){ tm = null; process(b); }, 250);
+    }).observe(b, { childList: true, subtree: true });
+    process(b);
+  }
+  function boot(){
+    ['v167-body', 'v183-body', 'v170-body', 'v180-body'].forEach(watch);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 </script>
 
