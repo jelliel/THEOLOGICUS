@@ -115,6 +115,33 @@ def wait_up(port: int, timeout: float = 5.0) -> bool:
     return False
 
 
+def get_lan_ip() -> str | None:
+    """Adresse IPv4 privée permettant de joindre cette machine depuis le LAN.
+
+    Astuce socket : on « connecte » un socket UDP vers une IP publique
+    inatteignable. Aucun paquet ne part (UDP, pas de connexion réelle), mais le
+    noyau choisit l'interface de sortie et donc l'IP locale correspondante —
+    exactement l'IP que les autres appareils du réseau utiliseront. Repli :
+    on énumère les interfaces et on prend la première IP non-loopback.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        pass
+    finally:
+        s.close()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                return ip
+    except OSError:
+        pass
+    return None
+
+
 # v129 — GPU. POURQUOI CE BLOC EXISTE, ET CE QU'IL NE FAIT PAS.
 #
 # D'abord un constat qui evite de chercher au mauvais endroit : pywebview
@@ -396,6 +423,59 @@ NAV_BAR_JS = """
 })();
 """
 
+# v2xx — bannière d'accès réseau injectée dans la fenêtre principale au
+# lancement (via window.events.loaded -> evaluate_js). Affiche l'URL LAN pour
+# ouvrir l'appli depuis un autre appareil, avec bouton Copier et auto-masquage.
+LAUNCH_BANNER_JS = r"""
+(function(){
+  function show(info){
+    try {
+      if (window.__theoLanBanner) return;
+      if (!document.body) { setTimeout(function(){ show(info); }, 300); return; }
+      window.__theoLanBanner = true;
+      var lan = (info && info.lan) || '';
+      var bar = document.createElement('div');
+      bar.id = 'theo-lan-banner';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;gap:10px;align-items:center;justify-content:center;background:linear-gradient(90deg,#0d1626,#13243f);border-bottom:1px solid rgba(79,142,247,.55);color:#cfe0ff;font:600 13px Consolas,monospace;padding:8px 12px;box-shadow:0 6px 22px rgba(0,0,0,.45);transition:opacity .6s';
+      var label = document.createElement('span');
+      label.innerHTML = '<b>Acces reseau</b> :';
+      bar.appendChild(label);
+      var link = document.createElement('a');
+      link.href = lan || '#';
+      link.textContent = lan || '(adresse LAN introuvable - connectez-vous a un reseau)';
+      link.target = '_blank';
+      link.style.cssText = 'color:#7fb4ff;text-decoration:underline;word-break:break-all';
+      bar.appendChild(link);
+      var copy = document.createElement('button');
+      copy.textContent = 'Copier';
+      copy.title = 'Copier l adresse reseau';
+      copy.style.cssText = 'background:rgba(28,58,120,.6);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 9px;font:700 11px Consolas,monospace;cursor:pointer';
+      copy.addEventListener('click', function(){
+        var u = lan;
+        function ok(){ copy.textContent='copie OK'; setTimeout(function(){ copy.textContent='Copier'; }, 1200); }
+        function fb(){ var t=document.createElement('textarea'); t.value=u; t.style.cssText='position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try{document.execCommand('copy'); ok();}catch(e){} t.remove(); }
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(ok, fb); else fb();
+      });
+      bar.appendChild(copy);
+      var close = document.createElement('button');
+      close.textContent = 'X';
+      close.title = 'Masquer';
+      close.style.cssText = 'background:transparent;color:#9cc0ff;border:none;font-size:14px;cursor:pointer;margin-left:4px';
+      close.addEventListener('click', function(){ bar.remove(); });
+      bar.appendChild(close);
+      document.body.appendChild(bar);
+      setTimeout(function(){ try { bar.style.opacity='0'; } catch(e){} }, 20000);
+      setTimeout(function(){ try { bar.remove(); } catch(e){} }, 21000);
+    } catch (e) {}
+  }
+  try {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.lan_info) {
+      Promise.resolve(window.pywebview.api.lan_info()).then(show).catch(function(){ show({}); });
+    } else { show({}); }
+  } catch (e) { show({}); }
+})();
+"""
+
 
 class DesktopApi:
     """API exposee au JavaScript sous `window.pywebview.api` (v74).
@@ -536,6 +616,18 @@ class DesktopApi:
         os.startfile(u)  # noqa: S606 - ouverture navigateur voulu
         return {"ok": True}
 
+    # ── v2xx — accès réseau (LAN) ─────────────────────────────────────────
+    # Le serveur écoute sur 0.0.0.0 (toutes interfaces) ; cette méthode expose
+    # au JavaScript l'URL réseau pour l'afficher dans une bannière au lancement,
+    # afin que l'utilisateur puisse ouvrir l'application depuis un autre appareil.
+    def lan_info(self):
+        return {
+            "port": getattr(self, "port", None),
+            "local": getattr(self, "local_url", ""),
+            "lan": getattr(self, "lan_url", ""),
+            "lan_ip": getattr(self, "lan_ip", None),
+        }
+
 
 def main() -> int:
     base = app_dir()
@@ -565,13 +657,19 @@ def main() -> int:
         return 1
 
     url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
+    # v2xx — adresse réseau (LAN) pour ouverture depuis un autre appareil.
+    lan_ip = get_lan_ip()
+    lan_url = f"http://{lan_ip}:{port}/THEOLOGICUS.html" if lan_ip else ""
     if deja_lancee:
         print(f"[OK] Instance THEOLOGICUS déjà en écoute sur le port {port} "
               f"— réutilisée (même origine, même configuration).")
     else:
         proxy_server.SERVE_DIR = base  # les fichiers statiques sont à côté de l'exe
         handler = partial(proxy_server.CORSProxyHandler, directory=base)
-        httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        # v2xx — 0.0.0.0 (toutes interfaces) au lieu de 127.0.0.1 : l'app est
+        # ainsi joignable depuis un autre appareil du même réseau (LAN). Le port
+        # reste déterministe (voir resoudre_port) ; seul l'attachement change.
+        httpd = ThreadingHTTPServer(("0.0.0.0", port), handler)
         httpd.daemon_threads = True
 
         server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -591,6 +689,8 @@ def main() -> int:
 
     if os.environ.get("THEOLOGICUS_NO_WINDOW"):
         print(f"[OK] Serveur prêt : {url}  (Ctrl+C pour arrêter)")
+        if lan_url:
+            print(f"[OK] Réseau (LAN)   : {lan_url}")
         try:
             while True:
                 time.sleep(3600)
@@ -622,6 +722,14 @@ def main() -> int:
 
     # Icône : fichier à côté du script ; en mode exe, pywebview extrait
     # automatiquement l'icône embarquée dans l'exécutable.
+    # v2xx — accès réseau (LAN) : on prépare l'API qui expose l'URL réseau au
+    # JavaScript pour la bannière affichée au lancement.
+    api = DesktopApi()
+    api.port = port
+    api.local_url = url
+    api.lan_ip = lan_ip
+    api.lan_url = lan_url
+
     icon_path = os.path.join(base, "THEOLOGICUS.ico")
     window = webview.create_window(
         "THEOLOGICUS",
@@ -629,11 +737,22 @@ def main() -> int:
         width=1400,
         height=900,
         min_size=(1100, 700),
-        js_api=DesktopApi(),  # v74 : mise a jour depuis l'application
+        js_api=api,  # v74 : mise a jour + infos LAN (v2xx)
         confirm_close=False,
         text_select=True,  # indispensable : sinon pywebview injecte body{user-select:none}
                            # et la sélection de texte (bulle AddToChat, surlignage) est morte.
     )
+    # v2xx — bannière d'accès réseau affichée dès le 1er chargement de la
+    # fenêtre principale (ré-injectée à chaque rechargement, sans doublon).
+    try:
+        def _afficher_banniere_lan(*_a, **_k):
+            try:
+                window.evaluate_js(LAUNCH_BANNER_JS)
+            except Exception:
+                pass
+        window.events.loaded += _afficher_banniere_lan
+    except Exception:
+        pass  # pywebview ancien : bannière absente, sans crash
     # private_mode=False : WebView2 persiste ses données (cache, etc.)
     webview.start(
         private_mode=False,
