@@ -43545,8 +43545,9 @@ window.continueTradApart = async function (msgId) {
       + '<button id="v179-rl" title="Recharger">⟳</button>'
       + '<button id="v179-nv" title="Moteur complet — tous les sites passent">⧉ Native</button>'
       + '<button id="v179-tr" title="Traduire cette page en français — Google Traduction dans la fenêtre native (équivalent de l\u2019extension Translate)">🌍 Traduire</button>'
-      + '<button id="v179-ex" title="Ouvrir dans le navigateur système">🌐 Externe</button>'
-      + '<button id="v179-x" title="Fermer (Échap)">✕</button></div>'
+    + '<button id="v179-ex" title="Ouvrir dans le navigateur système">🌐 Externe</button>'
+    + '<button id="v179-mod" title="Mode par défaut des liens externes (cliquer pour cycler) : interne d’abord / fenêtre native (tous les sites) / navigateur système">🔗 Auto</button>'
+    + '<button id="v179-x" title="Fermer (Échap)">✕</button></div>'
       + '<iframe id="v179-frame" referrerpolicy="no-referrer" title="Visualiseur web interne"></iframe>'
       + '<div id="v179-rsz" title="Redimensionner"></div>'
       + '</div>';
@@ -43568,6 +43569,26 @@ window.continueTradApart = async function (msgId) {
     m.querySelector('#v179-ex').addEventListener('click', function(){
       if (CUR) externe(CUR.u);
     });
+    /* v216 — bouton 🔗 Mode : fait cycler le mode par défaut des liens externes
+       et le persiste (theo_link_mode_v1, même clé que le réglage Paramètres →
+       Navigateur). Permet de basculer sur « fenêtre native » en un clic depuis le
+       navigateur lui-même, ce qui ouvre TOUS les liens (même ceux qui renvoient
+       une 404 en iframe, ex. documentacatholicaomnia.eu) dans le moteur complet. */
+    function refreshModeBtn(){
+      var mm = linkMode();
+      var lbl = mm === 'native' ? '🔗 Natif' : mm === 'external' ? '🔗 Ext' : '🔗 Auto';
+      var b = m.querySelector('#v179-mod'); if (b) b.textContent = lbl;
+    }
+    m.querySelector('#v179-mod').addEventListener('click', function(){
+      var cur = linkMode();
+      var nxt = cur === 'auto' ? 'native' : (cur === 'native' ? 'external' : 'auto');
+      try { localStorage.setItem('theo_link_mode_v1', nxt); } catch (e) {}
+      refreshModeBtn();
+      try { var sel = document.getElementById('set-linkmode'); if (sel) sel.value = nxt; } catch (e) {}
+      var txt = nxt === 'native' ? 'Fenêtre native (tous les liens)' : (nxt === 'external' ? 'Navigateur système' : 'Visualiseur interne d’abord');
+      if (window.toast) window.toast('Liens externes → ' + txt, 'success');
+    });
+    refreshModeBtn();
     /* v202 — historique de l'UI (les navigations internes à l'iframe sont
        invisibles en cross-origin, mais tous les accès passés par ici) */
     function updNavBtns(){
@@ -43583,8 +43604,38 @@ window.continueTradApart = async function (msgId) {
     /* indicateur de chargement : l'événement load de l'iframe passe même en
        cross-origin (c'est l'élément, pas le document, qui est observé) */
     f.addEventListener('load', function(){
-      if (CUR) ttl.textContent = (CUR.t ? CUR.t + ' — ' : '') + CUR.u;
+      if (!CUR) return;
+      ttl.textContent = (CUR.t ? CUR.t + ' — ' : '') + CUR.u;
       updNavBtns();
+      /* v216 — repli automatique (matérialise le « repli : fenêtre native »
+         annoncé par le réglage « interne d'abord »). Si le site refuse
+         l'encapsulation (X-Frame-Options / CSP frame-ancestors) ou renvoie une
+         page d'erreur interstitielle, le frame n'a PAS navigué et reste sur
+         about:blank (ou une page chrome-error, lisible). On bascule alors sur la
+         fenêtre native WebView2, qui passe toujours. Les pages cross-origin
+         normalement chargées lèvent une SecurityError à l'accès de location.href
+         (ou contentDocument) : on les laisse intactes. */
+      try {
+        var doc = f.contentDocument;
+        if (doc && doc.body) {
+          var tx = (doc.body.innerText || '').toLowerCase();
+          if (/refused to connect|x-frame-options|can't be displayed in a frame|blocked by|frame-ancestors|err_blocked_by_response|net::err/.test(tx)) {
+            var uu = CUR.u, tt = CUR.t;
+            native(uu, tt); close();
+            if (window.toast) window.toast('Site refusant l’affichage intégré → fenêtre native ouverte.', 'info');
+            return;
+          }
+        }
+      } catch (e) { /* cross-origin chargé : rien à faire */ }
+      try {
+        var h = f.contentWindow.location.href;
+        if (h === 'about:blank' || /chrome-error|interstitial/.test(h)) {
+          var u2 = CUR.u, t2 = CUR.t;
+          native(u2, t2); close();
+          if (window.toast) window.toast('Site refusant l’affichage intégré → fenêtre native ouverte.', 'info');
+          return;
+        }
+      } catch (e) { /* cross-origin chargé : rien à faire */ }
     });
     /* v202 — déplacer la fenêtre par sa barre de titre */
     var drag = null;
