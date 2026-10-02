@@ -425,6 +425,23 @@
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
+  /* v400 — mémoire de traduction UNIFIÉE et persistante (localStorage
+     « theo_tm_v1 »), partagée par TOUTES les voies (bulle LibreTranslate, IA
+     v193, Pères FR v171) : une traduction produite par une voie est réutilisée
+     par les autres — on ne retraduit jamais deux fois le même texte vers la
+     même langue. */
+  function _tmHash(s){ var h = 5381; s = String(s || ''); for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return 'h' + h; }
+  window.__theoTM = {
+    get: function(text, lang){
+      try { var o = JSON.parse(localStorage.getItem('theo_tm_v1') || '{}'); return o[_tmHash(text) + '|' + (lang || 'fr')] || null; }
+      catch(e){ return null; }
+    },
+    put: function(text, lang, tr){
+      try { var o = JSON.parse(localStorage.getItem('theo_tm_v1') || '{}'); o[_tmHash(text) + '|' + (lang || 'fr')] = String(tr || ''); localStorage.setItem('theo_tm_v1', JSON.stringify(o)); }
+      catch(e){}
+    }
+  };
+
   /* v64 — tri : la langue voulue en tête, puis l'ordre alphabétique des codes. */
   function sortLangs(arr, first){
     var a = (arr || []).slice();
@@ -646,11 +663,13 @@
           out.appendChild(cfg);
           return;
         }
+        var _cached = (window.__theoTM && window.__theoTM.get(text, current));
+        if (_cached) { out.textContent = _cached; out.dataset.ok = '1'; return; }
         return fetch(ep + '/translate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: text, source: 'auto', target: current, format: 'text' })
         }).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-          .then(function(d){ out.textContent = (d && d.translatedText) || '(vide)'; out.dataset.ok = '1'; })
+          .then(function(d){ var _t = (d && d.translatedText) || ''; out.textContent = _t || '(vide)'; out.dataset.ok = '1'; if (_t && window.__theoTM) window.__theoTM.put(text, current, _t); })
           .catch(function(e){ out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Erreur : ' + esc(e && e.message || e) + '</span>'; out.dataset.ok = ''; });
       });
     }
@@ -34820,7 +34839,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.400';
+  var STAMPED = '2.0.401';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -44819,7 +44838,7 @@ window.continueTradApart = async function (msgId) {
   window.__theoV189 = true;
 
   var BASKET = 'theo_basket_v1', NOTES = 'theo_panel_notes_v1';
-  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr', 'theo_v193_ai', 'theo_favorites_v1', 'theo_history_v1', 'theo_panel_font'];
+  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr', 'theo_v193_ai', 'theo_tm_v1', 'theo_favorites_v1', 'theo_history_v1', 'theo_panel_font'];
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function ld(k){ try { var a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
   function sv(k, a){ try { localStorage.setItem(k, JSON.stringify(a)); } catch(e){} }
@@ -44911,7 +44930,8 @@ window.continueTradApart = async function (msgId) {
     else arr.forEach(function(it){
       h += '<div class="v189-item"><b>' + esc(it.src || 'Sélection') + '</b>'
         + '<div class="tx">' + esc(String(it.text || '').slice(0, 600)) + (String(it.text || '').length > 600 ? '…' : '') + '</div>'
-        + '<button data-copy="' + it.id + '">📋 Copier</button><button data-del="' + it.id + '">🗑 Retirer</button></div>';
+        + (it.fr ? '<div class="tx" style="color:#7fdfff">🇫🇷 ' + esc(String(it.fr).slice(0, 600)) + (String(it.fr).length > 600 ? '…' : '') + '</div>' : '')
+        + '<button data-copy="' + it.id + '">📋 Copier</button><button data-copyfr="' + it.id + '" title="Copier la traduction">📋 FR</button><button data-del="' + it.id + '">🗑 Retirer</button></div>';
     });
     body.innerHTML = h;
     body.querySelector('#v189-word').addEventListener('click', exportWord);
@@ -44930,6 +44950,14 @@ window.continueTradApart = async function (msgId) {
         if (!it) return;
         var ta = document.getElementById('user-input');
         if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + it.text + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Inséré dans le champ de message', 'success'); }
+      });
+    });
+    body.querySelectorAll('[data-copyfr]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = ld(BASKET).find(function(x){ return x.id === b.dataset.copyfr; });
+        if (!it || !it.fr) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(it.fr).then(function(){ toast('Traduction copiée.', 'success'); });
+        else { var ta = document.createElement('textarea'); ta.value = it.fr; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Traduction copiée.', 'success'); } catch(e){} ta.remove(); }
       });
     });
   }
@@ -45079,7 +45107,8 @@ window.continueTradApart = async function (msgId) {
       h += '<h2 style="font-size:16px">🧺 Sélections</h2>';
       d.basket.forEach(function(it){
         h += '<p style="margin:10px 0 2px"><b style="font-size:11px;letter-spacing:1px;color:#444">' + esc(it.src || 'Sélection') + '</b></p>'
-          + '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(it.text || '') + '</blockquote>';
+          + '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(it.text || '') + '</blockquote>'
+          + (it.fr ? '<p style="margin:2px 0;color:#1a5276"><i>🇫🇷 ' + esc(it.fr) + '</i></p>' : '');
       });
     }
     if (d.notes.length) {
@@ -45105,7 +45134,7 @@ window.continueTradApart = async function (msgId) {
     var h = '# Feuille d\'étude\n\n_THEOLOGICUS — ' + new Date().toLocaleDateString('fr-FR') + '_\n';
     if (d.basket.length) {
       h += '\n## 🧺 Sélections\n';
-      d.basket.forEach(function(it){ h += '\n**' + (it.src || 'Sélection') + '**\n\n> ' + String(it.text || '').replace(/\n/g, '\n> ') + '\n'; });
+      d.basket.forEach(function(it){ h += '\n**' + (it.src || 'Sélection') + '**\n\n> ' + String(it.text || '').replace(/\n/g, '\n> '); if (it.fr) h += '\n\n🇫🇷 ' + String(it.fr).replace(/\n/g, '\n'); h += '\n'; });
     }
     if (d.notes.length) {
       h += '\n## 📝 Notes\n';
@@ -45124,8 +45153,12 @@ window.continueTradApart = async function (msgId) {
   window.__v189BasketAdd = function(s){
     if (!s) return;
     var key = (window.__v187PanelKeyFromRange && s.range) ? window.__v187PanelKeyFromRange(s.range) : null;
+    var entry = { id: 'bk-' + Date.now(), ts: Date.now(), src: srcLabel(key) || 'Sélection', text: (s.text || '').slice(0, 8000) };
+    /* v400 — mémorise la traduction FR déjà produite (bulle/IA) dans l'entrée,
+       pour que la feuille d'étude affiche et exporte le texte traduit. */
+    try { var _tr = (window.__theoTM && window.__theoTM.get(s.text, 'fr')) || null; if (_tr) entry.fr = _tr.slice(0, 8000); } catch(e){}
     var arr = ld(BASKET);
-    arr.push({ id: 'bk-' + Date.now(), ts: Date.now(), src: srcLabel(key) || 'Sélection', text: (s.text || '').slice(0, 8000) });
+    arr.push(entry);
     sv(BASKET, arr);
     toast('🧺 Ajouté à la feuille d\'étude (' + arr.length + ')', 'success');
   };
@@ -45409,7 +45442,7 @@ window.continueTradApart = async function (msgId) {
     } catch(e){}
   }
   window.__v193Translate = async function(sn, b){
-    var cached = aiCacheGet(sn);
+    var cached = aiCacheGet(sn) || (window.__theoTM && window.__theoTM.get(sn, 'fr'));
     if (cached) { b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(cached) + '</div>'; return; }
     var cfg = null;
     try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
@@ -45433,6 +45466,7 @@ window.continueTradApart = async function (msgId) {
       if (t.indexOf('```') === 0) t = t.replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim();
       if (!t) throw new Error('réponse vide');
       aiCachePut(sn, t);
+      if (window.__theoTM) window.__theoTM.put(sn, 'fr', t);
       b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(t) + '</div>';
       toast('✨ Traduction IA terminée', 'success');
     } catch(e) {
