@@ -42919,7 +42919,8 @@ window.continueTradApart = async function (msgId) {
     ((VDATA && VDATA.episodes) || []).forEach(function(e){ if (e.emv) emvs[e.emv] = 1; });
     var h = '<div class="v170-cat" data-vmissback="1">← Les dix tomes</div>'
       + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chapitres de l\'index officiel de la nouvelle édition '
-      + 'qui n\'ont pas de page sur maria-valtorta.org. Titres donnés par l\'index de référence.</div>';
+      + 'qui n\'ont pas de page sur maria-valtorta.org. Titres donnés par l\'index de référence ; le texte est lisible '
+      + 'sur mariavaltorta.online (qui publie les 652 chapitres).</div>';
     var n = 0;
     Object.keys(idx).sort(function(a, b){ return a - b; }).forEach(function(k){
       if (emvs[k]) return;
@@ -42927,7 +42928,9 @@ window.continueTradApart = async function (msgId) {
       if (q && norm(k + ' ' + t).indexOf(q) < 0) return;
       n++;
       h += '<div class="v170-item"><span class="v167-au">📖 ' + k + '</span>'
-        + '<span class="v167-ti">— ' + esc(t) + '</span></div>';
+        + '<span class="v167-ti">— ' + esc(t) + '</span>'
+        + '<button type="button" data-vurl="https://mariavaltorta.online/fr/biblio/01-levangile-tel-quil-ma-ete-revele/chapitre-'
+        + ('00' + k).slice(-3) + '/" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Lire sur mariavaltorta.online ↗</button></div>';
     });
     if (st) st.textContent = n + ' chapitre(s) sans page sur le site';
     body.innerHTML = h;
