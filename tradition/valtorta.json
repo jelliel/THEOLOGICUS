@@ -28,7 +28,8 @@
   "evenements": 519,
   "enrichi": "2026-10-01",
   "catecheses": 7,
-  "hors_recits": 11
+  "hors_recits": 11,
+  "emv_repares": true
  },
  "episodes": [
   {
@@ -4929,25 +4930,27 @@
   {
    "fid": "03-027",
    "tome": 3,
-   "title": "167",
+   "title": "La rencontre des Romaines dans le jardin de Jeanne de Kouza",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-027.htm",
    "anchors": [],
    "d": "samedi 19 mai 1945",
-   "refs": []
+   "refs": [],
+   "emv": 167
   },
   {
    "fid": "03-028",
    "tome": 3,
-   "title": "168",
+   "title": "Aglaé dans la maison de Marie à Nazareth",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-028.htm",
    "anchors": [],
    "refs": [],
-   "ev": "Dimanche 13 février 28"
+   "ev": "Dimanche 13 février 28",
+   "emv": 168
   },
   {
    "fid": "03-029",
    "tome": 3,
-   "title": "169",
+   "title": "Premier sermon sur la Montagne : la mission des apôtres et des disciples",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-029.htm",
    "anchors": [],
    "refs": [
@@ -4998,12 +5001,13 @@
      "v1": 2,
      "v2": 2
     }
-   ]
+   ],
+   "emv": 169
   },
   {
    "fid": "03-030",
    "tome": 3,
-   "title": "170",
+   "title": "Deuxième sermon sur la Montagne : le don de la grâce et les Béatitudes",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-030.htm",
    "anchors": [],
    "d": "jeudi 24 mai 1945",
@@ -5054,7 +5058,8 @@
      "v1": 3,
      "v2": 11
     }
-   ]
+   ],
+   "emv": 170
   },
   {
    "fid": "03-031",
@@ -5122,12 +5127,13 @@
      "v1": 17,
      "v2": 17
     }
-   ]
+   ],
+   "emv": 171
   },
   {
    "fid": "03-032",
    "tome": 3,
-   "title": "172",
+   "title": "Quatrième sermon sur la Montagne: le serment, la prière, le jeûne. Le vieil Ismaël et Sarah",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-032.htm",
    "anchors": [],
    "d": "samedi 26 mai 1945",
@@ -5206,12 +5212,13 @@
      "v1": 24,
      "v2": 26
     }
-   ]
+   ],
+   "emv": 172
   },
   {
    "fid": "03-033",
    "tome": 3,
-   "title": "173",
+   "title": "Cinquième discours sur la Montagne: l’usage des richesses, l’aumône, la confiance en Dieu",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-033.htm",
    "anchors": [],
    "d": "dimanche 27 mai 1945",
@@ -5394,12 +5401,13 @@
      "v1": 34,
      "v2": 34
     }
-   ]
+   ],
+   "emv": 173
   },
   {
    "fid": "03-034",
    "tome": 3,
-   "title": "174",
+   "title": "Sixième sermon sur la Montagne : choisir entre le bien et le mal, l’adultère, le divorce. L’arrivée importune de Marie-Madeleine",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-034.htm",
    "anchors": [],
    "refs": [
@@ -5526,12 +5534,13 @@
      "v1": 47,
      "v2": 49
     }
-   ]
+   ],
+   "emv": 174
   },
   {
    "fid": "03-035",
    "tome": 3,
-   "title": "175",
+   "title": "Le lépreux guéri au pied de la Montagne. La générosité du scribe Jean",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-035.htm",
    "anchors": [],
    "refs": [
@@ -5543,12 +5552,13 @@
      "v2": 4
     }
    ],
-   "ev": "Vendredi 18 février 28"
+   "ev": "Vendredi 18 février 28",
+   "emv": 175
   },
   {
    "fid": "03-036",
    "tome": 3,
-   "title": "176",
+   "title": "Pendant la pause du sabbat, le dernier sermon sur la Montagne: aimer la volonté de Dieu",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-036.htm",
    "anchors": [],
    "d": "vendredi 1er juin 1945",
@@ -5591,7 +5601,8 @@
      "v1": 26,
      "v2": 27
     }
-   ]
+   ],
+   "emv": 176
   },
   {
    "fid": "03-037",
@@ -5656,7 +5667,7 @@
   {
    "fid": "03-039",
    "tome": 3,
-   "title": "179",
+   "title": "La parabole du semeur",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-039.htm",
    "anchors": [],
    "d": "lundi 4 juin 1945",
@@ -5700,12 +5711,13 @@
      "v1": 1,
      "v2": 2
     }
-   ]
+   ],
+   "emv": 179
   },
   {
    "fid": "03-040",
    "tome": 3,
-   "title": "180",
+   "title": "Discussion dans la cuisine de Pierre à Bethsaïde. Explication de la parabole du semeur",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-040.htm",
    "anchors": [],
    "d": "jeudi 7 juin 1945",
@@ -5770,7 +5782,8 @@
      "v1": 15,
      "v2": 15
     }
-   ]
+   ],
+   "emv": 180
   },
   {
    "fid": "03-041",
@@ -5852,29 +5865,31 @@
   {
    "fid": "03-042",
    "tome": 3,
-   "title": "182",
+   "title": "Discours à des bergers, en présence de Zacharie, le petit orphelin",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-042.htm",
    "anchors": [],
    "d": "samedi 9 juin 1945",
    "refs": [],
    "ev": "Mercredi 23 février 28",
-   "lieu": "Bethsaïde"
+   "lieu": "Bethsaïde",
+   "emv": 182
   },
   {
    "fid": "03-043",
    "tome": 3,
-   "title": "183",
+   "title": "Guérison d’un homme blessé dans la maison de Marie de Magdala",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-043.htm",
    "anchors": [],
    "d": "samedi 12 août 1944",
    "refs": [],
    "ev": "Mercredi 23 février 28",
-   "lieu": "Magdala"
+   "lieu": "Magdala",
+   "emv": 183
   },
   {
    "fid": "03-044",
    "tome": 3,
-   "title": "184",
+   "title": "Le petit Benjamin de Magdala et deux paraboles sur le Royaume des Cieux",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-044.htm",
    "anchors": [],
    "d": "dimanche 10 juin 1945",
@@ -5888,12 +5903,13 @@
     }
    ],
    "ev": "Mercredi 23 février 28",
-   "lieu": "Magdala"
+   "lieu": "Magdala",
+   "emv": 184
   },
   {
    "fid": "03-045",
    "tome": 3,
-   "title": "185",
+   "title": "L’épisode de la tempête apaisée et les faits qui précèdent",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-045.htm",
    "anchors": [],
    "d": "dimanche 30 janvier 1944",
@@ -5921,7 +5937,8 @@
     }
    ],
    "ev": "Mercredi 15 mars 28",
-   "evj": "2 Nissan 3788"
+   "evj": "2 Nissan 3788",
+   "emv": 185
   },
   {
    "fid": "03-046",
@@ -6617,7 +6634,7 @@
   {
    "fid": "03-069",
    "tome": 3,
-   "title": "207",
+   "title": "À Bethléem, Marie évoque la naissance de Jésus",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2003/03-069.htm",
    "anchors": [],
    "refs": [],
@@ -6681,7 +6698,8 @@
      "v1": 5,
      "v2": 5
     }
-   ]
+   ],
+   "emv": 207
   },
   {
    "fid": "03-070",
@@ -8995,7 +9013,7 @@
   {
    "fid": "04-140",
    "tome": 4,
-   "title": "276 L’homme cupide et la parabole du riche insensé. Les inquiétudes et la vigilance chez les serviteurs de Dieu.",
+   "title": "L’homme cupide et la parabole du riche insensé. Les inquiétudes et la vigilance chez les serviteurs de Dieu",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2004/04-140.htm",
    "anchors": [],
    "refs": [
@@ -9022,7 +9040,8 @@
     }
    ],
    "ev": "Vendredi 8 septembre 28",
-   "evj": "2 Tishri 3789"
+   "evj": "2 Tishri 3789",
+   "emv": 276
   },
   {
    "fid": "04-141",
@@ -12398,10 +12417,10 @@
   {
    "fid": "06-087",
    "tome": 6,
-   "title": "Discours d’adieu à Hébron. Les illusions de Judas.",
+   "title": "Discours d’adieu à Hébron. Les illusions de Judas",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2006/06-087.htm",
    "anchors": [],
-   "emv": 8,
+   "emv": 398,
    "d": "jeudi 7 mars 1946",
    "refs": [],
    "ev": "Mardi 24 avril 29",
@@ -17084,7 +17103,7 @@
    "title": "Les juifs viennent en visite chez Lazare.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-001.htm",
    "anchors": [],
-   "emv": 1,
+   "emv": 541,
    "d": "mercredi 18 décembre 1946",
    "refs": [],
    "ev": "Mardi 22 janvier 30",
@@ -17097,7 +17116,7 @@
    "title": "Les juifs chez Lazare.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-002.htm",
    "anchors": [],
-   "emv": 2,
+   "emv": 542,
    "d": "jeudi 19 décembre 1946",
    "refs": [],
    "ev": "Mercredi 22 janvier 30",
@@ -17109,7 +17128,7 @@
    "title": "Marthe envoie un serviteur prévenir le Maître.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-003.htm",
    "anchors": [],
-   "emv": 3,
+   "emv": 543,
    "d": "vendredi 20 décembre 1946",
    "refs": [
     {
@@ -17128,7 +17147,7 @@
    "title": "Délire et mort de Lazare.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-004.htm",
    "anchors": [],
-   "emv": 4,
+   "emv": 544,
    "d": "samedi 21 décembre 1946",
    "refs": [],
    "ev": "vendredi 25 janvier 30",
@@ -17306,7 +17325,7 @@
    "title": "Le jour des funérailles de Lazare.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-006.htm",
    "anchors": [],
-   "emv": 6,
+   "emv": 546,
    "d": "lundi 23 décembre 1946",
    "refs": [],
    "ev": "Vendredi 25 janvier 30",
@@ -17326,7 +17345,7 @@
    "title": "Jésus décide de se rendre à Béthanie.",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-007.htm",
    "anchors": [],
-   "emv": 7,
+   "emv": 547,
    "d": "mardi 24 décembre 1946",
    "refs": [],
    "cit": [
@@ -17349,10 +17368,10 @@
   {
    "fid": "08-008",
    "tome": 8,
-   "title": "La résurrection de Lazare.",
+   "title": "La résurrection de Lazare",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2008/08-008.htm",
    "anchors": [],
-   "emv": 8,
+   "emv": 548,
    "refs": [],
    "ev": "Mardi 29 janvier 30",
    "evj": "9 Scébat 3790",
@@ -20621,10 +20640,10 @@
   {
    "fid": "10-017",
    "tome": 10,
-   "title": "Les apôtres envoyés au Golgotha, et leur retour au Cénacle.",
+   "title": "Les apôtres envoyés au Golgotha,",
    "u": "https://www.maria-valtorta.org/Publication/TOME%2010/10-017.htm",
    "anchors": [],
-   "emv": 1,
+   "emv": 631,
    "refs": [
     {
      "raw": "Marc 16,17-18",
