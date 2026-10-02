@@ -9,7 +9,7 @@
    "id": "calendrier",
    "nom": "Calendrier de la vie de Jésus",
    "kind": "texte",
-   "note": "Chronologie reconstituee d'apres l'oeuvre (an -53 a +80).",
+   "note": "Chronologie reconstituee d'apres l'oeuvre et les travaux de Jean Aulagnier — an -53 a +80 (62 annees renseignees).",
    "pages": [
     {
      "t": "Calendrier de la vie de Jésus — sommaire",
@@ -25,6 +25,318 @@
      "t": "5-trimestre2",
      "u": "https://www.maria-valtorta.org/Calendrier/5-trimestre2.htm",
      "x": "_\" \"\n\n_An -5_ de avril à juillet\n\nZivSiwanTammouzAb\n1 9-avr 1 8-mai 1 7-juin 1 Sabbat 6-juil\n2 10-avr 2 9-mai 2 8-juin 2 7-juil\n3 11-avr 3 10-mai 3 Sabbat 9-juin 3 8-juil\n4 12-avr 4 11-mai 4 10-juin 4 9-juil\n5 13-avr 5 Pentecôte 12-mai 5 11-juin 5 10-juil\n6 Sabbat 14-avr 6 13-mai 6 12-juin 6 Circoncision Baptiste 11-juil\n7 15-avr 7 14-mai 7 13-juin 7 12-juil\n8 16-avr 8 15-mai 8 14-juin 8 Sabbat 13-juil\n9 17-avr 9 16-mai 9 15-juin 9 Jeûne 14-juil\n10 18-avr 10 17-mai 10 Sabbat 16-juin 10 15-juil\n11 19-avr 11 18-mai 11 17-juin 11 16-juil\n12 20-avr 12 Sabbat 19-mai 12 18-juin 12 17-juil\n13 Sabbat 21-avr 13 20-mai 13 19-juin 13 18-juil\n14 22-avr 14 21-mai 14 20-juin 14 19-juil\n15 23-avr 15 22-mai 15 21-juin 15 Sabbat 20-juil\n16 24-avr 16 23-mai 16 22-juin 16 21-juil\n17 25-avr 17 24-mai 17 Sabbat 23-juin 17 22-juil\n18 26-avr 18 25-mai 18 24-juin 18 23-juil\n19 27-avr 19 Sabbat 26-mai 19 25-juin 19 24-juil\n20 Sabbat 28-avr 20 27-mai 20 26-juin 20 25-juil\n21 29-avr 21 28-mai 21 27-juin 21 26-juil\n22 30-avr 22 29-mai 22 28-juin 22 Sabbat 27-juil\n23 1-mai 23 30-mai 23 29-juin 23 28-juil\n24 2-mai 24 31-mai 24 Sabbat 30-juin 24 29-juil\n25 3-mai 25 1-juin 25 1-juil 25 30-juil\n26 4-mai 26 Sabbat 2-juin 26 2-juil 26 31-juil\n27 Sabbat 5-mai 27 3-juin 27 Naissance Baptiste 3-juil 27 1-août\n28 6-mai 28 4-juin 28 4-juil 28 2-août\n29 7-mai 29 5-juin 29 5-juil 29 Sabbat 3-août\n30 6-juin 30 4-août"
+    }
+   ],
+   "chrono": [
+    {
+     "a": -53,
+     "j": "Naissance estimative d'Alphée, oncle de Jésus",
+     "h": ""
+    },
+    {
+     "a": -44,
+     "j": "",
+     "h": "Assassinat de César"
+    },
+    {
+     "a": -43,
+     "j": "Naissance estimative de Marie d'Alphée, tante de Jésus",
+     "h": ""
+    },
+    {
+     "a": -40,
+     "j": "",
+     "h": "Hérode le grand, reçoit le titre de roi des juifs"
+    },
+    {
+     "a": -39,
+     "j": "Naissance estimative de Joseph le père adoptif de Jésus",
+     "h": ""
+    },
+    {
+     "a": -27,
+     "j": "",
+     "h": "Auguste empereur"
+    },
+    {
+     "a": -24,
+     "j": "Naissance estimative de Simon, le cousin de Jésus",
+     "h": ""
+    },
+    {
+     "a": -23,
+     "j": "Naissance estimative de Pierre",
+     "h": ""
+    },
+    {
+     "a": -22,
+     "j": "octobre 22, immaculée conception (conception de la Vierge Marie)",
+     "h": ""
+    },
+    {
+     "a": -21,
+     "j": "mercredi 10 septembre, naissance de la Vierge Marie",
+     "h": ""
+    },
+    {
+     "a": -20,
+     "j": "",
+     "h": "Automne 20, début de la construction du Temple"
+    },
+    {
+     "a": -18,
+     "j": "Fin de l'été, Marie présentée au Temple",
+     "h": ""
+    },
+    {
+     "a": -13,
+     "j": "Naissance estimative de Thomas l'apôtre",
+     "h": ""
+    },
+    {
+     "a": -10,
+     "j": "Naissance estimative de Jacques de Zébédée",
+     "h": ""
+    },
+    {
+     "a": -9,
+     "j": "Naissance estimative de Jude d'Alphée",
+     "h": ""
+    },
+    {
+     "a": -8,
+     "j": "",
+     "h": "Auguste lance le recensement"
+    },
+    {
+     "a": -7,
+     "j": "Naissance estimative de Jacques d'Alphée",
+     "h": ""
+    },
+    {
+     "a": -6,
+     "j": "Seconde quinzaine de décembre, fiançailles de Joseph et de Marie",
+     "h": "Le recensement est proclamé en Judée"
+    },
+    {
+     "a": -5,
+     "j": "Première décade de mars: Annonciation - mercredi 3 juillet: naissance de Jean-Baptiste - dans la nuit du mardi 10 au mercredi 11 décembre : naissance de Jésus",
+     "h": "Novembre: le recensement est proclamé en Galilée"
+    },
+    {
+     "a": -4,
+     "j": "Naissance estimative de Lazare - mi novembre: adoration des mages - fin novembre: fuite en Egypte",
+     "h": ""
+    },
+    {
+     "a": -2,
+     "j": "",
+     "h": "Pâque: Mort d'Hérode le grand"
+    },
+    {
+     "a": -1,
+     "j": "Retour, au printemps, de la Sainte Famille à Nazareth. Jésus à 3 ans et demi",
+     "h": "Début de l'ère chrétienne"
+    },
+    {
+     "a": 2,
+     "j": "Naissance estimative de Judas - Naissance estimative de Marie de Magdala",
+     "h": ""
+    },
+    {
+     "a": 7,
+     "j": "Naissance estimative de Jean l'apôtre",
+     "h": ""
+    },
+    {
+     "a": 9,
+     "j": "jeudi 16 avril: examen de majorité (Bar Mitsva) de Jésus. Discussion avec les Docteurs",
+     "h": ""
+    },
+    {
+     "a": 10,
+     "j": "",
+     "h": "Mort de Hillel, le grand docteur d'Israël"
+    },
+    {
+     "a": 14,
+     "j": "",
+     "h": "Tibère empereur"
+    },
+    {
+     "a": 20,
+     "j": "Mort d'Euchérie, la mère de Lazare, Marthe et Marie",
+     "h": ""
+    },
+    {
+     "a": 24,
+     "j": "Mort de Théophile le père de la famille de Béthanie",
+     "h": ""
+    },
+    {
+     "a": 25,
+     "j": "Début de l'année: Mort de Joseph à l'âge de 64 ans environ",
+     "h": ""
+    },
+    {
+     "a": 26,
+     "j": "11 décembre: Jésus a 30 ans. 13 décembre: Il commence sa préparation à la vie publique. 15 décembre: Baptême au Jourdain",
+     "h": "Ponce Pilate Gouverneur"
+    },
+    {
+     "a": 27,
+     "j": "Mars: début de la vie publique après la retraite au désert - Noces de Cana - Appel des apôtres",
+     "h": "Vie publique de Jésus de 3 ans : mars 27 - avril 30"
+    },
+    {
+     "a": 28,
+     "j": "Sermon sur la montagne - 1ère multiplication des pains - Envoi des apôtres en mission",
+     "h": ""
+    },
+    {
+     "a": 29,
+     "j": "Primauté de Pierre - Transfiguration - Le pain du ciel - Imprécations contre les pharisiens",
+     "h": ""
+    },
+    {
+     "a": 30,
+     "j": "Résurrection de Lazare - Mort de Jésus le vendredi 5 avril à 15.00, à l'âge de 33 ans. Résurrection le dimanche 7 avril. Ascension le jeudi 16 mai. Pentecôte le dimanche 26 mai",
+     "h": ""
+    },
+    {
+     "a": 31,
+     "j": "fin 31, début 32 : Martyr d'Etienne - Courant 32 : Conversion de Paul sur le chemin de Damas",
+     "h": ""
+    },
+    {
+     "a": 33,
+     "j": "Pierre à Césarée chez Cornélius",
+     "h": ""
+    },
+    {
+     "a": 34,
+     "j": "",
+     "h": "Tétrarchie de Philippe rattachée temporairement à la province de Syrie"
+    },
+    {
+     "a": 36,
+     "j": "",
+     "h": "Pilate destitué s'exile en Gaule, Caïphe destitué"
+    },
+    {
+     "a": 37,
+     "j": "",
+     "h": "Galigula empereur - Hérode Agrippa, son ami, règne sur la Tétrarchie de son oncle Philippe"
+    },
+    {
+     "a": 39,
+     "j": "",
+     "h": "Hérode Agrippa Tétrarque de Galilée"
+    },
+    {
+     "a": 41,
+     "j": "Exil probable de la famille de Béthanie en Gaule (Provence)",
+     "h": "Claude empereur - Pleins pouvoirs à Hérode Agrippa 1er qui reprend ses persécutions contre les chrétiens"
+    },
+    {
+     "a": 43,
+     "j": "Martyr de Jacques de Zébédée (le majeur) à l'âge de 53 ans",
+     "h": ""
+    },
+    {
+     "a": 45,
+     "j": "Matthieu commence son évangile à partir des notes qu'il prenait du vivant de Jésus",
+     "h": ""
+    },
+    {
+     "a": 49,
+     "j": "Concile de Jérusalem - Mort de Gamaliel",
+     "h": ""
+    },
+    {
+     "a": 50,
+     "j": "Assomption à Jérusalem de la Vierge Marie à l'âge de 70 ans",
+     "h": ""
+    },
+    {
+     "a": 51,
+     "j": "Paul écrit sa première épître aux Théssaloniciens",
+     "h": ""
+    },
+    {
+     "a": 52,
+     "j": "Jean, éxilé à Ephèse, commence progressivement son évangile à partir de ses souvenirs. Il l'achèvera 15 ou 20 ans plus tard",
+     "h": ""
+    },
+    {
+     "a": 54,
+     "j": "",
+     "h": "Néron empereur"
+    },
+    {
+     "a": 60,
+     "j": "Mort probable de Lazare de Béthanie en Provence (Gaule) à l'âge de 63/64 ans environ",
+     "h": ""
+    },
+    {
+     "a": 62,
+     "j": "Lapidation à Jérusalem de Jacques d'Alphée (le mineur) évêque de Jérusalem, à l'âge de 69 ans",
+     "h": ""
+    },
+    {
+     "a": 63,
+     "j": "Marc commence son évangile",
+     "h": ""
+    },
+    {
+     "a": 64,
+     "j": "",
+     "h": "Persécutions déclenchée par Néron"
+    },
+    {
+     "a": 65,
+     "j": "Fin 64, début 65 : Martyre à Rome de Pierre à l'âge de 87 ans",
+     "h": ""
+    },
+    {
+     "a": 66,
+     "j": "Paul écrit ses épîtres à Tite et Timothée",
+     "h": "Soulèvement de la Palestine"
+    },
+    {
+     "a": 67,
+     "j": "Martyre de Paul",
+     "h": ""
+    },
+    {
+     "a": 68,
+     "j": "",
+     "h": "Galba empereur"
+    },
+    {
+     "a": 69,
+     "j": "",
+     "h": "Othon puis Vitellius et Vespasien empereurs"
+    },
+    {
+     "a": 70,
+     "j": "",
+     "h": "Destruction du Temple de Jérusalem"
+    },
+    {
+     "a": 71,
+     "j": "La communauté chrétienne de Palestine se réfugie à Pella sous la direction de Simon d'Alphée, âgé de 94 ans environ - Martyr probable de Barthélemy",
+     "h": ""
+    },
+    {
+     "a": 76,
+     "j": "Mort probable de Marie de Magdala en Provence (Gaule), à l'âge de 74 ans",
+     "h": ""
+    },
+    {
+     "a": 79,
+     "j": "",
+     "h": "Titus empereur"
     }
    ]
   },

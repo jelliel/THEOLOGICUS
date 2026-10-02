@@ -43030,6 +43030,9 @@ window.continueTradApart = async function (msgId) {
     if (VPAGE === null){
       h += '<div class="v170-cat" data-vsback="1">← Les dix tomes</div>';
       if (s.note) h += '<div style="padding:6px 14px;font-size:11px;opacity:.65">' + esc(s.note) + '</div>';
+      if (s.chrono && s.chrono.length)
+        h += '<div class="v170-cat" data-vpage="-1">📅 <b>Chronologie complète</b> <span style="opacity:.5">— '
+           + s.chrono.length + ' années renseignées (an −53 à +80)</span></div>';
       pages.forEach(function(p, i){
         var label = p.t || p.u;
         if (q && norm(label + ' ' + (p.x || '').slice(0, 3000)).indexOf(q) < 0) return;
@@ -43041,6 +43044,22 @@ window.continueTradApart = async function (msgId) {
       });
       if (st) st.textContent = s.nom + ' — ' + pages.length + ' pages';
       body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucune page.</div>';
+      return;
+    }
+    /* v212 — chronologie complète (Synoptique.xls) */
+    if (VPAGE === -1 && s.chrono){
+      var hc = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>'
+        + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chronologie reconstituée d\'après l\'œuvre '
+        + 'et les travaux de Jean Aulagnier. ✝ = vie de Jésus, 🏛 = événements historiques.</div>';
+      s.chrono.forEach(function(x){
+        if (q && norm(x.a + ' ' + (x.j || '') + ' ' + (x.h || '')).indexOf(q) < 0) return;
+        hc += '<div class="v170-item"><span class="v167-au">' + (x.a < 0 ? (-x.a) + ' av. J.-C.' : x.a + ' apr. J.-C.') + '</span>'
+           + (x.j ? '<div class="v167-sn">✝ ' + esc(x.j) + '</div>' : '')
+           + (x.h ? '<div class="v167-sn" style="opacity:.6">🏛 ' + esc(x.h) + '</div>' : '')
+           + '</div>';
+      });
+      if (st) st.textContent = 'Chronologie — ' + s.chrono.length + ' années';
+      body.innerHTML = hc;
       return;
     }
     var p = pages[VPAGE];
