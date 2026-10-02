@@ -42957,6 +42957,12 @@ window.continueTradApart = async function (msgId) {
       + esc(c.x || '') + '</div>'
       + '<div style="font-size:10.5px;opacity:.5;margin-top:8px">Source : ' + esc(c.u || '') + '</div>'
       + '<button type="button" data-vurl="' + esc(c.u || '') + '" style="margin-top:8px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:5px 11px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la page source ↗</button>'
+      + (c.lg ? '<div style="margin-top:12px;font-size:10.5px;opacity:.6">Lire ce chapitre dans une autre langue :</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">'
+          + Object.keys(c.lg).map(function(lg){
+              return '<button type="button" data-vurl="' + esc(c.lg[lg]) + '" style="background:rgba(60,60,90,.55);color:#d8d8f0;border:1px solid rgba(150,150,200,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">' + lg.toUpperCase() + '</button>';
+            }).join('')
+          + '</div>' : '')
       + '</div>';
     if (st) st.textContent = 'Chapitre ' + VTEXT + ' — ' + (c.t || '');
     body.innerHTML = h;
@@ -43066,8 +43072,23 @@ window.continueTradApart = async function (msgId) {
         var y = parseInt(m[1], 10);
         (parAn[y] = parAn[y] || []).push(e);
       });
-      var hc = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>'
-        + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chronologie reconstituée d\'après l\'œuvre '
+      var hc = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>';
+      /* v214 — frise visuelle : on reutilise le composant SVG interactif de l'app */
+      if (window.__theoTLsvg){
+        try {
+          var evs = s.chrono.filter(function(x){ return x.j || x.h; }).map(function(x){
+            return { y: x.a,
+                     l: (x.j || x.h || '').replace(/\s+/g, ' ').slice(0, 34),
+                     i: (x.a < 0 ? (-x.a) + ' av. J.-C.' : x.a + ' apr. J.-C.')
+                        + (x.j ? '\n✝ ' + x.j : '') + (x.h ? '\n🏛 ' + x.h : '') };
+          });
+          if (evs.length >= 2)
+            hc += window.__theoTLsvg(evs, [])
+               + '<div style="font-size:10.5px;opacity:.5;text-align:center;margin:-4px 0 10px">'
+               + 'Cliquez sur un point de la frise pour lire l’événement</div>';
+        } catch (e) {}
+      }
+      hc += '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chronologie reconstituée d\'après l\'œuvre '
         + 'et les travaux de Jean Aulagnier. ✝ = vie de Jésus, 🏛 = événements historiques, '
         + '📖 = nombre de récits de l\'app datés de cette année.</div>';
       s.chrono.forEach(function(x){
