@@ -26289,6 +26289,9 @@ function initBibleVerseTooltip() {
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
     /* v89 — emplacement du mot a mot hebreu, rempli a la volee. */
     html += '<div id="hb-slot"></div>';
+    /* v204 — récits de Maria Valtorta concordés avec le passage (chips
+       cliquables, pointer-events:auto sur les chips : le panneau est none) */
+    if (window.__v204TipHtml) html += window.__v204TipHtml(p);
     tip.innerHTML = html;
     tip.style.display = 'block';
     tip.style.pointerEvents = 'none';
@@ -26567,9 +26570,13 @@ function initQuranVerseTooltip() {
       if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
     });
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
+    /* v215 — bloc Corpus Coranicum (rempli de façon asynchrone) */
+    html += '<div id="cc-block" style="margin-top:8px;border-top:1px solid rgba(245,197,66,.3);padding-top:6px;font-size:11px">⏳ Corpus Coranicum…</div>';
     tip.innerHTML = html;
     tip.style.pointerEvents = 'auto';
     tip.style.display = 'block';
+    /* v215 — charge et injecte le commentaire/variantes/manuscrits/intertextes */
+    if (window.__ccAppend) { try { window.__ccAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[CC]', e); } }
     const r = el.getBoundingClientRect();
     let x = r.left, y = r.bottom + 8;
     const tr = tip.getBoundingClientRect();
@@ -26684,6 +26691,125 @@ function initQuranVerseTooltip() {
   }, true);
 }
 __corpusHook("quran", initQuranVerseTooltip);
+
+/* ═══ CORPUS CORANICUM (v215) ═══
+   Moissonnage du site corpuscoranicum.de (BBAW) récupéré dans
+   tradition/cc/s{NNN}.json (par sourate) + tradition/cc/concordance_occ.json
+   (occurrences globales de la concordance). Affiché dans la bulle de survol
+   coranique (#quran-verse-tip) : commentaire, traduction allemande,
+   lectures variantes, manuscrits/codex, rapports intertextuels, racines. */
+function initCorpusCoranicum() {
+  'use strict';
+  window.__ccCache = {};        /* sura -> données */
+  window.__ccLoading = {};      /* sura -> Promise */
+  window.__ccOcc = null;
+  window.__ccOccLoading = null;
+  function ccEsc(s) {
+    if (s == null) return '';
+    var f = (typeof esc === 'function') ? esc : function (x) { return String(x); };
+    return f(s);
+  }
+  function ccEnsure(sura) {
+    if (window.__ccCache[sura]) return Promise.resolve(window.__ccCache[sura]);
+    if (window.__ccLoading[sura]) return window.__ccLoading[sura];
+    var fn = 'tradition/cc/s' + String(sura).padStart(3, '0') + '.json';
+    window.__ccLoading[sura] = fetch(fn, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { window.__ccCache[sura] = j || false; return window.__ccCache[sura]; })
+      .catch(function () { window.__ccCache[sura] = false; return false; });
+    return window.__ccLoading[sura];
+  }
+  function ccEnsureOcc() {
+    if (window.__ccOcc) return Promise.resolve(window.__ccOcc);
+    if (window.__ccOccLoading) return window.__ccOccLoading;
+    window.__ccOccLoading = fetch('tradition/cc/concordance_occ.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { window.__ccOcc = (j && typeof j === 'object') ? j : {}; return window.__ccOcc; })
+      .catch(function () { window.__ccOcc = {}; return {}; });
+    return window.__ccOccLoading;
+  }
+  function ccHtml(sura, v1, v2, data, occ) {
+    if (!data) {
+      return '<div style="margin-top:8px;opacity:.7;font-style:italic">⚠️ Corpus Coranicum : données en cours de récolte pour cette sourate.</div>';
+    }
+    var h = '';
+    var comm = data.comm;
+    if (comm && comm.title) {
+      h += '<div style="margin:6px 0 2px;color:#f5c542;font-weight:700;font-size:11px">📜 Corpus Coranicum — ' + ccEsc(comm.title.replace(/<[^>]+>/g, '')) + '</div>';
+    }
+    var v = v1;
+    for (; v <= (v2 || v1); v++) {
+      var ve = data.verses ? data.verses[String(v)] : null;
+      /* commentaire propre au verset (via text_structure -> section) */
+      if (comm && comm.structure && comm.sections) {
+        var row = null;
+        for (var i = 0; i < comm.structure.length; i++) { if (comm.structure[i].v === v) { row = comm.structure[i]; break; } }
+        if (row && row.sec != null && comm.sections[row.sec]) {
+          var sec = comm.sections[row.sec];
+          h += '<div style="margin:4px 0 2px;color:#f0d68a;font-size:10.5px;font-weight:700">Commentaire — v.' + v + '</div>';
+          (sec.vc || []).forEach(function (c) { h += '<div style="font-size:10.8px;line-height:1.45;margin:2px 0">' + c + '</div>'; });
+        }
+      }
+      if (!ve) { h += '<div style="opacity:.6;font-size:10.5px;margin:2px 0">Verset ' + v + ' : données non récoltées.</div>'; continue; }
+      h += '<div style="margin-top:6px;border-top:1px solid rgba(245,197,66,.25);padding-top:4px">';
+      /* lectures variantes */
+      if (ve.var) {
+        h += '<div style="margin:3px 0"><span style="color:#7fb3ff;font-weight:700">↔ Lectures variantes</span>';
+        (ve.var.read || []).forEach(function (rd) {
+          var who = (rd.r || []).join(', ');
+          var wk = rd.wk || '';
+          var vr = rd.w ? Object.keys(rd.w).map(function (k) { return k + '→' + rd.w[k]; }).join(' ') : '';
+          h += '<div style="font-size:10.5px;margin:2px 0 0 6px">• <b>' + ccEsc(who) + '</b> ' + (wk ? '<i>(' + ccEsc(wk) + ')</i> ' : '') + ccEsc(vr) + (rd.c ? ' — ' + ccEsc(rd.c) : '') + '</div>';
+        });
+        if (ve.var.com) h += '<div style="font-size:10.5px;opacity:.85;margin:2px 0 0 6px">' + ve.var.com + '</div>';
+        h += '</div>';
+      }
+      /* manuscrits / codex */
+      if (ve.mss && ve.mss.list && ve.mss.list.length) {
+        h += '<div style="margin:3px 0"><span style="color:#9fe0a0;font-weight:700">📜 Manuscrits (' + ve.mss.n + ')</span><div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">';
+        ve.mss.list.forEach(function (m) {
+          var img = m.img
+            ? '<img src="' + m.img + '" style="width:52px;height:52px;object-fit:cover;border:1px solid #444;border-radius:4px" loading="lazy" onerror="this.style.display=\'none\'">'
+            : '📜';
+          h += '<a href="' + (m.link || 'https://corpuscoranicum.de') + '" target="_blank" rel="noopener" title="' + ccEsc(m.t || '') + ' — ' + ccEsc(m.arch || '') + ' (f. ' + ccEsc(m.folio) + ')" style="text-decoration:none">' + img + '</a>';
+        });
+        h += '</div><a href="https://corpuscoranicum.de/fr/sura/' + sura + '/verse/' + v + '/manuscripts" target="_blank" rel="noopener" style="font-size:10px;color:#9fe0a0">Voir les ' + ve.mss.n + ' manuscrits ↗</a></div>';
+      }
+      /* rapports intertextuels */
+      if (ve.itt && ve.itt.length) {
+        h += '<div style="margin:3px 0"><span style="color:#e0a0f0;font-weight:700">🔗 Intertextes (' + ve.itt.length + ')</span>';
+        ve.itt.slice(0, 6).forEach(function (it) {
+          h += '<div style="font-size:10.5px;margin:2px 0 0 6px">• <b>' + ccEsc(it.t || '') + '</b> <i>(' + ccEsc(it.lang || '') + (it.dated ? ', ' + ccEsc(it.dated) : '') + ')</i>' + (it.cat ? ' — ' + ccEsc(it.cat) : '') + '</div>';
+        });
+        h += '</div>';
+      }
+      /* concordance / racines */
+      if (ve.conc && Object.keys(ve.conc).length) {
+        h += '<div style="margin:3px 0"><span style="color:#f0c060;font-weight:700">🔤 Concordance</span><div style="font-size:10px;margin-top:2px">';
+        Object.keys(ve.conc).forEach(function (wk) {
+          var c = ve.conc[wk];
+          var occn = (occ && occ[c.wc]) ? occ[c.wc].count : null;
+          h += '<span style="display:inline-block;margin:1px 4px 1px 0;padding:1px 5px;background:rgba(245,197,66,.12);border-radius:4px"><b>' + ccEsc(c.root || c.w || '') + '</b> <i>' + ccEsc(c.pos || '') + '</i>' + (occn != null ? ' <span style="opacity:.7">×' + occn + '</span>' : '') + '</span>';
+        });
+        h += '</div></div>';
+      }
+      h += '</div>';
+    }
+    return h;
+  }
+  /* injecte le bloc Corpus Coranicum dans la bulle de survol */
+  window.__ccAppend = function (sura, v1, v2, tip) {
+    var box = tip.querySelector('#cc-block');
+    if (!box) return;
+    box.innerHTML = '⏳ Corpus Coranicum…';
+    Promise.all([ccEnsure(sura), ccEnsureOcc()]).then(function (res) {
+      if (!tip.querySelector('#cc-block')) return;   /* bulle déjà refermée */
+      tip.querySelector('#cc-block').innerHTML = ccHtml(sura, v1, v2, res[0], res[1]);
+    });
+  };
+}
+initCorpusCoranicum();
+
 
 /* ═══ VÉRIFICATION INLINE DES RÉFÉRENCES (2.0 — T4) ═══
    Marque chaque référence biblique/coranique d'après la table de
@@ -29687,6 +29813,15 @@ const idx = fullM.norm.indexOf(txtM.norm);
     } else {
       tip.innerHTML = '<div class="vmt-ref">▶ ' + esc(v.ref) + (v.more ? ' <span style="font-weight:400">' + esc(v.more) + '</span>' : '') + '</div>' +
                       '<div class="vmt-txt">« ' + esc(v.text) + ' »</div>';
+    }
+    /* v213 — chips Valtorta aussi dans le panneau des annotations :
+       le module Bible exporte window.__parseBibleRef (v66). */
+    if (window.__v204TipHtml && window.__parseBibleRef) {
+      try {
+        var _vp = (window.__parseBibleRef ? window.__parseBibleRef(refStr) : null)
+                  || (window.__v204RefParts ? window.__v204RefParts(refStr) : null);
+        if (_vp) tip.innerHTML += window.__v204TipHtml(_vp);
+      } catch (e) {}
     }
     tip.style.display = 'block';
     var r = el.getBoundingClientRect();
@@ -34685,7 +34820,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.375';
+  var STAMPED = '__THEO_VERSION__';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42346,7 +42481,10 @@ window.continueTradApart = async function (msgId) {
   window.__theoV170 = true;
 
   var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
-      LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q';
+      LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q',
+      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false, VMISS = false,
+      VTEXT = null, VTDATA = null;
+      /* v204 — Valtorta : index + tome ; v205 — sections ; v206 — catéchèses */
 
   var style = document.createElement('style');
   style.textContent =
@@ -42404,6 +42542,7 @@ window.continueTradApart = async function (msgId) {
       + '<button id="v170-tab-a">ARGUMENTS (beliefmap.org)</button>'
       + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
       + '<button id="v170-tab-l">BIBLIOTHÈQUE</button>'
+      + '<button id="v170-tab-v">🌊 VALTORTA</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
@@ -42416,6 +42555,7 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
     document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
     document.getElementById('v170-tab-l').addEventListener('click', function(){ setView('l'); });
+    document.getElementById('v170-tab-v').addEventListener('click', function(){ setView('v'); });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -42455,6 +42595,62 @@ window.continueTradApart = async function (msgId) {
         render();
         return;
       }
+      if (c.hasAttribute('data-vsee')) {
+        VSEE = parseInt(c.getAttribute('data-vsee'), 10);
+        VCAT = false; VSEC = null; VMISS = false; VTEXT = null;
+        render();
+        return;
+      }
+      /* v210 — retour du lecteur de texte */
+      if (c.hasAttribute('data-vtextback')) {
+        VTEXT = null;
+        render();
+        return;
+      }
+      /* v208 — chapitres de l'index officiel sans page sur le site */
+      if (c.hasAttribute('data-vmiss')) {
+        VMISS = true; VCAT = false; VSEC = null; VSEE = null; VPAGE = null; VTEXT = null;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vmissback')) {
+        VMISS = false;
+        render();
+        return;
+      }
+      /* v206 — catéchèses */
+      if (c.hasAttribute('data-vcat')) {
+        VCAT = true; VSEE = null; VSEC = null; VPAGE = null; VMISS = false; VTEXT = null;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vcatback')) {
+        VCAT = false;
+        render();
+        return;
+      }
+      /* v205 — sections du site (encyclopédie / autres œuvres) */
+      if (c.hasAttribute('data-vsec')) {
+        VSEC = c.getAttribute('data-vsec');
+        VPAGE = null; VCAT = false; VMISS = false; VTEXT = null;
+        vsLoad(function(){ render(); });
+        return;
+      }
+      if (c.hasAttribute('data-vsback')) {
+        if (VPAGE !== null) VPAGE = null; else { VSEC = null; VSEE = null; }
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vpage')) {
+        VPAGE = parseInt(c.getAttribute('data-vpage'), 10);
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vback')) {
+        VSEE = null;
+        render();
+        return;
+      }
       if (c.hasAttribute('data-lback')) {
         var bk = c.getAttribute('data-lback');
         if (bk === 'root') { LSEL = null; LWI = null; LUNIT = null; }
@@ -42462,6 +42658,30 @@ window.continueTradApart = async function (msgId) {
         else { LUNIT = null; }
         render();
       }
+    });
+    /* v204 — ouvrir un récit Valtorta depuis la vue 🌊 (v205 : pages de section) */
+    document.getElementById('v170-body').addEventListener('click', function (ev) {
+      /* v210 — lire le texte d'un chapitre */
+      var vt = ev.target.closest ? ev.target.closest('[data-vtext]') : null;
+      if (vt){
+        VTEXT = parseInt(vt.getAttribute('data-vtext'), 10);
+        vtLoad(function(){ render(); });
+        return;
+      }
+      var vurl = ev.target.closest ? ev.target.closest('[data-vurl]') : null;
+      if (vurl){
+        var uu = vurl.getAttribute('data-vurl');
+        if (uu){
+          if (typeof window.__theoOpenNav === 'function') window.__theoOpenNav(uu, 'Valtorta');
+          else window.open(uu, '_blank');
+        }
+        return;
+      }
+      var vo = ev.target.closest ? ev.target.closest('.v170-vopen') : null;
+      if (!vo) return;
+      var vf = vo.getAttribute('data-vfid');
+      var ve = (VDATA && VDATA.episodes) ? VDATA.episodes.filter(function(x){ return x.fid === vf; })[0] : null;
+      if (ve) openVlt(ve);
     });
     document.addEventListener('keydown', function(e){
       if (e.key === 'Escape' && p.classList.contains('open')) p.classList.remove('open');
@@ -42476,10 +42696,12 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-a').classList.toggle('on', v === 'a');
     document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
     document.getElementById('v170-tab-l').classList.toggle('on', v === 'l');
+    document.getElementById('v170-tab-v').classList.toggle('on', v === 'v');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
            : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
+           : v === 'v' ? "Rechercher un récit de Valtorta (titre, date de l'événement, lieu, référence d'Évangile, numéro EMV)…"
                        : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
@@ -42833,6 +43055,310 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
   }
 
+  /* v210 — texte intégral des chapitres (mariavaltorta.online) */
+  function vtLoad(cb){
+    if (VTDATA !== null) { cb(VTDATA); return; }
+    fetch('tradition/valtorta_text.json', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ VTDATA = (j && typeof j === 'object') ? j : false; cb(VTDATA); })
+      .catch(function(){ VTDATA = false; cb(false); });
+  }
+  function renderVT(){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    if (!VTDATA){ body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du texte…</div>'; return; }
+    var c = VTDATA[String(VTEXT)];
+    var h = '<div class="v170-cat" data-vtextback="1">← Retour</div>';
+    if (!c){
+      h += '<div style="opacity:.6;padding:16px">Texte indisponible pour ce chapitre.</div>';
+      body.innerHTML = h; return;
+    }
+    h += '<div style="padding:4px 14px 12px">'
+      + '<div style="color:#d6e4ff;font-weight:700;margin-bottom:8px">📖 ' + VTEXT + '. ' + esc(c.t || '') + '</div>'
+      + '<div style="white-space:pre-wrap;font-size:12.5px;line-height:1.7;max-height:52vh;overflow:auto;padding-right:6px">'
+      + esc(c.x || '') + '</div>'
+      + '<div style="font-size:10.5px;opacity:.5;margin-top:8px">Source : ' + esc(c.u || '') + '</div>'
+      + '<button type="button" data-vurl="' + esc(c.u || '') + '" style="margin-top:8px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:5px 11px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la page source ↗</button>'
+      + (c.lg ? '<div style="margin-top:12px;font-size:10.5px;opacity:.6">Lire ce chapitre dans une autre langue :</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">'
+          + Object.keys(c.lg).map(function(lg){
+              return '<button type="button" data-vurl="' + esc(c.lg[lg]) + '" style="background:rgba(60,60,90,.55);color:#d8d8f0;border:1px solid rgba(150,150,200,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">' + lg.toUpperCase() + '</button>';
+            }).join('')
+          + '</div>' : '')
+      + '</div>';
+    if (st) st.textContent = 'Chapitre ' + VTEXT + ' — ' + (c.t || '');
+    body.innerHTML = h;
+  }
+
+  /* v208 — chapitres de l'index officiel (652) sans page sur le site */
+  function renderVMiss(q){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    var idx = (VDATA && VDATA.index652) || {};
+    var emvs = {};
+    ((VDATA && VDATA.episodes) || []).forEach(function(e){ if (e.emv) emvs[e.emv] = 1; });
+    var h = '<div class="v170-cat" data-vmissback="1">← Les dix tomes</div>'
+      + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chapitres de l\'index officiel de la nouvelle édition '
+      + 'qui n\'ont pas de page sur maria-valtorta.org. Titres donnés par l\'index de référence ; le texte est lisible '
+      + 'sur mariavaltorta.online (qui publie les 652 chapitres).</div>';
+    var n = 0;
+    Object.keys(idx).sort(function(a, b){ return a - b; }).forEach(function(k){
+      if (emvs[k]) return;
+      var t = idx[k];
+      if (q && norm(k + ' ' + t).indexOf(q) < 0) return;
+      n++;
+      h += '<div class="v170-item"><span class="v167-au">📖 ' + k + '</span>'
+        + '<span class="v167-ti">— ' + esc(t) + '</span>'
+        + '<button type="button" data-vurl="https://mariavaltorta.online/fr/biblio/01-levangile-tel-quil-ma-ete-revele/chapitre-'
+        + ('00' + k).slice(-3) + '/" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Lire sur mariavaltorta.online ↗</button></div>';
+    });
+    if (st) st.textContent = n + ' chapitre(s) sans page sur le site';
+    body.innerHTML = h;
+  }
+
+  /* v206 — catéchèses (dictées rattachées à un chapitre de l'œuvre) */
+  function renderVC(q){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    var cat = (VDATA && VDATA.catecheses) || [];
+    var h = '<div class="v170-cat" data-vcatback="1">← Les dix tomes</div>'
+      + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Dictées rattachées à un chapitre de l\'œuvre. '
+      + 'Le texte reste sur le site officiel (droits CEV).</div>';
+    var n = 0;
+    cat.forEach(function(c){
+      var hay = norm((c.d || '') + ' ' + (c.parent || '') + ' ' + (c.ex || '') + ' ' + c.fid);
+      if (q && hay.indexOf(q) < 0) return;
+      n++;
+      h += '<div class="v170-item"><span class="v167-au">📜 ' + esc(c.fid) + '</span>'
+        + '<span class="v167-ti">— ' + (c.d ? 'Catéchèse du ' + esc(c.d) : 'Catéchèse') + '</span>'
+        + (c.parent ? '<div style="font-size:11.5px;color:#9fd0a0">📖 chapitre ' + esc(c.parent) + ' de l\'œuvre</div>' : '')
+        + (c.ex ? '<div class="v167-sn" style="opacity:.75">' + esc(c.ex.slice(0, 220)) + '…</div>' : '')
+        + '<button type="button" data-vurl="' + esc(c.u) + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la catéchèse ↗</button></div>';
+    });
+    if (st) st.textContent = n + ' catéchèse(s)';
+    body.innerHTML = h + (n ? '' : '<div style="opacity:.6;padding:16px">Aucune catéchèse ne correspond au filtre.</div>');
+  }
+
+  /* v205 — sections du site : encyclopédie valtortienne (texte conservé) et
+     autres œuvres sous droits CEV (entrées datées + lien vers la page). */
+  function vsLoad(cb){
+    if (VSDATA !== null) { cb(VSDATA); return; }
+    fetch('tradition/valtorta_sec.json', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ VSDATA = (j && j.sections && j.sections.length) ? j : false; cb(VSDATA); })
+      .catch(function(){ VSDATA = false; cb(false); });
+  }
+  function vSec(id){
+    if (!VSDATA || !VSDATA.sections) return null;
+    for (var i = 0; i < VSDATA.sections.length; i++)
+      if (VSDATA.sections[i].id === id) return VSDATA.sections[i];
+    return null;
+  }
+  function renderVS(q){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    if (!VSDATA){ body.innerHTML = '<div style="opacity:.6;padding:16px">chargement des sections…</div>'; return; }
+    var s = vSec(VSEC);
+    if (!s){ VSEC = null; VPAGE = null; render(); return; }
+    var h = '', pages = s.pages || [];
+    if (VPAGE === null){
+      h += '<div class="v170-cat" data-vsback="1">← Les dix tomes</div>';
+      if (s.note) h += '<div style="padding:6px 14px;font-size:11px;opacity:.65">' + esc(s.note) + '</div>';
+      if (s.chrono && s.chrono.length)
+        h += '<div class="v170-cat" data-vpage="-1">📅 <b>Chronologie complète</b> <span style="opacity:.5">— '
+           + s.chrono.length + ' années renseignées (an −53 à +80)</span></div>';
+      pages.forEach(function(p, i){
+        var label = p.t || p.u;
+        if (q && norm(label + ' ' + (p.x || '').slice(0, 3000)).indexOf(q) < 0) return;
+        h += '<div class="v170-cat" data-vpage="' + i + '" style="cursor:pointer">'
+           + '<span class="v167-ti">' + esc(label) + '</span>'
+           + (p.e ? '<div class="v167-sn" style="opacity:.6">' + p.e.length + ' entrées datées</div>' : '')
+           + (p.x ? '<div class="v167-sn" style="opacity:.55">' + esc(p.x.replace(/\s+/g, ' ').slice(0, 150)) + '…</div>' : '')
+           + '</div>';
+      });
+      if (st) st.textContent = s.nom + ' — ' + pages.length + ' pages';
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucune page.</div>';
+      return;
+    }
+    /* v212 — chronologie complète (Synoptique.xls) */
+    if (VPAGE === -1 && s.chrono){
+      /* v213 — recoupement : combien de récits Valtorta portent une date
+         d'événement tombant sur cette année (champ `ev`, ex. « Jeudi 4 avril 30 »). */
+      var parAn = {};
+      ((VDATA && VDATA.episodes) || []).forEach(function(e){
+        var m = /(-?\d{1,3})\s*$/.exec(e.ev || '');
+        if (!m) return;
+        var y = parseInt(m[1], 10);
+        (parAn[y] = parAn[y] || []).push(e);
+      });
+      var hc = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>';
+      /* v214 — frise visuelle : on reutilise le composant SVG interactif de l'app */
+      if (window.__theoTLsvg){
+        try {
+          var evs = s.chrono.filter(function(x){ return x.j || x.h; }).map(function(x){
+            return { y: x.a,
+                     l: (x.j || x.h || '').replace(/\s+/g, ' ').slice(0, 34),
+                     i: (x.a < 0 ? (-x.a) + ' av. J.-C.' : x.a + ' apr. J.-C.')
+                        + (x.j ? '\n✝ ' + x.j : '') + (x.h ? '\n🏛 ' + x.h : '') };
+          });
+          if (evs.length >= 2)
+            hc += window.__theoTLsvg(evs, [])
+               + '<div style="font-size:10.5px;opacity:.5;text-align:center;margin:-4px 0 10px">'
+               + 'Cliquez sur un point de la frise pour lire l’événement</div>';
+        } catch (e) {}
+      }
+      hc += '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chronologie reconstituée d\'après l\'œuvre '
+        + 'et les travaux de Jean Aulagnier. ✝ = vie de Jésus, 🏛 = événements historiques, '
+        + '📖 = nombre de récits de l\'app datés de cette année.</div>';
+      s.chrono.forEach(function(x){
+        if (q && norm(x.a + ' ' + (x.j || '') + ' ' + (x.h || '')).indexOf(q) < 0) return;
+        var n = (parAn[x.a] || []).length;
+        hc += '<div class="v170-item"><span class="v167-au">' + (x.a < 0 ? (-x.a) + ' av. J.-C.' : x.a + ' apr. J.-C.') + '</span>'
+           + (n ? ' <span style="color:#9fd0a0;font-size:11px">📖 ' + n + ' récit' + (n > 1 ? 's' : '') + '</span>' : '')
+           + (x.j ? '<div class="v167-sn">✝ ' + esc(x.j) + '</div>' : '')
+           + (x.h ? '<div class="v167-sn" style="opacity:.6">🏛 ' + esc(x.h) + '</div>' : '')
+           + '</div>';
+      });
+      if (st) st.textContent = 'Chronologie — ' + s.chrono.length + ' années';
+      body.innerHTML = hc;
+      return;
+    }
+    var p = pages[VPAGE];
+    if (!p){ VPAGE = null; renderVS(q); return; }
+    h = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>'
+      + '<div style="padding:4px 14px 12px">'
+      + '<div style="color:#d6e4ff;font-weight:700;margin-bottom:8px">' + esc(p.t || '') + '</div>';
+    if (p.e){
+      h += '<div style="font-size:11.5px;opacity:.7;margin-bottom:6px">Entrées datées — le texte est sous droits CEV, ouvre la page officielle.</div>';
+      p.e.forEach(function(e){
+        h += '<div style="margin:3px 0;padding:4px 8px;border-left:2px solid rgba(79,142,247,.4)">'
+           + '<b style="color:#9fd0a0">' + esc(e.d) + '</b> — ' + esc(e.t) + '</div>';
+      });
+    } else {
+      h += '<div style="white-space:pre-wrap;font-size:12.5px;line-height:1.65;max-height:50vh;overflow:auto;padding-right:6px">'
+        + esc(p.x || '') + '</div>';
+    }
+    h += '<button type="button" data-vurl="' + esc(p.u) + '" style="margin-top:10px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:5px 11px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la page du site ↗</button>'
+      + '</div>';
+    if (st) st.textContent = s.nom + ' — ' + (p.t || '');
+    body.innerHTML = h;
+  }
+
+  /* v204 — vue 🌊 Valtorta : 10 tomes -> épisodes concordés avec les Évangiles */
+  function vltUrl(e){ return 'https://www.maria-valtorta.org/Publication/TOME%20' + ('0' + e.tome).slice(-2) + '/' + e.fid + '.htm'; }
+  function openVlt(e){
+    var u = vltUrl(e);
+    if (typeof window.__theoOpenNav === 'function') window.__theoOpenNav(u, 'Valtorta — ' + (e.t || e.title || ''));
+    else window.open(u, '_blank');
+  }
+  function renderV(q){
+    var body = document.getElementById('v170-body');
+    if (!body) return;
+    if (!VDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">⚠ Index Valtorta indisponible.</div>';
+      return;
+    }
+    if (VSEC){ renderVS(q); return; }
+    if (VCAT){ renderVC(q); return; }
+    if (VMISS){ renderVMiss(q); return; }
+    if (VTEXT !== null){ renderVT(); return; }
+    if (VSDATA === null) vsLoad(function(){ if (VIEW === 'v' && !VSEC) render(); });
+    var eps = VDATA.episodes;
+    var h = '', shown = 0, i;
+    /* les refs etendues (« jusqu'à ») repetent le meme libelle : on dedoublonne */
+    function raws(list, max){
+      var out = [], seen = {};
+      (list || []).forEach(function(r){
+        if (seen[r.raw]) return;
+        seen[r.raw] = 1;
+        out.push(r.raw);
+      });
+      return { txt: out.slice(0, max || 99).join(' · '), n: out.length };
+    }
+    /* v211 — les références deviennent survolables : le gestionnaire global
+       `span.bible-ref` ouvre l'infobulle du verset (avec ses chips Valtorta). */
+    function refsHtml(list, max){
+      var out = [], seen = {};
+      (list || []).forEach(function(r){
+        if (seen[r.raw]) return;
+        seen[r.raw] = 1;
+        if (out.length < (max || 99))
+          out.push('<span class="bible-ref" style="cursor:help" title="Survoler pour le texte du verset">' + esc(r.raw) + '</span>');
+      });
+      return out.join(' · ');
+    }
+    function item(e){
+      var ro = raws(e.refs), rc = raws(e.cit, 8);
+      return '<div class="v170-item"><span class="v167-au">🌊 ' + (e.emv ? 'EMV ' + e.emv : e.fid) + '</span>'
+         + '<span class="v167-ti">— ' + esc(e.t || e.title || '') + '</span>'
+         + (e.ev ? '<div style="font-size:11.5px;color:#9fd0a0">📅 ' + esc(e.ev)
+              + (e.lieu ? ' — ' + esc(e.lieu) : '')
+              + (e.evj ? ' <span style="opacity:.5">(' + esc(e.evj) + ')</span>' : '') + '</div>' : '')
+         + (e.d ? '<div style="font-size:11px;opacity:.6">🖋 vision du ' + esc(e.d) + '</div>' : '')
+         + (ro.n ? '<div class="v167-sn">📖 Évangile : ' + refsHtml(e.refs) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique en tête</div>')
+         + (rc.n ? '<div class="v167-sn" style="opacity:.7">🔎 cités dans le texte (' + rc.n + ') : ' + refsHtml(e.cit, 8) + (rc.n > 8 ? '…' : '') + '</div>' : '')
+         + (e.emv && e.emv >= 1 && e.emv <= 652 ? '<button type="button" data-vtext="' + e.emv + '" style="margin-top:4px;margin-right:6px;background:rgba(46,120,58,.5);color:#bfe8bf;border:1px solid rgba(120,200,140,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">📖 Lire le texte</button>' : '')
+         + '<button type="button" class="v170-vopen" data-vfid="' + e.fid + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir le récit ↗</button></div>';
+    }
+    function hay(e){
+      return norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + raws(e.refs).txt + ' '
+        + raws(e.cit).txt + ' emv ' + (e.emv || '') + ' ' + e.fid + ' ' + (e.ev || '') + ' '
+        + (e.evj || '') + ' ' + (e.lieu || ''));
+    }
+    var st = document.getElementById('v170-status');
+    /* filtre saisi : recherche sur les DIX tomes (titre, date, lieu, référence, EMV) */
+    if (q){
+      eps.forEach(function(e){
+        if (shown >= 80) return;
+        if (hay(e).indexOf(q) < 0) return;
+        shown++; h += item(e);
+      });
+      if (st) st.textContent = shown + ' récit(s) pour « ' + q + ' »' + (shown >= 80 ? ' — affichage limité aux 80 premiers' : '');
+      body.innerHTML = h || '<div style="opacity:.6;padding:16px">Aucun récit ne correspond au filtre.</div>';
+      return;
+    }
+    if (VSEE === null){
+      var tomes = [];
+      eps.forEach(function(e){ tomes[e.tome] = (tomes[e.tome] || 0) + 1; });
+      if (VDATA.meta && VDATA.meta.note)
+        h += '<div style="padding:8px 14px;font-size:11px;opacity:.65">' + esc(VDATA.meta.note) + '</div>';
+      for (i = 1; i <= 10; i++){
+        if (!tomes[i]) continue;
+        h += '<div class="v170-cat" data-vsee="' + i + '">🌊 <b>Tome ' + ('0' + i).slice(-2) + '</b> <span style="opacity:.5">— ' + tomes[i] + ' récits</span></div>';
+      }
+      if (VDATA.index652){
+        var _em = {}, _manq = 0;
+        eps.forEach(function(e){ if (e.emv) _em[e.emv] = 1; });
+        Object.keys(VDATA.index652).forEach(function(k){ if (!_em[k]) _manq++; });
+        if (_manq) h += '<div class="v170-cat" data-vmiss="1">📖 <b>' + _manq + ' chapitres</b> <span style="opacity:.5">— de l\'index officiel (652), sans page sur le site</span></div>';
+      }
+      if (VDATA.catecheses && VDATA.catecheses.length)
+        h += '<div class="v170-cat" data-vcat="1">📜 <b>Catéchèses</b> <span style="opacity:.5">— '
+           + VDATA.catecheses.length + ' dictées rattachées à un chapitre</span></div>';
+      if (VSDATA && VSDATA.sections){
+        h += '<div style="padding:12px 14px 4px;font-size:10.5px;letter-spacing:1.2px;color:#8fa8d8">ENCYCLOPÉDIE VALTORTIENNE &amp; AUTRES ŒUVRES</div>';
+        VSDATA.sections.forEach(function(s){
+          h += '<div class="v170-cat" data-vsec="' + s.id + '">📚 ' + esc(s.nom)
+             + ' <span style="opacity:.5">— ' + (s.pages || []).length + ' pages</span></div>';
+        });
+      }
+      if (st) st.textContent = eps.length + ' récits — concordance avec les Évangiles';
+      body.innerHTML = h;
+      return;
+    }
+    eps.forEach(function(e){
+      if (e.tome !== VSEE) return;
+      shown++; h += item(e);
+    });
+    body.innerHTML = '<div class="v170-cat" data-vback="1">← Les dix tomes</div>'
+      + (h || '<div style="opacity:.6;padding:16px">Aucun récit.</div>');
+    if (st) st.textContent = 'Tome ' + ('0' + VSEE).slice(-2) + ' — ' + shown + ' récits';
+  }
+
   function render(){
     var body = document.getElementById('v170-body');
     if (!body) return;
@@ -42856,9 +43382,13 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de la bibliothèque…</div>';
       return;
     }
+    if (VIEW === 'v' && VDATA === null){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de l\'index Valtorta…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
     if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q);
-    else if (VIEW === 'l') renderL(q); else renderP(q);
+    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q); else renderP(q);
   }
 
   function load(){
@@ -42904,6 +43434,12 @@ window.continueTradApart = async function (msgId) {
         .catch(function(){ LDATA = false; LOADING = false; render();
           var st = document.getElementById('v170-status');
           if (st) st.textContent = '⚠ Bibliothèque indisponible (tradition/sefaria_lib.json introuvable).'; });
+    } else if (VIEW === 'v' && VDATA === null){
+      fetch('tradition/valtorta.json', { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){ VDATA = (j && j.episodes && j.episodes.length) ? j : false; LOADING = false; render(); })
+        .catch(function(){ VDATA = false; LOADING = false; render();
+          var st = document.getElementById('v170-status');
+          if (st) st.textContent = '⚠ Index Valtorta indisponible (tradition/valtorta.json introuvable).'; });
     } else {
       LOADING = false;
     }
@@ -42926,6 +43462,22 @@ window.continueTradApart = async function (msgId) {
       if (inp) inp.value = q;
     }
     render();
+  };
+  /* v205 — ouvrir une section du site (encyclopédie / autres œuvres) */
+  window.__v170Text = function (n) {
+    var p = ensurePanel();
+    p.classList.add('open');
+    setView('v');
+    VTEXT = n; VCAT = false; VSEC = null; VMISS = false; VSEE = null;
+    vtLoad(function(){ render(); });
+  };
+  window.__v170Sec = function (sec, page) {
+    var p = ensurePanel();
+    p.classList.add('open');
+    setView('v');
+    VSEC = sec;
+    VPAGE = (typeof page === 'number' && page >= 0) ? page : null;
+    vsLoad(function(){ render(); });
   };
   window.__v170LibOpen = function (ci, wi) {
     var p = ensurePanel();
@@ -43196,7 +43748,8 @@ window.continueTradApart = async function (msgId) {
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
 
-  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, qur: 'loading' };
+  var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, vlt: null,
+            vsec: null, vtx: null, qur: 'loading' };
 
   function jget(url, cb){
     fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
@@ -43215,6 +43768,9 @@ window.continueTradApart = async function (msgId) {
     one('sef', 'tradition/sefaria_idx.json', function(j){ return (j && j.idx) ? j : false; });
     one('lib', 'tradition/sefaria_lib.json', function(j){ return (j && j.colls && j.colls.length) ? j : false; });
     one('thm', 'tradition/themes.json',      function(j){ return (j && j.themes && j.themes.length) ? j.themes : false; }); /* v195 */
+    one('vlt', 'tradition/valtorta.json',    function(j){ return (j && j.episodes && j.episodes.length) ? j : false; });   /* v204 */
+    one('vsec','tradition/valtorta_sec.json',function(j){ return (j && j.sections && j.sections.length) ? j : false; });   /* v205 */
+    one('vtx', 'tradition/valtorta_text.json',function(j){ return (j && typeof j === 'object') ? j : false; });            /* v210 */
     if (!need) cb();
   }
 
@@ -43300,6 +43856,73 @@ window.continueTradApart = async function (msgId) {
             }
           }
         }
+        return out;
+      } },
+    /* v204 — moteur 🌊 Valtorta : concordance des récits avec les Évangiles */
+    { key: 'vlt', label: "🌊 Valtorta — L'Évangile tel qu'il m'a été révélé", src: 'maria-valtorta.org',
+      run: function(q){
+        if (!C.vlt) return [];
+        var out = [], nq = norm(q);
+        if (nq.length < 2) return [];
+        C.vlt.episodes.forEach(function(e){
+          if (out.length >= 8) return;
+          var seenR = {}, rl = [];
+          (e.refs || []).concat(e.cit || []).forEach(function(r){
+            if (seenR[r.raw]) return;
+            seenR[r.raw] = 1; rl.push(r.raw);
+          });
+          var refs = rl.join(' · ');
+          var hay = norm((e.t || e.title || '') + ' ' + (e.d || '') + ' ' + refs + ' emv ' + (e.emv || '') + ' tome ' + e.tome + ' ' + e.fid
+                         + ' ' + (e.ev || '') + ' ' + (e.evj || '') + ' ' + (e.lieu || ''));
+          if (hay.indexOf(nq) < 0) return;
+          var ro = (e.refs || []).length, rc = (e.cit || []).length;
+          out.push({ h: '🌊 ' + esc(e.t || e.title) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : ''),
+                     sn: (e.ev ? '📅 ' + esc(e.ev) + (e.lieu ? ' — ' + esc(e.lieu) : '') + ' · ' : '')
+                         + (e.d ? 'vision ' + esc(e.d) + ' · ' : '')
+                         + (ro ? '📖 ' + esc(refs) : 'récit sans référence en tête')
+                         + (rc ? ' · 🔎 ' + rc + ' réf. citée(s)' : ''),
+                     go: { vlt: e.fid + '|' + ('0' + e.tome).slice(-2) } });
+        });
+        /* v206 — catéchèses (dictées rattachées à un chapitre) */
+        (C.vlt.catecheses || []).forEach(function(c){
+          if (out.length >= 16) return;
+          var hayC = norm((c.d || '') + ' ' + (c.parent || '') + ' ' + (c.ex || '') + ' ' + c.fid + ' catechese');
+          if (hayC.indexOf(nq) < 0) return;
+          out.push({ h: '📜 Catéchèse' + (c.d ? ' du ' + esc(c.d) : '') + ' <span style="opacity:.55">(chapitre ' + esc(c.parent || '?') + ')</span>',
+                     sn: esc((c.ex || '').slice(0, 130)) + '…',
+                     go: { vlt: c.fid + '|' + ('0' + c.tome).slice(-2) } });
+        });
+        /* v205 — sections du site : encyclopédie, calendrier, autres œuvres */
+        if (C.vsec && C.vsec.sections){
+          C.vsec.sections.forEach(function(s){
+            (s.pages || []).forEach(function(p, i){
+              if (out.length >= 16) return;
+              var hayS = norm((p.t || '') + ' ' + (p.x || '').slice(0, 3000) + ' ' + s.nom);
+              if (hayS.indexOf(nq) < 0) return;
+              out.push({ h: '📚 ' + esc(p.t || s.nom) + ' <span style="opacity:.55">(' + esc(s.nom) + ')</span>',
+                         sn: p.x ? esc(p.x.replace(/\s+/g, ' ').slice(0, 130)) + '…'
+                                  : (p.e ? p.e.length + ' entrées datées' : ''),
+                         go: { vltsec: s.id + '|' + i } });
+            });
+          });
+        }
+        return out;
+      } },
+    { key: 'vtx', label: "\U0001F4D6 Texte des 652 chapitres", src: 'mariavaltorta.online',
+      run: function(q){
+        if (!C.vtx) return [];
+        var out = [], nq = norm(q);
+        if (nq.length < 3) return [];
+        Object.keys(C.vtx).forEach(function(k){
+          if (out.length >= 8) return;
+          var c = C.vtx[k];
+          var hay = norm((c.t || '') + ' ' + (c.x || ''));
+          var i = hay.indexOf(nq);
+          if (i < 0) return;
+          out.push({ h: '\U0001F4D6 ' + k + '. ' + esc(c.t || ''),
+                     sn: '\u2026' + esc((c.x || '').slice(Math.max(0, i - 70), i + 110)) + '\u2026',
+                     go: { vtxt: +k } });
+        });
         return out;
       } },
     { key: 'ta', label: '📖 Citations des Pères', src: 'traditionapostolique.fr',
@@ -43445,6 +44068,24 @@ window.continueTradApart = async function (msgId) {
       if (d.libCi !== undefined) { window.__v170LibOpen(+d.libCi, +d.libWi); return; }
       /* v184 — résultat coranique : ouvre le panneau Tafsirs/Hadiths/Lexique */
       if (d.q183s) { if (window.__v183Open) window.__v183Open(+d.q183s, +d.q183v); return; }
+      /* v205 — page d'une section Valtorta : ouvre le lecteur de l'onglet 🌊 */
+      /* v210 — ouvrir le texte d'un chapitre */
+      if (d.vtxt) {
+        if (window.__v170Text) window.__v170Text(+d.vtxt);
+        return;
+      }
+      if (d.vltsec) {
+        var vs = d.vltsec.split('|');
+        if (window.__v170Sec) window.__v170Sec(vs[0], +vs[1]);
+        return;
+      }
+      /* v204 — récit Valtorta : page officielle dans le navigateur interne */
+      if (d.vlt) {
+        var vp = d.vlt.split('|');
+        var vu = 'https://www.maria-valtorta.org/Publication/TOME%20' + vp[1] + '/' + vp[0] + '.htm';
+        if (window.__theoOpenNav) window.__theoOpenNav(vu, 'Valtorta'); else window.open(vu, '_blank');
+        return;
+      }
       if (d.view) window.__v170Open(d.view, d.q || '');
     });
     document.addEventListener('keydown', function(e){
@@ -43509,6 +44150,9 @@ window.continueTradApart = async function (msgId) {
            + (r.go ? ' <button type="button" class="v180-go" data-view="' + esc(r.go.view || '') + '" data-q="' + esc(r.go.q || '')
                     + (r.go.lib !== undefined ? '" data-lib-ci="' + r.go.lib + '" data-lib-wi="' + r.go.wi : '')
                     + (r.go.q183s ? '" data-q183s="' + r.go.q183s + '" data-q183v="' + r.go.q183v : '')
+                    + (r.go.vlt ? '" data-vlt="' + esc(r.go.vlt) : '')
+                    + (r.go.vltsec ? '" data-vltsec="' + esc(r.go.vltsec) : '')
+                    + (r.go.vtxt ? '" data-vtxt="' + esc(String(r.go.vtxt)) : '')
                     + '">ouvrir ↗</button>' : '')
            + '</div>';
       });
@@ -45107,5 +45751,147 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v204-valtorta">
+/* ═════════════════════════════════════════════════════════════════════
+   v204 — MARIA VALTORTA : concordance récits ↔ versets bibliques
+   Index tradition/valtorta.json (numéros EMV, titres, dates de vision,
+   références évangéliques extraites des pages maria-valtorta.org).
+   Les TEXTES restent sur le site officiel (œuvre sous droits CEV) :
+   chaque chip / bouton ouvre le récit dans le navigateur interne (v179).
+   1. Chips 🌊 dans l'infobulle d'un verset (hook dans showTip v66).
+   2. Moteur de recherche dans BIBLIOTHÈQUES (v180) + onglet dédié (v170).
+   ═════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var V = null, LOADING = false, FAILED = false, QUEUE = [];
+  function load(cb){
+    if (V) { cb(V); return; }
+    if (FAILED) { cb(null); return; }
+    QUEUE.push(cb);
+    if (LOADING) return;
+    LOADING = true;
+    fetch('tradition/valtorta.json', { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ V = (j && j.episodes && j.episodes.length) ? j : null; if (!V) FAILED = true; })
+      .catch(function(){ V = null; FAILED = true; })
+      .then(function(){ LOADING = false; var v = V; QUEUE.splice(0).forEach(function(c){ c(v); }); });
+  }
+
+  /* codes livres AELF (site) -> numéro de livre de l'app (BOOK_NUM, v66) */
+  var BOOKN = {
+    gn:'1', ex:'2', lv:'3', nb:'4', dt:'5', jos:'6', jg:'7', rt:'8',
+    '1s':'9', '2s':'10', '1r':'11', '2r':'12', '1ch':'13', '2ch':'14',
+    esd:'15', ne:'16', et:'17', jb:'18', ps:'19', pr:'20', ec:'21', ct:'22',
+    is:'23', jr:'24', lm:'25', ez:'26', dn:'27', os:'28', jl:'29', am:'30',
+    ab:'31', jo:'32', mi:'33', na:'34', ha:'35', so:'36', ag:'37', za:'38', ml:'39',
+    mt:'40', mc:'41', lc:'42', jn:'43', ac:'44', rm:'45',
+    '1co':'46', '2co':'47', ga:'48', ep:'49', ph:'50', col:'51',
+    '1th':'52', '2th':'53', '1ti':'54', '2ti':'55', ti:'56', phm:'57',
+    hb:'58', jc:'59', '1p':'60', '2p':'61', '1jn':'62', '2jn':'63', '3jn':'64',
+    jd:'65', ap:'66'
+  };
+
+  /* v213 — table livres -> numeros, copiee de BOOK_NUM (module Bible v66).
+     Le module Bible n'expose __parseBibleRef qu'apres un amorcage par corpus
+     hook qui ne se declenche pas toujours : on reste autonome. */
+  var FR2NUM = {
+    'gn': '1', 'genèse': '1', 'ex': '2', 'exode': '2', 'lv': '3', 'lévitique': '3', 'nb': '4', 'nombres': '4', 'dt': '5', 'deutéronome': '5',
+    'jos': '6', 'josué': '6', 'jg': '7', 'juges': '7', 'rt': '8', 'ruth': '8', '1s': '9', '1 samuel': '9', '2s': '10', '2 samuel': '10',
+    '1r': '11', '1 rois': '11', '2r': '12', '2 rois': '12', '1ch': '13', '1 chroniques': '13', '2ch': '14', '2 chroniques': '14',
+    'esd': '15', 'esdras': '15', 'ne': '16', 'néhémie': '16', 'et': '17', 'esther': '17', 'jb': '18', 'job': '18', 'ps': '19', 'psaume': '19', 'psaumes': '19',
+    'pr': '20', 'proverbes': '20', 'ec': '21', 'ecclésiaste': '21', 'ct': '22', 'cantique': '22', 'cantique des cantiques': '22', 'is': '23', 'es': '23', 'esa': '23', 'isaie': '23', 'ésaïe': '23', 'ésaie': '23', 'esaie': '23',
+    'jr': '24', 'jérémie': '24', 'lm': '25', 'lamentations': '25', 'ez': '26', 'ézéchiel': '26', 'dn': '27', 'daniel': '27', 'os': '28', 'osée': '28',
+    'jl': '29', 'joël': '29', 'joel': '29', 'am': '30', 'amos': '30', 'ab': '31', 'abdias': '31', 'jo': '32', 'jon': '32', 'jonas': '32', 'mi': '33', 'michée': '33', 'michee': '33', 'na': '34', 'nahum': '34',
+    'ha': '35', 'habacuc': '35', 'so': '36', 'sophonie': '36', 'ag': '37', 'aggée': '37', 'za': '38', 'zacharie': '38', 'ml': '39', 'malachie': '39',
+    'mt': '40', 'matthieu': '40', 'mc': '41', 'marc': '41', 'lc': '42', 'luc': '42', 'jn': '43', 'jean': '43', 'ac': '44', 'actes': '44', 'rm': '45', 'romains': '45',
+    '1co': '46', '1 corinthiens': '46', '2co': '47', '2 corinthiens': '47', 'ga': '48', 'galates': '48', 'ep': '49', 'éphésiens': '49', 'ph': '50', 'philippiens': '50',
+    'col': '51', 'colossiens': '51', '1th': '52', '1 thessaloniciens': '52', '2th': '53', '2 thessaloniciens': '53', '1tm': '54', '1 timothée': '54', '2tm': '55', '2 timothée': '55',
+    't': '56', 'tite': '56', 'phm': '57', 'philémon': '57', 'he': '58', 'hébreux': '58', 'jc': '59', 'jacques': '59', '1p': '60', '1 pierre': '60', '2p': '61', '2 pierre': '61',
+    '1jn': '62', '1 jean': '62', '2jn': '63', '2 jean': '63', '3jn': '64', '3 jean': '64', 'jd': '65', 'jude': '65', 'ap': '66', 'apocalypse': '66'
+  };
+  var REF_RE = /^(?:(\d+)\s+)?([A-Za-z\u00c0-\u00ff.]+)\s+(\d+)\s*[:,]\s*(\d+)(?:\s*[-\u2013]\s*(\d+))?$/;
+  function refParts(text){
+    var m = REF_RE.exec(String(text || '').trim());
+    if (!m) return null;
+    var key = (m[1] ? m[1] + ' ' : '') + m[2].toLowerCase().replace(/\.$/, '');
+    var num = FR2NUM[key] || FR2NUM[m[2].toLowerCase()] || FR2NUM[key.replace(/\s+/g, '')];
+    if (!num) return null;
+    return { book: num, ch: m[3], v1: parseInt(m[4], 10),
+             v2: m[5] ? parseInt(m[5], 10) : null, ref: String(text).trim() };
+  }
+  window.__v204RefParts = refParts;
+
+  var IDX = null;   /* 'numLivre:chapitre' -> [{e, r, off}] */
+  function buildIndex(){
+    if (IDX || !V) return IDX;
+    IDX = {};
+    function add(e, r, off){
+      var n = BOOKN[r.b];
+      if (!n) return;
+      var k = n + ':' + r.c;
+      (IDX[k] = IDX[k] || []).push({ e: e, r: r, off: off });
+    }
+    V.episodes.forEach(function(e){
+      (e.refs || []).forEach(function(r){ add(e, r, 1); });   /* en-tête du site */
+      (e.cit  || []).forEach(function(r){ add(e, r, 0); });   /* cités dans le texte */
+    });
+    return IDX;
+  }
+  function hits(p){
+    var ix = buildIndex();
+    if (!ix) return [];
+    var out = [], seen = {};
+    (ix[p.book + ':' + p.ch] || []).forEach(function(h){
+      var v2p = p.v2 || p.v1;
+      if (h.r.v1 <= v2p && h.r.v2 >= p.v1) {
+        var k = h.e.fid;
+        if (seen[k]) { if (h.off) seen[k].off = 1; return; }
+        var it = { e: h.e, r: h.r, off: h.off };
+        seen[k] = it;
+        out.push(it);
+      }
+    });
+    /* une référence d'en-tête passe avant une simple citation */
+    out.sort(function(a, b){ return (b.off ? 1 : 0) - (a.off ? 1 : 0); });
+    return out;
+  }
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* chips de l'infobulle verset — pointer-events:auto (le panneau est none) */
+  window.__v204TipHtml = function(p){
+    if (!V){ load(function(){}); return ''; }   /* 1er survol : lance le chargement, chips au survol suivant */
+    var hs = hits(p);
+    if (!hs.length) return '';
+    var out = '<div style="margin-top:8px;padding-top:6px;border-top:1px dashed rgba(79,142,247,.35)">'
+      + '<div style="color:#f0a020;font-size:10.5px;letter-spacing:1px;margin-bottom:4px;">🌊 MARIA VALTORTA — L\'ÉVANGILE TEL QU\'IL M\'A ÉTÉ RÉVÉLÉ</div>';
+    hs.slice(0, 4).forEach(function(h){
+      var e = h.e, t = e.t || e.title || ('Récit ' + e.fid);
+      out += '<div class="v204-chip" data-u="' + esc(e.u) + '" data-t="Valtorta — ' + esc(t) + '" '
+        + 'style="pointer-events:auto;cursor:pointer;margin:2px 0;padding:4px 8px;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.35);border-radius:8px;font-size:11.5px;color:#bfd4ff">'
+        + '🌊 ' + esc(t) + (e.emv ? ' <span style="opacity:.55">(EMV ' + e.emv + ')</span>' : '')
+        + (e.ev ? ' <span style="opacity:.55">· 📅 ' + esc(e.ev) + (e.lieu ? ', ' + esc(e.lieu) : '') + '</span>' : '')
+        + (h.r.raw ? ' <span style="opacity:.55">· ' + (h.off ? '📖 ' : '🔎 cité ') + esc(h.r.raw) + '</span>' : '')
+        + '</div>';
+    });
+    if (hs.length > 4) out += '<div style="font-size:10.5px;opacity:.55;margin-top:2px">+ ' + (hs.length - 4) + ' autre(s) récit(s) — onglet 🌊 VALTORTA</div>';
+    out += '</div>';
+    return out;
+  };
+
+  /* clic sur un chip → récit officiel dans le navigateur interne (v179) */
+  document.addEventListener('click', function(e){
+    var c = e.target.closest ? e.target.closest('.v204-chip') : null;
+    if (!c) return;
+    var u = c.getAttribute('data-u');
+    if (!u) return;
+    if (typeof window.__theoOpenNav === 'function') window.__theoOpenNav(u, c.getAttribute('data-t') || 'Valtorta');
+    else window.open(u, '_blank');
+  });
+
+  /* préchargement différé (148 Ko) — l'infobulle doit répondre dès le 1er survol */
+  function boot(){ setTimeout(function(){ load(function(){}); }, 2500); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
 </body>
 </html>

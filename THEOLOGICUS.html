@@ -26570,9 +26570,13 @@ function initQuranVerseTooltip() {
       if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
     });
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
+    /* v215 — bloc Corpus Coranicum (rempli de façon asynchrone) */
+    html += '<div id="cc-block" style="margin-top:8px;border-top:1px solid rgba(245,197,66,.3);padding-top:6px;font-size:11px">⏳ Corpus Coranicum…</div>';
     tip.innerHTML = html;
     tip.style.pointerEvents = 'auto';
     tip.style.display = 'block';
+    /* v215 — charge et injecte le commentaire/variantes/manuscrits/intertextes */
+    if (window.__ccAppend) { try { window.__ccAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[CC]', e); } }
     const r = el.getBoundingClientRect();
     let x = r.left, y = r.bottom + 8;
     const tr = tip.getBoundingClientRect();
@@ -26687,6 +26691,125 @@ function initQuranVerseTooltip() {
   }, true);
 }
 __corpusHook("quran", initQuranVerseTooltip);
+
+/* ═══ CORPUS CORANICUM (v215) ═══
+   Moissonnage du site corpuscoranicum.de (BBAW) récupéré dans
+   tradition/cc/s{NNN}.json (par sourate) + tradition/cc/concordance_occ.json
+   (occurrences globales de la concordance). Affiché dans la bulle de survol
+   coranique (#quran-verse-tip) : commentaire, traduction allemande,
+   lectures variantes, manuscrits/codex, rapports intertextuels, racines. */
+function initCorpusCoranicum() {
+  'use strict';
+  window.__ccCache = {};        /* sura -> données */
+  window.__ccLoading = {};      /* sura -> Promise */
+  window.__ccOcc = null;
+  window.__ccOccLoading = null;
+  function ccEsc(s) {
+    if (s == null) return '';
+    var f = (typeof esc === 'function') ? esc : function (x) { return String(x); };
+    return f(s);
+  }
+  function ccEnsure(sura) {
+    if (window.__ccCache[sura]) return Promise.resolve(window.__ccCache[sura]);
+    if (window.__ccLoading[sura]) return window.__ccLoading[sura];
+    var fn = 'tradition/cc/s' + String(sura).padStart(3, '0') + '.json';
+    window.__ccLoading[sura] = fetch(fn, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { window.__ccCache[sura] = j || false; return window.__ccCache[sura]; })
+      .catch(function () { window.__ccCache[sura] = false; return false; });
+    return window.__ccLoading[sura];
+  }
+  function ccEnsureOcc() {
+    if (window.__ccOcc) return Promise.resolve(window.__ccOcc);
+    if (window.__ccOccLoading) return window.__ccOccLoading;
+    window.__ccOccLoading = fetch('tradition/cc/concordance_occ.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { window.__ccOcc = (j && typeof j === 'object') ? j : {}; return window.__ccOcc; })
+      .catch(function () { window.__ccOcc = {}; return {}; });
+    return window.__ccOccLoading;
+  }
+  function ccHtml(sura, v1, v2, data, occ) {
+    if (!data) {
+      return '<div style="margin-top:8px;opacity:.7;font-style:italic">⚠️ Corpus Coranicum : données en cours de récolte pour cette sourate.</div>';
+    }
+    var h = '';
+    var comm = data.comm;
+    if (comm && comm.title) {
+      h += '<div style="margin:6px 0 2px;color:#f5c542;font-weight:700;font-size:11px">📜 Corpus Coranicum — ' + ccEsc(comm.title.replace(/<[^>]+>/g, '')) + '</div>';
+    }
+    var v = v1;
+    for (; v <= (v2 || v1); v++) {
+      var ve = data.verses ? data.verses[String(v)] : null;
+      /* commentaire propre au verset (via text_structure -> section) */
+      if (comm && comm.structure && comm.sections) {
+        var row = null;
+        for (var i = 0; i < comm.structure.length; i++) { if (comm.structure[i].v === v) { row = comm.structure[i]; break; } }
+        if (row && row.sec != null && comm.sections[row.sec]) {
+          var sec = comm.sections[row.sec];
+          h += '<div style="margin:4px 0 2px;color:#f0d68a;font-size:10.5px;font-weight:700">Commentaire — v.' + v + '</div>';
+          (sec.vc || []).forEach(function (c) { h += '<div style="font-size:10.8px;line-height:1.45;margin:2px 0">' + c + '</div>'; });
+        }
+      }
+      if (!ve) { h += '<div style="opacity:.6;font-size:10.5px;margin:2px 0">Verset ' + v + ' : données non récoltées.</div>'; continue; }
+      h += '<div style="margin-top:6px;border-top:1px solid rgba(245,197,66,.25);padding-top:4px">';
+      /* lectures variantes */
+      if (ve.var) {
+        h += '<div style="margin:3px 0"><span style="color:#7fb3ff;font-weight:700">↔ Lectures variantes</span>';
+        (ve.var.read || []).forEach(function (rd) {
+          var who = (rd.r || []).join(', ');
+          var wk = rd.wk || '';
+          var vr = rd.w ? Object.keys(rd.w).map(function (k) { return k + '→' + rd.w[k]; }).join(' ') : '';
+          h += '<div style="font-size:10.5px;margin:2px 0 0 6px">• <b>' + ccEsc(who) + '</b> ' + (wk ? '<i>(' + ccEsc(wk) + ')</i> ' : '') + ccEsc(vr) + (rd.c ? ' — ' + ccEsc(rd.c) : '') + '</div>';
+        });
+        if (ve.var.com) h += '<div style="font-size:10.5px;opacity:.85;margin:2px 0 0 6px">' + ve.var.com + '</div>';
+        h += '</div>';
+      }
+      /* manuscrits / codex */
+      if (ve.mss && ve.mss.list && ve.mss.list.length) {
+        h += '<div style="margin:3px 0"><span style="color:#9fe0a0;font-weight:700">📜 Manuscrits (' + ve.mss.n + ')</span><div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">';
+        ve.mss.list.forEach(function (m) {
+          var img = m.img
+            ? '<img src="' + m.img + '" style="width:52px;height:52px;object-fit:cover;border:1px solid #444;border-radius:4px" loading="lazy" onerror="this.style.display=\'none\'">'
+            : '📜';
+          h += '<a href="' + (m.link || 'https://corpuscoranicum.de') + '" target="_blank" rel="noopener" title="' + ccEsc(m.t || '') + ' — ' + ccEsc(m.arch || '') + ' (f. ' + ccEsc(m.folio) + ')" style="text-decoration:none">' + img + '</a>';
+        });
+        h += '</div><a href="https://corpuscoranicum.de/fr/sura/' + sura + '/verse/' + v + '/manuscripts" target="_blank" rel="noopener" style="font-size:10px;color:#9fe0a0">Voir les ' + ve.mss.n + ' manuscrits ↗</a></div>';
+      }
+      /* rapports intertextuels */
+      if (ve.itt && ve.itt.length) {
+        h += '<div style="margin:3px 0"><span style="color:#e0a0f0;font-weight:700">🔗 Intertextes (' + ve.itt.length + ')</span>';
+        ve.itt.slice(0, 6).forEach(function (it) {
+          h += '<div style="font-size:10.5px;margin:2px 0 0 6px">• <b>' + ccEsc(it.t || '') + '</b> <i>(' + ccEsc(it.lang || '') + (it.dated ? ', ' + ccEsc(it.dated) : '') + ')</i>' + (it.cat ? ' — ' + ccEsc(it.cat) : '') + '</div>';
+        });
+        h += '</div>';
+      }
+      /* concordance / racines */
+      if (ve.conc && Object.keys(ve.conc).length) {
+        h += '<div style="margin:3px 0"><span style="color:#f0c060;font-weight:700">🔤 Concordance</span><div style="font-size:10px;margin-top:2px">';
+        Object.keys(ve.conc).forEach(function (wk) {
+          var c = ve.conc[wk];
+          var occn = (occ && occ[c.wc]) ? occ[c.wc].count : null;
+          h += '<span style="display:inline-block;margin:1px 4px 1px 0;padding:1px 5px;background:rgba(245,197,66,.12);border-radius:4px"><b>' + ccEsc(c.root || c.w || '') + '</b> <i>' + ccEsc(c.pos || '') + '</i>' + (occn != null ? ' <span style="opacity:.7">×' + occn + '</span>' : '') + '</span>';
+        });
+        h += '</div></div>';
+      }
+      h += '</div>';
+    }
+    return h;
+  }
+  /* injecte le bloc Corpus Coranicum dans la bulle de survol */
+  window.__ccAppend = function (sura, v1, v2, tip) {
+    var box = tip.querySelector('#cc-block');
+    if (!box) return;
+    box.innerHTML = '⏳ Corpus Coranicum…';
+    Promise.all([ccEnsure(sura), ccEnsureOcc()]).then(function (res) {
+      if (!tip.querySelector('#cc-block')) return;   /* bulle déjà refermée */
+      tip.querySelector('#cc-block').innerHTML = ccHtml(sura, v1, v2, res[0], res[1]);
+    });
+  };
+}
+initCorpusCoranicum();
+
 
 /* ═══ VÉRIFICATION INLINE DES RÉFÉRENCES (2.0 — T4) ═══
    Marque chaque référence biblique/coranique d'après la table de
