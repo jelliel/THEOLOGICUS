@@ -34839,7 +34839,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.401';
+  var STAMPED = '2.0.402';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -44998,7 +44998,18 @@ window.continueTradApart = async function (msgId) {
     if (!favs.length) h += '<div class="v189-empty">Clique ⭐ dans l\'en-tête d\'un panneau (tafsirs, Pères) pour épingler un passage.</div>';
     else favs.forEach(function(f){
       h += '<div class="v189-item"><b>' + esc(f.label || '') + '</b> '
-        + '<button data-open="' + f.id + '">📖 Ouvrir</button><button data-unfav="' + f.id + '">✕ Retirer</button></div>';
+        + '<button data-open="' + f.id + '">📖 Ouvrir</button><button data-unfav="' + f.id + '">✕ Retirer</button>';
+      if (f.parts && f.parts.length) {
+        var hasFr = f.parts.some(function(p){ return p.fr; });
+        f.parts.forEach(function(p){
+          if (p.sn) h += '<div class="tx" style="opacity:.92;margin-top:4px">' + esc(String(p.sn).slice(0, 300)) + (String(p.sn).length > 300 ? '…' : '') + '</div>';
+          if (p.fr) h += '<div class="tx" style="color:#7fdfff">🇫🇷 ' + esc(String(p.fr).slice(0, 300)) + (String(p.fr).length > 300 ? '…' : '') + '</div>';
+        });
+        h += '<div style="margin-top:5px"><button data-copyfsrc="' + f.id + '" title="Insérer le texte source dans le champ de message">📋 Source</button>'
+          + (hasFr ? '<button data-copyffr="' + f.id + '" title="Copier la traduction FR">📋 FR</button>' : '')
+          + '</div>';
+      }
+      h += '</div>';
     });
     h += '<div class="v189-item" style="border:none;margin-top:14px"><b>🕘 HISTORIQUE</b></div>';
     if (!hist.length) h += '<div class="v189-empty">Vos derniers passages ouverts (tafsirs, Pères) apparaîtront ici.</div>';
@@ -45018,6 +45029,27 @@ window.continueTradApart = async function (msgId) {
       b.addEventListener('click', function(){
         sv('theo_favorites_v1', ld('theo_favorites_v1').filter(function(x){ return x.id !== b.dataset.unfav; }));
         render();
+      });
+    });
+    body.querySelectorAll('[data-copyfsrc]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = findIn(ld('theo_favorites_v1'), b.dataset.copyfsrc);
+        if (!it || !it.parts) return;
+        var txt = it.parts.map(function(p){ return p.sn; }).filter(Boolean).join('\n\n');
+        if (!txt) return;
+        var ta = document.getElementById('user-input');
+        if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + txt + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Texte source inséré dans le champ de message', 'success'); }
+        else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ toast('Texte source copié.', 'success'); });
+      });
+    });
+    body.querySelectorAll('[data-copyffr]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = findIn(ld('theo_favorites_v1'), b.dataset.copyffr);
+        if (!it || !it.parts) return;
+        var txt = it.parts.map(function(p){ return p.fr; }).filter(Boolean).join('\n\n');
+        if (!txt) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ toast('Traduction copiée.', 'success'); });
+        else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Traduction copiée.', 'success'); } catch(e){} ta.remove(); }
       });
     });
     body.querySelectorAll('[data-hopen]').forEach(function(b){
@@ -45045,7 +45077,7 @@ window.continueTradApart = async function (msgId) {
     body.innerHTML = '<div id="v189-actions"><button id="v189-save">💾 Exporter mes données</button><button id="v189-load">♻️ Restaurer un fichier</button><input type="file" id="v189-file" accept=".json" style="display:none"></div>'
       + '<div style="opacity:.75;line-height:1.7">'
       + '<p>Cet export inclut <b>toutes tes données locales</b> :</p>'
-      + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>🌐 cache des traductions</li></ul>'
+      + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>⭐ favoris (texte + traduction)</li><li>🌐 mémoire de traduction unifiée</li></ul>'
       + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>';
     body.querySelector('#v189-save').addEventListener('click', saveAll);
     body.querySelector('#v189-load').addEventListener('click', function(){ body.querySelector('#v189-file').click(); });
@@ -45094,7 +45126,8 @@ window.continueTradApart = async function (msgId) {
     var basket = ld(BASKET);
     var notes = ld(NOTES);
     var marks = ld('theo_panel_marks_v1');
-    return { basket: basket, notes: notes, marks: marks };
+    var favorites = ld('theo_favorites_v1');
+    return { basket: basket, notes: notes, marks: marks, favorites: favorites };
   }
   function wordHtml(){
     var d = collectAll();
@@ -45125,7 +45158,17 @@ window.continueTradApart = async function (msgId) {
       });
       h += '</ul>';
     }
-    if (!d.basket.length && !d.notes.length && !d.marks.length) h += '<p style="color:#888">Vide — ajoute des passages avec 🧺 et 📝.</p>';
+    if (d.favorites && d.favorites.length) {
+      h += '<h2 style="font-size:16px">⭐ Favoris</h2>';
+      d.favorites.forEach(function(f){
+        h += '<p style="margin:10px 0 2px"><b style="font-size:12px">⭐ ' + esc(f.label || '') + '</b></p>';
+        (f.parts || []).forEach(function(p){
+          if (p.sn) h += '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(p.sn) + '</blockquote>';
+          if (p.fr) h += '<p style="margin:2px 0;color:#1a5276"><i>🇫🇷 ' + esc(p.fr) + '</i></p>';
+        });
+      });
+    }
+    if (!d.basket.length && !d.notes.length && !d.marks.length && !(d.favorites && d.favorites.length)) h += '<p style="color:#888">Vide — ajoute des passages avec 🧺 et 📝.</p>';
     h += '</body></html>';
     return h;
   }
@@ -45143,6 +45186,17 @@ window.continueTradApart = async function (msgId) {
     if (d.marks.length) {
       h += '\n## 🖍 Surlignages\n';
       d.marks.forEach(function(m){ h += '\n- **' + srcLabel(m.key) + '** — ' + String(m.text || '').slice(0, 300) + (String(m.text || '').length > 300 ? '…' : '') + '\n'; });
+    }
+    if (d.favorites && d.favorites.length) {
+      h += '\n## ⭐ Favoris\n';
+      d.favorites.forEach(function(f){
+        h += '\n**⭐ ' + (f.label || '') + '**\n';
+        (f.parts || []).forEach(function(p){
+          if (p.sn) h += '\n> ' + String(p.sn).replace(/\n/g, '\n> ');
+          if (p.fr) h += '\n\n🇫🇷 ' + String(p.fr).replace(/\n/g, '\n');
+        });
+        h += '\n';
+      });
     }
     return h + '\n';
   }
@@ -45370,7 +45424,26 @@ window.continueTradApart = async function (msgId) {
     var open = null;
     if (key.indexOf('v183#') === 0) { var qr = parseQuranRef(key); if (qr) open = { kind: 'quran', s: qr.s, v1: qr.v1, v2: qr.v2 }; }
     else if (key.indexOf('v167#') === 0) open = { kind: 'bible', ref: key.replace(/^v167#/, '') };
-    arr.unshift({ id: 'fv-' + Date.now(), key: key, label: label, open: open, ts: Date.now() });
+    /* v402 — un favori n'est plus un simple pointeur : on capture le(s) texte(s)
+       source(s) du passage ET la traduction FR déjà mémorisée (mémoire unifiée
+       theo_tm_v1), pour l'afficher, le copier et l'exporter comme le panier. */
+    var parts = [];
+    try {
+      if (box) {
+        var _btns = box.querySelectorAll('.v167-tr[data-sn]');
+        var _seen = {};
+        for (var _i = 0; _i < _btns.length && parts.length < 12; _i++) {
+          var _s = (_btns[_i].dataset.sn || '').trim();
+          if (!_s || _seen[_s]) continue;
+          _seen[_s] = 1;
+          var _fr = (window.__theoTM && window.__theoTM.get(_s, 'fr')) || null;
+          parts.push({ sn: _s.slice(0, 4000), fr: _fr ? String(_fr).slice(0, 4000) : null });
+        }
+      }
+    } catch(e){}
+    var _entry = { id: 'fv-' + Date.now(), key: key, label: label, open: open, ts: Date.now() };
+    if (parts.length) _entry.parts = parts;
+    arr.unshift(_entry);
     sv(FAV, arr);
     toast('⭐ ' + label + ' épinglé dans les favoris', 'success');
   };
