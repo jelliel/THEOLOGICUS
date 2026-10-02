@@ -3,3 +3,11 @@ sefaria/cache/*
 quranx/cache/*
 corpus/cache/*
 dist/THEOLOGICUS/THEOLOGICUS.log
+
+# Reliquats de build, caches et fichiers de debug (jamais suivis)
+**/*.retire/
+**/*.retire1/
+.playwright-cli/
+__pycache__/
+_v179_check.js
+build_*_progress.log
