@@ -11,3 +11,8 @@ dist/THEOLOGICUS/THEOLOGICUS.log
 __pycache__/
 _v179_check.js
 build_*_progress.log
+build_*.log
+
+# Cle de signature — JAMAIS suivie (fuite = usurpation d'identite du createur)
+*.pfx
+THEOLOGICUS_signing.pfx

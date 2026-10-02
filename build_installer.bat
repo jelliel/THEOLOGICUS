@@ -59,6 +59,13 @@ for %%d in (bible quran tafsir summa summafr fathers reformed orthodox islamic d
   copy /y %%d\*.js dist\THEOLOGICUS\%%d\ >nul || goto :err
   copy /y %%d\*.json dist\THEOLOGICUS\%%d\ >nul 2>&1
 )
+rem v399 : tradition contient des SOUS-DOSSIERS (cc/ qhadith/ qtafsir/ qwbw/ mishnah/
+rem philo/ talmud/ yerushalmi/) que la boucle ci-dessus ne copie pas (elle ne fait
+rem que la racine *.js/*.json). Copie recursive, hors cache/ (cache local, jamais livre).
+rem v399 : tradition copie recursive (sous-dossiers cc/ qhadith/ qtafsir/ qwbw/ mishnah/
+rem philo/ talmud/ yerushalmi/) hors cache/ (cache local, jamais livre)
+robocopy tradition dist\THEOLOGICUS\tradition /s /e /xd cache >nul
+if errorlevel 4 goto :err
 copy /y tafsir\index.json dist\THEOLOGICUS\tafsir\ >nul || goto :err
 del /q dist\THEOLOGICUS\bible_data.js 2>nul
 del /q dist\THEOLOGICUS\quran_data.js 2>nul
