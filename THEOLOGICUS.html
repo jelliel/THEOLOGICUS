@@ -29691,6 +29691,15 @@ const idx = fullM.norm.indexOf(txtM.norm);
       tip.innerHTML = '<div class="vmt-ref">▶ ' + esc(v.ref) + (v.more ? ' <span style="font-weight:400">' + esc(v.more) + '</span>' : '') + '</div>' +
                       '<div class="vmt-txt">« ' + esc(v.text) + ' »</div>';
     }
+    /* v213 — chips Valtorta aussi dans le panneau des annotations :
+       le module Bible exporte window.__parseBibleRef (v66). */
+    if (window.__v204TipHtml && window.__parseBibleRef) {
+      try {
+        var _vp = (window.__parseBibleRef ? window.__parseBibleRef(refStr) : null)
+                  || (window.__v204RefParts ? window.__v204RefParts(refStr) : null);
+        if (_vp) tip.innerHTML += window.__v204TipHtml(_vp);
+      } catch (e) {}
+    }
     tip.style.display = 'block';
     var r = el.getBoundingClientRect();
     /* v97 — placement par le helper PARTAGE, comme les panneaux de verset.
@@ -43048,12 +43057,24 @@ window.continueTradApart = async function (msgId) {
     }
     /* v212 — chronologie complète (Synoptique.xls) */
     if (VPAGE === -1 && s.chrono){
+      /* v213 — recoupement : combien de récits Valtorta portent une date
+         d'événement tombant sur cette année (champ `ev`, ex. « Jeudi 4 avril 30 »). */
+      var parAn = {};
+      ((VDATA && VDATA.episodes) || []).forEach(function(e){
+        var m = /(-?\d{1,3})\s*$/.exec(e.ev || '');
+        if (!m) return;
+        var y = parseInt(m[1], 10);
+        (parAn[y] = parAn[y] || []).push(e);
+      });
       var hc = '<div class="v170-cat" data-vsback="2">← ' + esc(s.nom) + '</div>'
         + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chronologie reconstituée d\'après l\'œuvre '
-        + 'et les travaux de Jean Aulagnier. ✝ = vie de Jésus, 🏛 = événements historiques.</div>';
+        + 'et les travaux de Jean Aulagnier. ✝ = vie de Jésus, 🏛 = événements historiques, '
+        + '📖 = nombre de récits de l\'app datés de cette année.</div>';
       s.chrono.forEach(function(x){
         if (q && norm(x.a + ' ' + (x.j || '') + ' ' + (x.h || '')).indexOf(q) < 0) return;
+        var n = (parAn[x.a] || []).length;
         hc += '<div class="v170-item"><span class="v167-au">' + (x.a < 0 ? (-x.a) + ' av. J.-C.' : x.a + ' apr. J.-C.') + '</span>'
+           + (n ? ' <span style="color:#9fd0a0;font-size:11px">📖 ' + n + ' récit' + (n > 1 ? 's' : '') + '</span>' : '')
            + (x.j ? '<div class="v167-sn">✝ ' + esc(x.j) + '</div>' : '')
            + (x.h ? '<div class="v167-sn" style="opacity:.6">🏛 ' + esc(x.h) + '</div>' : '')
            + '</div>';
@@ -45624,6 +45645,36 @@ window.continueTradApart = async function (msgId) {
     hb:'58', jc:'59', '1p':'60', '2p':'61', '1jn':'62', '2jn':'63', '3jn':'64',
     jd:'65', ap:'66'
   };
+
+  /* v213 — table livres -> numeros, copiee de BOOK_NUM (module Bible v66).
+     Le module Bible n'expose __parseBibleRef qu'apres un amorcage par corpus
+     hook qui ne se declenche pas toujours : on reste autonome. */
+  var FR2NUM = {
+    'gn': '1', 'genèse': '1', 'ex': '2', 'exode': '2', 'lv': '3', 'lévitique': '3', 'nb': '4', 'nombres': '4', 'dt': '5', 'deutéronome': '5',
+    'jos': '6', 'josué': '6', 'jg': '7', 'juges': '7', 'rt': '8', 'ruth': '8', '1s': '9', '1 samuel': '9', '2s': '10', '2 samuel': '10',
+    '1r': '11', '1 rois': '11', '2r': '12', '2 rois': '12', '1ch': '13', '1 chroniques': '13', '2ch': '14', '2 chroniques': '14',
+    'esd': '15', 'esdras': '15', 'ne': '16', 'néhémie': '16', 'et': '17', 'esther': '17', 'jb': '18', 'job': '18', 'ps': '19', 'psaume': '19', 'psaumes': '19',
+    'pr': '20', 'proverbes': '20', 'ec': '21', 'ecclésiaste': '21', 'ct': '22', 'cantique': '22', 'cantique des cantiques': '22', 'is': '23', 'es': '23', 'esa': '23', 'isaie': '23', 'ésaïe': '23', 'ésaie': '23', 'esaie': '23',
+    'jr': '24', 'jérémie': '24', 'lm': '25', 'lamentations': '25', 'ez': '26', 'ézéchiel': '26', 'dn': '27', 'daniel': '27', 'os': '28', 'osée': '28',
+    'jl': '29', 'joël': '29', 'joel': '29', 'am': '30', 'amos': '30', 'ab': '31', 'abdias': '31', 'jo': '32', 'jon': '32', 'jonas': '32', 'mi': '33', 'michée': '33', 'michee': '33', 'na': '34', 'nahum': '34',
+    'ha': '35', 'habacuc': '35', 'so': '36', 'sophonie': '36', 'ag': '37', 'aggée': '37', 'za': '38', 'zacharie': '38', 'ml': '39', 'malachie': '39',
+    'mt': '40', 'matthieu': '40', 'mc': '41', 'marc': '41', 'lc': '42', 'luc': '42', 'jn': '43', 'jean': '43', 'ac': '44', 'actes': '44', 'rm': '45', 'romains': '45',
+    '1co': '46', '1 corinthiens': '46', '2co': '47', '2 corinthiens': '47', 'ga': '48', 'galates': '48', 'ep': '49', 'éphésiens': '49', 'ph': '50', 'philippiens': '50',
+    'col': '51', 'colossiens': '51', '1th': '52', '1 thessaloniciens': '52', '2th': '53', '2 thessaloniciens': '53', '1tm': '54', '1 timothée': '54', '2tm': '55', '2 timothée': '55',
+    't': '56', 'tite': '56', 'phm': '57', 'philémon': '57', 'he': '58', 'hébreux': '58', 'jc': '59', 'jacques': '59', '1p': '60', '1 pierre': '60', '2p': '61', '2 pierre': '61',
+    '1jn': '62', '1 jean': '62', '2jn': '63', '2 jean': '63', '3jn': '64', '3 jean': '64', 'jd': '65', 'jude': '65', 'ap': '66', 'apocalypse': '66'
+  };
+  var REF_RE = /^(?:(\d+)\s+)?([A-Za-z\u00c0-\u00ff.]+)\s+(\d+)\s*[:,]\s*(\d+)(?:\s*[-\u2013]\s*(\d+))?$/;
+  function refParts(text){
+    var m = REF_RE.exec(String(text || '').trim());
+    if (!m) return null;
+    var key = (m[1] ? m[1] + ' ' : '') + m[2].toLowerCase().replace(/\.$/, '');
+    var num = FR2NUM[key] || FR2NUM[m[2].toLowerCase()] || FR2NUM[key.replace(/\s+/g, '')];
+    if (!num) return null;
+    return { book: num, ch: m[3], v1: parseInt(m[4], 10),
+             v2: m[5] ? parseInt(m[5], 10) : null, ref: String(text).trim() };
+  }
+  window.__v204RefParts = refParts;
 
   var IDX = null;   /* 'numLivre:chapitre' -> [{e, r, off}] */
   function buildIndex(){
