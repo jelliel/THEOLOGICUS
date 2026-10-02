@@ -42350,8 +42350,8 @@ window.continueTradApart = async function (msgId) {
 
   var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
       LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q',
-      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null;
-      /* v204 — Valtorta : index + tome sélectionné ; v205 — sections (encyclopédie, œuvres) */
+      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false;
+      /* v204 — Valtorta : index + tome ; v205 — sections ; v206 — catéchèses */
 
   var style = document.createElement('style');
   style.textContent =
@@ -42464,13 +42464,25 @@ window.continueTradApart = async function (msgId) {
       }
       if (c.hasAttribute('data-vsee')) {
         VSEE = parseInt(c.getAttribute('data-vsee'), 10);
+        VCAT = false; VSEC = null;
+        render();
+        return;
+      }
+      /* v206 — catéchèses */
+      if (c.hasAttribute('data-vcat')) {
+        VCAT = true; VSEE = null; VSEC = null; VPAGE = null;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vcatback')) {
+        VCAT = false;
         render();
         return;
       }
       /* v205 — sections du site (encyclopédie / autres œuvres) */
       if (c.hasAttribute('data-vsec')) {
         VSEC = c.getAttribute('data-vsec');
-        VPAGE = null;
+        VPAGE = null; VCAT = false;
         vsLoad(function(){ render(); });
         return;
       }
@@ -42886,6 +42898,30 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
   }
 
+  /* v206 — catéchèses (dictées rattachées à un chapitre de l'œuvre) */
+  function renderVC(q){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    var cat = (VDATA && VDATA.catecheses) || [];
+    var h = '<div class="v170-cat" data-vcatback="1">← Les dix tomes</div>'
+      + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Dictées rattachées à un chapitre de l\'œuvre. '
+      + 'Le texte reste sur le site officiel (droits CEV).</div>';
+    var n = 0;
+    cat.forEach(function(c){
+      var hay = norm((c.d || '') + ' ' + (c.parent || '') + ' ' + (c.ex || '') + ' ' + c.fid);
+      if (q && hay.indexOf(q) < 0) return;
+      n++;
+      h += '<div class="v170-item"><span class="v167-au">📜 ' + esc(c.fid) + '</span>'
+        + '<span class="v167-ti">— ' + (c.d ? 'Catéchèse du ' + esc(c.d) : 'Catéchèse') + '</span>'
+        + (c.parent ? '<div style="font-size:11.5px;color:#9fd0a0">📖 chapitre ' + esc(c.parent) + ' de l\'œuvre</div>' : '')
+        + (c.ex ? '<div class="v167-sn" style="opacity:.75">' + esc(c.ex.slice(0, 220)) + '…</div>' : '')
+        + '<button type="button" data-vurl="' + esc(c.u) + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la catéchèse ↗</button></div>';
+    });
+    if (st) st.textContent = n + ' catéchèse(s)';
+    body.innerHTML = h + (n ? '' : '<div style="opacity:.6;padding:16px">Aucune catéchèse ne correspond au filtre.</div>');
+  }
+
   /* v205 — sections du site : encyclopédie valtortienne (texte conservé) et
      autres œuvres sous droits CEV (entrées datées + lien vers la page). */
   function vsLoad(cb){
@@ -42961,6 +42997,7 @@ window.continueTradApart = async function (msgId) {
       return;
     }
     if (VSEC){ renderVS(q); return; }
+    if (VCAT){ renderVC(q); return; }
     if (VSDATA === null) vsLoad(function(){ if (VIEW === 'v' && !VSEC) render(); });
     var eps = VDATA.episodes;
     var h = '', shown = 0, i;
@@ -43012,6 +43049,9 @@ window.continueTradApart = async function (msgId) {
         if (!tomes[i]) continue;
         h += '<div class="v170-cat" data-vsee="' + i + '">🌊 <b>Tome ' + ('0' + i).slice(-2) + '</b> <span style="opacity:.5">— ' + tomes[i] + ' récits</span></div>';
       }
+      if (VDATA.catecheses && VDATA.catecheses.length)
+        h += '<div class="v170-cat" data-vcat="1">📜 <b>Catéchèses</b> <span style="opacity:.5">— '
+           + VDATA.catecheses.length + ' dictées rattachées à un chapitre</span></div>';
       if (VSDATA && VSDATA.sections){
         h += '<div style="padding:12px 14px 4px;font-size:10.5px;letter-spacing:1.2px;color:#8fa8d8">ENCYCLOPÉDIE VALTORTIENNE &amp; AUTRES ŒUVRES</div>';
         VSDATA.sections.forEach(function(s){
@@ -43547,6 +43587,15 @@ window.continueTradApart = async function (msgId) {
                          + (ro ? '📖 ' + esc(refs) : 'récit sans référence en tête')
                          + (rc ? ' · 🔎 ' + rc + ' réf. citée(s)' : ''),
                      go: { vlt: e.fid + '|' + ('0' + e.tome).slice(-2) } });
+        });
+        /* v206 — catéchèses (dictées rattachées à un chapitre) */
+        (C.vlt.catecheses || []).forEach(function(c){
+          if (out.length >= 16) return;
+          var hayC = norm((c.d || '') + ' ' + (c.parent || '') + ' ' + (c.ex || '') + ' ' + c.fid + ' catechese');
+          if (hayC.indexOf(nq) < 0) return;
+          out.push({ h: '📜 Catéchèse' + (c.d ? ' du ' + esc(c.d) : '') + ' <span style="opacity:.55">(chapitre ' + esc(c.parent || '?') + ')</span>',
+                     sn: esc((c.ex || '').slice(0, 130)) + '…',
+                     go: { vlt: c.fid + '|' + ('0' + c.tome).slice(-2) } });
         });
         /* v205 — sections du site : encyclopédie, calendrier, autres œuvres */
         if (C.vsec && C.vsec.sections){

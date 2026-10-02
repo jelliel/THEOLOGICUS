@@ -26,7 +26,9 @@
   "comble": "2026-10-01",
   "citees": 1381,
   "evenements": 519,
-  "enrichi": "2026-10-01"
+  "enrichi": "2026-10-01",
+  "catecheses": 7,
+  "hors_recits": 11
  },
  "episodes": [
   {
@@ -21288,5 +21290,69 @@
    ]
   }
  ],
- "erreurs": []
+ "erreurs": [],
+ "catecheses": [
+  {
+   "emv": 4,
+   "parent": "4.5",
+   "d": "jeudi 24 août 1944",
+   "ex": "Jésusdit : «Après les avoir éclairés par les songes de la nuit, la Sagesse descendit elle-même, en “effluve de la puissance de Dieu, une émanation toute pure de la gloire du Tout-Puissant [[1]](https://www.maria-valtorta",
+   "fid": "01-006",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-006.htm"
+  },
+  {
+   "emv": 17,
+   "parent": "17.16",
+   "d": "mercredi 8 mars 1944",
+   "ex": "Jésus dit : «Ces mots de ma Mère devraient dissiper toute hésitation même chez ceux qui s’embrouillent le plus dans les formules. […] [[1]](https://www.maria-valtorta.org/Publication/TOME%2001/01-026.htm#_ftn1). J’ai par",
+   "fid": "01-026",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-026.htm"
+  },
+  {
+   "emv": 20,
+   "parent": "20.6",
+   "d": "mardi 28 mars 1944",
+   "ex": "Marie dit: \"Je ne vais pas te parler longuement, parce que tu es bien lasse, ma pauvre fille. J'attire uniquement ton attention et celle des lecteurs sur l'habitude constante de Joseph et la mienne de donner toujours la ",
+   "fid": "01-031",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-031.htm"
+  },
+  {
+   "emv": 24,
+   "parent": "24.6",
+   "d": "mardi 4 avril 1944 (mardi-saint)",
+   "ex": "Mariedit: \"À qui reconnaît sa faute et s'en repent et s'accuse humblement d'un cœur sincère, Dieu pardonne. Il ne pardonne pas seulement: Il récompense. Oh! mon Seigneur, comme Il est bon envers qui est humble et sincère",
+   "fid": "01-039",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-039.htm"
+  },
+  {
+   "emv": 26,
+   "parent": "26.6",
+   "d": "mercredi 31 mai 1944",
+   "ex": "Marie dit: \"Que personne n'interprète d'une manière inexacte ma pâleur. Elle ne provenait pas d'une crainte humaine. Humainement j'aurais dû m'attendre à la lapidation. Mais ce n'était pas le motif de ma crainte. Je souf",
+   "fid": "01-043",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-043.htm"
+  },
+  {
+   "emv": 30,
+   "parent": "30.10",
+   "ex": "Jésus dit: \"Aujourd'hui c'est Moi qui parle. Tu es très fatiguée, mais prends encore un peu de patience. C'est la veille de la Fête-Dieu. Je pourrais te parler de l'Eucharistie et des saints qui se sont faits les apôtres",
+   "fid": "01-050",
+   "tome": 1,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2001/01-050.htm"
+  },
+  {
+   "emv": 70,
+   "parent": "70.8",
+   "d": "jeudi 4 janvier 1945",
+   "ex": "Jésusdit ensuite: \"Encore un parallèle entre Jeanet un autre disciple.Parallèle d'où ressort plus claire la figure de mon préféré. Lui est celui qui se dépouille même de sa façon de penser et de juger pour être le \"disci",
+   "fid": "02-034",
+   "tome": 2,
+   "u": "https://www.maria-valtorta.org/Publication/TOME%2002/02-034.htm"
+  }
+ ]
 }
