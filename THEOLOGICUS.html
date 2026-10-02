@@ -42350,7 +42350,7 @@ window.continueTradApart = async function (msgId) {
 
   var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
       LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q',
-      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false;
+      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false, VMISS = false;
       /* v204 — Valtorta : index + tome ; v205 — sections ; v206 — catéchèses */
 
   var style = document.createElement('style');
@@ -42468,9 +42468,20 @@ window.continueTradApart = async function (msgId) {
         render();
         return;
       }
+      /* v208 — chapitres de l'index officiel sans page sur le site */
+      if (c.hasAttribute('data-vmiss')) {
+        VMISS = true; VCAT = false; VSEC = null; VSEE = null; VPAGE = null;
+        render();
+        return;
+      }
+      if (c.hasAttribute('data-vmissback')) {
+        VMISS = false;
+        render();
+        return;
+      }
       /* v206 — catéchèses */
       if (c.hasAttribute('data-vcat')) {
-        VCAT = true; VSEE = null; VSEC = null; VPAGE = null;
+        VCAT = true; VSEE = null; VSEC = null; VPAGE = null; VMISS = false;
         render();
         return;
       }
@@ -42898,6 +42909,30 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
   }
 
+  /* v208 — chapitres de l'index officiel (652) sans page sur le site */
+  function renderVMiss(q){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    var idx = (VDATA && VDATA.index652) || {};
+    var emvs = {};
+    ((VDATA && VDATA.episodes) || []).forEach(function(e){ if (e.emv) emvs[e.emv] = 1; });
+    var h = '<div class="v170-cat" data-vmissback="1">← Les dix tomes</div>'
+      + '<div style="padding:6px 14px;font-size:11px;opacity:.65">Chapitres de l\'index officiel de la nouvelle édition '
+      + 'qui n\'ont pas de page sur maria-valtorta.org. Titres donnés par l\'index de référence.</div>';
+    var n = 0;
+    Object.keys(idx).sort(function(a, b){ return a - b; }).forEach(function(k){
+      if (emvs[k]) return;
+      var t = idx[k];
+      if (q && norm(k + ' ' + t).indexOf(q) < 0) return;
+      n++;
+      h += '<div class="v170-item"><span class="v167-au">📖 ' + k + '</span>'
+        + '<span class="v167-ti">— ' + esc(t) + '</span></div>';
+    });
+    if (st) st.textContent = n + ' chapitre(s) sans page sur le site';
+    body.innerHTML = h;
+  }
+
   /* v206 — catéchèses (dictées rattachées à un chapitre de l'œuvre) */
   function renderVC(q){
     var body = document.getElementById('v170-body');
@@ -42998,6 +43033,7 @@ window.continueTradApart = async function (msgId) {
     }
     if (VSEC){ renderVS(q); return; }
     if (VCAT){ renderVC(q); return; }
+    if (VMISS){ renderVMiss(q); return; }
     if (VSDATA === null) vsLoad(function(){ if (VIEW === 'v' && !VSEC) render(); });
     var eps = VDATA.episodes;
     var h = '', shown = 0, i;
@@ -43048,6 +43084,12 @@ window.continueTradApart = async function (msgId) {
       for (i = 1; i <= 10; i++){
         if (!tomes[i]) continue;
         h += '<div class="v170-cat" data-vsee="' + i + '">🌊 <b>Tome ' + ('0' + i).slice(-2) + '</b> <span style="opacity:.5">— ' + tomes[i] + ' récits</span></div>';
+      }
+      if (VDATA.index652){
+        var _em = {}, _manq = 0;
+        eps.forEach(function(e){ if (e.emv) _em[e.emv] = 1; });
+        Object.keys(VDATA.index652).forEach(function(k){ if (!_em[k]) _manq++; });
+        if (_manq) h += '<div class="v170-cat" data-vmiss="1">📖 <b>' + _manq + ' chapitres</b> <span style="opacity:.5">— de l\'index officiel (652), sans page sur le site</span></div>';
       }
       if (VDATA.catecheses && VDATA.catecheses.length)
         h += '<div class="v170-cat" data-vcat="1">📜 <b>Catéchèses</b> <span style="opacity:.5">— '
