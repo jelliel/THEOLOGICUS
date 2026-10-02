@@ -42350,7 +42350,8 @@ window.continueTradApart = async function (msgId) {
 
   var DATA = null, DDATA = null, BDATA = null, CPDATA = null, CPFULL = null, CPCAT = null,
       LDATA = null, LSEL = null, LWI = null, LUNIT = null, LDONE = {}, LOADING = false, VIEW = 'q',
-      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false, VMISS = false;
+      VDATA = null, VSEE = null, VSEC = null, VPAGE = null, VSDATA = null, VCAT = false, VMISS = false,
+      VTEXT = null, VTDATA = null;
       /* v204 — Valtorta : index + tome ; v205 — sections ; v206 — catéchèses */
 
   var style = document.createElement('style');
@@ -42464,13 +42465,19 @@ window.continueTradApart = async function (msgId) {
       }
       if (c.hasAttribute('data-vsee')) {
         VSEE = parseInt(c.getAttribute('data-vsee'), 10);
-        VCAT = false; VSEC = null;
+        VCAT = false; VSEC = null; VMISS = false; VTEXT = null;
+        render();
+        return;
+      }
+      /* v210 — retour du lecteur de texte */
+      if (c.hasAttribute('data-vtextback')) {
+        VTEXT = null;
         render();
         return;
       }
       /* v208 — chapitres de l'index officiel sans page sur le site */
       if (c.hasAttribute('data-vmiss')) {
-        VMISS = true; VCAT = false; VSEC = null; VSEE = null; VPAGE = null;
+        VMISS = true; VCAT = false; VSEC = null; VSEE = null; VPAGE = null; VTEXT = null;
         render();
         return;
       }
@@ -42481,7 +42488,7 @@ window.continueTradApart = async function (msgId) {
       }
       /* v206 — catéchèses */
       if (c.hasAttribute('data-vcat')) {
-        VCAT = true; VSEE = null; VSEC = null; VPAGE = null; VMISS = false;
+        VCAT = true; VSEE = null; VSEC = null; VPAGE = null; VMISS = false; VTEXT = null;
         render();
         return;
       }
@@ -42493,7 +42500,7 @@ window.continueTradApart = async function (msgId) {
       /* v205 — sections du site (encyclopédie / autres œuvres) */
       if (c.hasAttribute('data-vsec')) {
         VSEC = c.getAttribute('data-vsec');
-        VPAGE = null; VCAT = false;
+        VPAGE = null; VCAT = false; VMISS = false; VTEXT = null;
         vsLoad(function(){ render(); });
         return;
       }
@@ -42522,6 +42529,13 @@ window.continueTradApart = async function (msgId) {
     });
     /* v204 — ouvrir un récit Valtorta depuis la vue 🌊 (v205 : pages de section) */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
+      /* v210 — lire le texte d'un chapitre */
+      var vt = ev.target.closest ? ev.target.closest('[data-vtext]') : null;
+      if (vt){
+        VTEXT = parseInt(vt.getAttribute('data-vtext'), 10);
+        vtLoad(function(){ render(); });
+        return;
+      }
       var vurl = ev.target.closest ? ev.target.closest('[data-vurl]') : null;
       if (vurl){
         var uu = vurl.getAttribute('data-vurl');
@@ -42909,6 +42923,36 @@ window.continueTradApart = async function (msgId) {
     if (st) st.textContent = w.t + ' ' + u.u + ' — texte intégral en anglais (sefaria.org)';
   }
 
+  /* v210 — texte intégral des chapitres (mariavaltorta.online) */
+  function vtLoad(cb){
+    if (VTDATA !== null) { cb(VTDATA); return; }
+    fetch('tradition/valtorta_text.json', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ VTDATA = (j && typeof j === 'object') ? j : false; cb(VTDATA); })
+      .catch(function(){ VTDATA = false; cb(false); });
+  }
+  function renderVT(){
+    var body = document.getElementById('v170-body');
+    var st = document.getElementById('v170-status');
+    if (!body) return;
+    if (!VTDATA){ body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du texte…</div>'; return; }
+    var c = VTDATA[String(VTEXT)];
+    var h = '<div class="v170-cat" data-vtextback="1">← Retour</div>';
+    if (!c){
+      h += '<div style="opacity:.6;padding:16px">Texte indisponible pour ce chapitre.</div>';
+      body.innerHTML = h; return;
+    }
+    h += '<div style="padding:4px 14px 12px">'
+      + '<div style="color:#d6e4ff;font-weight:700;margin-bottom:8px">📖 ' + VTEXT + '. ' + esc(c.t || '') + '</div>'
+      + '<div style="white-space:pre-wrap;font-size:12.5px;line-height:1.7;max-height:52vh;overflow:auto;padding-right:6px">'
+      + esc(c.x || '') + '</div>'
+      + '<div style="font-size:10.5px;opacity:.5;margin-top:8px">Source : ' + esc(c.u || '') + '</div>'
+      + '<button type="button" data-vurl="' + esc(c.u || '') + '" style="margin-top:8px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:5px 11px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir la page source ↗</button>'
+      + '</div>';
+    if (st) st.textContent = 'Chapitre ' + VTEXT + ' — ' + (c.t || '');
+    body.innerHTML = h;
+  }
+
   /* v208 — chapitres de l'index officiel (652) sans page sur le site */
   function renderVMiss(q){
     var body = document.getElementById('v170-body');
@@ -43037,6 +43081,7 @@ window.continueTradApart = async function (msgId) {
     if (VSEC){ renderVS(q); return; }
     if (VCAT){ renderVC(q); return; }
     if (VMISS){ renderVMiss(q); return; }
+    if (VTEXT !== null){ renderVT(); return; }
     if (VSDATA === null) vsLoad(function(){ if (VIEW === 'v' && !VSEC) render(); });
     var eps = VDATA.episodes;
     var h = '', shown = 0, i;
@@ -43050,6 +43095,18 @@ window.continueTradApart = async function (msgId) {
       });
       return { txt: out.slice(0, max || 99).join(' · '), n: out.length };
     }
+    /* v211 — les références deviennent survolables : le gestionnaire global
+       `span.bible-ref` ouvre l'infobulle du verset (avec ses chips Valtorta). */
+    function refsHtml(list, max){
+      var out = [], seen = {};
+      (list || []).forEach(function(r){
+        if (seen[r.raw]) return;
+        seen[r.raw] = 1;
+        if (out.length < (max || 99))
+          out.push('<span class="bible-ref" style="cursor:help" title="Survoler pour le texte du verset">' + esc(r.raw) + '</span>');
+      });
+      return out.join(' · ');
+    }
     function item(e){
       var ro = raws(e.refs), rc = raws(e.cit, 8);
       return '<div class="v170-item"><span class="v167-au">🌊 ' + (e.emv ? 'EMV ' + e.emv : e.fid) + '</span>'
@@ -43058,8 +43115,9 @@ window.continueTradApart = async function (msgId) {
               + (e.lieu ? ' — ' + esc(e.lieu) : '')
               + (e.evj ? ' <span style="opacity:.5">(' + esc(e.evj) + ')</span>' : '') + '</div>' : '')
          + (e.d ? '<div style="font-size:11px;opacity:.6">🖋 vision du ' + esc(e.d) + '</div>' : '')
-         + (ro.n ? '<div class="v167-sn">📖 Évangile : ' + esc(ro.txt) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique en tête</div>')
-         + (rc.n ? '<div class="v167-sn" style="opacity:.7">🔎 cités dans le texte (' + rc.n + ') : ' + esc(rc.txt) + (rc.n > 8 ? '…' : '') + '</div>' : '')
+         + (ro.n ? '<div class="v167-sn">📖 Évangile : ' + refsHtml(e.refs) + '</div>' : '<div class="v167-sn" style="opacity:.55">Récit sans référence évangélique en tête</div>')
+         + (rc.n ? '<div class="v167-sn" style="opacity:.7">🔎 cités dans le texte (' + rc.n + ') : ' + refsHtml(e.cit, 8) + (rc.n > 8 ? '…' : '') + '</div>' : '')
+         + (e.emv && e.emv >= 1 && e.emv <= 652 ? '<button type="button" data-vtext="' + e.emv + '" style="margin-top:4px;margin-right:6px;background:rgba(46,120,58,.5);color:#bfe8bf;border:1px solid rgba(120,200,140,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">📖 Lire le texte</button>' : '')
          + '<button type="button" class="v170-vopen" data-vfid="' + e.fid + '" style="margin-top:4px;background:rgba(28,58,120,.55);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 10px;font:700 11px Consolas,monospace;cursor:pointer">Ouvrir le récit ↗</button></div>';
     }
     function hay(e){
@@ -43222,6 +43280,13 @@ window.continueTradApart = async function (msgId) {
     render();
   };
   /* v205 — ouvrir une section du site (encyclopédie / autres œuvres) */
+  window.__v170Text = function (n) {
+    var p = ensurePanel();
+    p.classList.add('open');
+    setView('v');
+    VTEXT = n; VCAT = false; VSEC = null; VMISS = false; VSEE = null;
+    vtLoad(function(){ render(); });
+  };
   window.__v170Sec = function (sec, page) {
     var p = ensurePanel();
     p.classList.add('open');
@@ -43500,7 +43565,7 @@ window.continueTradApart = async function (msgId) {
   function norm(s){ try { return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); } catch(e){ return String(s||'').toLowerCase(); } }
 
   var C = { ta: null, d: null, b: null, cp: null, sef: null, lib: null, thm: null, vlt: null,
-            vsec: null, qur: 'loading' };
+            vsec: null, vtx: null, qur: 'loading' };
 
   function jget(url, cb){
     fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(cb).catch(function(){ cb(null); });
@@ -43521,6 +43586,7 @@ window.continueTradApart = async function (msgId) {
     one('thm', 'tradition/themes.json',      function(j){ return (j && j.themes && j.themes.length) ? j.themes : false; }); /* v195 */
     one('vlt', 'tradition/valtorta.json',    function(j){ return (j && j.episodes && j.episodes.length) ? j : false; });   /* v204 */
     one('vsec','tradition/valtorta_sec.json',function(j){ return (j && j.sections && j.sections.length) ? j : false; });   /* v205 */
+    one('vtx', 'tradition/valtorta_text.json',function(j){ return (j && typeof j === 'object') ? j : false; });            /* v210 */
     if (!need) cb();
   }
 
@@ -43656,6 +43722,23 @@ window.continueTradApart = async function (msgId) {
             });
           });
         }
+        return out;
+      } },
+    { key: 'vtx', label: "\U0001F4D6 Texte des 652 chapitres", src: 'mariavaltorta.online',
+      run: function(q){
+        if (!C.vtx) return [];
+        var out = [], nq = norm(q);
+        if (nq.length < 3) return [];
+        Object.keys(C.vtx).forEach(function(k){
+          if (out.length >= 8) return;
+          var c = C.vtx[k];
+          var hay = norm((c.t || '') + ' ' + (c.x || ''));
+          var i = hay.indexOf(nq);
+          if (i < 0) return;
+          out.push({ h: '\U0001F4D6 ' + k + '. ' + esc(c.t || ''),
+                     sn: '\u2026' + esc((c.x || '').slice(Math.max(0, i - 70), i + 110)) + '\u2026',
+                     go: { vtxt: +k } });
+        });
         return out;
       } },
     { key: 'ta', label: '📖 Citations des Pères', src: 'traditionapostolique.fr',
@@ -43802,6 +43885,11 @@ window.continueTradApart = async function (msgId) {
       /* v184 — résultat coranique : ouvre le panneau Tafsirs/Hadiths/Lexique */
       if (d.q183s) { if (window.__v183Open) window.__v183Open(+d.q183s, +d.q183v); return; }
       /* v205 — page d'une section Valtorta : ouvre le lecteur de l'onglet 🌊 */
+      /* v210 — ouvrir le texte d'un chapitre */
+      if (d.vtxt) {
+        if (window.__v170Text) window.__v170Text(+d.vtxt);
+        return;
+      }
       if (d.vltsec) {
         var vs = d.vltsec.split('|');
         if (window.__v170Sec) window.__v170Sec(vs[0], +vs[1]);
@@ -43880,6 +43968,7 @@ window.continueTradApart = async function (msgId) {
                     + (r.go.q183s ? '" data-q183s="' + r.go.q183s + '" data-q183v="' + r.go.q183v : '')
                     + (r.go.vlt ? '" data-vlt="' + esc(r.go.vlt) : '')
                     + (r.go.vltsec ? '" data-vltsec="' + esc(r.go.vltsec) : '')
+                    + (r.go.vtxt ? '" data-vtxt="' + esc(String(r.go.vtxt)) : '')
                     + '">ouvrir ↗</button>' : '')
            + '</div>';
       });

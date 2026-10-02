@@ -61,6 +61,23 @@ SECTIONS = [
      "note": "Commentaires dictees par l'Esprit-Saint. Droits CEV : entrees + lien.",
      "idx": [B + "/Epitre/index.htm"],
      "follow": [r"/Epitre/[^)\s]+\.htm"]},
+    {"id": "essentiel", "nom": "L'essentiel en résumé", "kind": "texte",
+     "note": "Résumé de chaque tome de l'œuvre.",
+     "idx": [B + "/ValtortaWeb/introduction0%d.htm" % i for i in range(6)],
+     "follow": []},
+    {"id": "mystiques", "nom": "Autres mystiques", "kind": "texte",
+     "note": "Marie d'Agréda, Anne-Catherine Emmerich, Brigitte de Suède.",
+     "idx": [B + "/ValtortaWeb/MariaAgreda.htm", B + "/ValtortaWeb/ACEmmerich.htm",
+             B + "/ValtortaWeb/Brigitte.htm"],
+     "follow": []},
+    {"id": "dossiers", "nom": "Dossiers", "kind": "texte",
+     "note": "Dossiers thématiques de maria-valtorta.org.",
+     "idx": [B + "/ValtortaWeb/Dossiers.htm"],
+     "follow": [r"/ValtortaWeb/(?!MariaAgreda|ACEmmerich|Brigitte|Plan|RSI|Boutique|Oeuvre|Ressources|MariaValtorta|SeReperer)[^)\s]+\.htm"]},
+    {"id": "travaux", "nom": "Travaux de lecteurs", "kind": "index",
+     "note": "Études et travaux téléchargeables.",
+     "idx": [B + "/Travaux/Experts.htm"],
+     "follow": []},
 ]
 
 DATE_RE = re.compile(
