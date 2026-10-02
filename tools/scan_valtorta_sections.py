@@ -51,13 +51,16 @@ SECTIONS = [
     {"id": "cahiers", "nom": "Les Cahiers (1943-1950)", "kind": "index",
      "note": "Dictees et visions 1943-1950. Texte sous droits CEV : entrees + lien.",
      "idx": [B + "/Quaderni/index.htm", B + "/Quaderni/index02.htm",
-             B + "/Quaderni/index03.htm"], "follow": []},
+             B + "/Quaderni/index03.htm"],
+     "follow": [r"/Quaderni/[^)\s]+\.htm"]},
     {"id": "azarias", "nom": "Livre d'Azarias", "kind": "index",
      "note": "Commentaires liturgiques dictees par l'ange. Droits CEV : entrees + lien.",
-     "idx": [B + "/Azarias/Index.htm"], "follow": []},
+     "idx": [B + "/Azarias/Index.htm"],
+     "follow": [r"/Azarias/[^)\s]+\.htm"]},
     {"id": "romains", "nom": "Leçons sur l'épître aux Romains", "kind": "index",
      "note": "Commentaires dictees par l'Esprit-Saint. Droits CEV : entrees + lien.",
-     "idx": [B + "/Epitre/index.htm"], "follow": []},
+     "idx": [B + "/Epitre/index.htm"],
+     "follow": [r"/Epitre/[^)\s]+\.htm"]},
 ]
 
 DATE_RE = re.compile(
@@ -163,7 +166,7 @@ def main():
                 pages.append({"t": sec["nom"] + " — sommaire", "u": iu, "x": txt[:20000]})
             else:
                 pages.append({"t": sec["nom"] + " — sommaire", "u": iu,
-                              "e": entries(txt, iu)})
+                              "e": entries(txt, iu), "x": txt[:2500]})
             seen.add(iu)
             # pages liees
             if sec["follow"]:
@@ -186,7 +189,13 @@ def main():
                     tx = body(m2)
                     if len(tx) < 120:
                         continue
-                    pages.append({"t": titre(m2, u), "u": u, "x": tx[:60000]})
+                    if sec["kind"] == "texte":
+                        pages.append({"t": titre(m2, u), "u": u, "x": tx[:60000]})
+                    else:
+                        # oeuvre sous droits CEV : entrees datees + lien seulement
+                        e = entries(tx, u)
+                        pages.append({"t": titre(m2, u), "u": u, "e": e,
+                                      "x": tx[:200] if not e else ""})
                     print("   + %-58s %6d c" % (u.split("/")[-1][:58], len(tx)), flush=True)
                     time.sleep(PAUSE)
             time.sleep(PAUSE)
