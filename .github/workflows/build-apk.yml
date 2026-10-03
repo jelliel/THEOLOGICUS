@@ -193,7 +193,7 @@ jobs:
           # TOUS les corpus locaux, pas seulement bible/quran/tafsir : sans
           # eux les cinq onglets de bibliotheque et la Somme renvoient 404
           # dans l'exe, alors que l'APK les a.
-          foreach ($d in 'bible','quran','tafsir','libs','summa','summafr','fathers','reformed','orthodox','islamic','denzinger','quranwbw','quranroots','biblehb','biblegr','latin') {
+          foreach ($d in 'bible','quran','tafsir','libs','summa','summafr','fathers','reformed','orthodox','islamic','denzinger','quranwbw','quranroots','biblehb','biblegr','latin','tradition') {
             if (Test-Path $d) {
               Copy-Item $d dist/THEOLOGICUS/ -Recurse -Force
             } else {
@@ -201,7 +201,15 @@ jobs:
               exit 1
             }
           }
+          # v403 — le cache local de tradition n'est JAMAIS livre (comme build_installer.bat)
+          if (Test-Path dist/THEOLOGICUS/tradition/cache) { Remove-Item -Recurse -Force dist/THEOLOGICUS/tradition/cache }
           Copy-Item THEOLOGICUS.ico dist/THEOLOGICUS/
+          # v403 — service Supertonic local (bouton « Demarrer le service » des PARAMETRES).
+          # Sans ces fichiers, l'exe de la CI repond « service absent ».
+          New-Item -ItemType Directory -Force -Path dist/THEOLOGICUS/tools/supertonic | Out-Null
+          Copy-Item tools/start_supertonic.py dist/THEOLOGICUS/tools/ -Force
+          Copy-Item tools/supertonic/helper.py dist/THEOLOGICUS/tools/supertonic/ -Force
+          Copy-Item tools/supertonic/LICENSE dist/THEOLOGICUS/tools/supertonic/ -Force
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
           $v = "$env:VERSION_NAME"
           python tools/stamp_version.py dist/THEOLOGICUS $v
