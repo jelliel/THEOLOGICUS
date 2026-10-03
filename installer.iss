@@ -33,6 +33,14 @@ OutputBaseFilename=THEOLOGICUS-Setup-x64
 SetupIconFile=THEOLOGICUS.ico
 ; Ne supprime PAS les donnees utilisateur (historique de chat, WebView2)
 UninstallFilesDir={app}\unins
+; v403 — FERMER l'appli en cours d'execution avant de copier les fichiers.
+; Sans cela, THEOLOGICUS.exe (image en cours d'execution, verrouillee sur
+; Windows) et THEOLOGICUS.html ne sont PAS remplaces : l'appli continue
+; d'afficher l'ancienne version alors que version.txt est deja a jour — le
+; symptome « j'ai fait la mise a jour mais c'est toujours 2.0.402 ». force =
+; fermeture sans demander. RestartApplications=no : c'est [Run] qui relance.
+CloseApplications=force
+RestartApplications=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -59,3 +67,20 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 [UninstallDelete]
 ; Nettoie le dossier d'installation residuel (logs), sans toucher aux donnees utilisateur
 Type: files; Name: "{app}\THEOLOGICUS.log"
+
+[Code]
+// v403 — Ceinture et bretelles : terminer explicitement THEOLOGICUS.exe juste
+// avant la copie des fichiers. CloseApplications=force couvre le cas normal,
+// mais le processus de l'appli (fenetre WebView2 + serveur HTTP interne) peut
+// survivre quelques instants ; ce taskkill garantit que l'exe verrouille est
+// libere AVANT l'ecriture, sinon la mise a jour laisse l'ancienne version.
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssInstall then
+  begin
+    Exec('taskkill.exe', '/F /IM THEOLOGICUS.exe', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+  end;
+end;

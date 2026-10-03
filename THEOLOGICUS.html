@@ -34839,7 +34839,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.402';
+  var STAMPED = '2.0.403';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42201,6 +42201,7 @@ window.continueTradApart = async function (msgId) {
       '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
       '<a class="v167-lk" href="' + esc(e.u || '') + '" target="_blank" rel="noopener">sefaria.org ↗</a></div>';
   }
+  window.__v167RenderPanel = renderPanel;   /* v403 — rafraîchissement après sync serveur */
   function renderPanel() {
     var p = document.getElementById('v167-pat');
     if (!p || !panelOpen()) return;
@@ -44630,6 +44631,7 @@ window.continueTradApart = async function (msgId) {
       '</div>';
   }
 
+  window.__v183RenderBody = renderBody;   /* v403 — rafraîchissement après sync serveur */
   function renderBody() {
     var body = document.getElementById('v183-body');
     if (!body) return;
@@ -44902,6 +44904,7 @@ window.continueTradApart = async function (msgId) {
     });
     return p;
   }
+  window.__v189Render = render;   /* v403 — rafraîchissement après sync serveur */
   function render(){
     var body = document.getElementById('v189-body');
     if (!body) return;
@@ -45074,11 +45077,20 @@ window.continueTradApart = async function (msgId) {
 
   /* ── sauvegarde ── */
   function renderBackup(body){
+    var _syncOn = (window.__theoSync ? window.__theoSync.enabled() : true);
     body.innerHTML = '<div id="v189-actions"><button id="v189-save">💾 Exporter mes données</button><button id="v189-load">♻️ Restaurer un fichier</button><input type="file" id="v189-file" accept=".json" style="display:none"></div>'
       + '<div style="opacity:.75;line-height:1.7">'
       + '<p>Cet export inclut <b>toutes tes données locales</b> :</p>'
       + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>⭐ favoris (texte + traduction)</li><li>🌐 mémoire de traduction unifiée</li></ul>'
-      + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>';
+      + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>'
+      + '<div id="v189-sync" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.14)">'
+      +   '<b>☁️ Synchronisation serveur</b>'
+      +   '<div style="opacity:.8;line-height:1.6;margin:6px 0;font-size:12px">Surlignages, encadrés, commentaires, panier, favoris et <b>conversations</b> sont enregistrés sur le serveur de cette machine, en plus du stockage local — et partagés avec les autres appareils du réseau (même URL <code>IP:port</code>).</div>'
+      +   '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+      +     '<button id="v189-sync-now">⟳ Synchroniser maintenant</button>'
+      +     '<label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="v189-sync-on"' + (_syncOn ? ' checked' : '') + '> activée</label>'
+      +     '<span id="v189-sync-st" style="font-size:11px;opacity:.7"></span>'
+      +   '</div></div>';
     body.querySelector('#v189-save').addEventListener('click', saveAll);
     body.querySelector('#v189-load').addEventListener('click', function(){ body.querySelector('#v189-file').click(); });
     body.querySelector('#v189-file').addEventListener('change', function(ev){
@@ -45087,6 +45099,21 @@ window.continueTradApart = async function (msgId) {
       var fr = new FileReader();
       fr.onload = function(){ restoreAll(String(fr.result)); };
       fr.readAsText(f);
+    });
+    /* v403 — contrôles de synchronisation serveur */
+    var st = body.querySelector('#v189-sync-st');
+    function setSt(txt){ if (st) st.textContent = txt; }
+    var sn = body.querySelector('#v189-sync-now');
+    if (sn) sn.addEventListener('click', function(){
+      if (!window.__theoSync) { setSt('indisponible'); return; }
+      setSt('synchronisation…');
+      try { window.__theoSync.pushNow(); window.__theoSync.pull(); } catch(e){}
+      setTimeout(function(){ setSt('✓ ' + (window.__theoSync ? window.__theoSync.count() : 0) + ' élément(s) suivi(s) · ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })); }, 1200);
+    });
+    var so = body.querySelector('#v189-sync-on');
+    if (so) so.addEventListener('change', function(){
+      if (window.__theoSync) window.__theoSync.setEnabled(so.checked);
+      setSt(so.checked ? 'activée' : 'désactivée');
     });
   }
   function saveAll(){
@@ -46049,6 +46076,253 @@ window.continueTradApart = async function (msgId) {
   /* préchargement différé (148 Ko) — l'infobulle doit répondre dès le 1er survol */
   function boot(){ setTimeout(function(){ load(function(){}); }, 2500); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+
+<script id="theo-sync">
+/* ═══ v403 — SYNCHRONISATION SERVEUR (multi-appareils) ═══
+   Objectif : TOUT ce que l'utilisateur produit — surlignages, encadrés,
+   commentaires/notes, panier, favoris, historique, mémoire de traduction,
+   CONVERSATIONS — est enregistré sur le SERVEUR (magasin partagé de
+   proxy_server : /theologicus-store) EN PLUS du stockage local. Un autre
+   appareil du réseau (navigateur) ou la fenêtre native de l'hôte récupère
+   ainsi les mêmes données.
+
+   Pourquoi c'est nécessaire : l'app de l'hôte (127.0.0.1:PORT) et le
+   navigateur d'un autre appareil (IP-LAN:PORT) ont des origines DIFFÉRENTES,
+   donc des localStorage/IndexedDB SÉPARÉS. Le magasin serveur est le point
+   de rencontre commun.
+
+   Mécanisme :
+   - PUSH localStorage : balayage diff toutes les 2 s des clés produit ;
+     toute valeur locale modifiée est envoyée (groupe, debounce 600 ms).
+   - PUSH conversations : IndexedDB 'chats' poussé dès l'écriture
+     (db.put/db.delete interceptés) + à l'amorçage.
+   - PULL : toutes les 4 s on relit le magasin ; toute entrée plus récente
+     (ts) que la nôtre est appliquée en local (localStorage ET IndexedDB),
+     puis l'interface est rafraîchie.
+   - Amorçage : au démarrage, ce que le serveur n'a pas encore reçoit les
+     données locales (première synchronisation d'une installation).
+   - Résolution : dernière écriture gagne, par clé (horodatage local).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var EP = '/theologicus-store';
+  var TS_KEY = 'theo_sync_ts_v1';   /* horodatage local par clé (NON synchronisé) */
+  var ON_KEY = 'theo_sync_on_v1';   /* interrupteur (NON synchronisé) */
+  var PUSH_MS = 2000, PULL_MS = 4000;
+
+  /* Clés localStorage synchronisées = tout le contenu produit par l'utilisateur.
+     (Les préférences d'interface purement locales — zoom, fond, etc. — ne sont
+     volontairement PAS synchronisées : elles restent propres à chaque appareil.) */
+  var EXACT = [
+    'theo_panel_marks_v1',       /* surlignages / encadrés des panneaux */
+    'theo_panel_notes_v1',       /* commentaires / notes d'étude */
+    'theo_basket_v1',            /* panier de la feuille d'étude */
+    'theo_favorites_v1',         /* favoris */
+    'theo_history_v1',           /* historique des passages */
+    'theo_panel_font',           /* taille de police des panneaux */
+    'theo_tm_v1',                /* mémoire de traduction unifiée */
+    'theo_v171_tr',              /* cache Pères FR */
+    'theo_v193_ai',              /* cache traduction IA */
+    'theologicus_currentChatId'  /* conversation courante */
+  ];
+  var PREFIX = ['theologicus_chat_'];   /* conversations (miroir localStorage) */
+
+  function isSynced(k){
+    if (!k) return false;
+    if (EXACT.indexOf(k) !== -1) return true;
+    for (var i = 0; i < PREFIX.length; i++) if (k.indexOf(PREFIX[i]) === 0) return true;
+    return false;
+  }
+
+  var _get = localStorage.getItem.bind(localStorage);
+  var _set = localStorage.setItem.bind(localStorage);
+  var _rem = localStorage.removeItem.bind(localStorage);
+
+  var TS = {};
+  try { TS = JSON.parse(_get(TS_KEY) || '{}') || {}; } catch(e){ TS = {}; }
+  function tsSave(){ try { _set(TS_KEY, JSON.stringify(TS)); } catch(e){} }
+  function nowMs(){ return Date.now(); }
+
+  function enabled(){ try { return _get(ON_KEY) !== '0'; } catch(e){ return true; } }
+
+  var _snap = {};        /* dernière valeur locale connue (anti-rebond push) */
+  var _dirty = {};       /* clés en attente d'envoi */
+  var _dirtyTimer = null;
+
+  function queue(k, v){
+    _dirty[k] = (v === null || v === undefined) ? null : String(v);
+    if (_dirtyTimer) return;
+    _dirtyTimer = setTimeout(flush, 600);
+  }
+  function flush(){
+    _dirtyTimer = null;
+    var entries = [], k;
+    for (k in _dirty){
+      if (!Object.prototype.hasOwnProperty.call(_dirty, k)) continue;
+      TS[k] = nowMs();
+      entries.push({ k: k, v: _dirty[k], ts: TS[k] });
+      delete _dirty[k];
+    }
+    if (!entries.length) return;
+    tsSave();
+    post({ entries: entries });
+  }
+
+  function post(payload){
+    try {
+      return fetch(EP, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .catch(function(){ return null; });
+    } catch(e){ return Promise.resolve(null); }
+  }
+
+  /* ── PUSH localStorage : balayage diff ── */
+  function scanLocal(){
+    if (!enabled()) return;
+    for (var i = 0; i < EXACT.length; i++){
+      var k = EXACT[i];
+      var cur = _get(k);
+      if (cur !== _snap[k]){
+        var prev = _snap[k];
+        _snap[k] = cur;
+        if (cur !== null) queue(k, cur);
+        else if (prev !== undefined && prev !== null) queue(k, null);   /* suppression */
+      }
+    }
+  }
+
+  /* ── PUSH conversations (IndexedDB 'chats') ── */
+  function pushChat(chat){
+    if (!chat || !chat.id || !enabled()) return;
+    var k = 'chat::' + chat.id, ts = nowMs();
+    TS[k] = ts; tsSave();
+    post({ entries: [{ k: k, v: JSON.stringify(chat), ts: ts }] });
+  }
+  function patchDb(){
+    try {
+      if (typeof db === 'undefined' || !db || db.__theoSynced) return;
+      var _put = db.put, _del = db.delete;
+      db.put = function(store, data){
+        var p = _put.apply(db, arguments);
+        try { if (store === 'chats' && p && p.then) p.then(function(){ pushChat(data); }, function(){}); } catch(e){}
+        return p;
+      };
+      db.delete = function(store, id){
+        var p = _del.apply(db, arguments);
+        try {
+          if (store === 'chats' && p && p.then) p.then(function(){
+            var k = 'chat::' + id, ts = nowMs();
+            TS[k] = ts; tsSave();
+            post({ entries: [{ k: k, v: null, ts: ts }] });
+          }, function(){});
+        } catch(e){}
+        return p;
+      };
+      db.__theoSynced = true;
+    } catch(e){}
+  }
+
+  /* ── PULL : appliquer ce que le serveur a de plus récent ── */
+  var _pulling = false;
+  function pull(){
+    if (!enabled() || _pulling) return;
+    _pulling = true;
+    fetch(EP, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(store){
+        _pulling = false;
+        if (!store || !store.keys) return;
+        var changedLocal = false, changedChat = false;
+        for (var k in store.keys){
+          if (!Object.prototype.hasOwnProperty.call(store.keys, k)) continue;
+          var e = store.keys[k] || {};
+          var sts = parseFloat(e.ts) || 0;
+          if (sts <= (parseFloat(TS[k]) || 0)) continue;      /* pas plus récent : ignorer */
+          var v = (e.v === undefined) ? null : e.v;
+          TS[k] = sts;
+          if (k.indexOf('chat::') === 0){
+            var cid = k.slice(6);
+            try {
+              if (v === null){ db.delete('chats', cid); }
+              else { db.put('chats', JSON.parse(v)); _set('theologicus_chat_' + cid, v); }
+            } catch(err){}
+            changedChat = true;
+          } else if (isSynced(k)){
+            try { if (v === null){ _rem(k); _snap[k] = null; } else { _set(k, v); _snap[k] = v; } } catch(err){}
+            changedLocal = true;
+          }
+        }
+        tsSave();
+        if (changedLocal || changedChat) refreshUI(changedChat);
+      })
+      .catch(function(){ _pulling = false; });
+  }
+
+  /* ── Rafraîchissement de l'interface après application serveur ── */
+  function refreshUI(chatChanged){
+    try { var p = document.getElementById('v189-pan'); if (p && p.classList.contains('open') && window.__v189Render) window.__v189Render(); } catch(e){}
+    try { if (document.querySelector('#v167-pat.open') && window.__v167RenderPanel) window.__v167RenderPanel(); } catch(e){}
+    try { if (document.querySelector('#v183-pat.open') && window.__v183RenderBody) window.__v183RenderBody(); } catch(e){}
+    if (chatChanged){ try { if (typeof renderMessages === 'function') renderMessages(); } catch(e){} }
+  }
+
+  /* ── Amorçage : pousser ce que le serveur n'a pas encore ── */
+  function seed(){
+    if (!enabled()) return;
+    fetch(EP, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+      .then(function(r){ return r.ok ? r.json() : { keys:{} }; })
+      .then(function(store){
+        store = store || { keys:{} };
+        var sk = store.keys || {}, entries = [], t = nowMs();
+        for (var i = 0; i < EXACT.length; i++){
+          var k = EXACT[i], cur = _get(k);
+          _snap[k] = cur;
+          if (cur === null) continue;
+          if (sk[k] === undefined){ TS[k] = t; entries.push({ k:k, v:cur, ts:t }); }
+        }
+        function send(){ if (entries.length){ tsSave(); post({ entries: entries }); } }
+        try {
+          if (typeof db !== 'undefined' && db && db.getAll){
+            db.getAll('chats').then(function(list){
+              (list || []).forEach(function(c){
+                if (!c || !c.id) return;
+                var k = 'chat::' + c.id;
+                if (sk[k] === undefined){ TS[k] = t; entries.push({ k:k, v: JSON.stringify(c), ts:t }); }
+              });
+              send();
+            }, function(){ send(); });
+            return;
+          }
+        } catch(e){}
+        send();
+      })
+      .catch(function(){});
+  }
+
+  function boot(){
+    patchDb();
+    seed();
+    setTimeout(pull, 800);
+    setInterval(scanLocal, PUSH_MS);
+    setInterval(pull, PULL_MS);
+    /* IndexedDB peut s'ouvrir APRÈS nous : on (re)patche jusqu'à réussite. */
+    var tries = 0;
+    var t = setInterval(function(){ patchDb(); if (++tries > 20) clearInterval(t); }, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+
+  window.__theoSync = {
+    pull: pull,
+    pushNow: function(){ scanLocal(); flush(); },
+    setEnabled: function(on){ try { _set(ON_KEY, on ? '1' : '0'); } catch(e){} },
+    enabled: enabled,
+    count: function(){ return Object.keys(TS).length; }
+  };
 })();
 </script>
 </body>

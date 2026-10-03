@@ -102,6 +102,52 @@ def _app_data_dir():
         pass
     return d
 
+
+# ════════════════════════════════════════════════════════════════════
+# v403 — MAGASIN PARTAGÉ (synchronisation multi-appareils)
+#
+# Tout ce que l'utilisateur produit dans l'app — surlignages, encadrés,
+# commentaires/notes, panier, favoris, historique, mémoire de traduction,
+# CONVERSATIONS — est renvoyé ici par CHAQUE client, qu'il soit la fenêtre
+# native de l'hôte (origine 127.0.0.1:PORT) ou le navigateur d'un autre
+# appareil du réseau (origine IP-LAN:PORT). Les deux origines ont des
+# localStorage/IndexedDB distincts : ce fichier est la source de vérité
+# commune. Il vit dans %LOCALAPPDATA%/THEOLOGICUS → il survit aux MAJ.
+#
+# Format : {"rev": <int>, "keys": {"<clé>": {"v": <chaîne>, "ts": <ms>}}}
+# Résolution : par clé, la plus récente écriture (ts) gagne. v=null ⇒ suppr.
+# ════════════════════════════════════════════════════════════════════
+_STORE_LOCK = _threading.Lock()
+
+
+def _store_path():
+    return os.path.join(_app_data_dir(), 'theologicus_store.json')
+
+
+def _store_read():
+    """Lit le magasin partagé ; renvoie toujours un dict bien formé."""
+    try:
+        with open(_store_path(), 'r', encoding='utf-8') as f:
+            d = json.load(f)
+        if not isinstance(d, dict):
+            raise ValueError('format inattendu')
+        keys = d.get('keys')
+        if not isinstance(keys, dict):
+            keys = {}
+        return {'rev': int(d.get('rev') or 0), 'keys': keys}
+    except Exception:
+        return {'rev': 0, 'keys': {}}
+
+
+def _store_write(d):
+    """Écriture atomique (tmp + os.replace) : jamais de fichier tronqué."""
+    p = _store_path()
+    tmp = p + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(d, f, ensure_ascii=False)
+    os.replace(tmp, p)
+
+
 # ════════════════════════════════════════════════════════════════════
 # LibreTranslate local — démarré/arrêté depuis PARAMÈTRES dans l'app.
 # Le bouton 🌐 de la bulle Add-to-chat (et l'APK sur le même Wi-Fi)
@@ -1900,6 +1946,18 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
+        # v403 — magasin partagé : renvoie tout le contenu (clés + révision)
+        # pour que le client applique ce qui est plus récent que chez lui.
+        if self.path.split('?')[0] == '/theologicus-store':
+            with _STORE_LOCK:
+                d = _store_read()
+            body = json.dumps(d, ensure_ascii=False).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(body)
+            return
         # Servir les fichiers statiques du répertoire courant (THEOLOGICUS.html, CSS, JS...)
         if not self.path.startswith('/proxy/'):
             # Chemin du fichier demandé (relative au dossier du proxy)
@@ -1959,6 +2017,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self._save_config()
         elif self.path.split('?')[0] == '/save-data':
             self._save_data()
+        elif self.path.split('?')[0] == '/theologicus-store':
+            self._post_store()
         elif self.path.split('?')[0] == '/libretranslate/start':
             self._json_response(lt_start())
         elif self.path.split('?')[0] == '/libretranslate/stop':
@@ -2194,6 +2254,59 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({"ok": True, "path": out_path}).encode())
+        except Exception as e:
+            try:
+                self.send_response(400)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(f'erreur: {e}'.encode())
+            except Exception:
+                pass
+
+    def _post_store(self):
+        """v403 — fusionne des entrées dans le magasin partagé (sync multi-appareils).
+
+        Body : {"entries": [{"k": "<clé>", "v": "<chaîne>|null", "ts": <ms>}]}
+        v=null ⇒ suppression. Résolution PAR CLÉ : la plus récente (ts) gagne,
+        donc un client ne peut pas écraser une donnée plus fraîche d'un autre.
+        """
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > 64 * 1024 * 1024:
+                raise ValueError('taille invalide')
+            req = json.loads(self.rfile.read(length).decode('utf-8'))
+            entries = req.get('entries')
+            if not isinstance(entries, list):
+                raise ValueError('entries manquant')
+            with _STORE_LOCK:
+                d = _store_read()
+                keys = d['keys']
+                for e in entries:
+                    if not isinstance(e, dict):
+                        continue
+                    k = e.get('k')
+                    if not isinstance(k, str) or not k:
+                        continue
+                    try:
+                        ts = float(e.get('ts') or 0)
+                    except Exception:
+                        ts = 0.0
+                    cur = keys.get(k)
+                    cur_ts = float(cur.get('ts') or 0) if isinstance(cur, dict) else -1.0
+                    if ts < cur_ts:
+                        continue          # entrée plus ancienne : on l'ignore
+                    v = e.get('v')
+                    if v is None:
+                        keys.pop(k, None)
+                    else:
+                        keys[k] = {'v': str(v), 'ts': ts}
+                d['rev'] = int(d.get('rev') or 0) + 1
+                _store_write(d)
+                rev = d['rev']
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'ok': True, 'rev': rev}).encode())
         except Exception as e:
             try:
                 self.send_response(400)
