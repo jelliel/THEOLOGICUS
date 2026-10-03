@@ -26603,6 +26603,8 @@ function initQuranVerseTooltip() {
     tip.style.display = 'block';
     /* v215 — charge et injecte le commentaire/variantes/manuscrits/intertextes */
     if (window.__ccAppend) { try { window.__ccAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[CC]', e); } }
+    /* v428 — le récit de la révélation (al-Wāḥidī), chargé à part. */
+    if (window.__asbabAppend) { try { window.__asbabAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[ASB]', e); } }
     const r = el.getBoundingClientRect();
     let x = r.left, y = r.bottom + 8;
     const tr = tip.getBoundingClientRect();
@@ -34863,7 +34865,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.427';
+  var STAMPED = '2.0.429';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -47439,10 +47441,74 @@ window.continueTradApart = async function (msgId) {
         esc(s + ':' + a.v[0] + (a.v[1] !== a.v[0] ? '-' + a.v[1] : '')) + '</span><br>' + esc(a.t) + '</div>';
     });
 
+    /* v428 — notices de la SOURCE PRIMAIRE (al-Wāḥidī), chargées à la demande */
+    h += '<div id="asbab-src"></div>';
+
     h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Chronologie : ordre égyptien standard. ' +
          'Asbāb al-nuzūl : traditions exégétiques (al-Wāḥidī, Ibn Ḥajar, Ṭabarī) — récits rapportés, non faits établis.</div>';
     h += '</div>';
     return h;
+  };
+
+  /* ═══ v428 — LA SOURCE PRIMAIRE : al-Wāḥidī, « Asbāb al-Nuzūl » ═══
+     Les notices ci-dessus sont des RÉSUMÉS français, écrits pour les versets
+     les plus étudiés : 176 versets sur 6236 — c'est trop peu, et c'est
+     exactement ce qui manquait à l'usage.
+     Ici on charge le RECUEIL lui-même : أسباب النزول d'Abū al-Ḥasan al-Wāḥidī
+     (m. 468 H), édition d'Isām ibn ʿAbd al-Muḥsin al-Ḥumaydān — les 471 pages
+     ont été dépouillées depuis la bibliothèque Shamela (shamela.ws), ce qui
+     donne 310 notices rattachées à un verset précis, sur 287 versets.
+     Un fichier par sourate (tradition/asbab/sNNN.json), chargé seulement à
+     l'ouverture de l'infobulle : rien n'est téléchargé au démarrage. */
+  var _asbCache = {}, _asbProm = {};
+  function asbabCharger(s){
+    if (_asbCache[s] !== undefined) return Promise.resolve(_asbCache[s]);
+    if (_asbProm[s]) return _asbProm[s];
+    _asbProm[s] = fetch('tradition/asbab/s' + String(s).padStart(3, '0') + '.json', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ _asbCache[s] = (j && j.e && j.e.length) ? j : null; return _asbCache[s]; })
+      .catch(function(){ _asbCache[s] = null; return null; });
+    return _asbProm[s];
+  }
+  window.__asbabAppend = function(sura, v1, v2, tip){
+    if (!tip || !tip.querySelector('#asbab-src')) return;
+    asbabCharger(sura).then(function(j){
+      /* la bulle a pu se refermer pendant le chargement : on ne peint que si
+         elle est encore ouverte. */
+      var box = tip.querySelector('#asbab-src');
+      if (!box || !j) return;
+      var fin = v2 || v1;
+      var hits = j.e.filter(function(e){ return e.v >= v1 && e.v <= fin; });
+      if (!hits.length) return;
+      var h = '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed rgba(159,224,160,.4)">' +
+        '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Le récit de la révélation — الواحدي</div>';
+      hits.slice(0, 3).forEach(function(e){
+        h += '<div style="margin:5px 0">' +
+             '<div style="font-size:10px;color:#8fa3b8;margin-bottom:2px;">Sourate ' + sura + ' : ' + e.v + '</div>' +
+             '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;' +
+             'background:rgba(159,224,160,.07);border-right:3px solid rgba(159,224,160,.5);' +
+             'padding:6px 9px;border-radius:6px 0 0 6px">' + esc(e.t) + '</div>' +
+             '<button class="asb-tr" style="pointer-events:auto;margin-top:3px;background:rgba(79,142,247,.15);color:#cfe0ff;' +
+             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire</button>' +
+             '</div>';
+      });
+      if (hits.length > 3) h += '<div style="font-size:10.5px;opacity:.6;margin-top:2px">+ ' + (hits.length - 3) + ' autre(s) récit(s) pour ce verset</div>';
+      h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">الواحدي، أسباب النزول — تحقيق عصام بن عبد المحسن الحميدان · المكتبة الشاملة (shamela.ws). ' +
+           'Traditions narratives rapportées : pas des faits établis.</div></div>';
+      box.innerHTML = h;
+      /* Le bouton ouvre la traduction NATIVE de l'application (sa popup) :
+         on ne réinvente pas un second chemin de traduction. */
+      box.querySelectorAll('.asb-tr').forEach(function(b){
+        b.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var ar = b.parentNode.querySelector('[dir="rtl"]');
+          if (!ar) return;
+          if (window.__LT && typeof window.__LT.translate === 'function') {
+            window.__LT.translate(ar.textContent, b.getBoundingClientRect());
+          } else if (window.toast) { window.toast('Traduction non configurée', 'info'); }
+        });
+      });
+    }).catch(function(){});
   };
 })();
 </script>
