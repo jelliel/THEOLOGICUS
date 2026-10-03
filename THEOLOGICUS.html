@@ -26593,6 +26593,8 @@ function initQuranVerseTooltip() {
         html += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left;margin:2px 0 6px;"><b style="color:#ff4d4d;">← on commence ici</b> — arabe, lecture de droite à gauche — survolez un mot</div>';
       }
     });
+    /* v424 — CHRONOLOGIE de la révélation + CONTEXTE (asbāb al-nuzūl) */
+    try { if (window.__asbabHtml) html += window.__asbabHtml(p); } catch(e){}
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
     /* v215 — bloc Corpus Coranicum (rempli de façon asynchrone) */
     html += '<div id="cc-block" style="margin-top:8px;border-top:1px solid rgba(245,197,66,.3);padding-top:6px;font-size:11px">⏳ Corpus Coranicum…</div>';
@@ -47053,6 +47055,130 @@ window.continueTradApart = async function (msgId) {
            '⚠️ <b>Variante notable</b> — ' + esc(x.n) + '</div>';
     });
     h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Repères d\'après l\'apparat critique standard (Nestle-Aland 28 / UBS5).</div>';
+    h += '</div>';
+    return h;
+  };
+})();
+</script>
+
+<script id="v424-asbab">
+/* ═══ v424 — CHRONOLOGIE DE LA RÉVÉLATION + ASBĀB AL-NUZŪL ═══
+   Dans l'infobulle d'un verset coranique :
+     • CHRONOLOGIE — rang de révélation de la sourate (1..114) et période
+       (mecquoise 610-622 / médinoise 622-632). Ordre de révélation selon la
+       numérotation « égyptienne » standard (celle des marges du Caire),
+       reprise par la plupart des éditions modernes.
+     • ASBĀB AL-NUZŪL — l'occasion de la révélation, telle que la rapporte la
+       tradition exégétique (al-Wāḥidī, Ibn Ḥajar, Ṭabarī). Ce sont des
+       traditions narratives : on les présente comme telles, pas comme des faits
+       établis. */
+(function(){
+  'use strict';
+  if (window.__v424) return; window.__v424 = true;
+
+  /* Ordre de révélation des 114 sourates (numérotation égyptienne standard). */
+  var ORDRE = [
+    96,68,73,74,1,111,81,87,92,89,  93,94,103,100,108,102,107,109,105,113,
+    114,112,53,80,97,91,85,95,106,101, 75,104,77,50,90,86,54,38,7,72,
+    36,25,35,19,20,56,26,27,28,17,  10,11,12,15,6,37,31,34,39,40,
+    41,42,43,44,45,46,51,88,18,16,  71,14,21,23,32,52,67,69,70,78,
+    79,82,84,30,29,83,2,8,3,33,     60,4,99,57,47,13,55,76,65,98,
+    59,24,22,63,58,49,66,64,61,62,  48,5,9,110
+  ];
+  /* Sourates médinoises (les autres sont mecquoises). Liste standard (28). */
+  var MEDINOISES = [2,3,4,5,8,9,13,22,24,33,47,48,49,55,57,58,59,60,61,62,63,64,65,66,76,98,99,110];
+
+  /* Asbāb al-nuzūl : s = sourate, v = [verset début, verset fin]. */
+  var ASBAB = [
+    { s:96, v:[1,5], t:'La première révélation : l\'ange Gabriel apparaît au Prophète dans la caverne de Ḥirāʾ et lui ordonne de lire (610).' },
+    { s:93, v:[1,11], t:'La « pause » de la révélation : les Qurayshites dirent que le Seigneur avait abandonné le Prophète ; cette sourate répond « ton Seigneur ne t\'a ni abandonné ni haï ».' },
+    { s:74, v:[1,7], t:'La reprise de la révélation après la pause : « Ô toi, enveloppé d\'un manteau, lève-toi et avertis ».' },
+    { s:73, v:[1,4], t:'Institution de la prière nocturne (qiyām al-layl) au début de la mission.' },
+    { s:72, v:[1,2], t:'Un groupe de jinn, passant par la vallée de Nakhlah, entendit la récitation du Prophète et crut.' },
+    { s:54, v:[1,2], t:'La fente de la lune : un signe demandé par les Qurayshites ; selon la tradition, la lune se fendit.' },
+    { s:26, v:[214,214], t:'Ordre d\'avertir la famille proche : le Prophète convoqua le clan des ʿAbd al-Muṭṭalib sur le mont Ṣafā.' },
+    { s:30, v:[1,5], t:'La défaite des Byzantins devant les Perses (614) : Abū Bakr paria sur leur victoire future, que ce passage annonce.' },
+    { s:17, v:[85,85], t:'Les Juifs interrogèrent le Prophète sur l\'« esprit » (rūḥ) : « l\'esprit relève de l\'ordre de mon Seigneur ».' },
+    { s:18, v:[9,10], t:'Les Qurayshites, conseillés par les Juifs, posèrent trois questions — dont celle des « jeunes de la caverne ».' },
+    { s:22, v:[39,40], t:'Autorisation de combattre, donnée aux premiers musulmans persécutés à La Mecque.' },
+    { s:24, v:[11,20], t:'L\'affaire du collier (al-ifk) : ʿĀʾisha, accusée d\'adultère, est innocentée par ces versets.' },
+    { s:24, v:[31,31], t:'Le verset du voile : les femmes de Médine se découvraient devant les hommes ; le verset fixe la pudeur et le voile.' },
+    { s:33, v:[37,37], t:'Le mariage du Prophète avec Zaynab, ex-épouse de son fils adoptif Zayd : le verset abolit la prohibition de l\'adoption.' },
+    { s:33, v:[53,53], t:'Le voile des épouses du Prophète, à l\'occasion du festin de mariage : des invités s\'attardaient.' },
+    { s:49, v:[1,5], t:'La délégation de Banū Tamīm : Abū Bakr et ʿUmar haussèrent la voix devant le Prophète ; ces versets l\'interdisent.' },
+    { s:58, v:[1,4], t:'Khawla bint Thaʿlaba : son mari Aws prononça la formule du ẓihār (répudiation par assimilation à la mère) ; elle se plaignit au Prophète.' },
+    { s:60, v:[1,3], t:'Ḥāṭib b. Abī Baltaʿa, qui avait averti La Mecque des préparatifs de la conquête.' },
+    { s:63, v:[1,4], t:'Les hypocrites de Médine, menés par ʿAbdallāh b. Ubayy.' },
+    { s:66, v:[1,5], t:'Le serment du Prophète, qui s\'était interdit le miel (ou sa servante Māriya) pour satisfaire ses épouses.' },
+    { s:80, v:[1,10], t:'ʿAbdallāh b. Umm Maktūm, aveugle, vint interroger le Prophète qui détourna le visage : le verset le reprend et l\'honore.' },
+    { s:83, v:[1,4], t:'Les fraudeurs de Médine : un homme y mesurait plus large qu\'il ne rendait.' },
+    { s:85, v:[1,8], t:'Les « gens de la fosse » : la persécution des chrétiens de Najrān par le roi ḥimyarite Dhū Nuwās.' },
+    { s:98, v:[1,8], t:'Les gens du Livre de Médine et la venue du Prophète.' },
+    { s:104, v:[1,4], t:'Al-Akhnas b. Sharīq (ou Umayya b. Khalaf), qui méditait du Prophète et amassait sa fortune.' },
+    { s:105, v:[1,5], t:'L\'année de l\'Éléphant (~570) : l\'expédition d\'Abraha contre la Kaaba.' },
+    { s:106, v:[1,4], t:'La sécurité des caravanes qurayshites, contrepartie du service de la Kaaba.' },
+    { s:108, v:[1,3], t:'Al-Kawthar : al-ʿĀṣ b. Wāʾil traita le Prophète d\'« abtar » (sans postérité) à la mort de son fils.' },
+    { s:109, v:[1,6], t:'Les notables qurayshites proposèrent au Prophète un compromis d\'adoration alternée.' },
+    { s:110, v:[1,3], t:'La conquête de La Mecque (630) et l\'entrée des gens en foule dans l\'islam.' },
+    { s:111, v:[1,5], t:'Abū Lahab et son épouse Umm Jamīl, ennemis déclarés du Prophète.' },
+    { s:112, v:[1,4], t:'Un homme demanda au Prophète la généalogie de son Seigneur : « Dis : Il est Allah, l\'Unique ».' },
+    { s:113, v:[1,5], t:'Le sortilège de Labīd b. al-Aʿṣam : ces deux sourates (113-114) furent révélées pour la guérison du Prophète.' },
+    { s:114, v:[1,6], t:'Le sortilège de Labīd b. al-Aʿṣam : ces deux sourates (113-114) furent révélées pour la guérison du Prophète.' },
+    { s:8, v:[1,1], t:'La bataille de Badr (624) : les Compagnons se disputaient le butin.' },
+    { s:8, v:[67,69], t:'Badr : le Prophète consulta Abū Bakr et ʿUmar sur le sort des prisonniers.' },
+    { s:9, v:[113,114], t:'Le Prophète voulait demander pardon pour sa mère (ou pour Abū Ṭālib) ; le verset l\'interdit aux associateurs.' },
+    { s:4, v:[43,43], t:'Interdiction de prier en état d\'ivresse — étape avant l\'interdiction totale du vin (5:90).' },
+    { s:4, v:[95,95], t:'ʿAbdallāh b. Umm Maktūm, aveugle, demanda à combattre : le verset distingue les combattants des non-combattants.' },
+    { s:4, v:[176,176], t:'La kalāla (succession sans ascendant ni descendant) : ʿUmar interrogea le Prophète.' },
+    { s:5, v:[90,91], t:'Interdiction du vin et du jeu : étape finale après 2:219 et 4:43.' },
+    { s:2, v:[144,144], t:'Le changement de qibla : à Médine, le Prophète se tournait vers Jérusalem ; ce verset ordonne de se tourner vers la Kaaba.' },
+    { s:2, v:[187,187], t:'Le jeûne de Ramadan : les Compagnons hésitaient sur ce qui était permis la nuit ; le verset fixe la limite.' },
+    { s:2, v:[216,216], t:'Le combat : les Compagnons y répugnaient ; « il se peut que vous détestiez une chose qui est un bien pour vous ».' },
+    { s:2, v:[219,219], t:'Le vin et le jeu de hasard : les Compagnons interrogeaient le Prophète ; « leur mal est plus grand que leur utilité ».' },
+    { s:48, v:[1,3], t:'Le traité de Hudaybiyya (628), ressenti comme un recul par les Compagnons : « c\'est une victoire éclatante ».' },
+    { s:47, v:[1,3], t:'Les premiers combats contre les Qurayshites après l\'Hégire.' },
+    { s:55, v:[1,2], t:'Rappel des bienfaits du Créateur, révélé à La Mecque.' },
+    { s:65, v:[1,1], t:'Le divorce : le Prophète reçut des questions sur la répudiation ; ce verset en fixe la procédure.' },
+    { s:59, v:[7,7], t:'Le butin du banissement des Banū Naḍīr : le Prophète s\'était plaint de la répartition.' }
+  ];
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var RANG = {};
+  ORDRE.forEach(function(s, i){ RANG[s] = i + 1; });
+
+  window.__asbabHtml = function(p){
+    var s = parseInt(p && p.sourate, 10);
+    if (!s || s < 1 || s > 114) return '';
+    var v1 = parseInt(p && p.v1, 10), v2 = p && p.v2 ? parseInt(p.v2, 10) : v1;
+
+    var h = '<div style="margin-top:9px;padding-top:7px;border-top:1px dashed rgba(245,197,66,.4)">';
+
+    /* ── chronologie ── */
+    var r = RANG[s];
+    if (r) {
+      var med = MEDINOISES.indexOf(s) !== -1;
+      h += '<div style="font-size:11.5px;line-height:1.6;">' +
+        '<span style="color:#f0c060;font-size:10px;letter-spacing:1px;text-transform:uppercase;">🕰 Chronologie</span><br>' +
+        '<b style="color:#9fd0ff">' + r + '<sup>' + (r === 1 ? 're' : 'e') + '</sup> sourate révélée</b> sur 114 — ' +
+        '<span style="color:#7fd1a0">' + (med ? 'médinoise' : 'mecquoise') + '</span> ' +
+        '<span style="color:#8fa3b8">(' + (med ? '622-632, après l\'Hégire' : '610-622, avant l\'Hégire') + ')</span>' +
+        '</div>';
+    }
+
+    /* ── asbāb al-nuzūl ── */
+    var notes = ASBAB.filter(function(a){
+      return a.s === s && v2 >= a.v[0] && v1 <= a.v[1];
+    });
+    notes.forEach(function(a){
+      h += '<div style="margin-top:6px;font-size:11.5px;color:#d9e6f5;background:rgba(79,142,247,.10);' +
+        'border-left:3px solid #4f8ef7;padding:5px 9px;border-radius:0 6px 6px 0">' +
+        '<span style="color:#9fd0ff;font-size:10px;letter-spacing:.8px;text-transform:uppercase;">📜 Contexte de révélation — ' +
+        esc(s + ':' + a.v[0] + (a.v[1] !== a.v[0] ? '-' + a.v[1] : '')) + '</span><br>' + esc(a.t) + '</div>';
+    });
+
+    h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Chronologie : ordre égyptien standard. ' +
+         'Asbāb al-nuzūl : traditions exégétiques (al-Wāḥidī, Ibn Ḥajar, Ṭabarī) — récits rapportés, non faits établis.</div>';
     h += '</div>';
     return h;
   };
