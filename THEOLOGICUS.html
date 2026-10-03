@@ -36884,10 +36884,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         h += '<div class="hb-lig"><span class="hb-cle">Lemme (entrée lexicale)</span><br>' +
           '<span class="hb-lem">' + ech(d.lem) + '</span>' +
           (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '') +
-          ' <span style="color:#8fa3b8">· Strong ' + ech(d.s) + '</span></div>';
+          ' <span style="color:#8fa3b8">· Strong </span>' +
+          '<span class="conc-lien" data-conc="hb" data-strong="' + ech(d.s) + '" data-lem="' + ech(d.lem || '') + '" ' +
+          'title="Voir toutes les occurrences (concordance)" ' +
+          'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">' + ech(d.s) + '</span></div>';
         vide = false;
       } else if (d.s) {
-        h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' + ech(d.s) + '</div>';
+        h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' +
+          '<span class="conc-lien" data-conc="hb" data-strong="' + ech(d.s) + '" ' +
+          'title="Voir toutes les occurrences (concordance)" ' +
+          'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">' + ech(d.s) + '</span></div>';
       }
       if (d.defFr) {
         h += '<div class="hb-lig"><span class="hb-cle">Sens</span><br>'
@@ -37178,7 +37184,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         h += '<div class="gr-lig"><span class="gr-cle">Lemme (entrée lexicale)</span><br>'
           + '<span class="gr-lem">' + ech(d.lem) + '</span>'
           + (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '')
-          + (d.s ? ' <span style="color:#8fa3b8">· Strong G' + ech(d.s) + '</span>' : '')
+          + (d.s ? ' <span style="color:#8fa3b8">· Strong </span>' +
+              '<span class="conc-lien" data-conc="gr" data-strong="' + ech(d.s) + '" data-lem="' + ech(d.lem || '') + '" ' +
+              'title="Voir toutes les occurrences (concordance)" ' +
+              'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">G' + ech(d.s) + '</span>' : '')
           + '</div>';
         vide = false;
       }
@@ -46404,6 +46413,163 @@ window.continueTradApart = async function (msgId) {
     enabled: enabled,
     count: function(){ return Object.keys(TS).length; }
   };
+})();
+</script>
+
+<script id="v416-concordance">
+/* ═══ v416 — CONCORDANCE STRONG (outil d'étude expert) ═══
+   Depuis la fiche d'un mot hébreu/grec (qui affiche son numéro Strong), un clic
+   ouvre la CONCORDANCE : TOUTES les occurrences de cette entrée dans la Bible,
+   groupées par livre, avec le texte français du verset.
+
+   Index généré depuis les corpus Strong's déjà embarqués (Open Scriptures, GPL) :
+     biblehb/concordance.js  -> window.__concHb["7225"] = "1.1.1,1.10.10,..."
+     biblegr/concordance.js  -> window.__concGr["3056"] = "43.1.1,..."
+   Chargé À LA DEMANDE (~3 Mo) : rien n'est téléchargé tant qu'on n'ouvre pas
+   une concordance. */
+(function(){
+  'use strict';
+  if (window.__v416Conc) return;
+  window.__v416Conc = true;
+
+  var NOMS = ['Genèse','Exode','Lévitique','Nombres','Deutéronome','Josué','Juges','Ruth',
+    '1 Samuel','2 Samuel','1 Rois','2 Rois','1 Chroniques','2 Chroniques','Esdras','Néhémie',
+    'Esther','Job','Psaumes','Proverbes','Ecclésiaste','Cantique','Ésaïe','Jérémie',
+    'Lamentations','Ézéchiel','Daniel','Osée','Joël','Amos','Abdias','Jonas','Michée','Nahum',
+    'Habacuc','Sophonie','Aggée','Zacharie','Malachie','Matthieu','Marc','Luc','Jean','Actes',
+    'Romains','1 Corinthiens','2 Corinthiens','Galates','Éphésiens','Philippiens','Colossiens',
+    '1 Thessaloniciens','2 Thessaloniciens','1 Timothée','2 Timothée','Tite','Philémon',
+    'Hébreux','Jacques','1 Pierre','2 Pierre','1 Jean','2 Jean','3 Jean','Jude','Apocalypse'];
+
+  function nomLivre(n){ return NOMS[(parseInt(n, 10) || 1) - 1] || ('Livre ' + n); }
+  function ech(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var prom = {};
+  window.__ensureConc = function(kind){
+    var g = kind === 'gr' ? '__concGr' : '__concHb';
+    if (window[g]) return Promise.resolve(true);
+    if (prom[g]) return prom[g];
+    prom[g] = new Promise(function(res){
+      var sc = document.createElement('script');
+      sc.src = (kind === 'gr' ? 'biblegr' : 'biblehb') + '/concordance.js';
+      sc.onerror = function(){ sc.remove(); res(false); };
+      sc.onload = function(){ res(!!window[g]); };
+      document.head.appendChild(sc);
+    });
+    return prom[g];
+  };
+
+  function entree(kind, strong){
+    try {
+      var tab = kind === 'gr' ? (window.__strongsGr || {}) : (window.__strongsHb || {});
+      var e = tab[strong];
+      if (!e) return null;
+      return { lemme: e[0] || '', translit: e[1] || '', def: (kind === 'gr' ? e[3] : e[2]) || e[2] || '' };
+    } catch(e){ return null; }
+  }
+
+  var pan = null;
+  function creer(){
+    if (pan) return pan;
+    var st = document.createElement('style');
+    st.textContent =
+      '#conc-pan{position:fixed;z-index:147000;left:50%;top:5vh;transform:translateX(-50%);' +
+      'width:min(780px,95vw);max-height:90vh;display:none;flex-direction:column;background:#0e1622;' +
+      'color:#dbe8f5;border:1px solid rgba(245,197,66,.45);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.6);' +
+      'font:13px/1.55 system-ui,Segoe UI,sans-serif;overflow:hidden;}' +
+      '#conc-pan.open{display:flex;}' +
+      '#conc-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#132030;' +
+      'border-bottom:1px solid rgba(255,255,255,.1);}' +
+      '#conc-titre{color:#f5c542;letter-spacing:.5px;font-weight:700;}' +
+      '#conc-x{margin-left:auto;background:transparent;color:#9cc0ff;border:none;font-size:18px;cursor:pointer;}' +
+      '#conc-corps{overflow:auto;padding:12px 14px;}' +
+      '#conc-mot{font-size:24px;color:#9fd0ff;}' +
+      '#conc-tr{color:#7fd1a0;margin-left:10px;font-size:15px;}' +
+      '#conc-def{color:#a8b6c6;margin-top:4px;}' +
+      '#conc-cnt{color:#8fa3b8;margin:12px 0 6px;text-transform:uppercase;font-size:10px;letter-spacing:.6px;}' +
+      '.conc-chip{display:inline-block;margin:3px 4px 3px 0;padding:3px 9px;border-radius:20px;' +
+      'background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.35);color:#e8d9a0;cursor:pointer;font-size:11.5px;}' +
+      '.conc-chip:hover{background:rgba(245,197,66,.25);}' +
+      '.conc-chip.on{background:#f5c542;color:#000;font-weight:700;}' +
+      '.conc-occ{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.07);}' +
+      '.conc-ref{color:#f5c542;font-weight:700;}' +
+      '.conc-txt{margin-top:2px;}';
+    document.head.appendChild(st);
+    pan = document.createElement('div');
+    pan.id = 'conc-pan';
+    pan.innerHTML = '<div id="conc-head"><span id="conc-titre">CONCORDANCE</span>' +
+      '<button id="conc-x" title="Fermer">✕</button></div><div id="conc-corps"></div>';
+    document.body.appendChild(pan);
+    pan.querySelector('#conc-x').addEventListener('click', function(){ pan.classList.remove('open'); });
+    return pan;
+  }
+
+  window.__concOuvrir = function(kind, strong, label){
+    strong = String(strong || '').replace(/^[GH]/i, '').trim();
+    if (!strong) return;
+    var p = creer();
+    p.classList.add('open');
+    var titre = (kind === 'gr' ? 'G' : 'H') + strong;
+    p.querySelector('#conc-titre').textContent = '📖 CONCORDANCE — ' + titre + (label ? ' · ' + label : '');
+    var corps = p.querySelector('#conc-corps');
+    corps.innerHTML = '<div style="opacity:.7;padding:10px 0;">⏳ Chargement de l\'index de concordance…</div>';
+    Promise.all([window.__ensureConc(kind),
+                 (kind === 'gr' ? window.__ensureStrongsGr() : window.__ensureStrongsHb())])
+      .then(function(r){
+        if (!r[0]) { corps.innerHTML = '<div style="color:#ff8a8a;padding:10px 0;">Index de concordance indisponible.</div>'; return; }
+        var tab = kind === 'gr' ? window.__concGr : window.__concHb;
+        var refs = (tab && tab[strong]) ? String(tab[strong]).split(',') : [];
+        var e = entree(kind, strong);
+        var h = '';
+        if (e) {
+          h += '<div><span id="conc-mot">' + ech(e.lemme) + '</span><span id="conc-tr">' + ech(e.translit) + '</span></div>';
+          if (e.def) h += '<div id="conc-def">' + ech(String(e.def).slice(0, 400)) + '</div>';
+        }
+        if (!refs.length) {
+          h += '<div style="padding:10px 0;opacity:.8;">Aucune occurrence trouvée pour ' + ech(titre) + ' dans le corpus.</div>';
+          corps.innerHTML = h; return;
+        }
+        var parLivre = {};
+        refs.forEach(function(r){ var b = r.split('.')[0]; (parLivre[b] = parLivre[b] || []).push(r); });
+        var livres = Object.keys(parLivre).sort(function(a, b){ return parseInt(a, 10) - parseInt(b, 10); });
+        h += '<div id="conc-cnt">' + refs.length + ' verset(s) dans ' + livres.length + ' livre(s) — cliquez un livre</div>';
+        livres.forEach(function(b){
+          h += '<span class="conc-chip" data-b="' + b + '">' + ech(nomLivre(b)) + ' (' + parLivre[b].length + ')</span>';
+        });
+        h += '<div id="conc-liste" style="margin-top:10px;"></div>';
+        corps.innerHTML = h;
+        var liste = corps.querySelector('#conc-liste');
+        function montrerLivre(b){
+          corps.querySelectorAll('.conc-chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-b') === b); });
+          var rs = parLivre[b] || [];
+          liste.innerHTML = '<div style="opacity:.7;">⏳ ' + ech(nomLivre(b)) + '…</div>';
+          window.__ensureBibleBook(b).then(function(ok){
+            var d = ok && window.__bibleBooks && window.__bibleBooks[b];
+            var out = '';
+            rs.slice(0, 500).forEach(function(r){
+              var q = r.split('.'), ch = q[1], v = q[2];
+              var txt = (d && d[ch] && d[ch][v]) ? d[ch][v] : '(texte indisponible)';
+              out += '<div class="conc-occ"><span class="conc-ref">' + ech(nomLivre(b)) + ' ' + ch + ':' + v + '</span>'
+                   + '<div class="conc-txt">' + ech(txt) + '</div></div>';
+            });
+            if (rs.length > 500) out += '<div style="opacity:.6;padding:6px 0;">… et ' + (rs.length - 500) + ' autre(s).</div>';
+            liste.innerHTML = out;
+          });
+        }
+        corps.querySelectorAll('.conc-chip').forEach(function(c){
+          c.addEventListener('click', function(){ montrerLivre(c.getAttribute('data-b')); });
+        });
+        montrerLivre(livres[0]);
+      });
+  };
+
+  /* Clic sur un numéro Strong dans une fiche de mot hébreu/grec. */
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('.conc-lien') : null;
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    window.__concOuvrir(a.getAttribute('data-conc'), a.getAttribute('data-strong'), a.getAttribute('data-lem') || '');
+  }, true);
 })();
 </script>
 </body>
