@@ -41135,14 +41135,22 @@ window.continueTradApart = async function (msgId) {
   function buildFig(data, label) {
     var fig = document.createElement('div');
     fig.className = 'theo-fig';
+    /* v420 — l'image n'est plus un lien vers l'article : elle OUVRE le
+       visualiseur (zoom molette, haute résolution, feuilletage IIIF).
+       L'article reste accessible par son propre lien, juste à côté. */
     fig.innerHTML =
-      '<a class="theo-fig-img" href="' + esc(data.link) + '" target="_blank" rel="noopener" title="Ouvrir l\'article Wikipédia">' +
-      '<img src="' + esc(data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy">' +
-      '</a>' +
+      '<span class="theo-fig-img" role="button" tabindex="0" title="Agrandir — zoom, haute résolution, manuscrit en ligne">' +
+      '<img src="' + esc(data.thumb || data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy"' +
+      ' data-full="' + esc(data.img) + '"' +
+      ' data-titre="' + esc(data.title || label) + '"' +
+      ' data-lien="' + esc(data.link) + '"' +
+      ' data-wiki="' + esc(data.wiki || '') + '">' +
+      '</span>' +
       '<div class="theo-fig-txt">' +
       '<div class="theo-fig-t">' + esc(data.title || label) + '</div>' +
       (data.extract ? '<div class="theo-fig-x">' + esc(String(data.extract).slice(0, 170)) + (String(data.extract).length > 170 ? '…' : '') + '</div>' : '') +
-      '<a class="theo-fig-l" href="' + esc(data.link) + '" target="_blank" rel="noopener">Article Wikipédia →</a>' +
+      '<div class="theo-fig-l"><span class="msv2-zoom">🔍 Agrandir</span> · ' +
+      '<a href="' + esc(data.link) + '" target="_blank" rel="noopener" style="color:inherit">Article Wikipédia →</a></div>' +
       '</div>';
     return fig;
   }
@@ -41156,12 +41164,18 @@ window.continueTradApart = async function (msgId) {
     fetchSum(wiki).then(function (j) {
       var waiters = pending[wiki]; delete pending[wiki];
       if (!j) return;
-      var img = (j.originalimage && j.originalimage.source) || (j.thumbnail && j.thumbnail.source) || '';
-      if (!img) return;
+      var orig = (j.originalimage && j.originalimage.source) || '';
+      var thumb = (j.thumbnail && j.thumbnail.source) || orig;
+      if (!orig && !thumb) return;
+      /* v420 — la vignette légère sert à l'affichage EN LIGNE ; l'image
+         ORIGINALE (souvent plusieurs Mo) n'est chargée qu'à l'ouverture du
+         visualiseur. Avant, l'originale était téléchargée pour un rendu 190 px. */
       var data = {
-        img: img,
+        img: orig || thumb,
+        thumb: thumb,
         title: j.title || label,
         extract: j.extract || '',
+        wiki: wiki,
         link: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) ||
               ('https://fr.wikipedia.org/wiki/' + encodeURIComponent(wiki))
       };
@@ -46570,6 +46584,342 @@ window.continueTradApart = async function (msgId) {
     e.preventDefault(); e.stopPropagation();
     window.__concOuvrir(a.getAttribute('data-conc'), a.getAttribute('data-strong'), a.getAttribute('data-lem') || '');
   }, true);
+})();
+</script>
+
+<script id="v420-msv2">
+/* ═══ v420 — VISUALISEUR DE MANUSCRITS v2 ═══
+   A. Lightbox plein écran : zoom (molette / pincement), déplacement à la
+      souris, navigation ‹ › entre les images, Échap pour fermer.
+   B. Haute résolution à la demande + auteur / licence / source via l'API
+      Commons (les images de Wikimedia sont souvent sous licence CC-BY-SA).
+   C. Comparateur côte à côte (2 images, zoom synchronisé).
+   D. Feuilletage IIIF des grands manuscrits numérisés (Vatican DigiVatLib,
+      e-codices) — manifests VÉRIFIÉS, pages servies par l'Image API.
+   Aucune dépendance externe : le moteur de zoom est écrit ici. */
+(function(){
+  'use strict';
+  if (window.__msv2) return; window.__msv2 = true;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* ── D. table curée manuscrit -> manifest IIIF (URLs vérifiées) ── */
+  var IIIF = [
+    /* ORDRE IMPORTANT : le plus SPÉCIFIQUE d'abord. « Vergilius Vaticanus »
+       contient « Vaticanus » — il doit être testé avant Codex Vaticanus,
+       sinon il ouvrait le mauvais manuscrit (bug vérifié). */
+    { re: /vergilius\s+vaticanus|vat\.?\s*lat\.?\s*3225/i, nom: 'Vergilius Vaticanus (Vat. lat. 3225)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3225/manifest.json' },
+    { re: /vergilius\s+romanus|vat\.?\s*lat\.?\s*3867/i,   nom: 'Vergilius Romanus (Vat. lat. 3867)',   url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3867/manifest.json' },
+    { re: /codex\s+vaticanus|vat\.?\s*gr\.?\s*1209/i, nom: 'Codex Vaticanus (Vat. gr. 1209)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1209/manifest.json' },
+    { re: /pal\.?\s*gr\.?\s*220/i,                  nom: 'Pal. gr. 220 (Vatican)',          url: 'https://digi.vatlib.it/iiif/MSS_Pal.gr.220/manifest.json' },
+    { re: /barb\.?\s*gr\.?\s*372/i,                 nom: 'Barb. gr. 372 (Vatican)',         url: 'https://digi.vatlib.it/iiif/MSS_Barb.gr.372/manifest.json' },
+    { re: /urb\.?\s*gr\.?\s*35\b/i,                 nom: 'Urb. gr. 35 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Urb.gr.35/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*1\b|csg-?0*1\b/i,     nom: 'St. Gallen, Cod. Sang. 1',        url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0001/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*22\b|csg-?0*22\b/i,   nom: 'St. Gallen, Cod. Sang. 22',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0022/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*53\b|csg-?0*53\b/i,   nom: 'St. Gallen, Cod. Sang. 53',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0053/manifest.json' }
+  ];
+  function iiifPour(txt){
+    var s = String(txt || '');
+    for (var i = 0; i < IIIF.length; i++) if (IIIF[i].re.test(s)) return IIIF[i];
+    return null;
+  }
+
+  /* ── CSS ── */
+  var st = document.createElement('style');
+  st.id = 'v420-css';
+  st.textContent =
+    '#msv2{position:fixed;inset:0;z-index:2147483000;display:none;flex-direction:column;background:rgba(4,8,14,.98);}' +
+    '#msv2.on{display:flex;}' +
+    '#msv2-bar{display:flex;align-items:center;gap:7px;padding:8px 12px;background:#0d1622;border-bottom:1px solid rgba(255,255,255,.1);color:#dbe8f5;font:12.5px system-ui,Segoe UI,sans-serif;flex-wrap:wrap;}' +
+    '#msv2-titre{font-weight:700;color:#9fd0ff;}' +
+    '#msv2-page{color:#8fa3b8;}' +
+    '#msv2-bar button{background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:4px 9px;cursor:pointer;font:700 11.5px system-ui;}' +
+    '#msv2-bar button:hover{background:rgba(79,142,247,.3);}' +
+    '#msv2-bar button.on{background:#4f8ef7;color:#08101c;}' +
+    '#msv2-bar .sp{margin-left:auto;}' +
+    '#msv2-zone{flex:1;display:flex;align-items:stretch;min-height:0;}' +
+    '#msv2-prev,#msv2-next{background:transparent;border:none;color:#9cc0ff;font-size:34px;cursor:pointer;padding:0 10px;}' +
+    '#msv2-prev:hover,#msv2-next:hover{color:#fff;}' +
+    '#msv2-panes{flex:1;display:flex;gap:6px;min-width:0;}' +
+    '.msv2-pane{flex:1;position:relative;overflow:hidden;background:#05080d;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;}' +
+    '.msv2-pane.drag{cursor:grabbing;}' +
+    '.msv2-pane img{max-width:none;max-height:none;transform-origin:0 0;user-select:none;-webkit-user-drag:none;}' +
+    '#msv2-cap{padding:7px 12px;background:#0d1622;border-top:1px solid rgba(255,255,255,.1);color:#a8b6c6;font:11.5px/1.5 system-ui;max-height:22vh;overflow:auto;}' +
+    '#msv2-cap a{color:#7fb4ff;}' +
+    '#msv2-hint{position:absolute;left:12px;bottom:8px;color:#5d6f82;font:11px system-ui;pointer-events:none;}';
+  document.head.appendChild(st);
+
+  var el = null, panes = [], items = [], idx = 0, cmp = false, cmpIdx = 1, sync = true, drag = null;
+
+  /* ── moteur de zoom / déplacement d'un volet ── */
+  function Pane(node){
+    var img = node.querySelector('img');
+    var o = { node: node, img: img, s: 1, tx: 0, ty: 0, nw: 0, nh: 0 };
+    o.appliquer = function(){ img.style.transform = 'translate(' + o.tx + 'px,' + o.ty + 'px) scale(' + o.s + ')'; };
+    o.fit = function(){
+      if (!o.nw) return;
+      var W = node.clientWidth || 1, H = node.clientHeight || 1;
+      var k = Math.min(W / o.nw, H / o.nh);
+      o.s = k; o.tx = (W - o.nw * k) / 2; o.ty = (H - o.nh * k) / 2; o.appliquer();
+    };
+    o.zoom = function(f, cx, cy){
+      var ns = Math.max(0.05, Math.min(24, o.s * f));
+      if (cx === undefined) { cx = node.clientWidth / 2; cy = node.clientHeight / 2; }
+      o.tx = cx - (cx - o.tx) * (ns / o.s);
+      o.ty = cy - (cy - o.ty) * (ns / o.s);
+      o.s = ns; o.appliquer();
+    };
+    o.charger = function(src){
+      if (!src) return;
+      img.onload = function(){ o.nw = img.naturalWidth || 1; o.nh = img.naturalHeight || 1; o.fit(); };
+      img.onerror = function(){};
+      img.src = src;
+    };
+    node.addEventListener('wheel', function(e){
+      e.preventDefault();
+      var r = node.getBoundingClientRect();
+      o.zoom(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top);
+      if (cmp && sync) { var p = panes[1]; if (p && p !== o) { p.s = o.s; p.appliquer(); } }
+    }, { passive: false });
+    node.addEventListener('mousedown', function(e){ drag = { o: o, x: e.clientX, y: e.clientY, tx: o.tx, ty: o.ty }; node.classList.add('drag'); e.preventDefault(); });
+    var t0 = null;
+    node.addEventListener('touchstart', function(e){
+      if (e.touches.length === 1) t0 = { n: 1, x: e.touches[0].clientX, y: e.touches[0].clientY, tx: o.tx, ty: o.ty };
+      else if (e.touches.length === 2) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+        t0 = { n: 2, d: Math.hypot(dx, dy) || 1, s: o.s, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+      }
+    }, { passive: true });
+    node.addEventListener('touchmove', function(e){
+      if (!t0) return;
+      if (t0.n === 1 && e.touches.length === 1) { o.tx = t0.tx + (e.touches[0].clientX - t0.x); o.ty = t0.ty + (e.touches[0].clientY - t0.y); o.appliquer(); }
+      else if (t0.n === 2 && e.touches.length === 2) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+        var r = node.getBoundingClientRect();
+        o.zoom((t0.s * (Math.hypot(dx, dy) / t0.d)) / o.s, t0.cx - r.left, t0.cy - r.top);
+      }
+      e.preventDefault();
+    }, { passive: false });
+    node.addEventListener('touchend', function(){ t0 = null; }, { passive: true });
+    return o;
+  }
+  window.addEventListener('mousemove', function(e){
+    if (!drag) return;
+    drag.o.tx = drag.tx + (e.clientX - drag.x);
+    drag.o.ty = drag.ty + (e.clientY - drag.y);
+    drag.o.appliquer();
+    if (cmp && sync && panes[1] && panes[1] !== drag.o) { panes[1].tx = drag.o.tx; panes[1].ty = drag.o.ty; panes[1].appliquer(); }
+  });
+  window.addEventListener('mouseup', function(){ if (!drag) return; drag.o.node.classList.remove('drag'); drag = null; });
+
+  /* ── B. métadonnées Commons (auteur / licence / source) ── */
+  var META = {};
+  function chargerMeta(it, cb){
+    if (!it || !it.wiki) return;
+    if (META[it.wiki]) { cb(META[it.wiki]); return; }
+    var nom = '';
+    try { nom = decodeURIComponent(String(it.full || it.src || '').split('?')[0].split('/').pop()); } catch(e){ nom = ''; }
+    if (!nom) return;
+    fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=imageinfo&iiprop=extmetadata|url&titles=File:' + encodeURIComponent(nom))
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var pages = (j && j.query && j.query.pages) || {};
+        var k = Object.keys(pages)[0];
+        var ii = pages[k] && pages[k].imageinfo && pages[k].imageinfo[0];
+        var em = (ii && ii.extmetadata) || {};
+        function g(x){ return String((em[x] && em[x].value) || '').replace(/<[^>]*>/g, '').trim(); }
+        var m = { auteur: g('Artist'), licence: g('LicenseShortName') || g('License'), source: g('Credit') || g('Attribution') };
+        META[it.wiki] = m; cb(m);
+      }).catch(function(){});
+  }
+
+  /* ── D. feuilletage IIIF ── */
+  function chargerIIIF(it, cb){
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || ''));
+    if (!m) { cb(null); return; }
+    fetch(m.url).then(function(r){ return r.json(); }).then(function(d){
+      var pages = [];
+      if (d.sequences && d.sequences[0]) {
+        (d.sequences[0].canvases || []).forEach(function(c, i){
+          var res = (c.images && c.images[0] && c.images[0].resource) || {};
+          var svc = res.service && (res.service['@id'] || res.service.id);
+          var u = svc ? (svc + '/full/1400,/0/default.jpg') : res['@id'];
+          if (u) pages.push({ src: u, hi: svc ? (svc + '/full/full/0/default.jpg') : u, label: (c.label || '') });
+        });
+      } else if (d.items) {
+        d.items.forEach(function(c){
+          var body = c.items && c.items[0] && c.items[0].items && c.items[0].items[0] && c.items[0].items[0].body;
+          var svc = body && body.service && (body.service[0] && (body.service[0].id || body.service[0]['@id']));
+          var u = svc ? (svc + '/full/1400,/0/default.jpg') : (body && body.id);
+          if (u) pages.push({ src: u, hi: svc ? (svc + '/full/full/0/default.jpg') : u, label: '' });
+        });
+      }
+      cb(pages.length ? { nom: m.nom, pages: pages } : null);
+    }).catch(function(){ cb(null); });
+  }
+
+  /* ── construction du visualiseur ── */
+  function creer(){
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'msv2';
+    el.innerHTML =
+      '<div id="msv2-bar">' +
+        '<span id="msv2-titre"></span><span id="msv2-page"></span>' +
+        '<button data-a="cmp" title="Comparer deux images côte à côte">⧉ Comparer</button>' +
+        '<button data-a="sync" title="Zoom synchronisé en mode comparaison">🔗</button>' +
+        '<button data-a="swap2" title="Image suivante dans le volet droit" style="display:none">⇄</button>' +
+        '<button data-a="iiif" title="Feuilleter le manuscrit numérisé (IIIF)" style="display:none">📜</button>' +
+        '<span class="sp"></span>' +
+        '<button data-a="out" title="Zoom arrière (−)">−</button>' +
+        '<button data-a="in" title="Zoom avant (+)">+</button>' +
+        '<button data-a="fit" title="Ajuster à l\'écran">⛶</button>' +
+        '<button data-a="one" title="Taille réelle (100 %)">1:1</button>' +
+        '<button data-a="orig" title="Ouvrir l\'image originale dans un onglet">⤓</button>' +
+        '<button data-a="x" title="Fermer (Échap)">✕</button>' +
+      '</div>' +
+      '<div id="msv2-zone">' +
+        '<button id="msv2-prev" title="Précédent (←)">‹</button>' +
+        '<div id="msv2-panes">' +
+          '<div class="msv2-pane" id="msv2-p1"><img alt=""><span id="msv2-hint">molette = zoom · glisser = déplacer</span></div>' +
+          '<div class="msv2-pane" id="msv2-p2" style="display:none"><img alt=""></div>' +
+        '</div>' +
+        '<button id="msv2-next" title="Suivant (→)">›</button>' +
+      '</div>' +
+      '<div id="msv2-cap"></div>';
+    document.body.appendChild(el);
+    panes[0] = Pane(el.querySelector('#msv2-p1'));
+    panes[1] = Pane(el.querySelector('#msv2-p2'));
+    el.querySelector('#msv2-prev').addEventListener('click', function(){ nav(-1); });
+    el.querySelector('#msv2-next').addEventListener('click', function(){ nav(1); });
+    el.addEventListener('click', function(e){
+      var b = e.target.closest && e.target.closest('[data-a]');
+      if (!b) return;
+      var a = b.getAttribute('data-a');
+      if (a === 'x') fermer();
+      else if (a === 'in') zoomTous(1.25);
+      else if (a === 'out') zoomTous(1 / 1.25);
+      else if (a === 'fit') { panes[0].fit(); if (cmp && panes[1]) panes[1].fit(); }
+      else if (a === 'one') { panes[0].s = 1; panes[0].appliquer(); }
+      else if (a === 'orig') { var it = items[idx]; if (it) window.open(it.full || it.src, '_blank'); }
+      else if (a === 'cmp') basculerCmp();
+      else if (a === 'sync') { sync = !sync; b.classList.toggle('on', sync); }
+      else if (a === 'swap2') { cmpIdx = (cmpIdx + 1) % items.length; afficher2(); }
+      else if (a === 'iiif') feuilleter();
+    });
+    document.addEventListener('keydown', function(e){
+      if (!el || !el.classList.contains('on')) return;
+      if (e.key === 'Escape') fermer();
+      else if (e.key === 'ArrowLeft') nav(-1);
+      else if (e.key === 'ArrowRight') nav(1);
+      else if (e.key === '+' || e.key === '=') zoomTous(1.25);
+      else if (e.key === '-') zoomTous(1 / 1.25);
+      else if (e.key === '0') panes[0].fit();
+    });
+    return el;
+  }
+  function zoomTous(f){
+    panes[0].zoom(f);
+    if (cmp && panes[1]) { panes[1].s = panes[0].s; panes[1].appliquer(); }
+  }
+  function nav(d){
+    if (items.length < 2) return;
+    idx = (idx + d + items.length) % items.length;
+    afficher();
+  }
+  function fermer(){ if (el) el.classList.remove('on'); }
+
+  function afficher(){
+    var it = items[idx]; if (!it) return;
+    el.querySelector('#msv2-titre').textContent = it.titre || '';
+    el.querySelector('#msv2-page').textContent = items.length > 1 ? '  (' + (idx + 1) + ' / ' + items.length + ')' : '';
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || ''));
+    var bi = el.querySelector('[data-a="iiif"]');
+    bi.style.display = m ? '' : 'none';
+    bi.textContent = m ? '📜 ' + m.nom.replace(/\s*\(.*/, '') : '📜';
+    panes[0].charger(it.src || it.full);
+    var cap = el.querySelector('#msv2-cap');
+    cap.innerHTML = '<b>' + esc(it.titre) + '</b>' +
+      (it.lien ? ' — <a href="' + esc(it.lien) + '" target="_blank" rel="noopener">article Wikipédia</a>' : '') +
+      '<div id="msv2-meta" style="opacity:.85;margin-top:2px"></div>';
+    chargerMeta(it, function(mm){
+      var d = el.querySelector('#msv2-meta');
+      if (!d || !mm) return;
+      d.innerHTML = [mm.auteur ? 'Auteur : ' + esc(mm.auteur) : '', mm.licence ? 'Licence : ' + esc(mm.licence) : '', mm.source ? 'Source : ' + esc(mm.source) : ''].filter(Boolean).join(' · ') ||
+        'Image : Wikimedia Commons';
+    });
+    if (cmp) afficher2();
+  }
+  function afficher2(){
+    if (!cmp) return;
+    var it = items[cmpIdx]; if (!it) return;
+    panes[1].charger(it.src || it.full);
+  }
+  function basculerCmp(){
+    cmp = !cmp;
+    el.querySelector('#msv2-p2').style.display = cmp ? '' : 'none';
+    el.querySelector('[data-a="cmp"]').classList.toggle('on', cmp);
+    el.querySelector('[data-a="sync"]').style.display = cmp ? '' : 'none';
+    el.querySelector('[data-a="swap2"]').style.display = cmp ? '' : 'none';
+    if (cmp) { cmpIdx = (idx + 1) % Math.max(items.length, 1); afficher2(); }
+  }
+  function feuilleter(){
+    var it = items[idx]; if (!it) return;
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || '')); if (!m) return;
+    var cap = el.querySelector('#msv2-cap');
+    cap.innerHTML = '⏳ Chargement du manuscrit numérisé — <b>' + esc(m.nom) + '</b>… (le manifeste peut peser plusieurs Mo)';
+    chargerIIIF(it, function(res){
+      if (!res) { cap.innerHTML = '⚠️ Manuscrit numérisé indisponible pour l\'instant.'; return; }
+      items = res.pages.map(function(p, i){
+        return { src: p.src, full: p.hi, titre: m.nom + ' — page ' + (i + 1) + (p.label ? ' · ' + p.label : ''), lien: '', wiki: '' };
+      });
+      idx = 0; cmp = false;
+      el.querySelector('#msv2-p2').style.display = 'none';
+      el.querySelector('[data-a="cmp"]').classList.remove('on');
+      afficher();
+    });
+  }
+
+  /* ── ouverture depuis une carte d'image (v160/v161) ── */
+  function collecter(){
+    var out = [];
+    document.querySelectorAll('.theo-fig-img img').forEach(function(im){
+      out.push({
+        src: im.getAttribute('src') || '',
+        full: im.getAttribute('data-full') || im.getAttribute('src') || '',
+        titre: im.getAttribute('data-titre') || '',
+        lien: im.getAttribute('data-lien') || '',
+        wiki: im.getAttribute('data-wiki') || ''
+      });
+    });
+    return out;
+  }
+  window.__msv2Ouvrir = function(im){
+    var list = collecter();
+    if (!list.length) return;
+    var full = im ? (im.getAttribute('data-full') || im.getAttribute('src')) : '';
+    var i = 0;
+    for (var k = 0; k < list.length; k++) if (list[k].full === full) { i = k; break; }
+    items = list; idx = i; cmp = false;
+    creer();
+    el.classList.add('on');
+    el.querySelector('#msv2-p2').style.display = 'none';
+    el.querySelector('[data-a="cmp"]').classList.remove('on');
+    afficher();
+  };
+
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    var im = (t.closest && t.closest('.theo-fig-img img')) || (t.closest && t.closest('.msv2-zoom') ? t.closest('.theo-fig').querySelector('img') : null);
+    if (!im) return;
+    e.preventDefault(); e.stopPropagation();
+    window.__msv2Ouvrir(im);
+  }, true);
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = e.target;
+    if (t && t.tagName === 'IMG' && t.closest && t.closest('.theo-fig-img')) { e.preventDefault(); window.__msv2Ouvrir(t); }
+  });
 })();
 </script>
 </body>
