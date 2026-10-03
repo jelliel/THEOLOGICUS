@@ -1946,12 +1946,29 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        # v403 — magasin partagé : renvoie tout le contenu (clés + révision)
-        # pour que le client applique ce qui est plus récent que chez lui.
+        # v403b — magasin partagé, PULL INCRÉMENTAL.
+        # ?since=<rev> ne renvoie que les clés modifiées APRÈS cette révision.
+        # Sans cela, le client re-téléchargeait TOUT le magasin (des dizaines de
+        # Mo : ~800 conversations) toutes les 4 s → application saturée (le
+        # thread principal bloqué sur JSON.parse) → l'infobulle de verset
+        # restait figée sur « Chargement… ». Sans `since`, renvoie tout
+        # (premier remplissage d'un nouvel appareil).
         if self.path.split('?')[0] == '/theologicus-store':
+            q = parse_qs(urlparse(self.path).query)
+            try:
+                since = int((q.get('since') or ['0'])[0])
+            except Exception:
+                since = 0
             with _STORE_LOCK:
                 d = _store_read()
-            body = json.dumps(d, ensure_ascii=False).encode('utf-8')
+            rev = int(d.get('rev') or 0)
+            if since > 0:
+                keys = {k: v for k, v in d['keys'].items()
+                        if int((v or {}).get('rev') or 0) > since}
+            else:
+                keys = d['keys']
+            body = json.dumps({'rev': rev, 'keys': keys},
+                              ensure_ascii=False).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.send_header('Cache-Control', 'no-store')
@@ -2281,6 +2298,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             with _STORE_LOCK:
                 d = _store_read()
                 keys = d['keys']
+                newrev = int(d.get('rev') or 0) + 1
+                changed = False
                 for e in entries:
                     if not isinstance(e, dict):
                         continue
@@ -2297,10 +2316,16 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                         continue          # entrée plus ancienne : on l'ignore
                     v = e.get('v')
                     if v is None:
-                        keys.pop(k, None)
+                        if k in keys:
+                            keys.pop(k, None)
+                            changed = True
                     else:
-                        keys[k] = {'v': str(v), 'ts': ts}
-                d['rev'] = int(d.get('rev') or 0) + 1
+                        keys[k] = {'v': str(v), 'ts': ts, 'rev': newrev}
+                        changed = True
+                # On ne fait avancer la révision que si quelque chose a changé :
+                # sinon les clients se croiraient désynchronisés à chaque cycle.
+                if changed:
+                    d['rev'] = newrev
                 _store_write(d)
                 rev = d['rev']
             self.send_response(200)
