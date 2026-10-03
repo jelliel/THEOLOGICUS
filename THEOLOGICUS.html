@@ -47922,6 +47922,63 @@ window.continueTradApart = async function (msgId) {
       .catch(function(){ _asbCache[s] = null; return null; });
     return _asbProm[s];
   }
+
+  /* ═══ v437 — TRADUCTION IA (LLM) D'UN RÉCIT ASBĀB ═══
+     Le bouton « 🇫🇷 Traduire (IA) » traduit l'arabe en français via le modèle
+     configuré (le même que le tafsir). Deux garde-fous :
+       • mémoire partagée __theoTM (localStorage theo_tm_v1) : un texte déjà
+         traduit par n'importe quelle voie est rendu instantanément, sans appel ;
+       • repli sur la traduction native si aucune clé API n'est configurée. */
+  function asbabTraduire(btn, txt){
+    if (!txt) return;
+    var wrap = btn.parentNode;
+    var out = wrap.querySelector('.asb-tr-out');
+    if (!out) {
+      out = document.createElement('div');
+      out.className = 'asb-tr-out';
+      out.style.cssText = 'margin-top:4px;font-size:12px;line-height:1.65;color:#eaf4ff;' +
+        'background:rgba(79,142,247,.10);border-left:3px solid #4f8ef7;' +
+        'padding:6px 9px;border-radius:0 6px 6px 0;';
+      wrap.appendChild(out);
+    }
+    /* déjà traduit -> on bascule l'affichage */
+    if (out.dataset.done === '1' && out.dataset.busy !== '1') {
+      out.style.display = (out.style.display === 'none') ? '' : 'none';
+      btn.textContent = (out.style.display === 'none') ? '🇫🇷 Traduire (IA)' : '🇫🇷 Masquer';
+      return;
+    }
+    if (out.dataset.busy === '1') return;
+    var lang = 'fr';
+    var memo = (window.__theoTM && window.__theoTM.get) ? window.__theoTM.get(txt, lang) : null;
+    if (memo) {
+      out.textContent = memo; out.dataset.done = '1'; btn.textContent = '🇫🇷 Masquer';
+      return;
+    }
+    var cfg = null;
+    try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
+    if (!cfg || !cfg.apiKey) {
+      out.textContent = '⚠️ Aucune clé API : ouvrez ⬡ CLÉ API. Repli traduction native…';
+      if (window.__LT && typeof window.__LT.translate === 'function') window.__LT.translate(txt, btn.getBoundingClientRect());
+      return;
+    }
+    out.dataset.busy = '1';
+    btn.disabled = true;
+    out.textContent = '⏳ Traduction IA…';
+    var sys = 'You are a translator specialised in early Islamic sources. Translate the following Arabic text (a report on the occasions of revelation, asbab al-nuzul) into French. Rules: translate faithfully and completely, keep the narrative style, transliterate proper names consistently, keep technical terms and give the Arabic in parentheses for key terms, add no commentary or notes, and return ONLY the French translation.';
+    callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: txt }], { temperature: 0.2, max_tokens: 2000 })
+      .then(function(r){
+        out.dataset.busy = ''; btn.disabled = false;
+        var tr = String(r || '').trim();
+        if (!tr) { out.textContent = '⚠️ Traduction vide.'; return; }
+        out.textContent = tr; out.dataset.done = '1'; btn.textContent = '🇫🇷 Masquer';
+        try { if (window.__theoTM && window.__theoTM.put) window.__theoTM.put(txt, lang, tr); } catch(e){}
+      })
+      .catch(function(e){
+        out.dataset.busy = ''; btn.disabled = false;
+        out.textContent = '⚠️ Erreur traduction : ' + (e && e.message ? e.message : e);
+      });
+  }
+
   window.__asbabAppend = function(sura, v1, v2, tip){
     if (!tip || !tip.querySelector('#asbab-src')) return;
     asbabCharger(sura).then(function(j){
@@ -47947,7 +48004,7 @@ window.continueTradApart = async function (msgId) {
              'background:rgba(159,224,160,.07);border-right:3px solid rgba(159,224,160,.5);' +
              'padding:6px 9px;border-radius:6px 0 0 6px">' + esc(e.t) + '</div>' +
              '<button class="asb-tr" style="pointer-events:auto;margin-top:3px;background:rgba(79,142,247,.15);color:#cfe0ff;' +
-             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire</button>' +
+             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire (IA)</button>' +
              '</div>';
       });
       var leg = Object.keys(srcs).map(function(s){ return (window.__ASBAB_SRC && window.__ASBAB_SRC[s]) ? window.__ASBAB_SRC[s] : s; }).join(' · ');
@@ -47956,16 +48013,13 @@ window.continueTradApart = async function (msgId) {
            '<br>الشاملة (shamela.ws) — recueils complets d\'asbāb al-nuzūl (7 ouvrages, 3175 notices). ' +
            'Traditions narratives rapportées : pas des faits établis.</div></div>';
       box.innerHTML = h;
-      /* Le bouton ouvre la traduction NATIVE de l'application (sa popup) :
-         on ne réinvente pas un second chemin de traduction. */
+      /* v437 — traduction IA (LLM) avec mémoire partagée ; repli natif si pas de clé. */
       box.querySelectorAll('.asb-tr').forEach(function(b){
         b.addEventListener('click', function(ev){
           ev.stopPropagation();
           var ar = b.parentNode.querySelector('[dir="rtl"]');
           if (!ar) return;
-          if (window.__LT && typeof window.__LT.translate === 'function') {
-            window.__LT.translate(ar.textContent, b.getBoundingClientRect());
-          } else if (window.toast) { window.toast('Traduction non configurée', 'info'); }
+          asbabTraduire(b, ar.textContent || '');
         });
       });
     }).catch(function(){});
