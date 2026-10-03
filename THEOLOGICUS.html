@@ -3088,6 +3088,62 @@ input[type="checkbox"]:active{ transform:scale(.88); }
   box-shadow: 0 0 8px rgba(255,51,102,0.2);
 }
 .memory-item .actions button:active { transform: scale(0.9); }
+/* ═══ MEMORY / LEARNINGS TABS ═══ */
+.mem-tabs { display:flex; gap:6px; margin-bottom:12px; padding-bottom:10px; border-bottom: var(--border); }
+.mem-tab {
+  flex:1; padding:6px 4px; font-family: var(--font-mono); font-size:10px; letter-spacing:1px;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim);
+  border-radius:6px; cursor:pointer; transition: all .2s ease;
+}
+.mem-tab:hover { border-color: var(--cyan); color: var(--text); }
+.mem-tab.active { background: rgba(232,198,90,.14); border-color: rgba(232,198,90,.55); color:#e8c65a; }
+.mem-subhead { margin-bottom:8px; }
+.learnings-toolbar { display:flex; gap:6px; margin-bottom:10px; }
+.learnings-toolbar .btn-ghost {
+  flex:1; padding:5px 6px; font-size:10px; border-radius:6px; cursor:pointer;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim);
+}
+.learnings-toolbar .btn-ghost:hover { border-color:#e8c65a; color:#e8c65a; }
+.learnings-filter { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+.lf-btn {
+  padding:3px 7px; font-family: var(--font-mono); font-size:9px; border-radius:10px; cursor:pointer;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim); transition: all .2s ease;
+}
+.lf-btn:hover { border-color:#e8c65a; color:#e8c65a; }
+.lf-btn.active { background: rgba(232,198,90,.18); border-color:#e8c65a; color:#e8c65a; }
+.learnings-list { max-height: 200px; overflow-y:auto; font-size:12px; margin-bottom:10px; }
+.learning-item {
+  padding:8px 0; border-bottom:1px solid var(--grid);
+}
+.learning-item.promoted { background: rgba(232,198,90,.06); border-left:2px solid #e8c65a; padding-left:6px; border-radius:3px; }
+.learning-head { display:flex; align-items:center; gap:6px; margin-bottom:3px; flex-wrap:wrap; }
+.learning-cat {
+  font-family: var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:1px;
+  color:#e8c65a; border:1px solid rgba(232,198,90,.4); border-radius:4px; padding:1px 6px;
+}
+.learning-rec { font-family: var(--font-mono); font-size:9px; color: var(--cyan); }
+.learning-promo { font-family: var(--font-mono); font-size:9px; color:#e8c65a; font-weight:700; }
+.learning-content { color: var(--text); font-family: var(--font-mono); font-size:11px; line-height:1.4; }
+.learning-actions { display:flex; gap:6px; margin-top:5px; }
+.learning-actions button {
+  padding:2px 7px; font-size:9px; background: transparent; border:1px solid var(--wire);
+  color: var(--text-dim); border-radius:3px; cursor:pointer; font-family: var(--font-mono); transition: all .2s ease;
+}
+.learning-actions button:hover { border-color:#e8c65a; color:#e8c65a; }
+.learnings-input { display:flex; gap:7px; padding-top:10px; border-top: var(--border); }
+.learnings-input select {
+  background: var(--hull); border: var(--hud-border); color: var(--text); font-size:10px; border-radius:6px; padding:0 4px;
+  font-family: var(--font-mono); max-width:120px;
+}
+.learnings-input input {
+  flex:1; background: var(--hull); border: var(--hud-border); color: var(--text); font-family: var(--font-mono);
+  font-size:11px; border-radius:6px; padding:6px 8px;
+}
+.learnings-input input:focus { outline:none; border-color: rgba(232,198,90,.6); }
+.learnings-input button {
+  background: linear-gradient(135deg,#e8c65a,#b8902f); color:#1a1206; border:none; border-radius:6px;
+  font-weight:700; cursor:pointer; padding:0 12px; font-size:14px;
+}
 .memory-input {
   display: flex;
   gap: 7px;
@@ -8156,16 +8212,54 @@ window.__ensureTafsirSurah = function(p){
 
 </div>
 
-<button id="memory-toggle" title="Mémoire Globale">⬡</button>
+<button id="memory-toggle" title="Mémoire Globale & Apprentissages">⬡</button>
 <div id="memory-panel">
   <div class="memory-header">
-    <h3>⬡ MÉMOIRE GLOBALE</h3>
-    <button class="btn-ghost" id="memory-clear" style="padding:3px 8px;font-size:10px;border-radius:3px">EFFACER</button>
+    <h3>⬡ MÉMOIRE & APPRENTISSAGES</h3>
   </div>
-  <div class="memory-list" id="memory-list"></div>
-  <div class="memory-input">
-    <input type="text" id="memory-input" placeholder="Ajouter à la mémoire…">
-    <button id="memory-add">+</button>
+  <div class="mem-tabs">
+    <button class="mem-tab active" data-view="mem">Mémoire</button>
+    <button class="mem-tab" data-view="learn">📚 Apprentissages</button>
+  </div>
+  <!-- Vue Mémoire -->
+  <div class="mem-view" data-view="mem">
+    <div class="mem-subhead">
+      <button class="btn-ghost" id="memory-clear" style="padding:3px 8px;font-size:10px;border-radius:3px">EFFACER</button>
+    </div>
+    <div class="memory-list" id="memory-list"></div>
+    <div class="memory-input">
+      <input type="text" id="memory-input" placeholder="Ajouter à la mémoire…">
+      <button id="memory-add">+</button>
+    </div>
+  </div>
+  <!-- Vue Apprentissages (self-improvement) -->
+  <div class="mem-view" data-view="learn" style="display:none">
+    <div class="learnings-toolbar">
+      <button class="btn-ghost" id="learnings-reflect" title="Extraire les apprentissages de la conversation via le LLM">⚡ Réflexion</button>
+      <button class="btn-ghost" id="learnings-clear" title="Effacer tous les apprentissages">Effacer</button>
+    </div>
+    <div class="learnings-filter" id="learnings-filter">
+      <button class="lf-btn active" data-cat="all">Tous</button>
+      <button class="lf-btn" data-cat="correction">Correction</button>
+      <button class="lf-btn" data-cat="insight">Insight</button>
+      <button class="lf-btn" data-cat="knowledge_gap">Écart</button>
+      <button class="lf-btn" data-cat="best_practice">Pratique</button>
+      <button class="lf-btn" data-cat="error">Erreur</button>
+      <button class="lf-btn" data-cat="feature_request">Fonction</button>
+    </div>
+    <div class="learnings-list" id="learnings-list"></div>
+    <div class="learnings-input">
+      <select id="learnings-cat">
+        <option value="correction">Correction</option>
+        <option value="insight" selected>Insight</option>
+        <option value="knowledge_gap">Écart de connaissance</option>
+        <option value="best_practice">Bonne pratique</option>
+        <option value="error">Erreur</option>
+        <option value="feature_request">Demande de fonction</option>
+      </select>
+      <input type="text" id="learnings-input" placeholder="Ajouter un apprentissage…">
+      <button id="learnings-add">+</button>
+    </div>
   </div>
 </div>
 
@@ -9856,7 +9950,7 @@ const MODELS = [
 ];
 
 const DB_NAME = "THEOLOGICUS_AI_DB";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let state = {
   apiKey: null,
@@ -9865,6 +9959,7 @@ let state = {
   agent: null,
   model: "codestral-2508",
   globalMemories: [],
+  learnings: [],   // self-improvement learnings (corrections, insights, errors, …)
   aiConfig: null, // {name, goal} from wizard
   attachedFile: null, // {type, data, name, mimeType}
   customModels: [],  // [{uid, name, model, baseUrl, apiKey, format, vision, audio}]
@@ -13362,7 +13457,7 @@ const db = {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ['chats','agents','settings','global_memory','app_config','auto_backups'].forEach(s => {
+      ['chats','agents','settings','global_memory','app_config','auto_backups','learnings'].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath:'id' });
       });
     };
@@ -13441,6 +13536,224 @@ const memory = {
       .map(m => `[MEM:${(m.tags||[]).join(',')}] ${m.content}`);
   }
 };
+
+// ════════════════════════════════════════
+// SELF-IMPROVEMENT — LEARNINGS
+// Porte nativement le pattern « self-improving agent » : chaque correction,
+// erreur, écart de connaissance, bonne pratique ou demande de fonctionnalité
+// est journalisée, catégorisée, suivie en récurrence, et les plus durables
+// sont PROMUES en règles injectées dans le system prompt de tout appel LLM.
+// (Idée inspirée de pskoett/self-improving-agent — implémentation originale,
+//  aucun code tiers réutilisé.)
+// ════════════════════════════════════════
+const LEARNING_CATEGORIES = ['correction', 'insight', 'knowledge_gap', 'best_practice', 'error', 'feature_request'];
+const LEARNING_PROMOTE_THRESHOLD = 3; // auto-promotion quand la récurrence atteint ce seuil
+
+// Normalise un texte libre en clé de pattern stable pour le suivi de récurrence.
+function _learningPatternKey(text) {
+  const t = (text || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(w => w.length > 3)
+    .slice(0, 6)
+    .join(' ');
+  return t || (text || '').toLowerCase().slice(0, 40);
+}
+
+function renderLearningsList(catFilter) {
+  const list = document.getElementById('learnings-list');
+  if (!list) return;
+  const all = (state.learnings || []).slice().sort(
+    (a, b) => ((b.promoted ? 1 : 0) - (a.promoted ? 1 : 0)) || ((b.recurrence || 1) - (a.recurrence || 1)) || ((b.updated || 0) - (a.updated || 0))
+  );
+  const items = (!catFilter || catFilter === 'all') ? all : all.filter(l => l.category === catFilter);
+  if (!items.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:8px 0">Aucun apprentissage enregistré</div>';
+    return;
+  }
+  list.innerHTML = items.map(l => `
+    <div class="learning-item ${l.promoted ? 'promoted' : ''}" data-id="${l.id}">
+      <div class="learning-head">
+        <span class="learning-cat">${l.category}</span>
+        ${l.recurrence > 1 ? `<span class="learning-rec" title="Récurrence">↻${l.recurrence}</span>` : ''}
+        ${l.promoted ? `<span class="learning-promo" title="Règle durable promue">★ PROMU</span>` : ''}
+      </div>
+      <div class="learning-content">${escapeHtml(l.content)}</div>
+      <div class="learning-actions">
+        <button onclick="window.learningsTogglePromote('${l.id}')">${l.promoted ? '★ Unpromote' : '☆ Promouvoir'}</button>
+        <button onclick="window.learningsDelete('${l.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+const learnings = {
+  add: async (category, content, opts = {}) => {
+    category = LEARNING_CATEGORIES.includes(category) ? category : 'insight';
+    const key = opts.patternKey || _learningPatternKey(content);
+    const nowTs = now();
+    const existing = (state.learnings || []).find(l => l.category === category && (l.patternKey || '') === key);
+    if (existing) {
+      existing.recurrence = (existing.recurrence || 1) + 1;
+      existing.updated = nowTs;
+      existing.content = content;
+      if (!existing.promoted && existing.recurrence >= LEARNING_PROMOTE_THRESHOLD) {
+        existing.promoted = true; existing.promotedAt = nowTs;
+      }
+      await db.put('learnings', existing);
+      renderLearningsList();
+      return existing;
+    }
+    const entry = {
+      id: uuid(),
+      category, content,
+      patternKey: key,
+      tags: Array.isArray(opts.tags) ? opts.tags : (opts.tags ? String(opts.tags).split(',').map(t => t.trim()).filter(Boolean) : []),
+      source: opts.source || 'manual',
+      recurrence: 1,
+      promoted: false,
+      promotedAt: null,
+      created: nowTs, updated: nowTs
+    };
+    await db.put('learnings', entry);
+    (state.learnings = state.learnings || []).push(entry);
+    renderLearningsList();
+    return entry;
+  },
+  getAll: async () => {
+    state.learnings = (await db.getAll('learnings')) || [];
+    renderLearningsList();
+    return state.learnings;
+  },
+  remove: async id => {
+    await db.delete('learnings', id);
+    state.learnings = (state.learnings || []).filter(l => l.id !== id);
+    renderLearningsList();
+  },
+  setPromoted: async (id, val) => {
+    const l = (state.learnings || []).find(x => x.id === id);
+    if (!l) return;
+    l.promoted = !!val; l.promotedAt = l.promoted ? now() : null;
+    await db.put('learnings', l);
+    renderLearningsList();
+  },
+  // Renvoie les chaînes à injecter dans le system prompt. Les apprentissages
+  // PROMUS sont TOUJOURS inclus (règles durables) ; les autres sont filtrés
+  // par pertinence par rapport à la dernière question de l'utilisateur.
+  getRelevant: (query, limit = 6) => {
+    const list = state.learnings || [];
+    if (!list.length) return [];
+    const q = (query || (state.messages || []).filter(m => m.role === 'user').slice(-1)[0]?.content || '').toLowerCase();
+    const promoted = list.filter(l => l.promoted).map(l => `[APPRENTISSAGE·${l.category}·PROMU] ${l.content}`);
+    const candidates = list.filter(l => !l.promoted);
+    const scored = candidates.map(l => {
+      const hay = ((l.content || '') + ' ' + (l.tags || []).join(' ')).toLowerCase();
+      let score = 0;
+      if (q) {
+        if (hay.includes(q)) score += 3;
+        q.split(/\s+/).forEach(w => { if (w.length > 3 && hay.includes(w)) score += 1; });
+        (l.tags || []).forEach(t => { if (q.includes(t.toLowerCase())) score += 2; });
+      }
+      score += Math.min((l.recurrence || 1), 3) * 0.5;
+      return { l, score };
+    }).filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(x => `[APPRENTISSAGE·${x.l.category}] ${x.l.content}`);
+    return [...promoted, ...scored].slice(0, limit + 4);
+  }
+};
+
+// ── Actions exposées (clics depuis le rendu messages / panneau) ──
+window.learnFromMessage = async ts => {
+  const m = (state.messages || []).find(x => x.ts === ts);
+  if (!m) return;
+  const content = (typeof m.content === 'string') ? m.content.replace(/\s+/g, ' ').trim().slice(0, 400) : '';
+  if (!content) return;
+  const category = m.role === 'user' ? 'correction' : 'insight';
+  await learnings.add(category, content, { source: 'chat-flag' });
+  toast('📚 Apprentissage enregistré — ouvrez 📚 pour promouvoir / re-catégoriser', 'success');
+};
+window.learningsTogglePromote = id => {
+  const l = (state.learnings || []).find(x => x.id === id);
+  if (l) learnings.setPromoted(id, !l.promoted);
+};
+window.learningsDelete = id => { learnings.remove(id); };
+
+// ── Réflexion de fin de cycle (équivalent du handler.ts) ──
+// Envoie les derniers messages au LLM et extrait les apprentissages structurés.
+window.learningsReflect = async () => {
+  const msgs = (state.messages || []).filter(m => m.role !== 'system').slice(-12);
+  if (msgs.length < 2) { toast('Pas assez de contexte pour la réflexion', 'info'); return; }
+  const cfg = resolveModelConfig(state.model);
+  if (!cfg.apiKey) { toast('Configurez une clé API d\'abord', 'error'); openApiKeyModal(); return; }
+  const convo = msgs.map(m => (m.role === 'user' ? 'UTILISATEUR: ' : 'ASSISTANT: ') + (typeof m.content === 'string' ? m.content : '')).join('\n\n');
+  const sys = `Tu es un extracteur d'apprentissages pour un assistant théologique. À partir de la conversation, identifie les corrections apportées à l'assistant, les erreurs commises, les écarts de connaissance, les bonnes pratiques utiles, et les demandes de fonctionnalités. Réponds STRICTEMENT en JSON valide, sans texte autour : {"learnings":[{"category":"correction|insight|knowledge_gap|best_practice|error|feature_request","content":"texte concis de l'apprentissage"}]}. Maximum 6. Si rien à retenir, retourne {"learnings":[]}.`;
+  toast('⚡ Réflexion en cours…', 'info');
+  try {
+    const reply = await callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: convo }], { temperature: 0.2, max_tokens: 1500 });
+    const m = reply.match(/\{[\s\S]*\}/);
+    const data = m ? JSON.parse(m[0]) : null;
+    const arr = (data && data.learnings) || [];
+    let n = 0;
+    for (const it of arr) {
+      if (it && it.content) { await learnings.add(it.category || 'insight', String(it.content).slice(0, 500), { source: 'reflection' }); n++; }
+    }
+    toast(n ? `⚡ ${n} apprentissage(s) extrait(s) de la conversation` : 'Aucun apprentissage détecté', n ? 'success' : 'info');
+  } catch (e) { toast('Réflexion échouée : ' + (e && e.message ? e.message : e), 'error'); }
+};
+
+// ── Câblage de l'UI du panneau apprentissages ──
+function bindLearningsUI() {
+  // Onglets Mémoire / Apprentissages dans le panneau existant
+  document.querySelectorAll('.mem-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.mem-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const v = tab.dataset.view;
+      document.querySelectorAll('.mem-view').forEach(vw => { vw.style.display = (vw.dataset.view === v) ? '' : 'none'; });
+      if (v === 'learn') renderLearningsList();
+    };
+  });
+  // Bouton EFFACER mémoire (répare un bouton sinon orphelin)
+  const mc = document.getElementById('memory-clear');
+  if (mc) mc.onclick = () => { if (confirm('Effacer toute la mémoire globale ?')) memory.clear(); };
+  const addBtn = document.getElementById('learnings-add');
+  const input = document.getElementById('learnings-input');
+  const catSel = document.getElementById('learnings-cat');
+  if (addBtn && input) {
+    const doAdd = () => {
+      const txt = input.value.trim();
+      if (!txt) return;
+      learnings.add(catSel ? catSel.value : 'insight', txt, { source: 'manual' });
+      input.value = '';
+      toast('📚 Apprentissage enregistré', 'success');
+    };
+    addBtn.onclick = doAdd;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
+  }
+  const clearBtn = document.getElementById('learnings-clear');
+  if (clearBtn) clearBtn.onclick = async () => {
+    if (!confirm('Effacer TOUS les apprentissages ?')) return;
+    const all = state.learnings || [];
+    for (const l of all) await db.delete('learnings', l.id);
+    state.learnings = [];
+    renderLearningsList();
+    toast('Apprentissages effacés', 'success');
+  };
+  const refBtn = document.getElementById('learnings-reflect');
+  if (refBtn) refBtn.onclick = () => window.learningsReflect();
+  document.querySelectorAll('#learnings-filter .lf-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#learnings-filter .lf-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderLearningsList(btn.dataset.cat);
+    };
+  });
+}
+document.addEventListener('DOMContentLoaded', bindLearningsUI);
 
 function renderMemoryList() {
   const list = $("#memory-list");
@@ -15805,6 +16118,7 @@ function renderMessages(scrollToTop) {
       ${ratingHtml}
       <div class="msg-actions">
         <button class="msg-action-btn" onclick="copyMsg(${msgId})">⎘ COPIER</button>
+        <button class="msg-action-btn" onclick="learnFromMessage(${msgId})" title="Enregistrer comme apprentissage (auto-amélioration)">📌 APPRENDRE</button>
         ${memoBtn}
         ${printBtn}
         ${deleteBtn}
@@ -17402,7 +17716,7 @@ function transliterateForSpeech(text, lang) {
     out = out.replace(/([bcdfgklmnprstvz])(?=[bcdfgklmnprstvz])/gi, '$1a');
   } else if (lang === 'grec') {
     // Décomposer les accents polytoniques (ᾶ → α + ◌͂) puis mapper lettre à lettre
-    const base = text.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const base = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     for (const ch of base) {
       const lo = ch.toLowerCase();
       if (_EL_PHON[lo] !== undefined) out += _EL_PHON[lo];
@@ -18802,6 +19116,9 @@ Les suggestions doivent :
   const memLimit = Math.min(memPrio * 2, 8);
   const rel = memory.getRelevant("context", memLimit);
   if (rel.length) prompt += `\n\n[MÉMOIRE GLOBALE ACTIVE]\n${rel.join('\n')}`;
+  // ── SELF-IMPROVEMENT : rappelle les règles apprises (promues + pertinentes) ──
+  const relL = learnings.getRelevant(null, 6);
+  if (relL.length) prompt += `\n\n[APPRENTISSAGES ACTIFS — règles que l'assistant a apprises au fil des conversations]\n${relL.join('\n')}`;
   prompt += "\n\nRéponds dans la langue de l'utilisateur. Sois précis, structuré et professionnel.";
   return prompt;
 }
@@ -19840,7 +20157,7 @@ async function exportData() {
       version: "2.1",
       exported: new Date().toISOString(),
       source: "THEOLOGICUS",
-      data: { chats, agents, global_memory: mems, settings, app_config: appConfig ? [appConfig] : [] }
+      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [] }
     };
     const json = JSON.stringify(payload, null, 2);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
@@ -19901,10 +20218,14 @@ async function importData(file) {
     if (data.global_memory?.length) {
       for (const m of data.global_memory) { await db.put('global_memory', m); count++; }
     }
+    if (data.learnings?.length) {
+      for (const l of data.learnings) { await db.put('learnings', l); count++; }
+    }
     if (data.app_config?.length) {
       for (const c of data.app_config) { await db.put('app_config', c); count++; }
     }
     await memory.getAll();
+    await learnings.getAll();
     await loadAgents();
     await computeStats();
     toast(`Import réussi — ${count} éléments restaurés`, "success");
@@ -21165,6 +21486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Chacun de ces appels est isolé : si IndexedDB échoue, l'initialisation
   // doit continuer jusqu'à bindEvents() (qui câble le bouton SEND).
   try { await memory.getAll(); } catch(e) { console.error("memory init:", e); }
+  try { await learnings.getAll(); } catch(e) { console.error("learnings init:", e); }
   await loadAgents();
   await renderArchives();
 
@@ -24010,7 +24332,7 @@ function bindEvents() {
 
   if ($("#btn-clear-all")) $("#btn-clear-all").onclick = async () => {
     if (!confirm("⚠ Supprimer TOUTES les données locales THEOLOGICUS ? Cette action est irréversible.")) return;
-    const stores = ['chats','agents','settings','global_memory','app_config','auto_backups'];
+    const stores = ['chats','agents','settings','global_memory','app_config','auto_backups','learnings'];
     for (const s of stores) {
       const all = await db.getAll(s) || [];
       for (const r of all) await db.delete(s, r.id);
@@ -28729,7 +29051,7 @@ initTafsirVerseTooltip();
       // On ignore totalement les espaces afin qu'une sélection traversant plusieurs
       // paragraphes/listes (où le DOM concatène les nœuds texte SANS séparateur)
       // soit retrouvée après rechargement. Renvoie chaîne + table de mapping.
-       const NF = (str || '').normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+       const NF = (str || '').normalize('NFKC').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       let norm = '', map = [];
       for (let i = 0; i < NF.length; i++) {
         const ch = NF[i];
