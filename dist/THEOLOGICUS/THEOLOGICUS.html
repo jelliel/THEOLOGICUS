@@ -26794,10 +26794,27 @@ function initCorpusCoranicum() {
       if (ve.mss && ve.mss.list && ve.mss.list.length) {
         h += '<div style="margin:3px 0"><span style="color:#9fe0a0;font-weight:700">📜 Manuscrits (' + ve.mss.n + ')</span><div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">';
         ve.mss.list.forEach(function (m) {
-          var img = m.img
-            ? '<img src="' + m.img + '" style="width:52px;height:52px;object-fit:cover;border:1px solid #444;border-radius:4px" loading="lazy" onerror="this.style.display=\'none\'">'
-            : '📜';
-          h += '<a href="' + (m.link || 'https://corpuscoranicum.de') + '" target="_blank" rel="noopener" title="' + ccEsc(m.t || '') + ' — ' + ccEsc(m.arch || '') + ' (f. ' + ccEsc(m.folio) + ')" style="text-decoration:none">' + img + '</a>';
+          /* v426 — la vignette devient une pastille : survol = image, clic =
+             visionneuse. Le Scaler du Corpus Coranicum accepte une taille
+             demandée : on demande 2400 px pour l'agrandissement (vérifié :
+             1713x2400 réels, contre 571x800 pour le dw=800 d'origine). */
+          var petit = m.img || '';
+          var grand = petit.replace(/([?&]dw=)800\b/, '$12400').replace(/([?&]dh=)800\b/, '$12400');
+          var titre = (m.t || 'Manuscrit') + (m.folio != null ? ' — f. ' + m.folio + (m.side || '') : '');
+          var sous = [m.arch || '', m.city || '', m.cc || ''].filter(Boolean).join(' · ');
+          if (petit && window.__msChipAttrs) {
+            h += '<span ' + window.__msChipAttrs({
+                apercu: petit, grand: grand, full: grand,
+                titre: titre, sous: sous,
+                lien: m.link || 'https://corpuscoranicum.de', lienTxt: 'site du manuscrit'
+              }) + ' style="pointer-events:auto;cursor:zoom-in;display:inline-block;line-height:0;' +
+              'border-radius:5px;overflow:hidden;border:1px solid rgba(159,224,160,.4)">' +
+              '<img src="' + petit + '" style="width:56px;height:56px;object-fit:cover;display:block" ' +
+              'loading="lazy" onerror="this.parentNode.style.display=\'none\'"></span>';
+          } else {
+            h += '<span title="' + ccEsc(titre) + '" style="display:inline-block;width:56px;height:56px;' +
+                 'border:1px solid #444;border-radius:5px;text-align:center;line-height:56px">📜</span>';
+          }
         });
         h += '</div><a href="https://corpuscoranicum.de/fr/sura/' + sura + '/verse/' + v + '/manuscripts" target="_blank" rel="noopener" style="font-size:10px;color:#9fe0a0">Voir les ' + ve.mss.n + ' manuscrits ↗</a></div>';
       }
@@ -34846,7 +34863,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.425';
+  var STAMPED = '2.0.427';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -46860,7 +46877,7 @@ window.continueTradApart = async function (msgId) {
     panes[0].charger(it.src || it.full);
     var cap = el.querySelector('#msv2-cap');
     cap.innerHTML = '<b>' + esc(it.titre) + '</b>' +
-      (it.lien ? ' — <a href="' + esc(it.lien) + '" target="_blank" rel="noopener">article Wikipédia</a>' : '') +
+      (it.lien ? ' — <a href="' + esc(it.lien) + '" target="_blank" rel="noopener">' + esc(it.lienTxt || 'article Wikipédia') + '</a>' : '') +
       '<div id="msv2-meta" style="opacity:.85;margin-top:2px"></div>';
     chargerMeta(it, function(mm){
       var d = el.querySelector('#msv2-meta');
@@ -46921,6 +46938,22 @@ window.continueTradApart = async function (msgId) {
     var i = 0;
     for (var k = 0; k < list.length; k++) if (list[k].full === full) { i = k; break; }
     items = list; idx = i; cmp = false;
+    creer();
+    el.classList.add('on');
+    el.querySelector('#msv2-p2').style.display = 'none';
+    el.querySelector('[data-a="cmp"]').classList.remove('on');
+    afficher();
+  };
+
+  /* v426 — ouverture d'une liste FOURNIE de l'extérieur. Les témoins du verset
+     (v422) et les manuscrits du Corpus Coranicum ne sont pas des cartes
+     .theo-fig-img : la visionneuse ne doit donc plus dépendre de ce sélecteur
+     pour s'ouvrir. `list` = [{src, full, titre, wiki, lien, lienTxt}, …]. */
+  window.__msv2OuvrirList = function(list, i){
+    if (!list || !list.length) return;
+    items = list.slice();
+    idx = Math.max(0, Math.min(i || 0, items.length - 1));
+    cmp = false;
     creer();
     el.classList.add('on');
     el.querySelector('#msv2-p2').style.display = 'none';
@@ -47005,6 +47038,37 @@ window.continueTradApart = async function (msgId) {
     { p:[41,9,46,41,9,46], n:'Mc 9:46 : omis par Sinaiticus et Vaticanus.' }
   ];
 
+  /* ── v426 — IMAGE de chaque témoin ──
+     `f` = nom du fichier sur Wikimedia Commons, `w` = article Wikipédia.
+     Les 22 entrées ont été VÉRIFIÉES une par une (résolution réelle du
+     fichier + type MIME image + code HTTP 200) : aucune URL devinée.
+     Les images sont chargées à la demande — `Special:FilePath` sert un
+     aperçu à la largeur demandée, jamais le fichier entier. */
+  var MSIMG = {
+    '1QIsaa':   { f:'Great Isaiah Scroll.jpg', w:'Rouleau d\'Isaïe' },
+    '1QpHab':   { f:'The Commentary on Habakkuk Scroll (1QpHab) Written in Hebrew - Google Art Project.jpg', w:'Pesher d\'Habacuc' },
+    'Leningrad':{ f:'Leningrad Codex Folio 040b.jpg', w:'Codex de Léningrad' },
+    'Alep':     { f:'Aleppo Codex (Deut).jpg', w:'Codex d\'Alep' },
+    'P52':      { f:'Papyrus 52.jpg', w:'Papyrus 52' },
+    'P90':      { f:'Oxford, Sackler Library Ms P. Oxy. 3523 (Papyrus 90) recto John 18, 36-19, 1.jpg', w:'Papyrus 90' },
+    'P104':     { f:'Oxford, Sackler Library Ms LXIV 4404 (Papyrus 104) recto Matt 21, 34-37.jpg', w:'Papyrus 104' },
+    'P98':      { f:'Cairo, French Institute for Oriental Archaeology Ms P. IFAO inv. 237b (Papyrus 98) recto Rev 1, 13-2, 1.jpg', w:'Papyrus 98' },
+    'P137':     { f:'Oxford, Sackler Library Ms P. Oxy LXXXIII 5345 (Papyrus 137) recto Mark 1, 7-9 (left) verso Mark 1, 16-18 (right).jpg', w:'Papyrus 137' },
+    'P66':      { f:'Papyrus66.jpg', w:'Papyrus 66' },
+    'P75':      { f:'Vatican, Apostolic Library Ms Hanna Papyrus 1 - Papyrus Bodmer XIV\u2013XV (Papyrus 75) fol 1B9r Luke 14, 3-14.jpg', w:'Papyrus 75' },
+    'P46':      { f:'Ann Arbor, University of Michigan P.Mich.inv. 6238 (Papyrus 46) fol. 142r - 2 Corinthians 11,33-12,9.jpg', w:'Papyrus 46' },
+    'P45':      { f:'Dublin, Chester Beatty Ms Papyrus 45 BP I ff.13-14 Luke 11.50-12.12; 12.18-37; 12.42-13.1; 13.jpg', w:'Papyrus 45' },
+    'P47':      { f:'Papyrus 47 Rev 13,16-14.4.jpg', w:'Papyrus 47' },
+    'P115':     { f:'P. Oxy. LXVI 4499.jpg', w:'Papyrus 115' },
+    '01':       { f:'Codex Sinaiticus Matthew 1,1-2,5.JPG', w:'Codex Sinaiticus' },
+    '02':       { f:'Codex Alexandrinus f41v - Luke.jpg', w:'Codex Alexandrinus' },
+    '03':       { f:'Codex Vaticanus B.jpg', w:'Codex Vaticanus' },
+    '04':       { f:'Codex Ephraemi f52.jpg', w:'Codex Ephraemi Rescriptus' },
+    '05':       { f:'Codex Bezae - Greek Luke 23-47 to 24-1 (The S.S. Teacher\'s Edition-The Holy Bible - Plate XXV).jpg', w:'Codex Bezae' },
+    '032':      { f:'Codex Washingtonensis W 032.JPG', w:'Codex Washingtonianus' },
+    '019':      { f:'Codex Regius (Fin de Marc).png', w:'Codex Regius' }
+  };
+
   function cle(b, c, v){ return b * 1000000 + c * 1000 + v; }
   function dans(pg, b, c, v){
     return cle(pg[0], pg[1], pg[2]) <= cle(b, c, v) && cle(b, c, v) <= cle(pg[3], pg[4], pg[5]);
@@ -47043,8 +47107,27 @@ window.continueTradApart = async function (msgId) {
         var l = parType[tp]; if (!l || !l.length) return;
         h += '<div style="font-size:11.5px;line-height:1.65;margin-bottom:2px;"><span style="color:#9fd0ff;font-weight:700">' + esc(tp) + ' :</span> ';
         h += l.map(function(t){
-          return '<span title="' + esc((t.n ? t.n + ' — ' : '') + t.d) + '" style="cursor:help">' +
-                 esc(t.nom) + ' <span style="color:#8fa3b8">(' + esc(t.d) + (t.frag ? ', fragments' : '') + ')</span></span>';
+          var libelle = esc(t.nom) + ' <span style="color:#8fa3b8">(' + esc(t.d) + (t.frag ? ', fragments' : '') + ')</span>';
+          var bulle = esc((t.n ? t.n + ' — ' : '') + t.d);
+          var im = MSIMG[t.id];
+          /* v426 — l'infobulle du verset étant en `pointer-events:none`, chaque
+             pastille doit RÉACTIVER les événements pour être survolable. */
+          if (!im || !window.__msChipAttrs) {
+            return '<span title="' + bulle + '" style="cursor:help">' + libelle + '</span>';
+          }
+          var attrs = window.__msChipAttrs({
+            apercu: window.__msCommons(im.f, 560),
+            grand:  window.__msCommons(im.f, 1600),
+            full:   window.__msCommons(im.f, 0),
+            titre:  t.nom,
+            sous:   t.d + (t.frag ? ' — fragments' : '') + (t.n ? ' — ' + t.n : ''),
+            wiki:   im.f,
+            lien:   im.w ? 'https://fr.wikipedia.org/wiki/' + encodeURIComponent(im.w) : '',
+            lienTxt: im.w ? 'article Wikipédia' : ''
+          });
+          return '<span ' + attrs + ' style="pointer-events:auto;cursor:zoom-in;' +
+                 'border-bottom:1px dotted rgba(159,208,255,.55)" ' +
+                 'title="' + bulle + ' · clic pour agrandir">' + libelle + '</span>';
         }).join(' · ');
         h += '</div>';
       });
@@ -47058,6 +47141,185 @@ window.continueTradApart = async function (msgId) {
     h += '</div>';
     return h;
   };
+})();
+</script>
+
+<script id="v426-msapercu">
+/* ═══ v426 — APERÇU DES MANUSCRITS AU SURVOL ═══
+   Deux endroits de l'application montrent des manuscrits :
+     • l'infobulle d'un verset BIBLIQUE (module v422) — les témoins textuels
+       (papyrus, codex, rouleaux de Qumrân) ;
+     • l'infobulle d'un verset CORANIQUE (bloc Corpus Coranicum) — les
+       manuscrits du verset.
+   Dans les deux cas : SURVOLER la référence affiche l'IMAGE du manuscrit dans
+   une carte flottante ; un CLIC l'ouvre en grand dans la visionneuse v420
+   (zoom, déplacement, métadonnées Commons, et feuilletage IIIF quand le
+   manuscrit est numérisé).
+
+   POURQUOI une carte FLOTTANTE et en `pointer-events:none` :
+   - l'infobulle n'a AUCUNE hauteur maximale ; un aperçu inséré dedans la
+     ferait déborder de l'écran ;
+   - une carte qui ne capte aucun événement ne peut pas perturber la mécanique
+     de rétention du panneau (v105c), qui juge la position RÉELLE du pointeur
+     avec `elementFromPoint`.
+   ═══ */
+(function(){
+  'use strict';
+  if (window.__msApercu) return; window.__msApercu = true;
+
+  var el = null, tmr = null, visible = false;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* URL d'une image de Wikimedia Commons depuis son nom de fichier.
+     `Special:FilePath` redirige vers le fichier réel : l'URL reste valable
+     même si le fichier est renommé, contrairement à un lien en dur. */
+  function commons(nom, largeur){
+    var base = 'https://commons.wikimedia.org/wiki/Special:FilePath/' +
+               encodeURIComponent(String(nom).replace(/^File:/, ''));
+    return largeur ? base + '?width=' + largeur : base;
+  }
+  window.__msCommons = commons;
+
+  function creer(){
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'ms-apercu';
+    el.style.cssText = 'position:fixed;z-index:2147482500;display:none;pointer-events:none;' +
+      'max-width:324px;padding:8px;border-radius:12px;background:rgba(8,16,28,.97);' +
+      'border:1px solid rgba(245,197,66,.45);box-shadow:0 12px 44px rgba(0,0,0,.72);' +
+      'color:#eaf4ff;font:12px system-ui,Segoe UI,sans-serif;';
+    el.innerHTML =
+      '<img alt="" style="display:block;max-width:308px;max-height:330px;border-radius:8px;background:#05080d">' +
+      '<div id="ms-apercu-t" style="margin-top:6px;font-weight:700;color:#f0d68a;font-size:11.5px;line-height:1.4"></div>' +
+      '<div id="ms-apercu-s" style="margin-top:2px;color:#8fa3b8;font-size:10.5px;line-height:1.45"></div>' +
+      '<div style="margin-top:5px;color:#7fb4ff;font-size:10px;letter-spacing:.4px">🔍 clic = agrandir (zoom, métadonnées)</div>';
+    /* Une image distante peut échouer (réseau, quota) : on le DIT au lieu de
+       laisser un cadre vide, et la carte reste utile (titre + repères). */
+    el.querySelector('img').onerror = function(){
+      this.style.display = 'none';
+      var s = el.querySelector('#ms-apercu-s');
+      if (s) s.textContent = (s.textContent ? s.textContent + ' — ' : '') + 'image indisponible (réseau)';
+    };
+    el.querySelector('img').onload = function(){ this.style.display = 'block'; };
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function montrer(chip, o){
+    creer();
+    var img = el.querySelector('img');
+    if (img.getAttribute('data-k') !== o.apercu) {
+      img.setAttribute('data-k', o.apercu);
+      img.style.display = 'block';      /* on repart d'une image « à charger » */
+      img.src = o.apercu;
+    }
+    el.querySelector('#ms-apercu-t').textContent = o.titre || '';
+    el.querySelector('#ms-apercu-s').textContent = o.sous || '';
+    el.style.display = 'block';
+    visible = true;
+
+    /* On s'ancre au PANNEAU, pas à la pastille : la carte doit rester à côté
+       de l'infobulle, jamais par-dessus le texte du verset. */
+    var panneau = chip.closest && (chip.closest('#bible-verse-tip') ||
+                                   chip.closest('#quran-verse-tip') ||
+                                   chip.closest('#tafsir-verse-tip'));
+    var ancre = panneau ? panneau.getBoundingClientRect() : chip.getBoundingClientRect();
+    var c = chip.getBoundingClientRect();
+    var W = el.offsetWidth || 324, H = el.offsetHeight || 400;
+    var x = ancre.right + 10;
+    if (x + W > window.innerWidth - 8) x = ancre.left - W - 10;
+    if (x < 8) x = Math.max(8, Math.min(window.innerWidth - W - 8, c.left));
+    var y = Math.min(Math.max(8, c.top - 6), Math.max(8, window.innerHeight - H - 8));
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+  }
+  function cacher(){ if (el && visible) { el.style.display = 'none'; visible = false; } }
+
+  /* Fermeture de sécurité : si le pointeur n'est plus sur une pastille (ou si
+     l'infobulle s'est refermée sous le curseur), la carte doit disparaître —
+     sinon elle resterait peinte alors que sa pastille n'existe plus.
+     ATTENTION (mesuré) : les panneaux d'infobulle SONT défilables (le bloc
+     Corpus Coranicum est long). Un `scroll` en capture sur window attrape donc
+     le défilement INTERNE du panneau, qui survient précisément quand on
+     survole une pastille — et masquait la carte aussitôt affichée. On ne
+     réagit qu'aux défilements qui ne viennent PAS d'un panneau. */
+  window.addEventListener('scroll', function(e){
+    var t = e.target;
+    if (t && t.closest && t.closest('#bible-verse-tip,#quran-verse-tip,#tafsir-verse-tip')) return;
+    cacher();
+  }, true);
+  document.addEventListener('mouseleave', cacher);
+
+  /* Attributs communs à toutes les pastilles de manuscrit. Les URLs sont
+     portées par la pastille elle-même : le moteur n'a rien à deviner. */
+  window.__msChipAttrs = function(o){
+    return 'class="ms-chip" data-msapercu="' + esc(o.apercu) + '" ' +
+      'data-msgrand="' + esc(o.grand || o.apercu) + '" ' +
+      'data-msfull="' + esc(o.full || o.grand || o.apercu) + '" ' +
+      'data-mst="' + esc(o.titre || '') + '" data-mss="' + esc(o.sous || '') + '" ' +
+      'data-mslien="' + esc(o.lien || '') + '" data-mslient="' + esc(o.lienTxt || '') + '" ' +
+      'data-mswiki="' + esc(o.wiki || '') + '"';
+  };
+
+  function lire(chip){
+    return {
+      apercu: chip.getAttribute('data-msapercu') || '',
+      grand:  chip.getAttribute('data-msgrand') || '',
+      full:   chip.getAttribute('data-msfull') || '',
+      titre:  chip.getAttribute('data-mst') || '',
+      sous:   chip.getAttribute('data-mss') || '',
+      lien:   chip.getAttribute('data-mslien') || '',
+      lienTxt: chip.getAttribute('data-mslient') || '',
+      wiki:   chip.getAttribute('data-mswiki') || ''
+    };
+  }
+
+  /* Le masquage est DIFFÉRÉ (90 ms) : le temps de traverser le séparateur « · »
+     entre deux pastilles sans faire clignoter la carte. */
+  function armerCache(){
+    if (tmr) clearTimeout(tmr);
+    tmr = setTimeout(function(){ tmr = null; cacher(); }, 90);
+  }
+
+  document.addEventListener('mouseover', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) { armerCache(); return; }          /* on a quitté les pastilles */
+    var o = lire(c);
+    if (!o.apercu) return;
+    if (tmr) { clearTimeout(tmr); tmr = null; }
+    montrer(c, o);
+  }, true);
+
+  document.addEventListener('mouseout', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) return;
+    /* on reste DANS la même pastille (on passe sur son libellé interne) */
+    if (e.relatedTarget && c.contains(e.relatedTarget)) return;
+    armerCache();
+  }, true);
+
+  /* Clic → visionneuse v420, avec TOUS les manuscrits de la même infobulle,
+     pour pouvoir passer de l'un à l'autre avec ‹ ›. */
+  document.addEventListener('click', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) return;
+    var racine = (c.closest && (c.closest('#bible-verse-tip') || c.closest('#quran-verse-tip') ||
+                                c.closest('#tafsir-verse-tip'))) || document;
+    var tous = [];
+    racine.querySelectorAll('.ms-chip').forEach(function(k){
+      var o = lire(k); if (o.apercu) tous.push(o);
+    });
+    var i = 0, cible = c.getAttribute('data-msapercu');
+    for (var k = 0; k < tous.length; k++) if (tous[k].apercu === cible) { i = k; break; }
+    cacher();
+    if (window.__msv2OuvrirList) {
+      window.__msv2OuvrirList(tous.map(function(o){
+        return { src: o.grand || o.apercu, full: o.full || o.grand || o.apercu,
+                 titre: o.titre, wiki: o.wiki, lien: o.lien, lienTxt: o.lienTxt };
+      }), i);
+    }
+    e.preventDefault();
+  }, true);
 })();
 </script>
 
