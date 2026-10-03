@@ -26306,6 +26306,8 @@ function initBibleVerseTooltip() {
     if (!verses) { showMissing(el, p); return; }
     let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ ' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
+    /* v422 — TÉMOINS du verset (papyrus, codex, rouleaux) + variantes notables */
+    try { if (window.__msRefHtml) html += window.__msRefHtml(p); } catch(e){}
     /* v89 — emplacement du mot a mot hebreu, rempli a la volee. */
     html += '<div id="hb-slot"></div>';
     /* v204 — récits de Maria Valtorta concordés avec le passage (chips
@@ -46936,6 +46938,124 @@ window.continueTradApart = async function (msgId) {
     var t = e.target;
     if (t && t.tagName === 'IMG' && t.closest && t.closest('.theo-fig-img')) { e.preventDefault(); window.__msv2Ouvrir(t); }
   });
+})();
+</script>
+
+<script id="v422-temoins">
+/* ═══ v422 — TÉMOINS DU VERSET (critique textuelle) ═══
+   Dans l'infobulle d'un verset biblique, liste les manuscrits qui contiennent
+   RÉELLEMENT ce verset — rouleaux de Qumrân, codex hébreux, papyrus et grands
+   codex grecs — puis signale les VARIANTES notables (fin longue de Marc,
+   femme adultère, Comma Johanneum…).
+
+   Plages = [livre, chap1, vers1, chap2, vers2] avec la numérotation de l'appli
+   (1-39 Ancien Testament, 40-66 Nouveau Testament). `e` = lacunes à retirer.
+   Les témoins fragmentaires portent la mention « fragments ».
+
+   Ces données suivent l'apparat critique standard (Nestle-Aland 28 / UBS5).
+   Elles disent ce que les manuscrits CONTIENNENT, pas une leçon variante
+   précise : c'est un repère d'étude, pas un apparat complet. */
+(function(){
+  'use strict';
+  if (window.__v422) return; window.__v422 = true;
+
+  var TEMOINS = [
+    /* ── Rouleaux de Qumrân (Ancien Testament hébreu) ── */
+    { id:'1QIsaa', nom:'1QIsaᵃ — grand rouleau d\'Isaïe', d:'c. 125 av. J.-C.', t:'Qumrân', n:'le plus ancien manuscrit hébreu d\'Isaïe presque complet', p:[[23,1,1,23,66,24]] },
+    { id:'1QpHab', nom:'1QpHab — pesher d\'Habacuc', d:'Ier s. av. J.-C.', t:'Qumrân', n:'commentaire de Habacuc 1-2', p:[[35,1,1,35,2,20]] },
+    /* ── Codex hébreux (texte massorétique) ── */
+    { id:'Leningrad', nom:'Codex Leningradensis (B19a)', d:'1008', t:'Codex hébreu', n:'base du texte massorétique utilisé par cette application', p:[[1,1,1,39,31,24]] },
+    { id:'Alep', nom:'Codex d\'Alep', d:'c. 920', t:'Codex hébreu', n:'partiel — une grande partie du manuscrit est perdue', frag:1, p:[[1,1,1,39,31,24]] },
+    /* ── Papyrus (Nouveau Testament grec) ── */
+    { id:'P52', nom:'𝔓52 (Papyrus Rylands 457)', d:'c. 125-175', t:'Papyrus', n:'le plus ancien fragment connu du Nouveau Testament', p:[[43,18,31,43,18,33],[43,18,37,43,18,38]] },
+    { id:'P90', nom:'𝔓90 (P. Oxy. 3523)', d:'IIe s.', t:'Papyrus', p:[[43,18,36,43,19,7]] },
+    { id:'P104', nom:'𝔓104 (P. Oxy. 4404)', d:'IIe s.', t:'Papyrus', p:[[40,21,34,40,21,37],[40,21,43,40,21,45]] },
+    { id:'P98', nom:'𝔓98 (P. IFAO 237b)', d:'IIe s.', t:'Papyrus', p:[[66,1,13,1,20]] },
+    { id:'P137', nom:'𝔓137 (P. Oxy. 5345)', d:'IIe-IIIe s.', t:'Papyrus', p:[[41,1,7,41,1,9],[41,1,16,41,1,18]] },
+    { id:'P66', nom:'𝔓66 (Papyrus Bodmer II)', d:'c. 200', t:'Papyrus', n:'Jean', p:[[43,1,1,43,6,11],[43,6,35,43,14,26],[43,14,29,43,21,9]] },
+    { id:'P75', nom:'𝔓75 (Bodmer XIV-XV)', d:'c. 175-225', t:'Papyrus', n:'Luc et Jean', p:[[42,3,18,42,18,18],[42,22,4,42,24,53],[43,1,1,43,11,45],[43,11,48,43,15,10]] },
+    { id:'P46', nom:'𝔓46 (Chester Beatty II)', d:'c. 200', t:'Papyrus', n:'épîtres de Paul — fragments', frag:1, p:[[45,5,17,45,16,27],[46,1,1,46,16,24],[47,1,1,47,13,14],[48,1,1,48,6,18],[49,1,1,49,6,24],[50,1,1,50,4,23],[51,1,1,51,4,18],[52,1,1,52,5,28],[58,1,1,58,13,25]] },
+    { id:'P45', nom:'𝔓45 (Chester Beatty I)', d:'IIIe s.', t:'Papyrus', n:'Évangiles — fragments', frag:1, p:[[40,20,1,40,26,75],[41,4,36,41,12,44],[42,6,31,42,14,35],[43,4,51,43,21,25]] },
+    { id:'P47', nom:'𝔓47 (Chester Beatty III)', d:'IIIe s.', t:'Papyrus', n:'Apocalypse', p:[[66,9,10,66,17,2]] },
+    { id:'P115', nom:'𝔓115 (P. Oxy. 4499)', d:'IIIe-IVe s.', t:'Papyrus', n:'Apocalypse — fragments', frag:1, p:[[66,2,1,66,3,22],[66,5,8,66,6,5],[66,8,3,66,8,13],[66,9,1,66,15,7]] },
+    /* ── Grands codex (grec) ── */
+    { id:'01', nom:'Codex Sinaiticus (01, ℵ)', d:'IVe s.', t:'Codex', n:'Bible entière (AT grec + NT) ; la fin longue de Marc et la femme adultère n\'y sont que des AJOUTS d\'un correcteur', p:[[1,1,1,66,22,21]], e:[[41,16,9,41,16,20],[43,7,53,43,8,11]] },
+    { id:'02', nom:'Codex Alexandrinus (02, A)', d:'Ve s.', t:'Codex', n:'lacunes : Mt 1–25:5, Jn 6:50–8:52, 2Co 4:13–12:6', p:[[1,1,1,66,22,21]], e:[[40,1,1,40,25,5],[43,6,50,43,8,52],[47,4,13,47,12,6]] },
+    { id:'03', nom:'Codex Vaticanus (03, B)', d:'IVe s.', t:'Codex', n:'NT jusqu\'à He 9:13 (au-delà : Pastorales, Philémon, Apocalypse absents) ; l\'évangile de Marc s\'arrête à 16:8', p:[[1,1,1,58,9,13]], e:[[41,16,9,41,16,20],[43,7,53,43,8,11]] },
+    { id:'04', nom:'Codex Ephraemi (04, C)', d:'Ve s.', t:'Codex', n:'palimpseste — portions de presque tous les livres du NT', frag:1, p:[[40,1,1,66,22,21]] },
+    { id:'05', nom:'Codex Bezae (05, D)', d:'Ve s.', t:'Codex', n:'Évangiles et Actes — texte « occidental », grec-latin', p:[[40,1,1,44,28,31]] },
+    { id:'032', nom:'Codex Washingtonianus (032, W)', d:'Ve s.', t:'Codex', n:'Évangiles', p:[[40,1,1,43,21,25]] },
+    { id:'019', nom:'Codex Regius (019, L)', d:'VIIIe s.', t:'Codex', n:'Évangiles', p:[[40,1,1,43,21,25]] }
+  ];
+
+  var VARIANTES = [
+    { p:[41,16,9,41,16,20], n:'Fin longue de Marc (16:9-20) : ABSENTE des plus anciens témoins (Sinaiticus 01, Vaticanus 03) ; présente chez Alexandrinus (02), Bezae (05) et dans la tradition byzantine.' },
+    { p:[43,7,53,43,8,11], n:'La femme adultère (7:53–8:11) : ABSENTE des plus anciens témoins (𝔓66, 𝔓75, Sinaiticus, Vaticanus) ; présente chez Bezae (05). Certains manuscrits la placent ailleurs (après Lc 21:38).' },
+    { p:[62,5,7,62,5,8], n:'« Comma Johanneum » (1 Jn 5:7-8) : absent de TOUS les manuscrits grecs antérieurs au XVIᵉ siècle ; il n\'apparaît que dans des témoins grecs tardifs et la Vulgate récente.' },
+    { p:[44,8,37,44,8,37], n:'Ac 8:37 : omis par 𝔓45, 𝔓74, Sinaiticus, Vaticanus et Alexandrinus — verset probablement ajouté.' },
+    { p:[42,22,43,42,22,44], n:'Lc 22:43-44 (agonie, sueur de sang) : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus ; présent chez Bezae (05).' },
+    { p:[43,5,4,43,5,4], n:'Jn 5:4 (l\'ange agitant l\'eau) : omis par 𝔓66, 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[42,23,17,42,23,17], n:'Lc 23:17 : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[42,17,36,42,17,36], n:'Lc 17:36 : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[40,17,21,40,17,21], n:'Mt 17:21 : omis par Sinaiticus et Vaticanus ; présent chez Bezae (05).' },
+    { p:[40,18,11,40,18,11], n:'Mt 18:11 : omis par Sinaiticus et Vaticanus.' },
+    { p:[41,9,44,41,9,44], n:'Mc 9:44 : omis par Sinaiticus et Vaticanus.' },
+    { p:[41,9,46,41,9,46], n:'Mc 9:46 : omis par Sinaiticus et Vaticanus.' }
+  ];
+
+  function cle(b, c, v){ return b * 1000000 + c * 1000 + v; }
+  function dans(pg, b, c, v){
+    return cle(pg[0], pg[1], pg[2]) <= cle(b, c, v) && cle(b, c, v) <= cle(pg[3], pg[4], pg[5]);
+  }
+  function couvert(t, b, c, v){
+    var dedans = false;
+    (t.p || []).forEach(function(pg){ if (dans(pg, b, c, v)) dedans = true; });
+    if (!dedans) return false;
+    (t.e || []).forEach(function(pg){ if (dans(pg, b, c, v)) dedans = false; });
+    return dedans;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var ORDRE = ['Qumrân', 'Codex hébreu', 'Papyrus', 'Codex'];
+
+  window.__msRefHtml = function(p){
+    var b = parseInt(p && p.book, 10);
+    var c = parseInt(p && p.ch, 10);
+    var v = parseInt(p && p.v1, 10);
+    if (!b || !c || !v) return '';
+
+    var parType = {};
+    TEMOINS.forEach(function(t){
+      if (!couvert(t, b, c, v)) return;
+      (parType[t.t] = parType[t.t] || []).push(t);
+    });
+    var notes = VARIANTES.filter(function(x){ return dans(x.p, b, c, v); });
+    var total = 0;
+    Object.keys(parType).forEach(function(k){ total += parType[k].length; });
+    if (!total && !notes.length) return '';
+
+    var h = '<div style="margin-top:9px;padding-top:7px;border-top:1px dashed rgba(245,197,66,.4)">';
+    if (total) {
+      h += '<div style="color:#f0c060;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📜 Témoins de ce verset</div>';
+      ORDRE.forEach(function(tp){
+        var l = parType[tp]; if (!l || !l.length) return;
+        h += '<div style="font-size:11.5px;line-height:1.65;margin-bottom:2px;"><span style="color:#9fd0ff;font-weight:700">' + esc(tp) + ' :</span> ';
+        h += l.map(function(t){
+          return '<span title="' + esc((t.n ? t.n + ' — ' : '') + t.d) + '" style="cursor:help">' +
+                 esc(t.nom) + ' <span style="color:#8fa3b8">(' + esc(t.d) + (t.frag ? ', fragments' : '') + ')</span></span>';
+        }).join(' · ');
+        h += '</div>';
+      });
+    }
+    notes.forEach(function(x){
+      h += '<div style="margin-top:6px;font-size:11.5px;color:#ffcf8a;background:rgba(245,197,66,.09);' +
+           'border-left:3px solid #f5c542;padding:5px 9px;border-radius:0 6px 6px 0">' +
+           '⚠️ <b>Variante notable</b> — ' + esc(x.n) + '</div>';
+    });
+    h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Repères d\'après l\'apparat critique standard (Nestle-Aland 28 / UBS5).</div>';
+    h += '</div>';
+    return h;
+  };
 })();
 </script>
 </body>
