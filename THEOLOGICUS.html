@@ -3144,6 +3144,18 @@ input[type="checkbox"]:active{ transform:scale(.88); }
   background: linear-gradient(135deg,#e8c65a,#b8902f); color:#1a1206; border:none; border-radius:6px;
   font-weight:700; cursor:pointer; padding:0 12px; font-size:14px;
 }
+.learning-hard {
+  font-family: var(--font-mono); font-size:9px; color:#ff6b6b; font-weight:700;
+  border:1px solid rgba(255,107,107,.5); border-radius:4px; padding:1px 6px;
+}
+.rule-warnings {
+  margin: 10px 0 4px; padding: 8px 10px; border-left: 3px solid #ff6b6b;
+  background: rgba(255,107,107,.08); border-radius: 4px;
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+}
+.rule-warn-title { font-weight: 700; color: #ff6b6b; margin-bottom: 4px; }
+.rule-warn-item { color: var(--text); }
+.rule-warn-why { color: var(--text-dim); }
 .memory-input {
   display: flex;
   gap: 7px;
@@ -13579,11 +13591,13 @@ function renderLearningsList(catFilter) {
       <div class="learning-head">
         <span class="learning-cat">${l.category}</span>
         ${l.recurrence > 1 ? `<span class="learning-rec" title="Récurrence">↻${l.recurrence}</span>` : ''}
+        ${l.hard ? `<span class="learning-hard" title="Règle STRICTE (non négociable + vérifiée en sortie)">🛡 DURE</span>` : ''}
         ${l.promoted ? `<span class="learning-promo" title="Règle durable promue">★ PROMU</span>` : ''}
       </div>
       <div class="learning-content">${escapeHtml(l.content)}</div>
       <div class="learning-actions">
         <button onclick="window.learningsTogglePromote('${l.id}')">${l.promoted ? '★ Unpromote' : '☆ Promouvoir'}</button>
+        <button onclick="window.learningsToggleHard('${l.id}')">${l.hard ? '🛡 Mou' : '🛡 Dur'}</button>
         <button onclick="window.learningsDelete('${l.id}')">✕</button>
       </div>
     </div>`).join('');
@@ -13615,6 +13629,7 @@ const learnings = {
       recurrence: 1,
       promoted: false,
       promotedAt: null,
+      hard: false,
       created: nowTs, updated: nowTs
     };
     await db.put('learnings', entry);
@@ -13639,6 +13654,15 @@ const learnings = {
     await db.put('learnings', l);
     renderLearningsList();
   },
+  // Une règle DURE est toujours promue (injectée) ; elle est en plus vérifiée en sortie.
+  setHard: async (id, val) => {
+    const l = (state.learnings || []).find(x => x.id === id);
+    if (!l) return;
+    l.hard = !!val;
+    if (l.hard && !l.promoted) { l.promoted = true; l.promotedAt = now(); }
+    await db.put('learnings', l);
+    renderLearningsList();
+  },
   // Renvoie les chaînes à injecter dans le system prompt. Les apprentissages
   // PROMUS sont TOUJOURS inclus (règles durables) ; les autres sont filtrés
   // par pertinence par rapport à la dernière question de l'utilisateur.
@@ -13646,7 +13670,8 @@ const learnings = {
     const list = state.learnings || [];
     if (!list.length) return [];
     const q = (query || (state.messages || []).filter(m => m.role === 'user').slice(-1)[0]?.content || '').toLowerCase();
-    const promoted = list.filter(l => l.promoted).map(l => `[APPRENTISSAGE·${l.category}·PROMU] ${l.content}`);
+    // Les règles DURES vont dans le bloc strict séparé ; ici on ne garde que les promues NON dures.
+    const promoted = list.filter(l => l.promoted && !l.hard).map(l => `[APPRENTISSAGE·${l.category}·PROMU] ${l.content}`);
     const candidates = list.filter(l => !l.promoted);
     const scored = candidates.map(l => {
       const hay = ((l.content || '') + ' ' + (l.tags || []).join(' ')).toLowerCase();
@@ -13663,7 +13688,11 @@ const learnings = {
       .slice(0, limit)
       .map(x => `[APPRENTISSAGE·${x.l.category}] ${x.l.content}`);
     return [...promoted, ...scored].slice(0, limit + 4);
-  }
+  },
+  // Règles DURES : promues ET marquées hard → injectées dans un bloc strict + vérifiées en sortie.
+  getHardRules: () => (state.learnings || [])
+    .filter(l => l.promoted && l.hard)
+    .map(l => `[RÈGLE DURE·${l.category}] ${l.content}`)
 };
 
 // ── Actions exposées (clics depuis le rendu messages / panneau) ──
@@ -13679,6 +13708,10 @@ window.learnFromMessage = async ts => {
 window.learningsTogglePromote = id => {
   const l = (state.learnings || []).find(x => x.id === id);
   if (l) learnings.setPromoted(id, !l.promoted);
+};
+window.learningsToggleHard = id => {
+  const l = (state.learnings || []).find(x => x.id === id);
+  if (l) learnings.setHard(id, !l.hard);
 };
 window.learningsDelete = id => { learnings.remove(id); };
 
@@ -13703,6 +13736,38 @@ window.learningsReflect = async () => {
     }
     toast(n ? `⚡ ${n} apprentissage(s) extrait(s) de la conversation` : 'Aucun apprentissage détecté', n ? 'success' : 'info');
   } catch (e) { toast('Réflexion échouée : ' + (e && e.message ? e.message : e), 'error'); }
+};
+
+// ── Vérification best-effort des règles DURES en sortie (NON bloquante) ──
+// Tourne en arrière-plan APRÈS le rendu : la réponse arrive immédiatement,
+// l'avertissement apparaît quelques secondes plus tard si violation.
+// Chaque message assistant n'est vérifié qu'une fois (gardé par m._ruleChecked).
+window.verifyHardRules = async () => {
+  const hard = (state.learnings || []).filter(l => l.promoted && l.hard);
+  if (!hard.length) return;
+  const last = [...(state.messages || [])].reverse().find(m => m.role === 'assistant' && typeof m.content === 'string');
+  if (!last || last._ruleChecked) return;
+  last._ruleChecked = true; // anti-doublon immédiat (le check LLM est asynchrone)
+  const cfg = resolveModelConfig(state.model);
+  if (!cfg.apiKey) return;
+  const rules = hard.map(l => '- ' + l.content).join('\n');
+  const sys = `Tu es un vérificateur de conformité pour un assistant théologique. On te donne des RÈGLES STRICTES et une RÉPONSE. Détermine si la réponse viole l'une de ces règles. Réponds STRICTEMENT en JSON valide, sans texte autour : {"violations":[{"rule":"<texte exact de la règle violée>","why":"<raison courte>"}]}. Si aucune violation, {"violations":[]}.`;
+  try {
+    const reply = await callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: `RÈGLES STRICTES :\n${rules}\n\nRÉPONSE À VÉRIFIER :\n${last.content}` }], { temperature: 0, max_tokens: 800 });
+    const m = reply.match(/\{[\s\S]*\}/);
+    const data = m ? JSON.parse(m[0]) : null;
+    const v = (data && data.violations) || [];
+    if (!v.length) return;
+    last.ruleWarnings = v.map(x => (x.rule || '') + (x.why ? ' — ' + x.why : ''));
+    const msgEl = document.getElementById('mc-' + (last.ts || ''))?.closest('.message');
+    if (msgEl) {
+      let warn = msgEl.querySelector('.rule-warnings');
+      if (!warn) { warn = document.createElement('div'); warn.className = 'rule-warnings'; msgEl.appendChild(warn); }
+      warn.innerHTML = '<div class="rule-warn-title">⚠️ Règle(s) stricte(s) potentiellement non respectée(s) :</div>' +
+        v.map(x => `<div class="rule-warn-item">• ${escapeHtml(x.rule || '')}${x.why ? ` <span class="rule-warn-why">(${escapeHtml(x.why)})</span>` : ''}</div>`).join('');
+    }
+    toast('⚠️ ' + v.length + ' règle(s) stricte(s) potentiellement violée(s)', 'warning');
+  } catch (e) { /* best-effort : silence */ }
 };
 
 // ── Câblage de l'UI du panneau apprentissages ──
@@ -16154,6 +16219,9 @@ function renderMessages(scrollToTop) {
       }).catch(() => { if (lastMsg) lastMsg._sugLoading = false; });
     }
   }
+
+  // ── Vérification best-effort des règles dures (non bloquante, 1×/message) ──
+  if (typeof window.verifyHardRules === 'function') window.verifyHardRules();
 
   /* Ré-applique les surlignages persistants (msg.marks) après chaque re-rendu — corrige la perte au F5/loadChat */
   if (typeof window.__applyMarks === 'function') {
@@ -19118,7 +19186,10 @@ Les suggestions doivent :
   if (rel.length) prompt += `\n\n[MÉMOIRE GLOBALE ACTIVE]\n${rel.join('\n')}`;
   // ── SELF-IMPROVEMENT : rappelle les règles apprises (promues + pertinentes) ──
   const relL = learnings.getRelevant(null, 6);
-  if (relL.length) prompt += `\n\n[APPRENTISSAGES ACTIFS — règles que l'assistant a apprises au fil des conversations]\n${relL.join('\n')}`;
+  if (relL.length) prompt += `\n\n[APPRENTISSAGES ACTIFS — règles apprises (guidage souple)]\n${relL.join('\n')}`;
+  // ── RÈGLES DURES : bloc strict, non négociable, vérifié en sortie ──
+  const hardR = learnings.getHardRules();
+  if (hardR.length) prompt += `\n\n[RÈGLES STRICTES — NON NÉGOCIABLES, À RESPECTER IMPÉRATIVEMENT]\n${hardR.join('\n')}\nSi une réponse risque de violer l'une de ces règles, ne la donne pas : corrige-toi avant.`;
   prompt += "\n\nRéponds dans la langue de l'utilisateur. Sois précis, structuré et professionnel.";
   return prompt;
 }
