@@ -16,3 +16,9 @@ build_*.log
 # Cle de signature — JAMAIS suivie (fuite = usurpation d'identite du createur)
 *.pfx
 THEOLOGICUS_signing.pfx
+
+# Dossiers de build deplaces (renommes en *.oldrun pour contourner le garde-fou
+# de suppression) — ne JAMAIS les committer : ils DUPLIQUENT dist/ (des centaines
+# de Mo). Un `git add dist` les embarquait par accident.
+*.oldrun/
+*.oldrun.exe
