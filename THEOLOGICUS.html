@@ -3104,6 +3104,11 @@ input[type="checkbox"]:active{ transform:scale(.88); }
   background: transparent; border:1px solid var(--wire); color: var(--text-dim);
 }
 .learnings-toolbar .btn-ghost:hover { border-color:#e8c65a; color:#e8c65a; }
+.learn-autofix {
+  display:flex; align-items:center; gap:5px; margin-bottom:10px;
+  font-family: var(--font-mono); font-size:10px; color: var(--text-dim); cursor:pointer;
+}
+.learn-autofix input { accent-color:#e8c65a; cursor:pointer; }
 .learnings-filter { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
 .lf-btn {
   padding:3px 7px; font-family: var(--font-mono); font-size:9px; border-radius:10px; cursor:pointer;
@@ -8250,6 +8255,9 @@ window.__ensureTafsirSurah = function(p){
       <button class="btn-ghost" id="learnings-reflect" title="Extraire les apprentissages de la conversation via le LLM">⚡ Réflexion</button>
       <button class="btn-ghost" id="learnings-clear" title="Effacer tous les apprentissages">Effacer</button>
     </div>
+    <label class="learn-autofix" title="Régénère automatiquement la réponse si une règle stricte est violée (1 appel LLM de plus, en arrière-plan)">
+      <input type="checkbox" id="learnings-autofix"> Auto-corriger la réponse si violation
+    </label>
     <div class="learnings-filter" id="learnings-filter">
       <button class="lf-btn active" data-cat="all">Tous</button>
       <button class="lf-btn" data-cat="correction">Correction</button>
@@ -13767,8 +13775,37 @@ window.verifyHardRules = async () => {
         v.map(x => `<div class="rule-warn-item">• ${escapeHtml(x.rule || '')}${x.why ? ` <span class="rule-warn-why">(${escapeHtml(x.why)})</span>` : ''}</div>`).join('');
     }
     toast('⚠️ ' + v.length + ' règle(s) stricte(s) potentiellement violée(s)', 'warning');
+    // ── Correction automatique (opt-in via la case « Auto-corriger ») ──
+    if (localStorage.getItem('theologicus_learnings_autofix') === '1') {
+      await _regenerateRespectingHardRules(last, v, hard);
+    }
   } catch (e) { /* best-effort : silence */ }
 };
+
+// Régénère une réponse corrigée qui respecte les règles dures violées.
+// Appelé en arrière-plan (non bloquant) UNIQUEMENT si l'option est activée.
+// Le garde _ruleChecked empêche toute boucle de re-vérification.
+async function _regenerateRespectingHardRules(lastMsg, violations, hardRules) {
+  try {
+    const cfg = resolveModelConfig(state.model);
+    if (!cfg.apiKey) return;
+    const rules = hardRules.map(l => '- ' + l.content).join('\n');
+    const violated = violations.map(x => '- ' + (x.rule || '')).join('\n');
+    const sys = buildSystemPrompt();
+    const hist = (state.messages || []).filter(m => m.role !== 'system' && m !== lastMsg).slice(-20).map(m => ({ role: m.role, content: m.content }));
+    const instr = `Ta réponse précédente a violé ces RÈGLES STRICTES :\n${violated}\n\nRÈGLES STRICTES À RESPECTER IMPÉRATIVEMENT :\n${rules}\n\nRégénère une réponse CORRIGÉE et complète qui respecte toutes ces règles. Ne mentionne PAS la correction ni la réponse précédente. Réponds directement.`;
+    const fixed = await callLLM(cfg, [{ role: 'system', content: sys }, ...hist, { role: 'user', content: instr }], { temperature: 0.3, max_tokens: 4096 });
+    if (!fixed || !String(fixed).trim()) return;
+    lastMsg.originalContent = lastMsg.content;
+    lastMsg.content = fixed;
+    lastMsg.ruleWarnings = [];
+    lastMsg.autofixed = true;
+    markChatDirty();
+    await saveChat();
+    if (typeof renderMessages === 'function') renderMessages();
+    toast('🛠 Réponse régénérée automatiquement (règle stricte)', 'success');
+  } catch (e) { /* best-effort : silence */ }
+}
 
 // ── Câblage de l'UI du panneau apprentissages ──
 function bindLearningsUI() {
@@ -13810,6 +13847,15 @@ function bindLearningsUI() {
   };
   const refBtn = document.getElementById('learnings-reflect');
   if (refBtn) refBtn.onclick = () => window.learningsReflect();
+  // Case « Auto-corriger » : régénère la réponse si une règle stricte est violée
+  const af = document.getElementById('learnings-autofix');
+  if (af) {
+    af.checked = localStorage.getItem('theologicus_learnings_autofix') === '1';
+    af.onchange = () => {
+      localStorage.setItem('theologicus_learnings_autofix', af.checked ? '1' : '0');
+      toast(af.checked ? 'Auto-correction ACTIVÉE (1 appel LLM de plus en arrière-plan si violation)' : 'Auto-correction désactivée', 'info');
+    };
+  }
   document.querySelectorAll('#learnings-filter .lf-btn').forEach(btn => {
     btn.onclick = () => {
       document.querySelectorAll('#learnings-filter .lf-btn').forEach(b => b.classList.remove('active'));
