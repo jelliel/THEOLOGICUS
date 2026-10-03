@@ -1,0 +1,2 @@
+window.__denzingerWorks = window.__denzingerWorks || {};
+window.__denzingerWorks["dz_003"] = {"id":"dz_003","a":"Denzinger (1819-1883) — 11e éd., Bannwart S.J., 1911","t":"S. PETRUS APOSTOLUS (?)-67(?)","u":"https://archive.org/details/enchiridionsymbo01denz","c":[{"t":"S. PETRUS APOSTOLUS (?)-67(?)","s":[{"t":"S. PETRUS APOSTOLUS (?)-67(?)","p":["sub cuius nomine exstant duae epistolae canonicae."]}]}]};

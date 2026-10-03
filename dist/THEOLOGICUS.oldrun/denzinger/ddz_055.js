@@ -1,0 +1,2 @@
+window.__denzingerWorks = window.__denzingerWorks || {};
+window.__denzingerWorks["dz_055"] = {"id":"dz_055","a":"Denzinger (1819-1883) — 11e éd., Bannwart S.J., 1911","t":"STEPHANUS V 816—817. VALENTINUS 827","u":"https://archive.org/details/enchiridionsymbo01denz","c":[{"t":"STEPHANUS V 816—817. VALENTINUS 827","s":[{"t":"STEPHANUS V 816—817. VALENTINUS 827","p":["S. PASCHALIS I 817—824. GREGORIUS IV 828—844."]}]}]};

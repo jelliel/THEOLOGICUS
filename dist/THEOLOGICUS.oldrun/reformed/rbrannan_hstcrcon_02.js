@@ -1,0 +1,2 @@
+window.__reformedWorks = window.__reformedWorks || {};
+window.__reformedWorks["brannan_hstcrcon_02"] = {"id":"brannan_hstcrcon_02","a":"Brannan, Rick","t":"Apostles' Creed","u":"https://ccel.org/ccel/brannan/hstcrcon","c":[{"t":"Apostles' Creed","s":[{"t":"","p":["Philip Schaff, The Creeds of Christendom, Volume 1: The History of Creeds, pp 14–15.(Grand Rapids, MI: Baker Books) 1983.","The simple doctrinal statements within this creed are clear and concise, and their meaning cannot be misconstrued."]}]}]};

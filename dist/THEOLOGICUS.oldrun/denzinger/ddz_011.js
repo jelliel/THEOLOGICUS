@@ -1,0 +1,2 @@
+window.__denzingerWorks = window.__denzingerWorks || {};
+window.__denzingerWorks["dz_011"] = {"id":"dz_011","a":"Denzinger (1819-1883) — 11e éd., Bannwart S.J., 1911","t":"S. MARCELLINUS 296—304","u":"https://archive.org/details/enchiridionsymbo01denz","c":[{"t":"S. MARCELLINUS 296—304","s":[{"t":"S. MARCELLINUS 296—304","p":["6 Tou 0eoO dibio^ xKoc^ ym XoTO^, Kai ouK dvepujrro^ utt6 0eou dvaXn^eei^, V 6e Tdp dvepujTTOv dveXapev 6 Tou 0eoO uio^, iva fj eTepo<s Trap' auTOv* dXXd 0e6g ujv TeXeio^, T^TOvev d|Lia Kai TeXeio^ dvepujiro^, 0\"apKUjeei<^ ^K TTapeevou."]}]}]};
