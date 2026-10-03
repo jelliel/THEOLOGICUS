@@ -26586,7 +26586,10 @@ function initQuranVerseTooltip() {
       /* v88 : le verset arabe devient une suite de mots reperes.
          Sans __qwMots (module pas encore charge) on garde le texte tel
          quel : l'infobulle reste lisible en toutes circonstances. */
-      if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
+      if (v.a) {
+        html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
+        html += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left;margin:2px 0 6px;">arabe ⟵ lecture de droite à gauche — survolez un mot</div>';
+      }
     });
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
     /* v215 — bloc Corpus Coranicum (rempli de façon asynchrone) */
@@ -36185,7 +36188,27 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         var t = parts[k];
         if (!t) continue;
         if (SIG.test(t)) { out.push(t); continue; }
-        out.push('<span class="qw" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' + t + '</span>');
+        out.push('<span class="qw" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' +
+                 '<span class="qw-h">' + t + '</span></span>');
+      }
+      /* v412 — translittération SOUS chaque mot arabe (comme l'hébreu/grec).
+         quranwbw/qN.js : __quranWbw[s][v][i] = [glose(en), translittération]. */
+      if (window.__ensureQuranWbw) {
+        window.__ensureQuranWbw(s).then(function (ok) {
+          if (!ok) return;
+          var arr = (window.__quranWbw && window.__quranWbw[s] && window.__quranWbw[s][v]) || null;
+          if (!arr) return;
+          document.querySelectorAll('.qw[data-s="' + s + '"][data-v="' + v + '"]').forEach(function (el) {
+            if (el.querySelector('.qw-t')) return;
+            var e = arr[parseInt(el.getAttribute('data-i'), 10)];
+            var tr = e ? (e[1] || '') : '';
+            if (!tr) return;
+            var sp = document.createElement('span');
+            sp.className = 'qw-t';
+            sp.textContent = tr;
+            el.appendChild(sp);
+          });
+        });
       }
       return out.join(' ');
     };
@@ -36193,8 +36216,13 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v88-arabe-css';
     style.textContent =
-      '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);}' +
+      '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);display:inline-block;' +
+      'text-align:center;vertical-align:top;padding:0 2px;}' +
+      '.qw .qw-h{display:block;}' +
+      '.qw .qw-t{display:block;font-size:9.5px;color:#c9b06a;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.qw:hover,.qw.qw-actif{background:rgba(245,197,66,0.22);border-bottom-color:#f5c542;}' +
+      '.qw:hover .qw-t,.qw.qw-actif .qw-t{color:#f5e6b0;}' +
       /* v96 — var(--z-mot) : la fiche doit passer AU-DESSUS du panneau du
          verset coranique, qui est a var(--z-panneau). Les deux sont des
          elements de premier niveau (rattaches a document.body), leurs
@@ -36951,7 +36979,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           });
           if (mots.length) {
             html += '<div class="hb-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="hb-sous">hébreu — verset ' + n +
+            html += '<div class="hb-sous">hébreu ⟵ lecture de droite à gauche — verset ' + n +
               ' — survolez un mot</div>';
           }
         }
@@ -37245,7 +37273,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           });
           if (mots.length) {
             html += '<div class="gr-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="gr-sous">grec — verset ' + n +
+            html += '<div class="gr-sous">grec ⟶ lecture de gauche à droite — verset ' + n +
               ' — survolez un mot</div>';
           } else {
             manquants.push(n);
@@ -37384,7 +37412,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
     function afficher(mot, cle) {
       var a = (window.__latinMots || {})[cle] || [];
-      var h = '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
+      var h = '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;">latin ⟶ lecture de gauche à droite</div>' +
+        '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
       if (!a.length) {
         /* OCR de 1911 ou mot absent du dictionnaire : on le DIT. */
         h += '<div class="lat-lig">Aucune analyse disponible pour cette ' +
