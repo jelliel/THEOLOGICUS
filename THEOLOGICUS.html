@@ -34865,7 +34865,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.403';
+  var STAMPED = '2.0.404';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -47445,21 +47445,34 @@ window.continueTradApart = async function (msgId) {
     h += '<div id="asbab-src"></div>';
 
     h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Chronologie : ordre égyptien standard. ' +
-         'Asbāb al-nuzūl : traditions exégétiques (al-Wāḥidī, Ibn Ḥajar, Ṭabarī) — récits rapportés, non faits établis.</div>';
+         'Asbāb al-nuzūl : corpus complet (الواحدي، السيوطي، ابن حجر، المحرر، الصحيح المسند، الاستيعاب) — ' +
+         'traditions narratives rapportées, non faits établis.</div>';
     h += '</div>';
     return h;
   };
 
-  /* ═══ v428 — LA SOURCE PRIMAIRE : al-Wāḥidī, « Asbāb al-Nuzūl » ═══
-     Les notices ci-dessus sont des RÉSUMÉS français, écrits pour les versets
-     les plus étudiés : 176 versets sur 6236 — c'est trop peu, et c'est
-     exactement ce qui manquait à l'usage.
-     Ici on charge le RECUEIL lui-même : أسباب النزول d'Abū al-Ḥasan al-Wāḥidī
-     (m. 468 H), édition d'Isām ibn ʿAbd al-Muḥsin al-Ḥumaydān — les 471 pages
-     ont été dépouillées depuis la bibliothèque Shamela (shamela.ws), ce qui
-     donne 310 notices rattachées à un verset précis, sur 287 versets.
-     Un fichier par sourate (tradition/asbab/sNNN.json), chargé seulement à
-     l'ouverture de l'infobulle : rien n'est téléchargé au démarrage. */
+  /* ═══ v430 — ASBĀB AL-NUZŪL : CORPUS COMPLET DEPUIS SHAMELA ═══
+     v428 chargeait la source primaire (al-Wāḥidī). v430 intègre TOUS les
+     recueils d'asbāb de la catégorie « علوم القرآن » de la bibliothèque
+     Shamela (shamela.ws) — sans rien laisser :
+       • الواحدي       (أسباب النزول — ت زغلول + ت الحميدان)
+       • السيوطي       (لباب النقول في أسباب النزول)
+       • ابن حجر       (العجاب في بيان الأسباب)
+       • المحرر        (في أسباب نزول القرآن — الكتب التسعة)
+       • الصحيح المسند  (من أسباب النزول)
+       • الاستيعاب      (في بيان الأسباب)
+     7 ouvrages, 5444 pages dépouillées -> 3175 notices, 858 versets, 94 sourates.
+     Un fichier par sourate (tradition/asbab/sNNN.json), chargé à la demande :
+     rien n'est téléchargé au démarrage. Chaque récit affiche sa source. */
+  /* légende des sources (clé courte -> titre complet shamela) */
+  window.__ASBAB_SRC = {
+    'الواحدي': 'الواحدي — أسباب النزول (ت زغلول + ت الحميدان)',
+    'السيوطي': 'السيوطي — لباب النقول في أسباب النزول',
+    'ابن حجر': 'ابن حجر — العجاب في بيان الأسباب',
+    'المحرر': 'المحرر في أسباب نزول القرآن (الكتب التسعة)',
+    'الصحيح المسند': 'الصحيح المسند من أسباب النزول',
+    'الاستيعاب': 'الاستيعاب في بيان الأسباب'
+  };
   var _asbCache = {}, _asbProm = {};
   function asbabCharger(s){
     if (_asbCache[s] !== undefined) return Promise.resolve(_asbCache[s]);
@@ -47480,20 +47493,28 @@ window.continueTradApart = async function (msgId) {
       var fin = v2 || v1;
       var hits = j.e.filter(function(e){ return e.v >= v1 && e.v <= fin; });
       if (!hits.length) return;
+      var srcs = {};
+      hits.forEach(function(e){ srcs[e.src] = 1; });
       var h = '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed rgba(159,224,160,.4)">' +
-        '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Le récit de la révélation — الواحدي</div>';
-      hits.slice(0, 3).forEach(function(e){
-        h += '<div style="margin:5px 0">' +
-             '<div style="font-size:10px;color:#8fa3b8;margin-bottom:2px;">Sourate ' + sura + ' : ' + e.v + '</div>' +
-             '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;' +
+        '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Asbāb al-nuzūl — ' +
+        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)</div>';
+      hits.forEach(function(e){
+        var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
+        h += '<div style="margin:6px 0">' +
+             '<div style="font-size:10px;color:#8fa3b8;margin-bottom:2px;">Sourate ' + sura + ' : ' + e.v +
+             ' &nbsp;<span title="' + esc(full) + '" style="color:#bfe0c8;border:1px solid rgba(159,224,160,.4);' +
+             'border-radius:10px;padding:0 6px;font-size:9.5px;cursor:help">' + esc(e.src) + '</span></div>' +
+             '<div dir="rtl" lang="ar" title="' + esc(full) + '" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;' +
              'background:rgba(159,224,160,.07);border-right:3px solid rgba(159,224,160,.5);' +
              'padding:6px 9px;border-radius:6px 0 0 6px">' + esc(e.t) + '</div>' +
              '<button class="asb-tr" style="pointer-events:auto;margin-top:3px;background:rgba(79,142,247,.15);color:#cfe0ff;' +
              'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire</button>' +
              '</div>';
       });
-      if (hits.length > 3) h += '<div style="font-size:10.5px;opacity:.6;margin-top:2px">+ ' + (hits.length - 3) + ' autre(s) récit(s) pour ce verset</div>';
-      h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">الواحدي، أسباب النزول — تحقيق عصام بن عبد المحسن الحميدان · المكتبة الشاملة (shamela.ws). ' +
+      var leg = Object.keys(srcs).map(function(s){ return (window.__ASBAB_SRC && window.__ASBAB_SRC[s]) ? window.__ASBAB_SRC[s] : s; }).join(' · ');
+// (v430) plus de plafond : tous les récits sont affichés, l'infobulle défile.
+      h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Sources de ce verset : ' + esc(leg) +
+           '<br>الشاملة (shamela.ws) — recueils complets d\'asbāb al-nuzūl (7 ouvrages, 3175 notices). ' +
            'Traditions narratives rapportées : pas des faits établis.</div></div>';
       box.innerHTML = h;
       /* Le bouton ouvre la traduction NATIVE de l'application (sa popup) :
