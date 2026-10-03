@@ -34839,7 +34839,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.407';
+  var STAMPED = '2.0.411';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -46124,9 +46124,10 @@ window.continueTradApart = async function (msgId) {
 (function(){
   'use strict';
   var EP = '/theologicus-store';
-  var TS_KEY = 'theo_sync_ts_v1';   /* horodatage local par clé (NON synchronisé) */
-  var ON_KEY = 'theo_sync_on_v1';   /* interrupteur (NON synchronisé) */
-  var PUSH_MS = 2000, PULL_MS = 4000;
+  var TS_KEY = 'theo_sync_ts_v1';    /* horodatage local par clé (NON synchronisé) */
+  var REV_KEY = 'theo_sync_rev_v1';  /* dernière révision serveur connue (NON synchronisé) */
+  var ON_KEY = 'theo_sync_on_v1';    /* interrupteur (NON synchronisé) */
+  var PUSH_MS = 2000, PULL_MS = 5000;
 
   /* Clés localStorage synchronisées = tout le contenu produit par l'utilisateur.
      (Les préférences d'interface purement locales — zoom, fond, etc. — ne sont
@@ -46158,14 +46159,19 @@ window.continueTradApart = async function (msgId) {
 
   var TS = {};
   try { TS = JSON.parse(_get(TS_KEY) || '{}') || {}; } catch(e){ TS = {}; }
+  var _rev = 0;
+  try { _rev = parseInt(_get(REV_KEY) || '0', 10) || 0; } catch(e){ _rev = 0; }
   function tsSave(){ try { _set(TS_KEY, JSON.stringify(TS)); } catch(e){} }
+  function revSave(){ try { _set(REV_KEY, String(_rev)); } catch(e){} }
   function nowMs(){ return Date.now(); }
 
   function enabled(){ try { return _get(ON_KEY) !== '0'; } catch(e){ return true; } }
 
   var _snap = {};        /* dernière valeur locale connue (anti-rebond push) */
-  var _dirty = {};       /* clés en attente d'envoi */
+  var _chatSnap = {};    /* id -> JSON déjà poussé (conversations) */
+  var _dirty = {};       /* clés en attente d'envoi (localStorage ET conversations) */
   var _dirtyTimer = null;
+  var _applying = false; /* vrai pendant l'application d'un pull : ne rien repousser */
 
   function queue(k, v){
     _dirty[k] = (v === null || v === undefined) ? null : String(v);
@@ -46212,12 +46218,18 @@ window.continueTradApart = async function (msgId) {
     }
   }
 
-  /* ── PUSH conversations (IndexedDB 'chats') ── */
+  /* ── PUSH conversations (IndexedDB 'chats') ──
+     v403b — plus de POST unitaire : on passe par la file `queue()` (un seul
+     envoi groupé). Et on IGNORE les réécritures identiques : au démarrage,
+     l'assainissement des conversations réécrit des centaines de chats
+     inchangés ; sans ce filtre, chacun déclenchait un POST (flot de requêtes). */
   function pushChat(chat){
-    if (!chat || !chat.id || !enabled()) return;
-    var k = 'chat::' + chat.id, ts = nowMs();
-    TS[k] = ts; tsSave();
-    post({ entries: [{ k: k, v: JSON.stringify(chat), ts: ts }] });
+    if (!chat || !chat.id || !enabled() || _applying) return;
+    var k = 'chat::' + chat.id;
+    var v = JSON.stringify(chat);
+    if (_chatSnap[k] === v) return;
+    _chatSnap[k] = v;
+    queue(k, v);
   }
   function patchDb(){
     try {
@@ -46232,9 +46244,9 @@ window.continueTradApart = async function (msgId) {
         var p = _del.apply(db, arguments);
         try {
           if (store === 'chats' && p && p.then) p.then(function(){
-            var k = 'chat::' + id, ts = nowMs();
-            TS[k] = ts; tsSave();
-            post({ entries: [{ k: k, v: null, ts: ts }] });
+            var k = 'chat::' + id;
+            delete _chatSnap[k];
+            queue(k, null);
           }, function(){});
         } catch(e){}
         return p;
@@ -46248,12 +46260,19 @@ window.continueTradApart = async function (msgId) {
   function pull(){
     if (!enabled() || _pulling) return;
     _pulling = true;
-    fetch(EP, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+    /* v403b — PULL INCRÉMENTAL : on ne demande que les clés modifiées depuis
+       notre dernière révision connue. Télécharger tout le magasin (dizaines de
+       Mo) toutes les 5 s bloquait le thread principal sur JSON.parse et figeait
+       l'interface (l'infobulle de verset restait sur « Chargement… »). */
+    fetch(EP + '?since=' + _rev, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(store){
         _pulling = false;
-        if (!store || !store.keys) return;
+        if (!store) return;
+        if (typeof store.rev === 'number' && store.rev > _rev){ _rev = store.rev; revSave(); }
+        if (!store.keys) return;
         var changedLocal = false, changedChat = false;
+        _applying = true;   /* ne pas repousser ce qu'on applique */
         for (var k in store.keys){
           if (!Object.prototype.hasOwnProperty.call(store.keys, k)) continue;
           var e = store.keys[k] || {};
@@ -46264,8 +46283,8 @@ window.continueTradApart = async function (msgId) {
           if (k.indexOf('chat::') === 0){
             var cid = k.slice(6);
             try {
-              if (v === null){ db.delete('chats', cid); }
-              else { db.put('chats', JSON.parse(v)); _set('theologicus_chat_' + cid, v); }
+              if (v === null){ delete _chatSnap[k]; db.delete('chats', cid); }
+              else { _chatSnap[k] = v; db.put('chats', JSON.parse(v)); _set('theologicus_chat_' + cid, v); }
             } catch(err){}
             changedChat = true;
           } else if (isSynced(k)){
@@ -46273,10 +46292,11 @@ window.continueTradApart = async function (msgId) {
             changedLocal = true;
           }
         }
+        _applying = false;
         tsSave();
         if (changedLocal || changedChat) refreshUI(changedChat);
       })
-      .catch(function(){ _pulling = false; });
+      .catch(function(){ _pulling = false; _applying = false; });
   }
 
   /* ── Rafraîchissement de l'interface après application serveur ── */
@@ -46287,35 +46307,29 @@ window.continueTradApart = async function (msgId) {
     if (chatChanged){ try { if (typeof renderMessages === 'function') renderMessages(); } catch(e){} }
   }
 
-  /* ── Amorçage : pousser ce que le serveur n'a pas encore ── */
+  /* ── Amorçage LÉGER (v403b) ──
+     On ne télécharge JAMAIS tout le magasin ici (il peut faire des dizaines de
+     Mo de conversations). On ne demande que la RÉVISION courante (since énorme
+     → aucune clé) :
+       - magasin vide (rev 0)  → on pousse nos clés locales (1er remplissage) ;
+       - magasin déjà peuplé et on n'a jamais synchronisé → on adopte sa
+         révision, ce qui évite un téléchargement massif au 1er lancement ; les
+         pulls suivants sont incrémentaux. (Un appareil neuf, dont la carte des
+         horodatages est vide, fera au contraire un pull complet une fois.) */
   function seed(){
     if (!enabled()) return;
-    fetch(EP, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
-      .then(function(r){ return r.ok ? r.json() : { keys:{} }; })
+    fetch(EP + '?since=999999999999', { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(store){
-        store = store || { keys:{} };
-        var sk = store.keys || {}, entries = [], t = nowMs();
+        var rev = store ? (parseInt(store.rev, 10) || 0) : 0;
+        var entries = [], t = nowMs();
         for (var i = 0; i < EXACT.length; i++){
           var k = EXACT[i], cur = _get(k);
           _snap[k] = cur;
-          if (cur === null) continue;
-          if (sk[k] === undefined){ TS[k] = t; entries.push({ k:k, v:cur, ts:t }); }
+          if (rev === 0 && cur !== null){ TS[k] = t; entries.push({ k:k, v:cur, ts:t }); }
         }
-        function send(){ if (entries.length){ tsSave(); post({ entries: entries }); } }
-        try {
-          if (typeof db !== 'undefined' && db && db.getAll){
-            db.getAll('chats').then(function(list){
-              (list || []).forEach(function(c){
-                if (!c || !c.id) return;
-                var k = 'chat::' + c.id;
-                if (sk[k] === undefined){ TS[k] = t; entries.push({ k:k, v: JSON.stringify(c), ts:t }); }
-              });
-              send();
-            }, function(){ send(); });
-            return;
-          }
-        } catch(e){}
-        send();
+        if (entries.length){ tsSave(); post({ entries: entries }); }
+        if (rev > 0 && !_rev && Object.keys(TS).length){ _rev = rev; revSave(); }
       })
       .catch(function(){});
   }
