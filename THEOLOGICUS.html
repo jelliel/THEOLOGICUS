@@ -46610,13 +46610,29 @@ window.continueTradApart = async function (msgId) {
        sinon il ouvrait le mauvais manuscrit (bug vérifié). */
     { re: /vergilius\s+vaticanus|vat\.?\s*lat\.?\s*3225/i, nom: 'Vergilius Vaticanus (Vat. lat. 3225)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3225/manifest.json' },
     { re: /vergilius\s+romanus|vat\.?\s*lat\.?\s*3867/i,   nom: 'Vergilius Romanus (Vat. lat. 3867)',   url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3867/manifest.json' },
-    { re: /codex\s+vaticanus|vat\.?\s*gr\.?\s*1209/i, nom: 'Codex Vaticanus (Vat. gr. 1209)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1209/manifest.json' },
+    { re: /codex\s+sinaiticus|sinaiticus/i,                nom: 'Codex Sinaiticus (édition Tischendorf, fac-similé)', url: 'https://iiif.archive.org/iiif/CodexSinaiticusTischendorf/manifest.json' },
+    { re: /codex\s+alexandrinus|alexandrinus/i,            nom: 'Codex Alexandrinus (Londres, BL Royal 1 D V)', url: 'https://iiif.archive.org/iiif/CodexAlexandrinus/manifest.json' },
+    { re: /marchalianus|vat\.?\s*gr\.?\s*2125/i,           nom: 'Codex Marchalianus (Vat. gr. 2125)',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.2125/manifest.json' },
+    { re: /codex\s+bezae|\bbezae\b|nn\.?\s*2\.?\s*41/i,    nom: 'Codex Bezae (Cambridge, MS Nn.2.41)', url: 'https://cudl.lib.cam.ac.uk/iiif/MS-NN-00002-00041' },
+    { re: /codex\s+vaticanus|vat\.?\s*gr\.?\s*1209/i,      nom: 'Codex Vaticanus (Vat. gr. 1209)',     url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1209/manifest.json' },
     { re: /pal\.?\s*gr\.?\s*220/i,                  nom: 'Pal. gr. 220 (Vatican)',          url: 'https://digi.vatlib.it/iiif/MSS_Pal.gr.220/manifest.json' },
     { re: /barb\.?\s*gr\.?\s*372/i,                 nom: 'Barb. gr. 372 (Vatican)',         url: 'https://digi.vatlib.it/iiif/MSS_Barb.gr.372/manifest.json' },
     { re: /urb\.?\s*gr\.?\s*35\b/i,                 nom: 'Urb. gr. 35 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Urb.gr.35/manifest.json' },
+    { re: /vat\.?\s*lat\.?\s*1\b/i,                 nom: 'Vat. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.1/manifest.json' },
+    { re: /vat\.?\s*gr\.?\s*1\b/i,                  nom: 'Vat. gr. 1 (Vatican)',            url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1/manifest.json' },
+    { re: /vat\.?\s*ar\.?\s*1\b/i,                  nom: 'Vat. ar. 1 — manuscrit arabe (1329)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.ar.1/manifest.json' },
+    { re: /vat\.?\s*copt\.?\s*1\b/i,                nom: 'Vat. copt. 1 — manuscrit copte',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.copt.1/manifest.json' },
+    { re: /vat\.?\s*ebr\.?\s*1\b/i,                 nom: 'Vat. ebr. 1 — manuscrit hébreu',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.ebr.1/manifest.json' },
+    { re: /pal\.?\s*lat\.?\s*1\b/i,                 nom: 'Pal. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Pal.lat.1/manifest.json' },
+    { re: /reg\.?\s*lat\.?\s*1\b/i,                 nom: 'Reg. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Reg.lat.1/manifest.json' },
+    { re: /ott\.?\s*gr\.?\s*1\b/i,                  nom: 'Ott. gr. 1 (Vatican)',            url: 'https://digi.vatlib.it/iiif/MSS_Ott.gr.1/manifest.json' },
     { re: /cod\.?\s*sang\.?\s*1\b|csg-?0*1\b/i,     nom: 'St. Gallen, Cod. Sang. 1',        url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0001/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*2\b|csg-?0*2\b/i,     nom: 'St. Gallen, Cod. Sang. 2',        url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0002/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*18\b|csg-?0*18\b/i,   nom: 'St. Gallen, Cod. Sang. 18',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0018/manifest.json' },
     { re: /cod\.?\s*sang\.?\s*22\b|csg-?0*22\b/i,   nom: 'St. Gallen, Cod. Sang. 22',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0022/manifest.json' },
-    { re: /cod\.?\s*sang\.?\s*53\b|csg-?0*53\b/i,   nom: 'St. Gallen, Cod. Sang. 53',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0053/manifest.json' }
+    { re: /cod\.?\s*sang\.?\s*23\b|csg-?0*23\b/i,   nom: 'St. Gallen, Cod. Sang. 23',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0023/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*53\b|csg-?0*53\b/i,   nom: 'St. Gallen, Cod. Sang. 53',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0053/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*56\b|csg-?0*56\b/i,   nom: 'St. Gallen, Cod. Sang. 56',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0056/manifest.json' }
   ];
   function iiifPour(txt){
     var s = String(txt || '');
