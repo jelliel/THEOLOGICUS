@@ -26588,7 +26588,7 @@ function initQuranVerseTooltip() {
          quel : l'infobulle reste lisible en toutes circonstances. */
       if (v.a) {
         html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
-        html += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left;margin:2px 0 6px;">arabe ⟵ lecture de droite à gauche — survolez un mot</div>';
+        html += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left;margin:2px 0 6px;"><b style="color:#ff4d4d;">← on commence ici</b> — arabe, lecture de droite à gauche — survolez un mot</div>';
       }
     });
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
@@ -36184,13 +36184,18 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       var parts = String(html || '').split(' ');
       var out = [];
       var i = 0;
+      var _prem = true;
       for (var k = 0; k < parts.length; k++) {
         var t = parts[k];
         if (!t) continue;
         if (SIG.test(t)) { out.push(t); continue; }
-        out.push('<span class="qw" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' +
+        out.push('<span class="qw' + (_prem ? ' qw-debut' : '') + '" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' +
                  '<span class="qw-h">' + t + '</span></span>');
+        _prem = false;
       }
+      /* v414 — flèche ROUGE marquant le début de lecture (à DROITE : l'arabe
+         se lit de droite à gauche) + premier mot en rouge. */
+      if (out.length) out.unshift('<span class="qw-sens">←</span>');
       /* v412 — translittération SOUS chaque mot arabe (comme l'hébreu/grec).
          quranwbw/qN.js : __quranWbw[s][v][i] = [glose(en), translittération]. */
       if (window.__ensureQuranWbw) {
@@ -36216,6 +36221,9 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v88-arabe-css';
     style.textContent =
+      '.qw-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 3px 0 6px;}' +
+      '.qw.qw-debut,.qw.qw-debut .qw-h{color:#ff5a5a;}' +
+      '.qw.qw-debut .qw-t{color:#ffa0a0;}' +
       '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);display:inline-block;' +
       'text-align:center;vertical-align:top;padding:0 2px;}' +
       '.qw .qw-h{display:block;}' +
@@ -36828,6 +36836,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     style.id = 'v89-hb-css';
     style.textContent =
       '.hb-ligne{direction:rtl;text-align:right;line-height:1.7;margin:6px 0 2px;}' +
+      '.hb-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 3px 0 6px;}' +
+      '.hb.hb-debut,.hb.hb-debut .hb-h{color:#ff5a5a;}' +
+      '.hb.hb-debut .hb-t{color:#ffa0a0;}' +
+      '.hb.hb-debut{border-bottom-color:#ff5a5a;}' +
       '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
       'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
       'text-align:center;vertical-align:top;}' +
@@ -36966,20 +36978,24 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           if (!txt) continue;
           trouve = true;
           var mots = [];
-          txt.split(' ').forEach(function (w, idx) {
+          var _prem = true;
+          txt.split(' ').forEach(function (w) {
             if (!w) return;
             var q = w.split('|');
-            mots.push('<span class="hb" data-h="' + ech(q[0] || '') + '"' +
+            mots.push('<span class="hb' + (_prem ? ' hb-debut' : '') + '" data-h="' + ech(q[0] || '') + '"' +
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
               ' data-m="' + ech(q[3] || '') + '">' +
               '<span class="hb-h">' + ech(q[0] || '') + '</span>' +
               (q[1] ? '<span class="hb-t">' + ech(q[1]) + '</span>' : '') +
               '</span>');
+            _prem = false;
           });
           if (mots.length) {
-            html += '<div class="hb-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="hb-sous">hébreu ⟵ lecture de droite à gauche — verset ' + n +
+            /* v414 — le sens de lecture : une flèche ROUGE marque le début
+               (à DROITE pour l'hébreu) et le premier mot est en rouge. */
+            html += '<div class="hb-ligne"><span class="hb-sens">←</span>' + mots.join(' ') + '</div>';
+            html += '<div class="hb-sous"><b style="color:#ff4d4d;">← on commence ici</b> — hébreu, verset ' + n +
               ' — survolez un mot</div>';
           }
         }
@@ -37110,6 +37126,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     style.id = 'v90-gr-css';
     style.textContent =
       '.gr-ligne{line-height:1.7;margin:6px 0 2px;}' +
+      '.gr-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 6px 0 3px;}' +
+      '.gr.gr-debut,.gr.gr-debut .gr-h{color:#ff5a5a;}' +
+      '.gr.gr-debut .gr-t{color:#ffa0a0;}' +
+      '.gr.gr-debut{border-bottom-color:#ff5a5a;}' +
       '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
       'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
       'text-align:center;vertical-align:top;}' +
@@ -37259,10 +37279,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           var txt = ch[String(n)];
           if (!txt) { manquants.push(n); continue; }
           var mots = [];
+          var _prem = true;
           txt.split(' ').forEach(function (w) {
             if (!w) return;
             var q = w.split('|');
-            mots.push('<span class="gr" data-g="' + ech(q[0] || '') + '"' +
+            mots.push('<span class="gr' + (_prem ? ' gr-debut' : '') + '" data-g="' + ech(q[0] || '') + '"' +
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
               ' data-m="' + ech(q[3] || '') + '"' +
@@ -37270,10 +37291,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
               '<span class="gr-h">' + ech(q[0] || '') + '</span>' +
               (q[1] ? '<span class="gr-t">' + ech(q[1]) + '</span>' : '') +
               '</span>');
+            _prem = false;
           });
           if (mots.length) {
-            html += '<div class="gr-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="gr-sous">grec ⟶ lecture de gauche à droite — verset ' + n +
+            html += '<div class="gr-ligne"><span class="gr-sens">→</span>' + mots.join(' ') + '</div>';
+            html += '<div class="gr-sous"><b style="color:#ff4d4d;">→ on commence ici</b> — grec, verset ' + n +
               ' — survolez un mot</div>';
           } else {
             manquants.push(n);
@@ -37412,7 +37434,7 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
     function afficher(mot, cle) {
       var a = (window.__latinMots || {})[cle] || [];
-      var h = '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;">latin ⟶ lecture de gauche à droite</div>' +
+      var h = '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;"><b style="color:#ff4d4d;">→ on commence ici</b> — latin, lecture de gauche à droite</div>' +
         '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
       if (!a.length) {
         /* OCR de 1911 ou mot absent du dictionnaire : on le DIT. */
