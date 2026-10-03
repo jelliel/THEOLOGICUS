@@ -34839,7 +34839,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.405';
+  var STAMPED = '2.0.406';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -36799,11 +36799,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v89-hb-css';
     style.textContent =
-      '.hb-ligne{direction:rtl;text-align:right;line-height:2.1;margin:6px 0 2px;}' +
-      '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
-      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.hb-ligne{direction:rtl;text-align:right;line-height:1.7;margin:6px 0 2px;}' +
+      '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
+      'text-align:center;vertical-align:top;}' +
+      '.hb .hb-h{display:block;}' +
+      '.hb .hb-t{display:block;font-size:9.5px;color:#8fa3b8;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.hb:hover,.hb.hb-actif{background:rgba(79,142,247,0.25);' +
       'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.hb:hover .hb-t,.hb.hb-actif .hb-t{color:#dbe8f5;}' +
       '.hb-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;direction:ltr;text-align:left;}' +
       '#hb-tip{position:fixed;z-index:var(--z-mot,9900);max-width:300px;max-height:60vh;' +
@@ -36939,7 +36944,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
             mots.push('<span class="hb" data-h="' + ech(q[0] || '') + '"' +
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
-              ' data-m="' + ech(q[3] || '') + '">' + ech(q[0] || '') + '</span>');
+              ' data-m="' + ech(q[3] || '') + '">' +
+              '<span class="hb-h">' + ech(q[0] || '') + '</span>' +
+              (q[1] ? '<span class="hb-t">' + ech(q[1]) + '</span>' : '') +
+              '</span>');
           });
           if (mots.length) {
             html += '<div class="hb-ligne">' + mots.join(' ') + '</div>';
@@ -37073,11 +37081,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v90-gr-css';
     style.textContent =
-      '.gr-ligne{line-height:2.1;margin:6px 0 2px;}' +
-      '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
-      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.gr-ligne{line-height:1.7;margin:6px 0 2px;}' +
+      '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
+      'text-align:center;vertical-align:top;}' +
+      '.gr .gr-h{display:block;}' +
+      '.gr .gr-t{display:block;font-size:9.5px;color:#8fa3b8;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.gr:hover,.gr.gr-actif{background:rgba(79,142,247,0.25);' +
       'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.gr:hover .gr-t,.gr.gr-actif .gr-t{color:#dbe8f5;}' +
       '.gr-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;}' +
       '.gr-manque{font-size:10px;color:#c9a26d;margin:3px 0 0;}' +
@@ -37225,7 +37238,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
               ' data-m="' + ech(q[3] || '') + '"' +
-              ' data-l="' + ech(q[4] || '') + '">' + ech(q[0] || '') + '</span>');
+              ' data-l="' + ech(q[4] || '') + '">' +
+              '<span class="gr-h">' + ech(q[0] || '') + '</span>' +
+              (q[1] ? '<span class="gr-t">' + ech(q[1]) + '</span>' : '') +
+              '</span>');
           });
           if (mots.length) {
             html += '<div class="gr-ligne">' + mots.join(' ') + '</div>';
