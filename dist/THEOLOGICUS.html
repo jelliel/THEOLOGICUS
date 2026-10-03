@@ -425,6 +425,23 @@
 
   function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
+  /* v400 — mémoire de traduction UNIFIÉE et persistante (localStorage
+     « theo_tm_v1 »), partagée par TOUTES les voies (bulle LibreTranslate, IA
+     v193, Pères FR v171) : une traduction produite par une voie est réutilisée
+     par les autres — on ne retraduit jamais deux fois le même texte vers la
+     même langue. */
+  function _tmHash(s){ var h = 5381; s = String(s || ''); for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return 'h' + h; }
+  window.__theoTM = {
+    get: function(text, lang){
+      try { var o = JSON.parse(localStorage.getItem('theo_tm_v1') || '{}'); return o[_tmHash(text) + '|' + (lang || 'fr')] || null; }
+      catch(e){ return null; }
+    },
+    put: function(text, lang, tr){
+      try { var o = JSON.parse(localStorage.getItem('theo_tm_v1') || '{}'); o[_tmHash(text) + '|' + (lang || 'fr')] = String(tr || ''); localStorage.setItem('theo_tm_v1', JSON.stringify(o)); }
+      catch(e){}
+    }
+  };
+
   /* v64 — tri : la langue voulue en tête, puis l'ordre alphabétique des codes. */
   function sortLangs(arr, first){
     var a = (arr || []).slice();
@@ -646,11 +663,13 @@
           out.appendChild(cfg);
           return;
         }
+        var _cached = (window.__theoTM && window.__theoTM.get(text, current));
+        if (_cached) { out.textContent = _cached; out.dataset.ok = '1'; return; }
         return fetch(ep + '/translate', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q: text, source: 'auto', target: current, format: 'text' })
         }).then(function(r){ if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-          .then(function(d){ out.textContent = (d && d.translatedText) || '(vide)'; out.dataset.ok = '1'; })
+          .then(function(d){ var _t = (d && d.translatedText) || ''; out.textContent = _t || '(vide)'; out.dataset.ok = '1'; if (_t && window.__theoTM) window.__theoTM.put(text, current, _t); })
           .catch(function(e){ out.innerHTML = '<span style="color:#ff8a8a;font-weight:400;">Erreur : ' + esc(e && e.message || e) + '</span>'; out.dataset.ok = ''; });
       });
     }
@@ -26287,6 +26306,8 @@ function initBibleVerseTooltip() {
     if (!verses) { showMissing(el, p); return; }
     let html = '<div style="color:#4f8ef7;font-size:11px;letter-spacing:1px;margin-bottom:6px;text-transform:uppercase;">✅ ' + BIBLE_LABEL + ' — ' + p.ref + '</div>';
     verses.forEach(function (v) { html += '<div style="margin-bottom:4px;"><span style="color:#7fdfff;">' + v.n + '</span> ' + v.t + '</div>'; });
+    /* v422 — TÉMOINS du verset (papyrus, codex, rouleaux) + variantes notables */
+    try { if (window.__msRefHtml) html += window.__msRefHtml(p); } catch(e){}
     /* v89 — emplacement du mot a mot hebreu, rempli a la volee. */
     html += '<div id="hb-slot"></div>';
     /* v204 — récits de Maria Valtorta concordés avec le passage (chips
@@ -26567,8 +26588,13 @@ function initQuranVerseTooltip() {
       /* v88 : le verset arabe devient une suite de mots reperes.
          Sans __qwMots (module pas encore charge) on garde le texte tel
          quel : l'infobulle reste lisible en toutes circonstances. */
-      if (v.a) html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
+      if (v.a) {
+        html += '<div style="direction:rtl;text-align:right;color:#c9b06a;font-size:15px;margin-bottom:2px;">' + (typeof window.__qwMots === 'function' ? window.__qwMots(p.sourate, v.n, v.a) : v.a) + '</div>';
+        html += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.5px;text-align:left;margin:2px 0 6px;"><b style="color:#ff4d4d;">← on commence ici</b> — arabe, lecture de droite à gauche — survolez un mot</div>';
+      }
     });
+    /* v424 — CHRONOLOGIE de la révélation + CONTEXTE (asbāb al-nuzūl) */
+    try { if (window.__asbabHtml) html += window.__asbabHtml(p); } catch(e){}
     html += '<button id="quran-audio-btn" style="margin-top:8px;background:#f5c542;color:#000;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:900;font-size:11px;font-family:Consolas,Monaco,monospace;">🎧 Écouter la récitation</button>';
     /* v215 — bloc Corpus Coranicum (rempli de façon asynchrone) */
     html += '<div id="cc-block" style="margin-top:8px;border-top:1px solid rgba(245,197,66,.3);padding-top:6px;font-size:11px">⏳ Corpus Coranicum…</div>';
@@ -26577,6 +26603,8 @@ function initQuranVerseTooltip() {
     tip.style.display = 'block';
     /* v215 — charge et injecte le commentaire/variantes/manuscrits/intertextes */
     if (window.__ccAppend) { try { window.__ccAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[CC]', e); } }
+    /* v428 — le récit de la révélation (al-Wāḥidī), chargé à part. */
+    if (window.__asbabAppend) { try { window.__asbabAppend(p.sourate, p.v1, p.v2, tip); } catch (e) { console.warn('[ASB]', e); } }
     const r = el.getBoundingClientRect();
     let x = r.left, y = r.bottom + 8;
     const tr = tip.getBoundingClientRect();
@@ -26768,10 +26796,27 @@ function initCorpusCoranicum() {
       if (ve.mss && ve.mss.list && ve.mss.list.length) {
         h += '<div style="margin:3px 0"><span style="color:#9fe0a0;font-weight:700">📜 Manuscrits (' + ve.mss.n + ')</span><div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">';
         ve.mss.list.forEach(function (m) {
-          var img = m.img
-            ? '<img src="' + m.img + '" style="width:52px;height:52px;object-fit:cover;border:1px solid #444;border-radius:4px" loading="lazy" onerror="this.style.display=\'none\'">'
-            : '📜';
-          h += '<a href="' + (m.link || 'https://corpuscoranicum.de') + '" target="_blank" rel="noopener" title="' + ccEsc(m.t || '') + ' — ' + ccEsc(m.arch || '') + ' (f. ' + ccEsc(m.folio) + ')" style="text-decoration:none">' + img + '</a>';
+          /* v426 — la vignette devient une pastille : survol = image, clic =
+             visionneuse. Le Scaler du Corpus Coranicum accepte une taille
+             demandée : on demande 2400 px pour l'agrandissement (vérifié :
+             1713x2400 réels, contre 571x800 pour le dw=800 d'origine). */
+          var petit = m.img || '';
+          var grand = petit.replace(/([?&]dw=)800\b/, '$12400').replace(/([?&]dh=)800\b/, '$12400');
+          var titre = (m.t || 'Manuscrit') + (m.folio != null ? ' — f. ' + m.folio + (m.side || '') : '');
+          var sous = [m.arch || '', m.city || '', m.cc || ''].filter(Boolean).join(' · ');
+          if (petit && window.__msChipAttrs) {
+            h += '<span ' + window.__msChipAttrs({
+                apercu: petit, grand: grand, full: grand,
+                titre: titre, sous: sous,
+                lien: m.link || 'https://corpuscoranicum.de', lienTxt: 'site du manuscrit'
+              }) + ' style="pointer-events:auto;cursor:zoom-in;display:inline-block;line-height:0;' +
+              'border-radius:5px;overflow:hidden;border:1px solid rgba(159,224,160,.4)">' +
+              '<img src="' + petit + '" style="width:56px;height:56px;object-fit:cover;display:block" ' +
+              'loading="lazy" onerror="this.parentNode.style.display=\'none\'"></span>';
+          } else {
+            h += '<span title="' + ccEsc(titre) + '" style="display:inline-block;width:56px;height:56px;' +
+                 'border:1px solid #444;border-radius:5px;text-align:center;line-height:56px">📜</span>';
+          }
         });
         h += '</div><a href="https://corpuscoranicum.de/fr/sura/' + sura + '/verse/' + v + '/manuscripts" target="_blank" rel="noopener" style="font-size:10px;color:#9fe0a0">Voir les ' + ve.mss.n + ' manuscrits ↗</a></div>';
       }
@@ -34820,7 +34865,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.398';
+  var STAMPED = '2.0.431';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -36162,11 +36207,36 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       var parts = String(html || '').split(' ');
       var out = [];
       var i = 0;
+      var _prem = true;
       for (var k = 0; k < parts.length; k++) {
         var t = parts[k];
         if (!t) continue;
         if (SIG.test(t)) { out.push(t); continue; }
-        out.push('<span class="qw" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' + t + '</span>');
+        out.push('<span class="qw' + (_prem ? ' qw-debut' : '') + '" data-s="' + s + '" data-v="' + v + '" data-i="' + (i++) + '">' +
+                 '<span class="qw-h">' + t + '</span></span>');
+        _prem = false;
+      }
+      /* v414 — flèche ROUGE marquant le début de lecture (à DROITE : l'arabe
+         se lit de droite à gauche) + premier mot en rouge. */
+      if (out.length) out.unshift('<span class="qw-sens">←</span>');
+      /* v412 — translittération SOUS chaque mot arabe (comme l'hébreu/grec).
+         quranwbw/qN.js : __quranWbw[s][v][i] = [glose(en), translittération]. */
+      if (window.__ensureQuranWbw) {
+        window.__ensureQuranWbw(s).then(function (ok) {
+          if (!ok) return;
+          var arr = (window.__quranWbw && window.__quranWbw[s] && window.__quranWbw[s][v]) || null;
+          if (!arr) return;
+          document.querySelectorAll('.qw[data-s="' + s + '"][data-v="' + v + '"]').forEach(function (el) {
+            if (el.querySelector('.qw-t')) return;
+            var e = arr[parseInt(el.getAttribute('data-i'), 10)];
+            var tr = e ? (e[1] || '') : '';
+            if (!tr) return;
+            var sp = document.createElement('span');
+            sp.className = 'qw-t';
+            sp.textContent = tr;
+            el.appendChild(sp);
+          });
+        });
       }
       return out.join(' ');
     };
@@ -36174,8 +36244,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v88-arabe-css';
     style.textContent =
-      '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);}' +
+      '.qw-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 3px 0 6px;}' +
+      '.qw.qw-debut,.qw.qw-debut .qw-h{color:#ff5a5a;}' +
+      '.qw.qw-debut .qw-t{color:#ffa0a0;}' +
+      '.qw{cursor:help;border-bottom:1px dotted rgba(245,197,66,0.55);display:inline-block;' +
+      'text-align:center;vertical-align:top;padding:0 2px;}' +
+      '.qw .qw-h{display:block;}' +
+      '.qw .qw-t{display:block;font-size:9.5px;color:#c9b06a;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.qw:hover,.qw.qw-actif{background:rgba(245,197,66,0.22);border-bottom-color:#f5c542;}' +
+      '.qw:hover .qw-t,.qw.qw-actif .qw-t{color:#f5e6b0;}' +
       /* v96 — var(--z-mot) : la fiche doit passer AU-DESSUS du panneau du
          verset coranique, qui est a var(--z-panneau). Les deux sont des
          elements de premier niveau (rattaches a document.body), leurs
@@ -36780,11 +36858,20 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v89-hb-css';
     style.textContent =
-      '.hb-ligne{direction:rtl;text-align:right;line-height:2.1;margin:6px 0 2px;}' +
-      '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
-      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.hb-ligne{direction:rtl;text-align:right;line-height:1.7;margin:6px 0 2px;}' +
+      '.hb-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 3px 0 6px;}' +
+      '.hb.hb-debut,.hb.hb-debut .hb-h{color:#ff5a5a;}' +
+      '.hb.hb-debut .hb-t{color:#ffa0a0;}' +
+      '.hb.hb-debut{border-bottom-color:#ff5a5a;}' +
+      '.hb{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
+      'text-align:center;vertical-align:top;}' +
+      '.hb .hb-h{display:block;}' +
+      '.hb .hb-t{display:block;font-size:9.5px;color:#8fa3b8;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.hb:hover,.hb.hb-actif{background:rgba(79,142,247,0.25);' +
       'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.hb:hover .hb-t,.hb.hb-actif .hb-t{color:#dbe8f5;}' +
       '.hb-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;direction:ltr;text-align:left;}' +
       '#hb-tip{position:fixed;z-index:var(--z-mot,9900);max-width:300px;max-height:60vh;' +
@@ -36820,10 +36907,16 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         h += '<div class="hb-lig"><span class="hb-cle">Lemme (entrée lexicale)</span><br>' +
           '<span class="hb-lem">' + ech(d.lem) + '</span>' +
           (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '') +
-          ' <span style="color:#8fa3b8">· Strong ' + ech(d.s) + '</span></div>';
+          ' <span style="color:#8fa3b8">· Strong </span>' +
+          '<span class="conc-lien" data-conc="hb" data-strong="' + ech(d.s) + '" data-lem="' + ech(d.lem || '') + '" ' +
+          'title="Voir toutes les occurrences (concordance)" ' +
+          'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">' + ech(d.s) + '</span></div>';
         vide = false;
       } else if (d.s) {
-        h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' + ech(d.s) + '</div>';
+        h += '<div class="hb-lig"><span class="hb-cle">Strong</span> ' +
+          '<span class="conc-lien" data-conc="hb" data-strong="' + ech(d.s) + '" ' +
+          'title="Voir toutes les occurrences (concordance)" ' +
+          'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">' + ech(d.s) + '</span></div>';
       }
       if (d.defFr) {
         h += '<div class="hb-lig"><span class="hb-cle">Sens</span><br>'
@@ -36914,17 +37007,24 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           if (!txt) continue;
           trouve = true;
           var mots = [];
-          txt.split(' ').forEach(function (w, idx) {
+          var _prem = true;
+          txt.split(' ').forEach(function (w) {
             if (!w) return;
             var q = w.split('|');
-            mots.push('<span class="hb" data-h="' + ech(q[0] || '') + '"' +
+            mots.push('<span class="hb' + (_prem ? ' hb-debut' : '') + '" data-h="' + ech(q[0] || '') + '"' +
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
-              ' data-m="' + ech(q[3] || '') + '">' + ech(q[0] || '') + '</span>');
+              ' data-m="' + ech(q[3] || '') + '">' +
+              '<span class="hb-h">' + ech(q[0] || '') + '</span>' +
+              (q[1] ? '<span class="hb-t">' + ech(q[1]) + '</span>' : '') +
+              '</span>');
+            _prem = false;
           });
           if (mots.length) {
-            html += '<div class="hb-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="hb-sous">hébreu — verset ' + n +
+            /* v414 — le sens de lecture : une flèche ROUGE marque le début
+               (à DROITE pour l'hébreu) et le premier mot est en rouge. */
+            html += '<div class="hb-ligne"><span class="hb-sens">←</span>' + mots.join(' ') + '</div>';
+            html += '<div class="hb-sous"><b style="color:#ff4d4d;">← on commence ici</b> — hébreu, verset ' + n +
               ' — survolez un mot</div>';
           }
         }
@@ -37054,11 +37154,20 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     var style = document.createElement('style');
     style.id = 'v90-gr-css';
     style.textContent =
-      '.gr-ligne{line-height:2.1;margin:6px 0 2px;}' +
-      '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 1px;' +
-      'border-bottom:1px dotted rgba(79,142,247,0.5);}' +
+      '.gr-ligne{line-height:1.7;margin:6px 0 2px;}' +
+      '.gr-sens{color:#ff4d4d;font-weight:900;font-size:16px;margin:0 6px 0 3px;}' +
+      '.gr.gr-debut,.gr.gr-debut .gr-h{color:#ff5a5a;}' +
+      '.gr.gr-debut .gr-t{color:#ffa0a0;}' +
+      '.gr.gr-debut{border-bottom-color:#ff5a5a;}' +
+      '.gr{cursor:help;font-size:17px;color:#cfe6ff;padding:0 2px;' +
+      'border-bottom:1px dotted rgba(79,142,247,0.5);display:inline-block;' +
+      'text-align:center;vertical-align:top;}' +
+      '.gr .gr-h{display:block;}' +
+      '.gr .gr-t{display:block;font-size:9.5px;color:#8fa3b8;direction:ltr;' +
+      'letter-spacing:.2px;line-height:1.15;margin-top:1px;}' +
       '.gr:hover,.gr.gr-actif{background:rgba(79,142,247,0.25);' +
       'border-bottom-color:#4f8ef7;color:#fff;}' +
+      '.gr:hover .gr-t,.gr.gr-actif .gr-t{color:#dbe8f5;}' +
       '.gr-sous{font-size:10px;color:#8fa3b8;letter-spacing:.5px;' +
       'text-transform:uppercase;margin:2px 0 0;}' +
       '.gr-manque{font-size:10px;color:#c9a26d;margin:3px 0 0;}' +
@@ -37098,7 +37207,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         h += '<div class="gr-lig"><span class="gr-cle">Lemme (entrée lexicale)</span><br>'
           + '<span class="gr-lem">' + ech(d.lem) + '</span>'
           + (d.lemTr ? ' <span style="color:#8fa3b8">· ' + ech(d.lemTr) + '</span>' : '')
-          + (d.s ? ' <span style="color:#8fa3b8">· Strong G' + ech(d.s) + '</span>' : '')
+          + (d.s ? ' <span style="color:#8fa3b8">· Strong </span>' +
+              '<span class="conc-lien" data-conc="gr" data-strong="' + ech(d.s) + '" data-lem="' + ech(d.lem || '') + '" ' +
+              'title="Voir toutes les occurrences (concordance)" ' +
+              'style="color:#f5c542;font-weight:700;text-decoration:underline;cursor:pointer;">G' + ech(d.s) + '</span>' : '')
           + '</div>';
         vide = false;
       }
@@ -37199,18 +37311,23 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
           var txt = ch[String(n)];
           if (!txt) { manquants.push(n); continue; }
           var mots = [];
+          var _prem = true;
           txt.split(' ').forEach(function (w) {
             if (!w) return;
             var q = w.split('|');
-            mots.push('<span class="gr" data-g="' + ech(q[0] || '') + '"' +
+            mots.push('<span class="gr' + (_prem ? ' gr-debut' : '') + '" data-g="' + ech(q[0] || '') + '"' +
               ' data-t="' + ech(q[1] || '') + '"' +
               ' data-s="' + ech(q[2] || '') + '"' +
               ' data-m="' + ech(q[3] || '') + '"' +
-              ' data-l="' + ech(q[4] || '') + '">' + ech(q[0] || '') + '</span>');
+              ' data-l="' + ech(q[4] || '') + '">' +
+              '<span class="gr-h">' + ech(q[0] || '') + '</span>' +
+              (q[1] ? '<span class="gr-t">' + ech(q[1]) + '</span>' : '') +
+              '</span>');
+            _prem = false;
           });
           if (mots.length) {
-            html += '<div class="gr-ligne">' + mots.join(' ') + '</div>';
-            html += '<div class="gr-sous">grec — verset ' + n +
+            html += '<div class="gr-ligne"><span class="gr-sens">→</span>' + mots.join(' ') + '</div>';
+            html += '<div class="gr-sous"><b style="color:#ff4d4d;">→ on commence ici</b> — grec, verset ' + n +
               ' — survolez un mot</div>';
           } else {
             manquants.push(n);
@@ -37349,7 +37466,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
 
     function afficher(mot, cle) {
       var a = (window.__latinMots || {})[cle] || [];
-      var h = '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
+      var h = '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;"><b style="color:#ff4d4d;">→ on commence ici</b> — latin, lecture de gauche à droite</div>' +
+        '<span class="lat-mot">' + ech(mot.textContent) + '</span>';
       if (!a.length) {
         /* OCR de 1911 ou mot absent du dictionnaire : on le DIT. */
         h += '<div class="lat-lig">Aucune analyse disponible pour cette ' +
@@ -41040,14 +41158,22 @@ window.continueTradApart = async function (msgId) {
   function buildFig(data, label) {
     var fig = document.createElement('div');
     fig.className = 'theo-fig';
+    /* v420 — l'image n'est plus un lien vers l'article : elle OUVRE le
+       visualiseur (zoom molette, haute résolution, feuilletage IIIF).
+       L'article reste accessible par son propre lien, juste à côté. */
     fig.innerHTML =
-      '<a class="theo-fig-img" href="' + esc(data.link) + '" target="_blank" rel="noopener" title="Ouvrir l\'article Wikipédia">' +
-      '<img src="' + esc(data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy">' +
-      '</a>' +
+      '<span class="theo-fig-img" role="button" tabindex="0" title="Agrandir — zoom, haute résolution, manuscrit en ligne">' +
+      '<img src="' + esc(data.thumb || data.img) + '" alt="' + esc(data.title || label) + '" loading="lazy"' +
+      ' data-full="' + esc(data.img) + '"' +
+      ' data-titre="' + esc(data.title || label) + '"' +
+      ' data-lien="' + esc(data.link) + '"' +
+      ' data-wiki="' + esc(data.wiki || '') + '">' +
+      '</span>' +
       '<div class="theo-fig-txt">' +
       '<div class="theo-fig-t">' + esc(data.title || label) + '</div>' +
       (data.extract ? '<div class="theo-fig-x">' + esc(String(data.extract).slice(0, 170)) + (String(data.extract).length > 170 ? '…' : '') + '</div>' : '') +
-      '<a class="theo-fig-l" href="' + esc(data.link) + '" target="_blank" rel="noopener">Article Wikipédia →</a>' +
+      '<div class="theo-fig-l"><span class="msv2-zoom">🔍 Agrandir</span> · ' +
+      '<a href="' + esc(data.link) + '" target="_blank" rel="noopener" style="color:inherit">Article Wikipédia →</a></div>' +
       '</div>';
     return fig;
   }
@@ -41061,12 +41187,18 @@ window.continueTradApart = async function (msgId) {
     fetchSum(wiki).then(function (j) {
       var waiters = pending[wiki]; delete pending[wiki];
       if (!j) return;
-      var img = (j.originalimage && j.originalimage.source) || (j.thumbnail && j.thumbnail.source) || '';
-      if (!img) return;
+      var orig = (j.originalimage && j.originalimage.source) || '';
+      var thumb = (j.thumbnail && j.thumbnail.source) || orig;
+      if (!orig && !thumb) return;
+      /* v420 — la vignette légère sert à l'affichage EN LIGNE ; l'image
+         ORIGINALE (souvent plusieurs Mo) n'est chargée qu'à l'ouverture du
+         visualiseur. Avant, l'originale était téléchargée pour un rendu 190 px. */
       var data = {
-        img: img,
+        img: orig || thumb,
+        thumb: thumb,
         title: j.title || label,
         extract: j.extract || '',
+        wiki: wiki,
         link: (j.content_urls && j.content_urls.desktop && j.content_urls.desktop.page) ||
               ('https://fr.wikipedia.org/wiki/' + encodeURIComponent(wiki))
       };
@@ -42182,6 +42314,7 @@ window.continueTradApart = async function (msgId) {
       '<button type="button" class="v167-tr" data-sn="' + esc(e.sn || '') + '">🌐 FR</button>' +
       '<a class="v167-lk" href="' + esc(e.u || '') + '" target="_blank" rel="noopener">sefaria.org ↗</a></div>';
   }
+  window.__v167RenderPanel = renderPanel;   /* v403 — rafraîchissement après sync serveur */
   function renderPanel() {
     var p = document.getElementById('v167-pat');
     if (!p || !panelOpen()) return;
@@ -44611,6 +44744,7 @@ window.continueTradApart = async function (msgId) {
       '</div>';
   }
 
+  window.__v183RenderBody = renderBody;   /* v403 — rafraîchissement après sync serveur */
   function renderBody() {
     var body = document.getElementById('v183-body');
     if (!body) return;
@@ -44819,7 +44953,7 @@ window.continueTradApart = async function (msgId) {
   window.__theoV189 = true;
 
   var BASKET = 'theo_basket_v1', NOTES = 'theo_panel_notes_v1';
-  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr', 'theo_v193_ai', 'theo_favorites_v1', 'theo_history_v1', 'theo_panel_font'];
+  var BACKUP_KEYS = ['theo_panel_marks_v1', NOTES, BASKET, 'theo_v171_tr', 'theo_v193_ai', 'theo_tm_v1', 'theo_favorites_v1', 'theo_history_v1', 'theo_panel_font'];
   function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function ld(k){ try { var a = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
   function sv(k, a){ try { localStorage.setItem(k, JSON.stringify(a)); } catch(e){} }
@@ -44883,6 +45017,7 @@ window.continueTradApart = async function (msgId) {
     });
     return p;
   }
+  window.__v189Render = render;   /* v403 — rafraîchissement après sync serveur */
   function render(){
     var body = document.getElementById('v189-body');
     if (!body) return;
@@ -44911,7 +45046,8 @@ window.continueTradApart = async function (msgId) {
     else arr.forEach(function(it){
       h += '<div class="v189-item"><b>' + esc(it.src || 'Sélection') + '</b>'
         + '<div class="tx">' + esc(String(it.text || '').slice(0, 600)) + (String(it.text || '').length > 600 ? '…' : '') + '</div>'
-        + '<button data-copy="' + it.id + '">📋 Copier</button><button data-del="' + it.id + '">🗑 Retirer</button></div>';
+        + (it.fr ? '<div class="tx" style="color:#7fdfff">🇫🇷 ' + esc(String(it.fr).slice(0, 600)) + (String(it.fr).length > 600 ? '…' : '') + '</div>' : '')
+        + '<button data-copy="' + it.id + '">📋 Copier</button><button data-copyfr="' + it.id + '" title="Copier la traduction">📋 FR</button><button data-del="' + it.id + '">🗑 Retirer</button></div>';
     });
     body.innerHTML = h;
     body.querySelector('#v189-word').addEventListener('click', exportWord);
@@ -44930,6 +45066,14 @@ window.continueTradApart = async function (msgId) {
         if (!it) return;
         var ta = document.getElementById('user-input');
         if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + it.text + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Inséré dans le champ de message', 'success'); }
+      });
+    });
+    body.querySelectorAll('[data-copyfr]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = ld(BASKET).find(function(x){ return x.id === b.dataset.copyfr; });
+        if (!it || !it.fr) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(it.fr).then(function(){ toast('Traduction copiée.', 'success'); });
+        else { var ta = document.createElement('textarea'); ta.value = it.fr; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Traduction copiée.', 'success'); } catch(e){} ta.remove(); }
       });
     });
   }
@@ -44970,7 +45114,18 @@ window.continueTradApart = async function (msgId) {
     if (!favs.length) h += '<div class="v189-empty">Clique ⭐ dans l\'en-tête d\'un panneau (tafsirs, Pères) pour épingler un passage.</div>';
     else favs.forEach(function(f){
       h += '<div class="v189-item"><b>' + esc(f.label || '') + '</b> '
-        + '<button data-open="' + f.id + '">📖 Ouvrir</button><button data-unfav="' + f.id + '">✕ Retirer</button></div>';
+        + '<button data-open="' + f.id + '">📖 Ouvrir</button><button data-unfav="' + f.id + '">✕ Retirer</button>';
+      if (f.parts && f.parts.length) {
+        var hasFr = f.parts.some(function(p){ return p.fr; });
+        f.parts.forEach(function(p){
+          if (p.sn) h += '<div class="tx" style="opacity:.92;margin-top:4px">' + esc(String(p.sn).slice(0, 300)) + (String(p.sn).length > 300 ? '…' : '') + '</div>';
+          if (p.fr) h += '<div class="tx" style="color:#7fdfff">🇫🇷 ' + esc(String(p.fr).slice(0, 300)) + (String(p.fr).length > 300 ? '…' : '') + '</div>';
+        });
+        h += '<div style="margin-top:5px"><button data-copyfsrc="' + f.id + '" title="Insérer le texte source dans le champ de message">📋 Source</button>'
+          + (hasFr ? '<button data-copyffr="' + f.id + '" title="Copier la traduction FR">📋 FR</button>' : '')
+          + '</div>';
+      }
+      h += '</div>';
     });
     h += '<div class="v189-item" style="border:none;margin-top:14px"><b>🕘 HISTORIQUE</b></div>';
     if (!hist.length) h += '<div class="v189-empty">Vos derniers passages ouverts (tafsirs, Pères) apparaîtront ici.</div>';
@@ -44990,6 +45145,27 @@ window.continueTradApart = async function (msgId) {
       b.addEventListener('click', function(){
         sv('theo_favorites_v1', ld('theo_favorites_v1').filter(function(x){ return x.id !== b.dataset.unfav; }));
         render();
+      });
+    });
+    body.querySelectorAll('[data-copyfsrc]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = findIn(ld('theo_favorites_v1'), b.dataset.copyfsrc);
+        if (!it || !it.parts) return;
+        var txt = it.parts.map(function(p){ return p.sn; }).filter(Boolean).join('\n\n');
+        if (!txt) return;
+        var ta = document.getElementById('user-input');
+        if (ta) { ta.value = (ta.value ? ta.value.replace(/\s+$/, '') + '\n\n' : '') + txt + '\n'; ta.dispatchEvent(new Event('input', { bubbles: true })); toast('Texte source inséré dans le champ de message', 'success'); }
+        else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ toast('Texte source copié.', 'success'); });
+      });
+    });
+    body.querySelectorAll('[data-copyffr]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var it = findIn(ld('theo_favorites_v1'), b.dataset.copyffr);
+        if (!it || !it.parts) return;
+        var txt = it.parts.map(function(p){ return p.fr; }).filter(Boolean).join('\n\n');
+        if (!txt) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ toast('Traduction copiée.', 'success'); });
+        else { var ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Traduction copiée.', 'success'); } catch(e){} ta.remove(); }
       });
     });
     body.querySelectorAll('[data-hopen]').forEach(function(b){
@@ -45014,11 +45190,20 @@ window.continueTradApart = async function (msgId) {
 
   /* ── sauvegarde ── */
   function renderBackup(body){
+    var _syncOn = (window.__theoSync ? window.__theoSync.enabled() : true);
     body.innerHTML = '<div id="v189-actions"><button id="v189-save">💾 Exporter mes données</button><button id="v189-load">♻️ Restaurer un fichier</button><input type="file" id="v189-file" accept=".json" style="display:none"></div>'
       + '<div style="opacity:.75;line-height:1.7">'
       + '<p>Cet export inclut <b>toutes tes données locales</b> :</p>'
-      + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>🌐 cache des traductions</li></ul>'
-      + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>';
+      + '<ul style="margin:4px 0 10px 18px"><li>🖍 surlignages des panneaux (tafsirs, Pères)</li><li>📌 notes d\'étude</li><li>🧺 panier de la feuille d\'étude</li><li>⭐ favoris (texte + traduction)</li><li>🌐 mémoire de traduction unifiée</li></ul>'
+      + '<p>Garde le fichier <b>theo_backup_*.json</b> en lieu sûr : il permet de restaurer ou transférer tes données sur une autre machine.</p></div>'
+      + '<div id="v189-sync" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.14)">'
+      +   '<b>☁️ Synchronisation serveur</b>'
+      +   '<div style="opacity:.8;line-height:1.6;margin:6px 0;font-size:12px">Surlignages, encadrés, commentaires, panier, favoris et <b>conversations</b> sont enregistrés sur le serveur de cette machine, en plus du stockage local — et partagés avec les autres appareils du réseau (même URL <code>IP:port</code>).</div>'
+      +   '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+      +     '<button id="v189-sync-now">⟳ Synchroniser maintenant</button>'
+      +     '<label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="v189-sync-on"' + (_syncOn ? ' checked' : '') + '> activée</label>'
+      +     '<span id="v189-sync-st" style="font-size:11px;opacity:.7"></span>'
+      +   '</div></div>';
     body.querySelector('#v189-save').addEventListener('click', saveAll);
     body.querySelector('#v189-load').addEventListener('click', function(){ body.querySelector('#v189-file').click(); });
     body.querySelector('#v189-file').addEventListener('change', function(ev){
@@ -45027,6 +45212,21 @@ window.continueTradApart = async function (msgId) {
       var fr = new FileReader();
       fr.onload = function(){ restoreAll(String(fr.result)); };
       fr.readAsText(f);
+    });
+    /* v403 — contrôles de synchronisation serveur */
+    var st = body.querySelector('#v189-sync-st');
+    function setSt(txt){ if (st) st.textContent = txt; }
+    var sn = body.querySelector('#v189-sync-now');
+    if (sn) sn.addEventListener('click', function(){
+      if (!window.__theoSync) { setSt('indisponible'); return; }
+      setSt('synchronisation…');
+      try { window.__theoSync.pushNow(); window.__theoSync.pull(); } catch(e){}
+      setTimeout(function(){ setSt('✓ ' + (window.__theoSync ? window.__theoSync.count() : 0) + ' élément(s) suivi(s) · ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })); }, 1200);
+    });
+    var so = body.querySelector('#v189-sync-on');
+    if (so) so.addEventListener('change', function(){
+      if (window.__theoSync) window.__theoSync.setEnabled(so.checked);
+      setSt(so.checked ? 'activée' : 'désactivée');
     });
   }
   function saveAll(){
@@ -45066,7 +45266,8 @@ window.continueTradApart = async function (msgId) {
     var basket = ld(BASKET);
     var notes = ld(NOTES);
     var marks = ld('theo_panel_marks_v1');
-    return { basket: basket, notes: notes, marks: marks };
+    var favorites = ld('theo_favorites_v1');
+    return { basket: basket, notes: notes, marks: marks, favorites: favorites };
   }
   function wordHtml(){
     var d = collectAll();
@@ -45079,7 +45280,8 @@ window.continueTradApart = async function (msgId) {
       h += '<h2 style="font-size:16px">🧺 Sélections</h2>';
       d.basket.forEach(function(it){
         h += '<p style="margin:10px 0 2px"><b style="font-size:11px;letter-spacing:1px;color:#444">' + esc(it.src || 'Sélection') + '</b></p>'
-          + '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(it.text || '') + '</blockquote>';
+          + '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(it.text || '') + '</blockquote>'
+          + (it.fr ? '<p style="margin:2px 0;color:#1a5276"><i>🇫🇷 ' + esc(it.fr) + '</i></p>' : '');
       });
     }
     if (d.notes.length) {
@@ -45096,7 +45298,17 @@ window.continueTradApart = async function (msgId) {
       });
       h += '</ul>';
     }
-    if (!d.basket.length && !d.notes.length && !d.marks.length) h += '<p style="color:#888">Vide — ajoute des passages avec 🧺 et 📝.</p>';
+    if (d.favorites && d.favorites.length) {
+      h += '<h2 style="font-size:16px">⭐ Favoris</h2>';
+      d.favorites.forEach(function(f){
+        h += '<p style="margin:10px 0 2px"><b style="font-size:12px">⭐ ' + esc(f.label || '') + '</b></p>';
+        (f.parts || []).forEach(function(p){
+          if (p.sn) h += '<blockquote style="border-left:3px solid #bbb;margin:4px 0;padding:2px 12px;white-space:pre-wrap">' + esc(p.sn) + '</blockquote>';
+          if (p.fr) h += '<p style="margin:2px 0;color:#1a5276"><i>🇫🇷 ' + esc(p.fr) + '</i></p>';
+        });
+      });
+    }
+    if (!d.basket.length && !d.notes.length && !d.marks.length && !(d.favorites && d.favorites.length)) h += '<p style="color:#888">Vide — ajoute des passages avec 🧺 et 📝.</p>';
     h += '</body></html>';
     return h;
   }
@@ -45105,7 +45317,7 @@ window.continueTradApart = async function (msgId) {
     var h = '# Feuille d\'étude\n\n_THEOLOGICUS — ' + new Date().toLocaleDateString('fr-FR') + '_\n';
     if (d.basket.length) {
       h += '\n## 🧺 Sélections\n';
-      d.basket.forEach(function(it){ h += '\n**' + (it.src || 'Sélection') + '**\n\n> ' + String(it.text || '').replace(/\n/g, '\n> ') + '\n'; });
+      d.basket.forEach(function(it){ h += '\n**' + (it.src || 'Sélection') + '**\n\n> ' + String(it.text || '').replace(/\n/g, '\n> '); if (it.fr) h += '\n\n🇫🇷 ' + String(it.fr).replace(/\n/g, '\n'); h += '\n'; });
     }
     if (d.notes.length) {
       h += '\n## 📝 Notes\n';
@@ -45114,6 +45326,17 @@ window.continueTradApart = async function (msgId) {
     if (d.marks.length) {
       h += '\n## 🖍 Surlignages\n';
       d.marks.forEach(function(m){ h += '\n- **' + srcLabel(m.key) + '** — ' + String(m.text || '').slice(0, 300) + (String(m.text || '').length > 300 ? '…' : '') + '\n'; });
+    }
+    if (d.favorites && d.favorites.length) {
+      h += '\n## ⭐ Favoris\n';
+      d.favorites.forEach(function(f){
+        h += '\n**⭐ ' + (f.label || '') + '**\n';
+        (f.parts || []).forEach(function(p){
+          if (p.sn) h += '\n> ' + String(p.sn).replace(/\n/g, '\n> ');
+          if (p.fr) h += '\n\n🇫🇷 ' + String(p.fr).replace(/\n/g, '\n');
+        });
+        h += '\n';
+      });
     }
     return h + '\n';
   }
@@ -45124,8 +45347,12 @@ window.continueTradApart = async function (msgId) {
   window.__v189BasketAdd = function(s){
     if (!s) return;
     var key = (window.__v187PanelKeyFromRange && s.range) ? window.__v187PanelKeyFromRange(s.range) : null;
+    var entry = { id: 'bk-' + Date.now(), ts: Date.now(), src: srcLabel(key) || 'Sélection', text: (s.text || '').slice(0, 8000) };
+    /* v400 — mémorise la traduction FR déjà produite (bulle/IA) dans l'entrée,
+       pour que la feuille d'étude affiche et exporte le texte traduit. */
+    try { var _tr = (window.__theoTM && window.__theoTM.get(s.text, 'fr')) || null; if (_tr) entry.fr = _tr.slice(0, 8000); } catch(e){}
     var arr = ld(BASKET);
-    arr.push({ id: 'bk-' + Date.now(), ts: Date.now(), src: srcLabel(key) || 'Sélection', text: (s.text || '').slice(0, 8000) });
+    arr.push(entry);
     sv(BASKET, arr);
     toast('🧺 Ajouté à la feuille d\'étude (' + arr.length + ')', 'success');
   };
@@ -45337,7 +45564,26 @@ window.continueTradApart = async function (msgId) {
     var open = null;
     if (key.indexOf('v183#') === 0) { var qr = parseQuranRef(key); if (qr) open = { kind: 'quran', s: qr.s, v1: qr.v1, v2: qr.v2 }; }
     else if (key.indexOf('v167#') === 0) open = { kind: 'bible', ref: key.replace(/^v167#/, '') };
-    arr.unshift({ id: 'fv-' + Date.now(), key: key, label: label, open: open, ts: Date.now() });
+    /* v402 — un favori n'est plus un simple pointeur : on capture le(s) texte(s)
+       source(s) du passage ET la traduction FR déjà mémorisée (mémoire unifiée
+       theo_tm_v1), pour l'afficher, le copier et l'exporter comme le panier. */
+    var parts = [];
+    try {
+      if (box) {
+        var _btns = box.querySelectorAll('.v167-tr[data-sn]');
+        var _seen = {};
+        for (var _i = 0; _i < _btns.length && parts.length < 12; _i++) {
+          var _s = (_btns[_i].dataset.sn || '').trim();
+          if (!_s || _seen[_s]) continue;
+          _seen[_s] = 1;
+          var _fr = (window.__theoTM && window.__theoTM.get(_s, 'fr')) || null;
+          parts.push({ sn: _s.slice(0, 4000), fr: _fr ? String(_fr).slice(0, 4000) : null });
+        }
+      }
+    } catch(e){}
+    var _entry = { id: 'fv-' + Date.now(), key: key, label: label, open: open, ts: Date.now() };
+    if (parts.length) _entry.parts = parts;
+    arr.unshift(_entry);
     sv(FAV, arr);
     toast('⭐ ' + label + ' épinglé dans les favoris', 'success');
   };
@@ -45409,7 +45655,7 @@ window.continueTradApart = async function (msgId) {
     } catch(e){}
   }
   window.__v193Translate = async function(sn, b){
-    var cached = aiCacheGet(sn);
+    var cached = aiCacheGet(sn) || (window.__theoTM && window.__theoTM.get(sn, 'fr'));
     if (cached) { b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(cached) + '</div>'; return; }
     var cfg = null;
     try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
@@ -45433,6 +45679,7 @@ window.continueTradApart = async function (msgId) {
       if (t.indexOf('```') === 0) t = t.replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim();
       if (!t) throw new Error('réponse vide');
       aiCachePut(sn, t);
+      if (window.__theoTM) window.__theoTM.put(sn, 'fr', t);
       b.outerHTML = '<div class="v167-sn v193-aidiv">✨ ' + esc(t) + '</div>';
       toast('✨ Traduction IA terminée', 'success');
     } catch(e) {
@@ -45942,6 +46189,1348 @@ window.continueTradApart = async function (msgId) {
   /* préchargement différé (148 Ko) — l'infobulle doit répondre dès le 1er survol */
   function boot(){ setTimeout(function(){ load(function(){}); }, 2500); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+})();
+</script>
+
+<script id="theo-sync">
+/* ═══ v403 — SYNCHRONISATION SERVEUR (multi-appareils) ═══
+   Objectif : TOUT ce que l'utilisateur produit — surlignages, encadrés,
+   commentaires/notes, panier, favoris, historique, mémoire de traduction,
+   CONVERSATIONS — est enregistré sur le SERVEUR (magasin partagé de
+   proxy_server : /theologicus-store) EN PLUS du stockage local. Un autre
+   appareil du réseau (navigateur) ou la fenêtre native de l'hôte récupère
+   ainsi les mêmes données.
+
+   Pourquoi c'est nécessaire : l'app de l'hôte (127.0.0.1:PORT) et le
+   navigateur d'un autre appareil (IP-LAN:PORT) ont des origines DIFFÉRENTES,
+   donc des localStorage/IndexedDB SÉPARÉS. Le magasin serveur est le point
+   de rencontre commun.
+
+   Mécanisme :
+   - PUSH localStorage : balayage diff toutes les 2 s des clés produit ;
+     toute valeur locale modifiée est envoyée (groupe, debounce 600 ms).
+   - PUSH conversations : IndexedDB 'chats' poussé dès l'écriture
+     (db.put/db.delete interceptés) + à l'amorçage.
+   - PULL : toutes les 4 s on relit le magasin ; toute entrée plus récente
+     (ts) que la nôtre est appliquée en local (localStorage ET IndexedDB),
+     puis l'interface est rafraîchie.
+   - Amorçage : au démarrage, ce que le serveur n'a pas encore reçoit les
+     données locales (première synchronisation d'une installation).
+   - Résolution : dernière écriture gagne, par clé (horodatage local).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var EP = '/theologicus-store';
+  var TS_KEY = 'theo_sync_ts_v1';    /* horodatage local par clé (NON synchronisé) */
+  var REV_KEY = 'theo_sync_rev_v1';  /* dernière révision serveur connue (NON synchronisé) */
+  var ON_KEY = 'theo_sync_on_v1';    /* interrupteur (NON synchronisé) */
+  var PUSH_MS = 2000, PULL_MS = 5000;
+
+  /* Clés localStorage synchronisées = tout le contenu produit par l'utilisateur.
+     (Les préférences d'interface purement locales — zoom, fond, etc. — ne sont
+     volontairement PAS synchronisées : elles restent propres à chaque appareil.) */
+  var EXACT = [
+    'theo_panel_marks_v1',       /* surlignages / encadrés des panneaux */
+    'theo_panel_notes_v1',       /* commentaires / notes d'étude */
+    'theo_basket_v1',            /* panier de la feuille d'étude */
+    'theo_favorites_v1',         /* favoris */
+    'theo_history_v1',           /* historique des passages */
+    'theo_panel_font',           /* taille de police des panneaux */
+    'theo_tm_v1',                /* mémoire de traduction unifiée */
+    'theo_v171_tr',              /* cache Pères FR */
+    'theo_v193_ai',              /* cache traduction IA */
+    'theologicus_currentChatId'  /* conversation courante */
+  ];
+  var PREFIX = ['theologicus_chat_'];   /* conversations (miroir localStorage) */
+
+  function isSynced(k){
+    if (!k) return false;
+    if (EXACT.indexOf(k) !== -1) return true;
+    for (var i = 0; i < PREFIX.length; i++) if (k.indexOf(PREFIX[i]) === 0) return true;
+    return false;
+  }
+
+  var _get = localStorage.getItem.bind(localStorage);
+  var _set = localStorage.setItem.bind(localStorage);
+  var _rem = localStorage.removeItem.bind(localStorage);
+
+  var TS = {};
+  try { TS = JSON.parse(_get(TS_KEY) || '{}') || {}; } catch(e){ TS = {}; }
+  var _rev = 0;
+  try { _rev = parseInt(_get(REV_KEY) || '0', 10) || 0; } catch(e){ _rev = 0; }
+  function tsSave(){ try { _set(TS_KEY, JSON.stringify(TS)); } catch(e){} }
+  function revSave(){ try { _set(REV_KEY, String(_rev)); } catch(e){} }
+  function nowMs(){ return Date.now(); }
+
+  function enabled(){ try { return _get(ON_KEY) !== '0'; } catch(e){ return true; } }
+
+  var _snap = {};        /* dernière valeur locale connue (anti-rebond push) */
+  var _chatSnap = {};    /* id -> JSON déjà poussé (conversations) */
+  var _dirty = {};       /* clés en attente d'envoi (localStorage ET conversations) */
+  var _dirtyTimer = null;
+  var _applying = false; /* vrai pendant l'application d'un pull : ne rien repousser */
+
+  function queue(k, v){
+    _dirty[k] = (v === null || v === undefined) ? null : String(v);
+    if (_dirtyTimer) return;
+    _dirtyTimer = setTimeout(flush, 600);
+  }
+  function flush(){
+    _dirtyTimer = null;
+    var entries = [], k;
+    for (k in _dirty){
+      if (!Object.prototype.hasOwnProperty.call(_dirty, k)) continue;
+      TS[k] = nowMs();
+      entries.push({ k: k, v: _dirty[k], ts: TS[k] });
+      delete _dirty[k];
+    }
+    if (!entries.length) return;
+    tsSave();
+    post({ entries: entries });
+  }
+
+  function post(payload){
+    try {
+      return fetch(EP, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(function(r){ return r.ok ? r.json() : null; })
+        .catch(function(){ return null; });
+    } catch(e){ return Promise.resolve(null); }
+  }
+
+  /* ── PUSH localStorage : balayage diff ── */
+  function scanLocal(){
+    if (!enabled()) return;
+    for (var i = 0; i < EXACT.length; i++){
+      var k = EXACT[i];
+      var cur = _get(k);
+      if (cur !== _snap[k]){
+        var prev = _snap[k];
+        _snap[k] = cur;
+        if (cur !== null) queue(k, cur);
+        else if (prev !== undefined && prev !== null) queue(k, null);   /* suppression */
+      }
+    }
+  }
+
+  /* ── PUSH conversations (IndexedDB 'chats') ──
+     v403b — plus de POST unitaire : on passe par la file `queue()` (un seul
+     envoi groupé). Et on IGNORE les réécritures identiques : au démarrage,
+     l'assainissement des conversations réécrit des centaines de chats
+     inchangés ; sans ce filtre, chacun déclenchait un POST (flot de requêtes). */
+  function pushChat(chat){
+    if (!chat || !chat.id || !enabled() || _applying) return;
+    var k = 'chat::' + chat.id;
+    var v = JSON.stringify(chat);
+    if (_chatSnap[k] === v) return;
+    _chatSnap[k] = v;
+    queue(k, v);
+  }
+  function patchDb(){
+    try {
+      if (typeof db === 'undefined' || !db || db.__theoSynced) return;
+      var _put = db.put, _del = db.delete;
+      db.put = function(store, data){
+        var p = _put.apply(db, arguments);
+        try { if (store === 'chats' && p && p.then) p.then(function(){ pushChat(data); }, function(){}); } catch(e){}
+        return p;
+      };
+      db.delete = function(store, id){
+        var p = _del.apply(db, arguments);
+        try {
+          if (store === 'chats' && p && p.then) p.then(function(){
+            var k = 'chat::' + id;
+            delete _chatSnap[k];
+            queue(k, null);
+          }, function(){});
+        } catch(e){}
+        return p;
+      };
+      db.__theoSynced = true;
+    } catch(e){}
+  }
+
+  /* ── PULL : appliquer ce que le serveur a de plus récent ── */
+  var _pulling = false;
+  function pull(){
+    if (!enabled() || _pulling) return;
+    _pulling = true;
+    /* v403b — PULL INCRÉMENTAL : on ne demande que les clés modifiées depuis
+       notre dernière révision connue. Télécharger tout le magasin (dizaines de
+       Mo) toutes les 5 s bloquait le thread principal sur JSON.parse et figeait
+       l'interface (l'infobulle de verset restait sur « Chargement… »). */
+    fetch(EP + '?since=' + _rev, { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(store){
+        _pulling = false;
+        if (!store) return;
+        if (typeof store.rev === 'number' && store.rev > _rev){ _rev = store.rev; revSave(); }
+        if (!store.keys) return;
+        var changedLocal = false, changedChat = false;
+        _applying = true;   /* ne pas repousser ce qu'on applique */
+        for (var k in store.keys){
+          if (!Object.prototype.hasOwnProperty.call(store.keys, k)) continue;
+          var e = store.keys[k] || {};
+          var sts = parseFloat(e.ts) || 0;
+          if (sts <= (parseFloat(TS[k]) || 0)) continue;      /* pas plus récent : ignorer */
+          var v = (e.v === undefined) ? null : e.v;
+          TS[k] = sts;
+          if (k.indexOf('chat::') === 0){
+            var cid = k.slice(6);
+            try {
+              if (v === null){ delete _chatSnap[k]; db.delete('chats', cid); }
+              else { _chatSnap[k] = v; db.put('chats', JSON.parse(v)); _set('theologicus_chat_' + cid, v); }
+            } catch(err){}
+            changedChat = true;
+          } else if (isSynced(k)){
+            try { if (v === null){ _rem(k); _snap[k] = null; } else { _set(k, v); _snap[k] = v; } } catch(err){}
+            changedLocal = true;
+          }
+        }
+        _applying = false;
+        tsSave();
+        if (changedLocal || changedChat) refreshUI(changedChat);
+      })
+      .catch(function(){ _pulling = false; _applying = false; });
+  }
+
+  /* ── Rafraîchissement de l'interface après application serveur ── */
+  function refreshUI(chatChanged){
+    try { var p = document.getElementById('v189-pan'); if (p && p.classList.contains('open') && window.__v189Render) window.__v189Render(); } catch(e){}
+    try { if (document.querySelector('#v167-pat.open') && window.__v167RenderPanel) window.__v167RenderPanel(); } catch(e){}
+    try { if (document.querySelector('#v183-pat.open') && window.__v183RenderBody) window.__v183RenderBody(); } catch(e){}
+    if (chatChanged){ try { if (typeof renderMessages === 'function') renderMessages(); } catch(e){} }
+  }
+
+  /* ── Amorçage LÉGER (v403b) ──
+     On ne télécharge JAMAIS tout le magasin ici (il peut faire des dizaines de
+     Mo de conversations). On ne demande que la RÉVISION courante (since énorme
+     → aucune clé) :
+       - magasin vide (rev 0)  → on pousse nos clés locales (1er remplissage) ;
+       - magasin déjà peuplé et on n'a jamais synchronisé → on adopte sa
+         révision, ce qui évite un téléchargement massif au 1er lancement ; les
+         pulls suivants sont incrémentaux. (Un appareil neuf, dont la carte des
+         horodatages est vide, fera au contraire un pull complet une fois.) */
+  function seed(){
+    if (!enabled()) return;
+    fetch(EP + '?since=999999999999', { method: 'GET', headers: { 'Cache-Control': 'no-store' } })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(store){
+        var rev = store ? (parseInt(store.rev, 10) || 0) : 0;
+        var entries = [], t = nowMs();
+        for (var i = 0; i < EXACT.length; i++){
+          var k = EXACT[i], cur = _get(k);
+          _snap[k] = cur;
+          if (rev === 0 && cur !== null){ TS[k] = t; entries.push({ k:k, v:cur, ts:t }); }
+        }
+        if (entries.length){ tsSave(); post({ entries: entries }); }
+        if (rev > 0 && !_rev && Object.keys(TS).length){ _rev = rev; revSave(); }
+      })
+      .catch(function(){});
+  }
+
+  function boot(){
+    patchDb();
+    seed();
+    setTimeout(pull, 800);
+    setInterval(scanLocal, PUSH_MS);
+    setInterval(pull, PULL_MS);
+    /* IndexedDB peut s'ouvrir APRÈS nous : on (re)patche jusqu'à réussite. */
+    var tries = 0;
+    var t = setInterval(function(){ patchDb(); if (++tries > 20) clearInterval(t); }, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+
+  window.__theoSync = {
+    pull: pull,
+    pushNow: function(){ scanLocal(); flush(); },
+    setEnabled: function(on){ try { _set(ON_KEY, on ? '1' : '0'); } catch(e){} },
+    enabled: enabled,
+    count: function(){ return Object.keys(TS).length; }
+  };
+})();
+</script>
+
+<script id="v416-concordance">
+/* ═══ v416 — CONCORDANCE STRONG (outil d'étude expert) ═══
+   Depuis la fiche d'un mot hébreu/grec (qui affiche son numéro Strong), un clic
+   ouvre la CONCORDANCE : TOUTES les occurrences de cette entrée dans la Bible,
+   groupées par livre, avec le texte français du verset.
+
+   Index généré depuis les corpus Strong's déjà embarqués (Open Scriptures, GPL) :
+     biblehb/concordance.js  -> window.__concHb["7225"] = "1.1.1,1.10.10,..."
+     biblegr/concordance.js  -> window.__concGr["3056"] = "43.1.1,..."
+   Chargé À LA DEMANDE (~3 Mo) : rien n'est téléchargé tant qu'on n'ouvre pas
+   une concordance. */
+(function(){
+  'use strict';
+  if (window.__v416Conc) return;
+  window.__v416Conc = true;
+
+  var NOMS = ['Genèse','Exode','Lévitique','Nombres','Deutéronome','Josué','Juges','Ruth',
+    '1 Samuel','2 Samuel','1 Rois','2 Rois','1 Chroniques','2 Chroniques','Esdras','Néhémie',
+    'Esther','Job','Psaumes','Proverbes','Ecclésiaste','Cantique','Ésaïe','Jérémie',
+    'Lamentations','Ézéchiel','Daniel','Osée','Joël','Amos','Abdias','Jonas','Michée','Nahum',
+    'Habacuc','Sophonie','Aggée','Zacharie','Malachie','Matthieu','Marc','Luc','Jean','Actes',
+    'Romains','1 Corinthiens','2 Corinthiens','Galates','Éphésiens','Philippiens','Colossiens',
+    '1 Thessaloniciens','2 Thessaloniciens','1 Timothée','2 Timothée','Tite','Philémon',
+    'Hébreux','Jacques','1 Pierre','2 Pierre','1 Jean','2 Jean','3 Jean','Jude','Apocalypse'];
+
+  function nomLivre(n){ return NOMS[(parseInt(n, 10) || 1) - 1] || ('Livre ' + n); }
+  function ech(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var prom = {};
+  window.__ensureConc = function(kind){
+    var g = kind === 'gr' ? '__concGr' : '__concHb';
+    if (window[g]) return Promise.resolve(true);
+    if (prom[g]) return prom[g];
+    prom[g] = new Promise(function(res){
+      var sc = document.createElement('script');
+      sc.src = (kind === 'gr' ? 'biblegr' : 'biblehb') + '/concordance.js';
+      sc.onerror = function(){ sc.remove(); res(false); };
+      sc.onload = function(){ res(!!window[g]); };
+      document.head.appendChild(sc);
+    });
+    return prom[g];
+  };
+
+  function entree(kind, strong){
+    try {
+      var tab = kind === 'gr' ? (window.__strongsGr || {}) : (window.__strongsHb || {});
+      var e = tab[strong];
+      if (!e) return null;
+      return { lemme: e[0] || '', translit: e[1] || '', def: (kind === 'gr' ? e[3] : e[2]) || e[2] || '' };
+    } catch(e){ return null; }
+  }
+
+  var pan = null;
+  function creer(){
+    if (pan) return pan;
+    var st = document.createElement('style');
+    st.textContent =
+      '#conc-pan{position:fixed;z-index:147000;left:50%;top:5vh;transform:translateX(-50%);' +
+      'width:min(780px,95vw);max-height:90vh;display:none;flex-direction:column;background:#0e1622;' +
+      'color:#dbe8f5;border:1px solid rgba(245,197,66,.45);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.6);' +
+      'font:13px/1.55 system-ui,Segoe UI,sans-serif;overflow:hidden;}' +
+      '#conc-pan.open{display:flex;}' +
+      '#conc-head{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#132030;' +
+      'border-bottom:1px solid rgba(255,255,255,.1);}' +
+      '#conc-titre{color:#f5c542;letter-spacing:.5px;font-weight:700;}' +
+      '#conc-x{margin-left:auto;background:transparent;color:#9cc0ff;border:none;font-size:18px;cursor:pointer;}' +
+      '#conc-corps{overflow:auto;padding:12px 14px;}' +
+      '#conc-mot{font-size:24px;color:#9fd0ff;}' +
+      '#conc-tr{color:#7fd1a0;margin-left:10px;font-size:15px;}' +
+      '#conc-def{color:#a8b6c6;margin-top:4px;}' +
+      '#conc-cnt{color:#8fa3b8;margin:12px 0 6px;text-transform:uppercase;font-size:10px;letter-spacing:.6px;}' +
+      '.conc-chip{display:inline-block;margin:3px 4px 3px 0;padding:3px 9px;border-radius:20px;' +
+      'background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.35);color:#e8d9a0;cursor:pointer;font-size:11.5px;}' +
+      '.conc-chip:hover{background:rgba(245,197,66,.25);}' +
+      '.conc-chip.on{background:#f5c542;color:#000;font-weight:700;}' +
+      '.conc-occ{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.07);}' +
+      '.conc-ref{color:#f5c542;font-weight:700;}' +
+      '.conc-txt{margin-top:2px;}';
+    document.head.appendChild(st);
+    pan = document.createElement('div');
+    pan.id = 'conc-pan';
+    pan.innerHTML = '<div id="conc-head"><span id="conc-titre">CONCORDANCE</span>' +
+      '<button id="conc-x" title="Fermer">✕</button></div><div id="conc-corps"></div>';
+    document.body.appendChild(pan);
+    pan.querySelector('#conc-x').addEventListener('click', function(){ pan.classList.remove('open'); });
+    return pan;
+  }
+
+  window.__concOuvrir = function(kind, strong, label){
+    strong = String(strong || '').replace(/^[GH]/i, '').trim();
+    if (!strong) return;
+    var p = creer();
+    p.classList.add('open');
+    var titre = (kind === 'gr' ? 'G' : 'H') + strong;
+    p.querySelector('#conc-titre').textContent = '📖 CONCORDANCE — ' + titre + (label ? ' · ' + label : '');
+    var corps = p.querySelector('#conc-corps');
+    corps.innerHTML = '<div style="opacity:.7;padding:10px 0;">⏳ Chargement de l\'index de concordance…</div>';
+    Promise.all([window.__ensureConc(kind),
+                 (kind === 'gr' ? window.__ensureStrongsGr() : window.__ensureStrongsHb())])
+      .then(function(r){
+        if (!r[0]) { corps.innerHTML = '<div style="color:#ff8a8a;padding:10px 0;">Index de concordance indisponible.</div>'; return; }
+        var tab = kind === 'gr' ? window.__concGr : window.__concHb;
+        var refs = (tab && tab[strong]) ? String(tab[strong]).split(',') : [];
+        var e = entree(kind, strong);
+        var h = '';
+        if (e) {
+          h += '<div><span id="conc-mot">' + ech(e.lemme) + '</span><span id="conc-tr">' + ech(e.translit) + '</span></div>';
+          if (e.def) h += '<div id="conc-def">' + ech(String(e.def).slice(0, 400)) + '</div>';
+        }
+        if (!refs.length) {
+          h += '<div style="padding:10px 0;opacity:.8;">Aucune occurrence trouvée pour ' + ech(titre) + ' dans le corpus.</div>';
+          corps.innerHTML = h; return;
+        }
+        var parLivre = {};
+        refs.forEach(function(r){ var b = r.split('.')[0]; (parLivre[b] = parLivre[b] || []).push(r); });
+        var livres = Object.keys(parLivre).sort(function(a, b){ return parseInt(a, 10) - parseInt(b, 10); });
+        h += '<div id="conc-cnt">' + refs.length + ' verset(s) dans ' + livres.length + ' livre(s) — cliquez un livre</div>';
+        livres.forEach(function(b){
+          h += '<span class="conc-chip" data-b="' + b + '">' + ech(nomLivre(b)) + ' (' + parLivre[b].length + ')</span>';
+        });
+        h += '<div id="conc-liste" style="margin-top:10px;"></div>';
+        corps.innerHTML = h;
+        var liste = corps.querySelector('#conc-liste');
+        function montrerLivre(b){
+          corps.querySelectorAll('.conc-chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-b') === b); });
+          var rs = parLivre[b] || [];
+          liste.innerHTML = '<div style="opacity:.7;">⏳ ' + ech(nomLivre(b)) + '…</div>';
+          window.__ensureBibleBook(b).then(function(ok){
+            var d = ok && window.__bibleBooks && window.__bibleBooks[b];
+            var out = '';
+            rs.slice(0, 500).forEach(function(r){
+              var q = r.split('.'), ch = q[1], v = q[2];
+              var txt = (d && d[ch] && d[ch][v]) ? d[ch][v] : '(texte indisponible)';
+              out += '<div class="conc-occ"><span class="conc-ref">' + ech(nomLivre(b)) + ' ' + ch + ':' + v + '</span>'
+                   + '<div class="conc-txt">' + ech(txt) + '</div></div>';
+            });
+            if (rs.length > 500) out += '<div style="opacity:.6;padding:6px 0;">… et ' + (rs.length - 500) + ' autre(s).</div>';
+            liste.innerHTML = out;
+          });
+        }
+        corps.querySelectorAll('.conc-chip').forEach(function(c){
+          c.addEventListener('click', function(){ montrerLivre(c.getAttribute('data-b')); });
+        });
+        montrerLivre(livres[0]);
+      });
+  };
+
+  /* Clic sur un numéro Strong dans une fiche de mot hébreu/grec. */
+  document.addEventListener('click', function(e){
+    var a = e.target && e.target.closest ? e.target.closest('.conc-lien') : null;
+    if (!a) return;
+    e.preventDefault(); e.stopPropagation();
+    window.__concOuvrir(a.getAttribute('data-conc'), a.getAttribute('data-strong'), a.getAttribute('data-lem') || '');
+  }, true);
+})();
+</script>
+
+<script id="v420-msv2">
+/* ═══ v420 — VISUALISEUR DE MANUSCRITS v2 ═══
+   A. Lightbox plein écran : zoom (molette / pincement), déplacement à la
+      souris, navigation ‹ › entre les images, Échap pour fermer.
+   B. Haute résolution à la demande + auteur / licence / source via l'API
+      Commons (les images de Wikimedia sont souvent sous licence CC-BY-SA).
+   C. Comparateur côte à côte (2 images, zoom synchronisé).
+   D. Feuilletage IIIF des grands manuscrits numérisés (Vatican DigiVatLib,
+      e-codices) — manifests VÉRIFIÉS, pages servies par l'Image API.
+   Aucune dépendance externe : le moteur de zoom est écrit ici. */
+(function(){
+  'use strict';
+  if (window.__msv2) return; window.__msv2 = true;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* ── D. table curée manuscrit -> manifest IIIF (URLs vérifiées) ── */
+  var IIIF = [
+    /* ORDRE IMPORTANT : le plus SPÉCIFIQUE d'abord. « Vergilius Vaticanus »
+       contient « Vaticanus » — il doit être testé avant Codex Vaticanus,
+       sinon il ouvrait le mauvais manuscrit (bug vérifié). */
+    { re: /vergilius\s+vaticanus|vat\.?\s*lat\.?\s*3225/i, nom: 'Vergilius Vaticanus (Vat. lat. 3225)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3225/manifest.json' },
+    { re: /vergilius\s+romanus|vat\.?\s*lat\.?\s*3867/i,   nom: 'Vergilius Romanus (Vat. lat. 3867)',   url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.3867/manifest.json' },
+    { re: /codex\s+sinaiticus|sinaiticus/i,                nom: 'Codex Sinaiticus (édition Tischendorf, fac-similé)', url: 'https://iiif.archive.org/iiif/CodexSinaiticusTischendorf/manifest.json' },
+    { re: /codex\s+alexandrinus|alexandrinus/i,            nom: 'Codex Alexandrinus (Londres, BL Royal 1 D V)', url: 'https://iiif.archive.org/iiif/CodexAlexandrinus/manifest.json' },
+    { re: /marchalianus|vat\.?\s*gr\.?\s*2125/i,           nom: 'Codex Marchalianus (Vat. gr. 2125)',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.2125/manifest.json' },
+    { re: /codex\s+bezae|\bbezae\b|nn\.?\s*2\.?\s*41/i,    nom: 'Codex Bezae (Cambridge, MS Nn.2.41)', url: 'https://cudl.lib.cam.ac.uk/iiif/MS-NN-00002-00041' },
+    { re: /codex\s+vaticanus|vat\.?\s*gr\.?\s*1209/i,      nom: 'Codex Vaticanus (Vat. gr. 1209)',     url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1209/manifest.json' },
+    { re: /pal\.?\s*gr\.?\s*220/i,                  nom: 'Pal. gr. 220 (Vatican)',          url: 'https://digi.vatlib.it/iiif/MSS_Pal.gr.220/manifest.json' },
+    { re: /barb\.?\s*gr\.?\s*372/i,                 nom: 'Barb. gr. 372 (Vatican)',         url: 'https://digi.vatlib.it/iiif/MSS_Barb.gr.372/manifest.json' },
+    { re: /urb\.?\s*gr\.?\s*35\b/i,                 nom: 'Urb. gr. 35 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Urb.gr.35/manifest.json' },
+    { re: /vat\.?\s*lat\.?\s*1\b/i,                 nom: 'Vat. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Vat.lat.1/manifest.json' },
+    { re: /vat\.?\s*gr\.?\s*1\b/i,                  nom: 'Vat. gr. 1 (Vatican)',            url: 'https://digi.vatlib.it/iiif/MSS_Vat.gr.1/manifest.json' },
+    { re: /vat\.?\s*ar\.?\s*1\b/i,                  nom: 'Vat. ar. 1 — manuscrit arabe (1329)', url: 'https://digi.vatlib.it/iiif/MSS_Vat.ar.1/manifest.json' },
+    { re: /vat\.?\s*copt\.?\s*1\b/i,                nom: 'Vat. copt. 1 — manuscrit copte',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.copt.1/manifest.json' },
+    { re: /vat\.?\s*ebr\.?\s*1\b/i,                 nom: 'Vat. ebr. 1 — manuscrit hébreu',  url: 'https://digi.vatlib.it/iiif/MSS_Vat.ebr.1/manifest.json' },
+    { re: /pal\.?\s*lat\.?\s*1\b/i,                 nom: 'Pal. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Pal.lat.1/manifest.json' },
+    { re: /reg\.?\s*lat\.?\s*1\b/i,                 nom: 'Reg. lat. 1 (Vatican)',           url: 'https://digi.vatlib.it/iiif/MSS_Reg.lat.1/manifest.json' },
+    { re: /ott\.?\s*gr\.?\s*1\b/i,                  nom: 'Ott. gr. 1 (Vatican)',            url: 'https://digi.vatlib.it/iiif/MSS_Ott.gr.1/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*1\b|csg-?0*1\b/i,     nom: 'St. Gallen, Cod. Sang. 1',        url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0001/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*2\b|csg-?0*2\b/i,     nom: 'St. Gallen, Cod. Sang. 2',        url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0002/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*18\b|csg-?0*18\b/i,   nom: 'St. Gallen, Cod. Sang. 18',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0018/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*22\b|csg-?0*22\b/i,   nom: 'St. Gallen, Cod. Sang. 22',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0022/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*23\b|csg-?0*23\b/i,   nom: 'St. Gallen, Cod. Sang. 23',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0023/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*53\b|csg-?0*53\b/i,   nom: 'St. Gallen, Cod. Sang. 53',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0053/manifest.json' },
+    { re: /cod\.?\s*sang\.?\s*56\b|csg-?0*56\b/i,   nom: 'St. Gallen, Cod. Sang. 56',       url: 'https://www.e-codices.unifr.ch/metadata/iiif/csg-0056/manifest.json' }
+  ];
+  function iiifPour(txt){
+    var s = String(txt || '');
+    for (var i = 0; i < IIIF.length; i++) if (IIIF[i].re.test(s)) return IIIF[i];
+    return null;
+  }
+
+  /* ── CSS ── */
+  var st = document.createElement('style');
+  st.id = 'v420-css';
+  st.textContent =
+    '#msv2{position:fixed;inset:0;z-index:2147483000;display:none;flex-direction:column;background:rgba(4,8,14,.98);}' +
+    '#msv2.on{display:flex;}' +
+    '#msv2-bar{display:flex;align-items:center;gap:7px;padding:8px 12px;background:#0d1622;border-bottom:1px solid rgba(255,255,255,.1);color:#dbe8f5;font:12.5px system-ui,Segoe UI,sans-serif;flex-wrap:wrap;}' +
+    '#msv2-titre{font-weight:700;color:#9fd0ff;}' +
+    '#msv2-page{color:#8fa3b8;}' +
+    '#msv2-bar button{background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:4px 9px;cursor:pointer;font:700 11.5px system-ui;}' +
+    '#msv2-bar button:hover{background:rgba(79,142,247,.3);}' +
+    '#msv2-bar button.on{background:#4f8ef7;color:#08101c;}' +
+    '#msv2-bar .sp{margin-left:auto;}' +
+    '#msv2-zone{flex:1;display:flex;align-items:stretch;min-height:0;}' +
+    '#msv2-prev,#msv2-next{background:transparent;border:none;color:#9cc0ff;font-size:34px;cursor:pointer;padding:0 10px;}' +
+    '#msv2-prev:hover,#msv2-next:hover{color:#fff;}' +
+    '#msv2-panes{flex:1;display:flex;gap:6px;min-width:0;}' +
+    '.msv2-pane{flex:1;position:relative;overflow:hidden;background:#05080d;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;}' +
+    '.msv2-pane.drag{cursor:grabbing;}' +
+    '.msv2-pane img{max-width:none;max-height:none;transform-origin:0 0;user-select:none;-webkit-user-drag:none;}' +
+    '#msv2-cap{padding:7px 12px;background:#0d1622;border-top:1px solid rgba(255,255,255,.1);color:#a8b6c6;font:11.5px/1.5 system-ui;max-height:22vh;overflow:auto;}' +
+    '#msv2-cap a{color:#7fb4ff;}' +
+    '#msv2-hint{position:absolute;left:12px;bottom:8px;color:#5d6f82;font:11px system-ui;pointer-events:none;}';
+  document.head.appendChild(st);
+
+  var el = null, panes = [], items = [], idx = 0, cmp = false, cmpIdx = 1, sync = true, drag = null;
+
+  /* ── moteur de zoom / déplacement d'un volet ── */
+  function Pane(node){
+    var img = node.querySelector('img');
+    var o = { node: node, img: img, s: 1, tx: 0, ty: 0, nw: 0, nh: 0 };
+    o.appliquer = function(){ img.style.transform = 'translate(' + o.tx + 'px,' + o.ty + 'px) scale(' + o.s + ')'; };
+    o.fit = function(){
+      if (!o.nw) return;
+      var W = node.clientWidth || 1, H = node.clientHeight || 1;
+      var k = Math.min(W / o.nw, H / o.nh);
+      o.s = k; o.tx = (W - o.nw * k) / 2; o.ty = (H - o.nh * k) / 2; o.appliquer();
+    };
+    o.zoom = function(f, cx, cy){
+      var ns = Math.max(0.05, Math.min(24, o.s * f));
+      if (cx === undefined) { cx = node.clientWidth / 2; cy = node.clientHeight / 2; }
+      o.tx = cx - (cx - o.tx) * (ns / o.s);
+      o.ty = cy - (cy - o.ty) * (ns / o.s);
+      o.s = ns; o.appliquer();
+    };
+    o.charger = function(src){
+      if (!src) return;
+      img.onload = function(){ o.nw = img.naturalWidth || 1; o.nh = img.naturalHeight || 1; o.fit(); };
+      img.onerror = function(){};
+      img.src = src;
+    };
+    node.addEventListener('wheel', function(e){
+      e.preventDefault();
+      var r = node.getBoundingClientRect();
+      o.zoom(e.deltaY < 0 ? 1.18 : 1 / 1.18, e.clientX - r.left, e.clientY - r.top);
+      if (cmp && sync) { var p = panes[1]; if (p && p !== o) { p.s = o.s; p.appliquer(); } }
+    }, { passive: false });
+    node.addEventListener('mousedown', function(e){ drag = { o: o, x: e.clientX, y: e.clientY, tx: o.tx, ty: o.ty }; node.classList.add('drag'); e.preventDefault(); });
+    var t0 = null;
+    node.addEventListener('touchstart', function(e){
+      if (e.touches.length === 1) t0 = { n: 1, x: e.touches[0].clientX, y: e.touches[0].clientY, tx: o.tx, ty: o.ty };
+      else if (e.touches.length === 2) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+        t0 = { n: 2, d: Math.hypot(dx, dy) || 1, s: o.s, cx: (e.touches[0].clientX + e.touches[1].clientX) / 2, cy: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+      }
+    }, { passive: true });
+    node.addEventListener('touchmove', function(e){
+      if (!t0) return;
+      if (t0.n === 1 && e.touches.length === 1) { o.tx = t0.tx + (e.touches[0].clientX - t0.x); o.ty = t0.ty + (e.touches[0].clientY - t0.y); o.appliquer(); }
+      else if (t0.n === 2 && e.touches.length === 2) {
+        var dx = e.touches[0].clientX - e.touches[1].clientX, dy = e.touches[0].clientY - e.touches[1].clientY;
+        var r = node.getBoundingClientRect();
+        o.zoom((t0.s * (Math.hypot(dx, dy) / t0.d)) / o.s, t0.cx - r.left, t0.cy - r.top);
+      }
+      e.preventDefault();
+    }, { passive: false });
+    node.addEventListener('touchend', function(){ t0 = null; }, { passive: true });
+    return o;
+  }
+  window.addEventListener('mousemove', function(e){
+    if (!drag) return;
+    drag.o.tx = drag.tx + (e.clientX - drag.x);
+    drag.o.ty = drag.ty + (e.clientY - drag.y);
+    drag.o.appliquer();
+    if (cmp && sync && panes[1] && panes[1] !== drag.o) { panes[1].tx = drag.o.tx; panes[1].ty = drag.o.ty; panes[1].appliquer(); }
+  });
+  window.addEventListener('mouseup', function(){ if (!drag) return; drag.o.node.classList.remove('drag'); drag = null; });
+
+  /* ── B. métadonnées Commons (auteur / licence / source) ── */
+  var META = {};
+  function chargerMeta(it, cb){
+    if (!it || !it.wiki) return;
+    if (META[it.wiki]) { cb(META[it.wiki]); return; }
+    var nom = '';
+    try { nom = decodeURIComponent(String(it.full || it.src || '').split('?')[0].split('/').pop()); } catch(e){ nom = ''; }
+    if (!nom) return;
+    fetch('https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=imageinfo&iiprop=extmetadata|url&titles=File:' + encodeURIComponent(nom))
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var pages = (j && j.query && j.query.pages) || {};
+        var k = Object.keys(pages)[0];
+        var ii = pages[k] && pages[k].imageinfo && pages[k].imageinfo[0];
+        var em = (ii && ii.extmetadata) || {};
+        function g(x){ return String((em[x] && em[x].value) || '').replace(/<[^>]*>/g, '').trim(); }
+        var m = { auteur: g('Artist'), licence: g('LicenseShortName') || g('License'), source: g('Credit') || g('Attribution') };
+        META[it.wiki] = m; cb(m);
+      }).catch(function(){});
+  }
+
+  /* ── D. feuilletage IIIF ── */
+  function chargerIIIF(it, cb){
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || ''));
+    if (!m) { cb(null); return; }
+    fetch(m.url).then(function(r){ return r.json(); }).then(function(d){
+      var pages = [];
+      if (d.sequences && d.sequences[0]) {
+        (d.sequences[0].canvases || []).forEach(function(c, i){
+          var res = (c.images && c.images[0] && c.images[0].resource) || {};
+          var svc = res.service && (res.service['@id'] || res.service.id);
+          var u = svc ? (svc + '/full/1400,/0/default.jpg') : res['@id'];
+          if (u) pages.push({ src: u, hi: svc ? (svc + '/full/full/0/default.jpg') : u, label: (c.label || '') });
+        });
+      } else if (d.items) {
+        d.items.forEach(function(c){
+          var body = c.items && c.items[0] && c.items[0].items && c.items[0].items[0] && c.items[0].items[0].body;
+          var svc = body && body.service && (body.service[0] && (body.service[0].id || body.service[0]['@id']));
+          var u = svc ? (svc + '/full/1400,/0/default.jpg') : (body && body.id);
+          if (u) pages.push({ src: u, hi: svc ? (svc + '/full/full/0/default.jpg') : u, label: '' });
+        });
+      }
+      cb(pages.length ? { nom: m.nom, pages: pages } : null);
+    }).catch(function(){ cb(null); });
+  }
+
+  /* ── construction du visualiseur ── */
+  function creer(){
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'msv2';
+    el.innerHTML =
+      '<div id="msv2-bar">' +
+        '<span id="msv2-titre"></span><span id="msv2-page"></span>' +
+        '<button data-a="cmp" title="Comparer deux images côte à côte">⧉ Comparer</button>' +
+        '<button data-a="sync" title="Zoom synchronisé en mode comparaison">🔗</button>' +
+        '<button data-a="swap2" title="Image suivante dans le volet droit" style="display:none">⇄</button>' +
+        '<button data-a="iiif" title="Feuilleter le manuscrit numérisé (IIIF)" style="display:none">📜</button>' +
+        '<span class="sp"></span>' +
+        '<button data-a="out" title="Zoom arrière (−)">−</button>' +
+        '<button data-a="in" title="Zoom avant (+)">+</button>' +
+        '<button data-a="fit" title="Ajuster à l\'écran">⛶</button>' +
+        '<button data-a="one" title="Taille réelle (100 %)">1:1</button>' +
+        '<button data-a="orig" title="Ouvrir l\'image originale dans un onglet">⤓</button>' +
+        '<button data-a="x" title="Fermer (Échap)">✕</button>' +
+      '</div>' +
+      '<div id="msv2-zone">' +
+        '<button id="msv2-prev" title="Précédent (←)">‹</button>' +
+        '<div id="msv2-panes">' +
+          '<div class="msv2-pane" id="msv2-p1"><img alt=""><span id="msv2-hint">molette = zoom · glisser = déplacer</span></div>' +
+          '<div class="msv2-pane" id="msv2-p2" style="display:none"><img alt=""></div>' +
+        '</div>' +
+        '<button id="msv2-next" title="Suivant (→)">›</button>' +
+      '</div>' +
+      '<div id="msv2-cap"></div>';
+    document.body.appendChild(el);
+    panes[0] = Pane(el.querySelector('#msv2-p1'));
+    panes[1] = Pane(el.querySelector('#msv2-p2'));
+    el.querySelector('#msv2-prev').addEventListener('click', function(){ nav(-1); });
+    el.querySelector('#msv2-next').addEventListener('click', function(){ nav(1); });
+    el.addEventListener('click', function(e){
+      var b = e.target.closest && e.target.closest('[data-a]');
+      if (!b) return;
+      var a = b.getAttribute('data-a');
+      if (a === 'x') fermer();
+      else if (a === 'in') zoomTous(1.25);
+      else if (a === 'out') zoomTous(1 / 1.25);
+      else if (a === 'fit') { panes[0].fit(); if (cmp && panes[1]) panes[1].fit(); }
+      else if (a === 'one') { panes[0].s = 1; panes[0].appliquer(); }
+      else if (a === 'orig') { var it = items[idx]; if (it) window.open(it.full || it.src, '_blank'); }
+      else if (a === 'cmp') basculerCmp();
+      else if (a === 'sync') { sync = !sync; b.classList.toggle('on', sync); }
+      else if (a === 'swap2') { cmpIdx = (cmpIdx + 1) % items.length; afficher2(); }
+      else if (a === 'iiif') feuilleter();
+    });
+    document.addEventListener('keydown', function(e){
+      if (!el || !el.classList.contains('on')) return;
+      if (e.key === 'Escape') fermer();
+      else if (e.key === 'ArrowLeft') nav(-1);
+      else if (e.key === 'ArrowRight') nav(1);
+      else if (e.key === '+' || e.key === '=') zoomTous(1.25);
+      else if (e.key === '-') zoomTous(1 / 1.25);
+      else if (e.key === '0') panes[0].fit();
+    });
+    return el;
+  }
+  function zoomTous(f){
+    panes[0].zoom(f);
+    if (cmp && panes[1]) { panes[1].s = panes[0].s; panes[1].appliquer(); }
+  }
+  function nav(d){
+    if (items.length < 2) return;
+    idx = (idx + d + items.length) % items.length;
+    afficher();
+  }
+  function fermer(){ if (el) el.classList.remove('on'); }
+
+  function afficher(){
+    var it = items[idx]; if (!it) return;
+    el.querySelector('#msv2-titre').textContent = it.titre || '';
+    el.querySelector('#msv2-page').textContent = items.length > 1 ? '  (' + (idx + 1) + ' / ' + items.length + ')' : '';
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || ''));
+    var bi = el.querySelector('[data-a="iiif"]');
+    bi.style.display = m ? '' : 'none';
+    bi.textContent = m ? '📜 ' + m.nom.replace(/\s*\(.*/, '') : '📜';
+    panes[0].charger(it.src || it.full);
+    var cap = el.querySelector('#msv2-cap');
+    cap.innerHTML = '<b>' + esc(it.titre) + '</b>' +
+      (it.lien ? ' — <a href="' + esc(it.lien) + '" target="_blank" rel="noopener">' + esc(it.lienTxt || 'article Wikipédia') + '</a>' : '') +
+      '<div id="msv2-meta" style="opacity:.85;margin-top:2px"></div>';
+    chargerMeta(it, function(mm){
+      var d = el.querySelector('#msv2-meta');
+      if (!d || !mm) return;
+      d.innerHTML = [mm.auteur ? 'Auteur : ' + esc(mm.auteur) : '', mm.licence ? 'Licence : ' + esc(mm.licence) : '', mm.source ? 'Source : ' + esc(mm.source) : ''].filter(Boolean).join(' · ') ||
+        'Image : Wikimedia Commons';
+    });
+    if (cmp) afficher2();
+  }
+  function afficher2(){
+    if (!cmp) return;
+    var it = items[cmpIdx]; if (!it) return;
+    panes[1].charger(it.src || it.full);
+  }
+  function basculerCmp(){
+    cmp = !cmp;
+    el.querySelector('#msv2-p2').style.display = cmp ? '' : 'none';
+    el.querySelector('[data-a="cmp"]').classList.toggle('on', cmp);
+    el.querySelector('[data-a="sync"]').style.display = cmp ? '' : 'none';
+    el.querySelector('[data-a="swap2"]').style.display = cmp ? '' : 'none';
+    if (cmp) { cmpIdx = (idx + 1) % Math.max(items.length, 1); afficher2(); }
+  }
+  function feuilleter(){
+    var it = items[idx]; if (!it) return;
+    var m = iiifPour((it.titre || '') + ' ' + (it.wiki || '')); if (!m) return;
+    var cap = el.querySelector('#msv2-cap');
+    cap.innerHTML = '⏳ Chargement du manuscrit numérisé — <b>' + esc(m.nom) + '</b>… (le manifeste peut peser plusieurs Mo)';
+    chargerIIIF(it, function(res){
+      if (!res) { cap.innerHTML = '⚠️ Manuscrit numérisé indisponible pour l\'instant.'; return; }
+      items = res.pages.map(function(p, i){
+        return { src: p.src, full: p.hi, titre: m.nom + ' — page ' + (i + 1) + (p.label ? ' · ' + p.label : ''), lien: '', wiki: '' };
+      });
+      idx = 0; cmp = false;
+      el.querySelector('#msv2-p2').style.display = 'none';
+      el.querySelector('[data-a="cmp"]').classList.remove('on');
+      afficher();
+    });
+  }
+
+  /* ── ouverture depuis une carte d'image (v160/v161) ── */
+  function collecter(){
+    var out = [];
+    document.querySelectorAll('.theo-fig-img img').forEach(function(im){
+      out.push({
+        src: im.getAttribute('src') || '',
+        full: im.getAttribute('data-full') || im.getAttribute('src') || '',
+        titre: im.getAttribute('data-titre') || '',
+        lien: im.getAttribute('data-lien') || '',
+        wiki: im.getAttribute('data-wiki') || ''
+      });
+    });
+    return out;
+  }
+  window.__msv2Ouvrir = function(im){
+    var list = collecter();
+    if (!list.length) return;
+    var full = im ? (im.getAttribute('data-full') || im.getAttribute('src')) : '';
+    var i = 0;
+    for (var k = 0; k < list.length; k++) if (list[k].full === full) { i = k; break; }
+    items = list; idx = i; cmp = false;
+    creer();
+    el.classList.add('on');
+    el.querySelector('#msv2-p2').style.display = 'none';
+    el.querySelector('[data-a="cmp"]').classList.remove('on');
+    afficher();
+  };
+
+  /* v426 — ouverture d'une liste FOURNIE de l'extérieur. Les témoins du verset
+     (v422) et les manuscrits du Corpus Coranicum ne sont pas des cartes
+     .theo-fig-img : la visionneuse ne doit donc plus dépendre de ce sélecteur
+     pour s'ouvrir. `list` = [{src, full, titre, wiki, lien, lienTxt}, …]. */
+  window.__msv2OuvrirList = function(list, i){
+    if (!list || !list.length) return;
+    items = list.slice();
+    idx = Math.max(0, Math.min(i || 0, items.length - 1));
+    cmp = false;
+    creer();
+    el.classList.add('on');
+    el.querySelector('#msv2-p2').style.display = 'none';
+    el.querySelector('[data-a="cmp"]').classList.remove('on');
+    afficher();
+  };
+
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    var im = (t.closest && t.closest('.theo-fig-img img')) || (t.closest && t.closest('.msv2-zoom') ? t.closest('.theo-fig').querySelector('img') : null);
+    if (!im) return;
+    e.preventDefault(); e.stopPropagation();
+    window.__msv2Ouvrir(im);
+  }, true);
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = e.target;
+    if (t && t.tagName === 'IMG' && t.closest && t.closest('.theo-fig-img')) { e.preventDefault(); window.__msv2Ouvrir(t); }
+  });
+})();
+</script>
+
+<script id="v422-temoins">
+/* ═══ v422 — TÉMOINS DU VERSET (critique textuelle) ═══
+   Dans l'infobulle d'un verset biblique, liste les manuscrits qui contiennent
+   RÉELLEMENT ce verset — rouleaux de Qumrân, codex hébreux, papyrus et grands
+   codex grecs — puis signale les VARIANTES notables (fin longue de Marc,
+   femme adultère, Comma Johanneum…).
+
+   Plages = [livre, chap1, vers1, chap2, vers2] avec la numérotation de l'appli
+   (1-39 Ancien Testament, 40-66 Nouveau Testament). `e` = lacunes à retirer.
+   Les témoins fragmentaires portent la mention « fragments ».
+
+   Ces données suivent l'apparat critique standard (Nestle-Aland 28 / UBS5).
+   Elles disent ce que les manuscrits CONTIENNENT, pas une leçon variante
+   précise : c'est un repère d'étude, pas un apparat complet. */
+(function(){
+  'use strict';
+  if (window.__v422) return; window.__v422 = true;
+
+  var TEMOINS = [
+    /* ── Rouleaux de Qumrân (Ancien Testament hébreu) ── */
+    { id:'1QIsaa', nom:'1QIsaᵃ — grand rouleau d\'Isaïe', d:'c. 125 av. J.-C.', t:'Qumrân', n:'le plus ancien manuscrit hébreu d\'Isaïe presque complet', p:[[23,1,1,23,66,24]] },
+    { id:'1QpHab', nom:'1QpHab — pesher d\'Habacuc', d:'Ier s. av. J.-C.', t:'Qumrân', n:'commentaire de Habacuc 1-2', p:[[35,1,1,35,2,20]] },
+    /* ── Codex hébreux (texte massorétique) ── */
+    { id:'Leningrad', nom:'Codex Leningradensis (B19a)', d:'1008', t:'Codex hébreu', n:'base du texte massorétique utilisé par cette application', p:[[1,1,1,39,31,24]] },
+    { id:'Alep', nom:'Codex d\'Alep', d:'c. 920', t:'Codex hébreu', n:'partiel — une grande partie du manuscrit est perdue', frag:1, p:[[1,1,1,39,31,24]] },
+    /* ── Papyrus (Nouveau Testament grec) ── */
+    { id:'P52', nom:'𝔓52 (Papyrus Rylands 457)', d:'c. 125-175', t:'Papyrus', n:'le plus ancien fragment connu du Nouveau Testament', p:[[43,18,31,43,18,33],[43,18,37,43,18,38]] },
+    { id:'P90', nom:'𝔓90 (P. Oxy. 3523)', d:'IIe s.', t:'Papyrus', p:[[43,18,36,43,19,7]] },
+    { id:'P104', nom:'𝔓104 (P. Oxy. 4404)', d:'IIe s.', t:'Papyrus', p:[[40,21,34,40,21,37],[40,21,43,40,21,45]] },
+    { id:'P98', nom:'𝔓98 (P. IFAO 237b)', d:'IIe s.', t:'Papyrus', p:[[66,1,13,1,20]] },
+    { id:'P137', nom:'𝔓137 (P. Oxy. 5345)', d:'IIe-IIIe s.', t:'Papyrus', p:[[41,1,7,41,1,9],[41,1,16,41,1,18]] },
+    { id:'P66', nom:'𝔓66 (Papyrus Bodmer II)', d:'c. 200', t:'Papyrus', n:'Jean', p:[[43,1,1,43,6,11],[43,6,35,43,14,26],[43,14,29,43,21,9]] },
+    { id:'P75', nom:'𝔓75 (Bodmer XIV-XV)', d:'c. 175-225', t:'Papyrus', n:'Luc et Jean', p:[[42,3,18,42,18,18],[42,22,4,42,24,53],[43,1,1,43,11,45],[43,11,48,43,15,10]] },
+    { id:'P46', nom:'𝔓46 (Chester Beatty II)', d:'c. 200', t:'Papyrus', n:'épîtres de Paul — fragments', frag:1, p:[[45,5,17,45,16,27],[46,1,1,46,16,24],[47,1,1,47,13,14],[48,1,1,48,6,18],[49,1,1,49,6,24],[50,1,1,50,4,23],[51,1,1,51,4,18],[52,1,1,52,5,28],[58,1,1,58,13,25]] },
+    { id:'P45', nom:'𝔓45 (Chester Beatty I)', d:'IIIe s.', t:'Papyrus', n:'Évangiles — fragments', frag:1, p:[[40,20,1,40,26,75],[41,4,36,41,12,44],[42,6,31,42,14,35],[43,4,51,43,21,25]] },
+    { id:'P47', nom:'𝔓47 (Chester Beatty III)', d:'IIIe s.', t:'Papyrus', n:'Apocalypse', p:[[66,9,10,66,17,2]] },
+    { id:'P115', nom:'𝔓115 (P. Oxy. 4499)', d:'IIIe-IVe s.', t:'Papyrus', n:'Apocalypse — fragments', frag:1, p:[[66,2,1,66,3,22],[66,5,8,66,6,5],[66,8,3,66,8,13],[66,9,1,66,15,7]] },
+    /* ── Grands codex (grec) ── */
+    { id:'01', nom:'Codex Sinaiticus (01, ℵ)', d:'IVe s.', t:'Codex', n:'Bible entière (AT grec + NT) ; la fin longue de Marc et la femme adultère n\'y sont que des AJOUTS d\'un correcteur', p:[[1,1,1,66,22,21]], e:[[41,16,9,41,16,20],[43,7,53,43,8,11]] },
+    { id:'02', nom:'Codex Alexandrinus (02, A)', d:'Ve s.', t:'Codex', n:'lacunes : Mt 1–25:5, Jn 6:50–8:52, 2Co 4:13–12:6', p:[[1,1,1,66,22,21]], e:[[40,1,1,40,25,5],[43,6,50,43,8,52],[47,4,13,47,12,6]] },
+    { id:'03', nom:'Codex Vaticanus (03, B)', d:'IVe s.', t:'Codex', n:'NT jusqu\'à He 9:13 (au-delà : Pastorales, Philémon, Apocalypse absents) ; l\'évangile de Marc s\'arrête à 16:8', p:[[1,1,1,58,9,13]], e:[[41,16,9,41,16,20],[43,7,53,43,8,11]] },
+    { id:'04', nom:'Codex Ephraemi (04, C)', d:'Ve s.', t:'Codex', n:'palimpseste — portions de presque tous les livres du NT', frag:1, p:[[40,1,1,66,22,21]] },
+    { id:'05', nom:'Codex Bezae (05, D)', d:'Ve s.', t:'Codex', n:'Évangiles et Actes — texte « occidental », grec-latin', p:[[40,1,1,44,28,31]] },
+    { id:'032', nom:'Codex Washingtonianus (032, W)', d:'Ve s.', t:'Codex', n:'Évangiles', p:[[40,1,1,43,21,25]] },
+    { id:'019', nom:'Codex Regius (019, L)', d:'VIIIe s.', t:'Codex', n:'Évangiles', p:[[40,1,1,43,21,25]] }
+  ];
+
+  var VARIANTES = [
+    { p:[41,16,9,41,16,20], n:'Fin longue de Marc (16:9-20) : ABSENTE des plus anciens témoins (Sinaiticus 01, Vaticanus 03) ; présente chez Alexandrinus (02), Bezae (05) et dans la tradition byzantine.' },
+    { p:[43,7,53,43,8,11], n:'La femme adultère (7:53–8:11) : ABSENTE des plus anciens témoins (𝔓66, 𝔓75, Sinaiticus, Vaticanus) ; présente chez Bezae (05). Certains manuscrits la placent ailleurs (après Lc 21:38).' },
+    { p:[62,5,7,62,5,8], n:'« Comma Johanneum » (1 Jn 5:7-8) : absent de TOUS les manuscrits grecs antérieurs au XVIᵉ siècle ; il n\'apparaît que dans des témoins grecs tardifs et la Vulgate récente.' },
+    { p:[44,8,37,44,8,37], n:'Ac 8:37 : omis par 𝔓45, 𝔓74, Sinaiticus, Vaticanus et Alexandrinus — verset probablement ajouté.' },
+    { p:[42,22,43,42,22,44], n:'Lc 22:43-44 (agonie, sueur de sang) : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus ; présent chez Bezae (05).' },
+    { p:[43,5,4,43,5,4], n:'Jn 5:4 (l\'ange agitant l\'eau) : omis par 𝔓66, 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[42,23,17,42,23,17], n:'Lc 23:17 : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[42,17,36,42,17,36], n:'Lc 17:36 : omis par 𝔓75, Sinaiticus, Vaticanus et Alexandrinus.' },
+    { p:[40,17,21,40,17,21], n:'Mt 17:21 : omis par Sinaiticus et Vaticanus ; présent chez Bezae (05).' },
+    { p:[40,18,11,40,18,11], n:'Mt 18:11 : omis par Sinaiticus et Vaticanus.' },
+    { p:[41,9,44,41,9,44], n:'Mc 9:44 : omis par Sinaiticus et Vaticanus.' },
+    { p:[41,9,46,41,9,46], n:'Mc 9:46 : omis par Sinaiticus et Vaticanus.' }
+  ];
+
+  /* ── v426 — IMAGE de chaque témoin ──
+     `f` = nom du fichier sur Wikimedia Commons, `w` = article Wikipédia.
+     Les 22 entrées ont été VÉRIFIÉES une par une (résolution réelle du
+     fichier + type MIME image + code HTTP 200) : aucune URL devinée.
+     Les images sont chargées à la demande — `Special:FilePath` sert un
+     aperçu à la largeur demandée, jamais le fichier entier. */
+  var MSIMG = {
+    '1QIsaa':   { f:'Great Isaiah Scroll.jpg', w:'Rouleau d\'Isaïe' },
+    '1QpHab':   { f:'The Commentary on Habakkuk Scroll (1QpHab) Written in Hebrew - Google Art Project.jpg', w:'Pesher d\'Habacuc' },
+    'Leningrad':{ f:'Leningrad Codex Folio 040b.jpg', w:'Codex de Léningrad' },
+    'Alep':     { f:'Aleppo Codex (Deut).jpg', w:'Codex d\'Alep' },
+    'P52':      { f:'Papyrus 52.jpg', w:'Papyrus 52' },
+    'P90':      { f:'Oxford, Sackler Library Ms P. Oxy. 3523 (Papyrus 90) recto John 18, 36-19, 1.jpg', w:'Papyrus 90' },
+    'P104':     { f:'Oxford, Sackler Library Ms LXIV 4404 (Papyrus 104) recto Matt 21, 34-37.jpg', w:'Papyrus 104' },
+    'P98':      { f:'Cairo, French Institute for Oriental Archaeology Ms P. IFAO inv. 237b (Papyrus 98) recto Rev 1, 13-2, 1.jpg', w:'Papyrus 98' },
+    'P137':     { f:'Oxford, Sackler Library Ms P. Oxy LXXXIII 5345 (Papyrus 137) recto Mark 1, 7-9 (left) verso Mark 1, 16-18 (right).jpg', w:'Papyrus 137' },
+    'P66':      { f:'Papyrus66.jpg', w:'Papyrus 66' },
+    'P75':      { f:'Vatican, Apostolic Library Ms Hanna Papyrus 1 - Papyrus Bodmer XIV\u2013XV (Papyrus 75) fol 1B9r Luke 14, 3-14.jpg', w:'Papyrus 75' },
+    'P46':      { f:'Ann Arbor, University of Michigan P.Mich.inv. 6238 (Papyrus 46) fol. 142r - 2 Corinthians 11,33-12,9.jpg', w:'Papyrus 46' },
+    'P45':      { f:'Dublin, Chester Beatty Ms Papyrus 45 BP I ff.13-14 Luke 11.50-12.12; 12.18-37; 12.42-13.1; 13.jpg', w:'Papyrus 45' },
+    'P47':      { f:'Papyrus 47 Rev 13,16-14.4.jpg', w:'Papyrus 47' },
+    'P115':     { f:'P. Oxy. LXVI 4499.jpg', w:'Papyrus 115' },
+    '01':       { f:'Codex Sinaiticus Matthew 1,1-2,5.JPG', w:'Codex Sinaiticus' },
+    '02':       { f:'Codex Alexandrinus f41v - Luke.jpg', w:'Codex Alexandrinus' },
+    '03':       { f:'Codex Vaticanus B.jpg', w:'Codex Vaticanus' },
+    '04':       { f:'Codex Ephraemi f52.jpg', w:'Codex Ephraemi Rescriptus' },
+    '05':       { f:'Codex Bezae - Greek Luke 23-47 to 24-1 (The S.S. Teacher\'s Edition-The Holy Bible - Plate XXV).jpg', w:'Codex Bezae' },
+    '032':      { f:'Codex Washingtonensis W 032.JPG', w:'Codex Washingtonianus' },
+    '019':      { f:'Codex Regius (Fin de Marc).png', w:'Codex Regius' }
+  };
+
+  function cle(b, c, v){ return b * 1000000 + c * 1000 + v; }
+  function dans(pg, b, c, v){
+    return cle(pg[0], pg[1], pg[2]) <= cle(b, c, v) && cle(b, c, v) <= cle(pg[3], pg[4], pg[5]);
+  }
+  function couvert(t, b, c, v){
+    var dedans = false;
+    (t.p || []).forEach(function(pg){ if (dans(pg, b, c, v)) dedans = true; });
+    if (!dedans) return false;
+    (t.e || []).forEach(function(pg){ if (dans(pg, b, c, v)) dedans = false; });
+    return dedans;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var ORDRE = ['Qumrân', 'Codex hébreu', 'Papyrus', 'Codex'];
+
+  window.__msRefHtml = function(p){
+    var b = parseInt(p && p.book, 10);
+    var c = parseInt(p && p.ch, 10);
+    var v = parseInt(p && p.v1, 10);
+    if (!b || !c || !v) return '';
+
+    var parType = {};
+    TEMOINS.forEach(function(t){
+      if (!couvert(t, b, c, v)) return;
+      (parType[t.t] = parType[t.t] || []).push(t);
+    });
+    var notes = VARIANTES.filter(function(x){ return dans(x.p, b, c, v); });
+    var total = 0;
+    Object.keys(parType).forEach(function(k){ total += parType[k].length; });
+    if (!total && !notes.length) return '';
+
+    var h = '<div style="margin-top:9px;padding-top:7px;border-top:1px dashed rgba(245,197,66,.4)">';
+    if (total) {
+      h += '<div style="color:#f0c060;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📜 Témoins de ce verset</div>';
+      ORDRE.forEach(function(tp){
+        var l = parType[tp]; if (!l || !l.length) return;
+        h += '<div style="font-size:11.5px;line-height:1.65;margin-bottom:2px;"><span style="color:#9fd0ff;font-weight:700">' + esc(tp) + ' :</span> ';
+        h += l.map(function(t){
+          var libelle = esc(t.nom) + ' <span style="color:#8fa3b8">(' + esc(t.d) + (t.frag ? ', fragments' : '') + ')</span>';
+          var bulle = esc((t.n ? t.n + ' — ' : '') + t.d);
+          var im = MSIMG[t.id];
+          /* v426 — l'infobulle du verset étant en `pointer-events:none`, chaque
+             pastille doit RÉACTIVER les événements pour être survolable. */
+          if (!im || !window.__msChipAttrs) {
+            return '<span title="' + bulle + '" style="cursor:help">' + libelle + '</span>';
+          }
+          var attrs = window.__msChipAttrs({
+            apercu: window.__msCommons(im.f, 560),
+            grand:  window.__msCommons(im.f, 1600),
+            full:   window.__msCommons(im.f, 0),
+            titre:  t.nom,
+            sous:   t.d + (t.frag ? ' — fragments' : '') + (t.n ? ' — ' + t.n : ''),
+            wiki:   im.f,
+            lien:   im.w ? 'https://fr.wikipedia.org/wiki/' + encodeURIComponent(im.w) : '',
+            lienTxt: im.w ? 'article Wikipédia' : ''
+          });
+          return '<span ' + attrs + ' style="pointer-events:auto;cursor:zoom-in;' +
+                 'border-bottom:1px dotted rgba(159,208,255,.55)" ' +
+                 'title="' + bulle + ' · clic pour agrandir">' + libelle + '</span>';
+        }).join(' · ');
+        h += '</div>';
+      });
+    }
+    notes.forEach(function(x){
+      h += '<div style="margin-top:6px;font-size:11.5px;color:#ffcf8a;background:rgba(245,197,66,.09);' +
+           'border-left:3px solid #f5c542;padding:5px 9px;border-radius:0 6px 6px 0">' +
+           '⚠️ <b>Variante notable</b> — ' + esc(x.n) + '</div>';
+    });
+    h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Repères d\'après l\'apparat critique standard (Nestle-Aland 28 / UBS5).</div>';
+    h += '</div>';
+    return h;
+  };
+})();
+</script>
+
+<script id="v426-msapercu">
+/* ═══ v426 — APERÇU DES MANUSCRITS AU SURVOL ═══
+   Deux endroits de l'application montrent des manuscrits :
+     • l'infobulle d'un verset BIBLIQUE (module v422) — les témoins textuels
+       (papyrus, codex, rouleaux de Qumrân) ;
+     • l'infobulle d'un verset CORANIQUE (bloc Corpus Coranicum) — les
+       manuscrits du verset.
+   Dans les deux cas : SURVOLER la référence affiche l'IMAGE du manuscrit dans
+   une carte flottante ; un CLIC l'ouvre en grand dans la visionneuse v420
+   (zoom, déplacement, métadonnées Commons, et feuilletage IIIF quand le
+   manuscrit est numérisé).
+
+   POURQUOI une carte FLOTTANTE et en `pointer-events:none` :
+   - l'infobulle n'a AUCUNE hauteur maximale ; un aperçu inséré dedans la
+     ferait déborder de l'écran ;
+   - une carte qui ne capte aucun événement ne peut pas perturber la mécanique
+     de rétention du panneau (v105c), qui juge la position RÉELLE du pointeur
+     avec `elementFromPoint`.
+   ═══ */
+(function(){
+  'use strict';
+  if (window.__msApercu) return; window.__msApercu = true;
+
+  var el = null, tmr = null, visible = false;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  /* URL d'une image de Wikimedia Commons depuis son nom de fichier.
+     `Special:FilePath` redirige vers le fichier réel : l'URL reste valable
+     même si le fichier est renommé, contrairement à un lien en dur. */
+  function commons(nom, largeur){
+    var base = 'https://commons.wikimedia.org/wiki/Special:FilePath/' +
+               encodeURIComponent(String(nom).replace(/^File:/, ''));
+    return largeur ? base + '?width=' + largeur : base;
+  }
+  window.__msCommons = commons;
+
+  function creer(){
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'ms-apercu';
+    el.style.cssText = 'position:fixed;z-index:2147482500;display:none;pointer-events:none;' +
+      'max-width:324px;padding:8px;border-radius:12px;background:rgba(8,16,28,.97);' +
+      'border:1px solid rgba(245,197,66,.45);box-shadow:0 12px 44px rgba(0,0,0,.72);' +
+      'color:#eaf4ff;font:12px system-ui,Segoe UI,sans-serif;';
+    el.innerHTML =
+      '<img alt="" style="display:block;max-width:308px;max-height:330px;border-radius:8px;background:#05080d">' +
+      '<div id="ms-apercu-t" style="margin-top:6px;font-weight:700;color:#f0d68a;font-size:11.5px;line-height:1.4"></div>' +
+      '<div id="ms-apercu-s" style="margin-top:2px;color:#8fa3b8;font-size:10.5px;line-height:1.45"></div>' +
+      '<div style="margin-top:5px;color:#7fb4ff;font-size:10px;letter-spacing:.4px">🔍 clic = agrandir (zoom, métadonnées)</div>';
+    /* Une image distante peut échouer (réseau, quota) : on le DIT au lieu de
+       laisser un cadre vide, et la carte reste utile (titre + repères). */
+    el.querySelector('img').onerror = function(){
+      this.style.display = 'none';
+      var s = el.querySelector('#ms-apercu-s');
+      if (s) s.textContent = (s.textContent ? s.textContent + ' — ' : '') + 'image indisponible (réseau)';
+    };
+    el.querySelector('img').onload = function(){ this.style.display = 'block'; };
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function montrer(chip, o){
+    creer();
+    var img = el.querySelector('img');
+    if (img.getAttribute('data-k') !== o.apercu) {
+      img.setAttribute('data-k', o.apercu);
+      img.style.display = 'block';      /* on repart d'une image « à charger » */
+      img.src = o.apercu;
+    }
+    el.querySelector('#ms-apercu-t').textContent = o.titre || '';
+    el.querySelector('#ms-apercu-s').textContent = o.sous || '';
+    el.style.display = 'block';
+    visible = true;
+
+    /* On s'ancre au PANNEAU, pas à la pastille : la carte doit rester à côté
+       de l'infobulle, jamais par-dessus le texte du verset. */
+    var panneau = chip.closest && (chip.closest('#bible-verse-tip') ||
+                                   chip.closest('#quran-verse-tip') ||
+                                   chip.closest('#tafsir-verse-tip'));
+    var ancre = panneau ? panneau.getBoundingClientRect() : chip.getBoundingClientRect();
+    var c = chip.getBoundingClientRect();
+    var W = el.offsetWidth || 324, H = el.offsetHeight || 400;
+    var x = ancre.right + 10;
+    if (x + W > window.innerWidth - 8) x = ancre.left - W - 10;
+    if (x < 8) x = Math.max(8, Math.min(window.innerWidth - W - 8, c.left));
+    var y = Math.min(Math.max(8, c.top - 6), Math.max(8, window.innerHeight - H - 8));
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+  }
+  function cacher(){ if (el && visible) { el.style.display = 'none'; visible = false; } }
+
+  /* Fermeture de sécurité : si le pointeur n'est plus sur une pastille (ou si
+     l'infobulle s'est refermée sous le curseur), la carte doit disparaître —
+     sinon elle resterait peinte alors que sa pastille n'existe plus.
+     ATTENTION (mesuré) : les panneaux d'infobulle SONT défilables (le bloc
+     Corpus Coranicum est long). Un `scroll` en capture sur window attrape donc
+     le défilement INTERNE du panneau, qui survient précisément quand on
+     survole une pastille — et masquait la carte aussitôt affichée. On ne
+     réagit qu'aux défilements qui ne viennent PAS d'un panneau. */
+  window.addEventListener('scroll', function(e){
+    var t = e.target;
+    if (t && t.closest && t.closest('#bible-verse-tip,#quran-verse-tip,#tafsir-verse-tip')) return;
+    cacher();
+  }, true);
+  document.addEventListener('mouseleave', cacher);
+
+  /* Attributs communs à toutes les pastilles de manuscrit. Les URLs sont
+     portées par la pastille elle-même : le moteur n'a rien à deviner. */
+  window.__msChipAttrs = function(o){
+    return 'class="ms-chip" data-msapercu="' + esc(o.apercu) + '" ' +
+      'data-msgrand="' + esc(o.grand || o.apercu) + '" ' +
+      'data-msfull="' + esc(o.full || o.grand || o.apercu) + '" ' +
+      'data-mst="' + esc(o.titre || '') + '" data-mss="' + esc(o.sous || '') + '" ' +
+      'data-mslien="' + esc(o.lien || '') + '" data-mslient="' + esc(o.lienTxt || '') + '" ' +
+      'data-mswiki="' + esc(o.wiki || '') + '"';
+  };
+
+  function lire(chip){
+    return {
+      apercu: chip.getAttribute('data-msapercu') || '',
+      grand:  chip.getAttribute('data-msgrand') || '',
+      full:   chip.getAttribute('data-msfull') || '',
+      titre:  chip.getAttribute('data-mst') || '',
+      sous:   chip.getAttribute('data-mss') || '',
+      lien:   chip.getAttribute('data-mslien') || '',
+      lienTxt: chip.getAttribute('data-mslient') || '',
+      wiki:   chip.getAttribute('data-mswiki') || ''
+    };
+  }
+
+  /* Le masquage est DIFFÉRÉ (90 ms) : le temps de traverser le séparateur « · »
+     entre deux pastilles sans faire clignoter la carte. */
+  function armerCache(){
+    if (tmr) clearTimeout(tmr);
+    tmr = setTimeout(function(){ tmr = null; cacher(); }, 90);
+  }
+
+  document.addEventListener('mouseover', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) { armerCache(); return; }          /* on a quitté les pastilles */
+    var o = lire(c);
+    if (!o.apercu) return;
+    if (tmr) { clearTimeout(tmr); tmr = null; }
+    montrer(c, o);
+  }, true);
+
+  document.addEventListener('mouseout', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) return;
+    /* on reste DANS la même pastille (on passe sur son libellé interne) */
+    if (e.relatedTarget && c.contains(e.relatedTarget)) return;
+    armerCache();
+  }, true);
+
+  /* Clic → visionneuse v420, avec TOUS les manuscrits de la même infobulle,
+     pour pouvoir passer de l'un à l'autre avec ‹ ›. */
+  document.addEventListener('click', function(e){
+    var c = e.target && e.target.closest ? e.target.closest('.ms-chip') : null;
+    if (!c) return;
+    var racine = (c.closest && (c.closest('#bible-verse-tip') || c.closest('#quran-verse-tip') ||
+                                c.closest('#tafsir-verse-tip'))) || document;
+    var tous = [];
+    racine.querySelectorAll('.ms-chip').forEach(function(k){
+      var o = lire(k); if (o.apercu) tous.push(o);
+    });
+    var i = 0, cible = c.getAttribute('data-msapercu');
+    for (var k = 0; k < tous.length; k++) if (tous[k].apercu === cible) { i = k; break; }
+    cacher();
+    if (window.__msv2OuvrirList) {
+      window.__msv2OuvrirList(tous.map(function(o){
+        return { src: o.grand || o.apercu, full: o.full || o.grand || o.apercu,
+                 titre: o.titre, wiki: o.wiki, lien: o.lien, lienTxt: o.lienTxt };
+      }), i);
+    }
+    e.preventDefault();
+  }, true);
+})();
+</script>
+
+<script id="v424-asbab">
+/* ═══ v424 — CHRONOLOGIE DE LA RÉVÉLATION + ASBĀB AL-NUZŪL ═══
+   Dans l'infobulle d'un verset coranique :
+     • CHRONOLOGIE — rang de révélation de la sourate (1..114) et période
+       (mecquoise 610-622 / médinoise 622-632). Ordre de révélation selon la
+       numérotation « égyptienne » standard (celle des marges du Caire),
+       reprise par la plupart des éditions modernes.
+     • ASBĀB AL-NUZŪL — l'occasion de la révélation, telle que la rapporte la
+       tradition exégétique (al-Wāḥidī, Ibn Ḥajar, Ṭabarī). Ce sont des
+       traditions narratives : on les présente comme telles, pas comme des faits
+       établis. */
+(function(){
+  'use strict';
+  if (window.__v424) return; window.__v424 = true;
+
+  /* Ordre de révélation des 114 sourates (numérotation égyptienne standard). */
+  var ORDRE = [
+    96,68,73,74,1,111,81,87,92,89,  93,94,103,100,108,102,107,109,105,113,
+    114,112,53,80,97,91,85,95,106,101, 75,104,77,50,90,86,54,38,7,72,
+    36,25,35,19,20,56,26,27,28,17,  10,11,12,15,6,37,31,34,39,40,
+    41,42,43,44,45,46,51,88,18,16,  71,14,21,23,32,52,67,69,70,78,
+    79,82,84,30,29,83,2,8,3,33,     60,4,99,57,47,13,55,76,65,98,
+    59,24,22,63,58,49,66,64,61,62,  48,5,9,110
+  ];
+  /* Sourates médinoises (les autres sont mecquoises). Liste standard (28). */
+  var MEDINOISES = [2,3,4,5,8,9,13,22,24,33,47,48,49,55,57,58,59,60,61,62,63,64,65,66,76,98,99,110];
+
+  /* Asbāb al-nuzūl : s = sourate, v = [verset début, verset fin]. */
+  var ASBAB = [
+    { s:96, v:[1,5], t:'La première révélation : l\'ange Gabriel apparaît au Prophète dans la caverne de Ḥirāʾ et lui ordonne de lire (610).' },
+    { s:93, v:[1,11], t:'La « pause » de la révélation : les Qurayshites dirent que le Seigneur avait abandonné le Prophète ; cette sourate répond « ton Seigneur ne t\'a ni abandonné ni haï ».' },
+    { s:74, v:[1,7], t:'La reprise de la révélation après la pause : « Ô toi, enveloppé d\'un manteau, lève-toi et avertis ».' },
+    { s:73, v:[1,4], t:'Institution de la prière nocturne (qiyām al-layl) au début de la mission.' },
+    { s:72, v:[1,2], t:'Un groupe de jinn, passant par la vallée de Nakhlah, entendit la récitation du Prophète et crut.' },
+    { s:54, v:[1,2], t:'La fente de la lune : un signe demandé par les Qurayshites ; selon la tradition, la lune se fendit.' },
+    { s:26, v:[214,214], t:'Ordre d\'avertir la famille proche : le Prophète convoqua le clan des ʿAbd al-Muṭṭalib sur le mont Ṣafā.' },
+    { s:30, v:[1,5], t:'La défaite des Byzantins devant les Perses (614) : Abū Bakr paria sur leur victoire future, que ce passage annonce.' },
+    { s:17, v:[85,85], t:'Les Juifs interrogèrent le Prophète sur l\'« esprit » (rūḥ) : « l\'esprit relève de l\'ordre de mon Seigneur ».' },
+    { s:18, v:[9,10], t:'Les Qurayshites, conseillés par les Juifs, posèrent trois questions — dont celle des « jeunes de la caverne ».' },
+    { s:22, v:[39,40], t:'Autorisation de combattre, donnée aux premiers musulmans persécutés à La Mecque.' },
+    { s:24, v:[11,20], t:'L\'affaire du collier (al-ifk) : ʿĀʾisha, accusée d\'adultère, est innocentée par ces versets.' },
+    { s:24, v:[31,31], t:'Le verset du voile : les femmes de Médine se découvraient devant les hommes ; le verset fixe la pudeur et le voile.' },
+    { s:33, v:[37,37], t:'Le mariage du Prophète avec Zaynab, ex-épouse de son fils adoptif Zayd : le verset abolit la prohibition de l\'adoption.' },
+    { s:33, v:[53,53], t:'Le voile des épouses du Prophète, à l\'occasion du festin de mariage : des invités s\'attardaient.' },
+    { s:49, v:[1,5], t:'La délégation de Banū Tamīm : Abū Bakr et ʿUmar haussèrent la voix devant le Prophète ; ces versets l\'interdisent.' },
+    { s:58, v:[1,4], t:'Khawla bint Thaʿlaba : son mari Aws prononça la formule du ẓihār (répudiation par assimilation à la mère) ; elle se plaignit au Prophète.' },
+    { s:60, v:[1,3], t:'Ḥāṭib b. Abī Baltaʿa, qui avait averti La Mecque des préparatifs de la conquête.' },
+    { s:63, v:[1,4], t:'Les hypocrites de Médine, menés par ʿAbdallāh b. Ubayy.' },
+    { s:66, v:[1,5], t:'Le serment du Prophète, qui s\'était interdit le miel (ou sa servante Māriya) pour satisfaire ses épouses.' },
+    { s:80, v:[1,10], t:'ʿAbdallāh b. Umm Maktūm, aveugle, vint interroger le Prophète qui détourna le visage : le verset le reprend et l\'honore.' },
+    { s:83, v:[1,4], t:'Les fraudeurs de Médine : un homme y mesurait plus large qu\'il ne rendait.' },
+    { s:85, v:[1,8], t:'Les « gens de la fosse » : la persécution des chrétiens de Najrān par le roi ḥimyarite Dhū Nuwās.' },
+    { s:98, v:[1,8], t:'Les gens du Livre de Médine et la venue du Prophète.' },
+    { s:104, v:[1,4], t:'Al-Akhnas b. Sharīq (ou Umayya b. Khalaf), qui méditait du Prophète et amassait sa fortune.' },
+    { s:105, v:[1,5], t:'L\'année de l\'Éléphant (~570) : l\'expédition d\'Abraha contre la Kaaba.' },
+    { s:106, v:[1,4], t:'La sécurité des caravanes qurayshites, contrepartie du service de la Kaaba.' },
+    { s:108, v:[1,3], t:'Al-Kawthar : al-ʿĀṣ b. Wāʾil traita le Prophète d\'« abtar » (sans postérité) à la mort de son fils.' },
+    { s:109, v:[1,6], t:'Les notables qurayshites proposèrent au Prophète un compromis d\'adoration alternée.' },
+    { s:110, v:[1,3], t:'La conquête de La Mecque (630) et l\'entrée des gens en foule dans l\'islam.' },
+    { s:111, v:[1,5], t:'Abū Lahab et son épouse Umm Jamīl, ennemis déclarés du Prophète.' },
+    { s:112, v:[1,4], t:'Un homme demanda au Prophète la généalogie de son Seigneur : « Dis : Il est Allah, l\'Unique ».' },
+    { s:113, v:[1,5], t:'Le sortilège de Labīd b. al-Aʿṣam : ces deux sourates (113-114) furent révélées pour la guérison du Prophète.' },
+    { s:114, v:[1,6], t:'Le sortilège de Labīd b. al-Aʿṣam : ces deux sourates (113-114) furent révélées pour la guérison du Prophète.' },
+    { s:8, v:[1,1], t:'La bataille de Badr (624) : les Compagnons se disputaient le butin.' },
+    { s:8, v:[67,69], t:'Badr : le Prophète consulta Abū Bakr et ʿUmar sur le sort des prisonniers.' },
+    { s:9, v:[113,114], t:'Le Prophète voulait demander pardon pour sa mère (ou pour Abū Ṭālib) ; le verset l\'interdit aux associateurs.' },
+    { s:4, v:[43,43], t:'Interdiction de prier en état d\'ivresse — étape avant l\'interdiction totale du vin (5:90).' },
+    { s:4, v:[95,95], t:'ʿAbdallāh b. Umm Maktūm, aveugle, demanda à combattre : le verset distingue les combattants des non-combattants.' },
+    { s:4, v:[176,176], t:'La kalāla (succession sans ascendant ni descendant) : ʿUmar interrogea le Prophète.' },
+    { s:5, v:[90,91], t:'Interdiction du vin et du jeu : étape finale après 2:219 et 4:43.' },
+    { s:2, v:[144,144], t:'Le changement de qibla : à Médine, le Prophète se tournait vers Jérusalem ; ce verset ordonne de se tourner vers la Kaaba.' },
+    { s:2, v:[187,187], t:'Le jeûne de Ramadan : les Compagnons hésitaient sur ce qui était permis la nuit ; le verset fixe la limite.' },
+    { s:2, v:[216,216], t:'Le combat : les Compagnons y répugnaient ; « il se peut que vous détestiez une chose qui est un bien pour vous ».' },
+    { s:2, v:[219,219], t:'Le vin et le jeu de hasard : les Compagnons interrogeaient le Prophète ; « leur mal est plus grand que leur utilité ».' },
+    { s:48, v:[1,3], t:'Le traité de Hudaybiyya (628), ressenti comme un recul par les Compagnons : « c\'est une victoire éclatante ».' },
+    { s:47, v:[1,3], t:'Les premiers combats contre les Qurayshites après l\'Hégire.' },
+    { s:55, v:[1,2], t:'Rappel des bienfaits du Créateur, révélé à La Mecque.' },
+    { s:65, v:[1,1], t:'Le divorce : le Prophète reçut des questions sur la répudiation ; ce verset en fixe la procédure.' },
+    { s:59, v:[7,7], t:'Le butin du banissement des Banū Naḍīr : le Prophète s\'était plaint de la répartition.' }
+  ];
+
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  var RANG = {};
+  ORDRE.forEach(function(s, i){ RANG[s] = i + 1; });
+
+  window.__asbabHtml = function(p){
+    var s = parseInt(p && p.sourate, 10);
+    if (!s || s < 1 || s > 114) return '';
+    var v1 = parseInt(p && p.v1, 10), v2 = p && p.v2 ? parseInt(p.v2, 10) : v1;
+
+    var h = '<div style="margin-top:9px;padding-top:7px;border-top:1px dashed rgba(245,197,66,.4)">';
+
+    /* ── chronologie ── */
+    var r = RANG[s];
+    if (r) {
+      var med = MEDINOISES.indexOf(s) !== -1;
+      h += '<div style="font-size:11.5px;line-height:1.6;">' +
+        '<span style="color:#f0c060;font-size:10px;letter-spacing:1px;text-transform:uppercase;">🕰 Chronologie</span><br>' +
+        '<b style="color:#9fd0ff">' + r + '<sup>' + (r === 1 ? 're' : 'e') + '</sup> sourate révélée</b> sur 114 — ' +
+        '<span style="color:#7fd1a0">' + (med ? 'médinoise' : 'mecquoise') + '</span> ' +
+        '<span style="color:#8fa3b8">(' + (med ? '622-632, après l\'Hégire' : '610-622, avant l\'Hégire') + ')</span>' +
+        '</div>';
+    }
+
+    /* ── asbāb al-nuzūl ── */
+    var notes = ASBAB.filter(function(a){
+      return a.s === s && v2 >= a.v[0] && v1 <= a.v[1];
+    });
+    notes.forEach(function(a){
+      h += '<div style="margin-top:6px;font-size:11.5px;color:#d9e6f5;background:rgba(79,142,247,.10);' +
+        'border-left:3px solid #4f8ef7;padding:5px 9px;border-radius:0 6px 6px 0">' +
+        '<span style="color:#9fd0ff;font-size:10px;letter-spacing:.8px;text-transform:uppercase;">📜 Contexte de révélation — ' +
+        esc(s + ':' + a.v[0] + (a.v[1] !== a.v[0] ? '-' + a.v[1] : '')) + '</span><br>' + esc(a.t) + '</div>';
+    });
+
+    /* v428 — notices de la SOURCE PRIMAIRE (al-Wāḥidī), chargées à la demande */
+    h += '<div id="asbab-src"></div>';
+
+    h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Chronologie : ordre égyptien standard. ' +
+         'Asbāb al-nuzūl : corpus complet (الواحدي، السيوطي، ابن حجر، المحرر، الصحيح المسند، الاستيعاب) — ' +
+         'traditions narratives rapportées, non faits établis.</div>';
+    h += '</div>';
+    return h;
+  };
+
+  /* ═══ v430 — ASBĀB AL-NUZŪL : CORPUS COMPLET DEPUIS SHAMELA ═══
+     v428 chargeait la source primaire (al-Wāḥidī). v430 intègre TOUS les
+     recueils d'asbāb de la catégorie « علوم القرآن » de la bibliothèque
+     Shamela (shamela.ws) — sans rien laisser :
+       • الواحدي       (أسباب النزول — ت زغلول + ت الحميدان)
+       • السيوطي       (لباب النقول في أسباب النزول)
+       • ابن حجر       (العجاب في بيان الأسباب)
+       • المحرر        (في أسباب نزول القرآن — الكتب التسعة)
+       • الصحيح المسند  (من أسباب النزول)
+       • الاستيعاب      (في بيان الأسباب)
+     7 ouvrages, 5444 pages dépouillées -> 3175 notices, 858 versets, 94 sourates.
+     Un fichier par sourate (tradition/asbab/sNNN.json), chargé à la demande :
+     rien n'est téléchargé au démarrage. Chaque récit affiche sa source. */
+  /* légende des sources (clé courte -> titre complet shamela) */
+  window.__ASBAB_SRC = {
+    'الواحدي': 'الواحدي — أسباب النزول (ت زغلول + ت الحميدان)',
+    'السيوطي': 'السيوطي — لباب النقول في أسباب النزول',
+    'ابن حجر': 'ابن حجر — العجاب في بيان الأسباب',
+    'المحرر': 'المحرر في أسباب نزول القرآن (الكتب التسعة)',
+    'الصحيح المسند': 'الصحيح المسند من أسباب النزول',
+    'الاستيعاب': 'الاستيعاب في بيان الأسباب'
+  };
+  var _asbCache = {}, _asbProm = {};
+  function asbabCharger(s){
+    if (_asbCache[s] !== undefined) return Promise.resolve(_asbCache[s]);
+    if (_asbProm[s]) return _asbProm[s];
+    _asbProm[s] = fetch('tradition/asbab/s' + String(s).padStart(3, '0') + '.json', { cache: 'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ _asbCache[s] = (j && j.e && j.e.length) ? j : null; return _asbCache[s]; })
+      .catch(function(){ _asbCache[s] = null; return null; });
+    return _asbProm[s];
+  }
+  window.__asbabAppend = function(sura, v1, v2, tip){
+    if (!tip || !tip.querySelector('#asbab-src')) return;
+    asbabCharger(sura).then(function(j){
+      /* la bulle a pu se refermer pendant le chargement : on ne peint que si
+         elle est encore ouverte. */
+      var box = tip.querySelector('#asbab-src');
+      if (!box || !j) return;
+      var fin = v2 || v1;
+      var hits = j.e.filter(function(e){ return e.v >= v1 && e.v <= fin; });
+      if (!hits.length) return;
+      var srcs = {};
+      hits.forEach(function(e){ srcs[e.src] = 1; });
+      var h = '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed rgba(159,224,160,.4)">' +
+        '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Asbāb al-nuzūl — ' +
+        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)</div>';
+      hits.forEach(function(e){
+        var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
+        h += '<div style="margin:6px 0">' +
+             '<div style="font-size:10px;color:#8fa3b8;margin-bottom:2px;">Sourate ' + sura + ' : ' + e.v +
+             ' &nbsp;<span title="' + esc(full) + '" style="color:#bfe0c8;border:1px solid rgba(159,224,160,.4);' +
+             'border-radius:10px;padding:0 6px;font-size:9.5px;cursor:help">' + esc(e.src) + '</span></div>' +
+             '<div dir="rtl" lang="ar" title="' + esc(full) + '" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;' +
+             'background:rgba(159,224,160,.07);border-right:3px solid rgba(159,224,160,.5);' +
+             'padding:6px 9px;border-radius:6px 0 0 6px">' + esc(e.t) + '</div>' +
+             '<button class="asb-tr" style="pointer-events:auto;margin-top:3px;background:rgba(79,142,247,.15);color:#cfe0ff;' +
+             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire</button>' +
+             '</div>';
+      });
+      var leg = Object.keys(srcs).map(function(s){ return (window.__ASBAB_SRC && window.__ASBAB_SRC[s]) ? window.__ASBAB_SRC[s] : s; }).join(' · ');
+// (v430) plus de plafond : tous les récits sont affichés, l'infobulle défile.
+      h += '<div style="font-size:9.5px;color:#6f8296;margin-top:5px;">Sources de ce verset : ' + esc(leg) +
+           '<br>الشاملة (shamela.ws) — recueils complets d\'asbāb al-nuzūl (7 ouvrages, 3175 notices). ' +
+           'Traditions narratives rapportées : pas des faits établis.</div></div>';
+      box.innerHTML = h;
+      /* Le bouton ouvre la traduction NATIVE de l'application (sa popup) :
+         on ne réinvente pas un second chemin de traduction. */
+      box.querySelectorAll('.asb-tr').forEach(function(b){
+        b.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var ar = b.parentNode.querySelector('[dir="rtl"]');
+          if (!ar) return;
+          if (window.__LT && typeof window.__LT.translate === 'function') {
+            window.__LT.translate(ar.textContent, b.getBoundingClientRect());
+          } else if (window.toast) { window.toast('Traduction non configurée', 'info'); }
+        });
+      });
+    }).catch(function(){});
+  };
 })();
 </script>
 </body>
