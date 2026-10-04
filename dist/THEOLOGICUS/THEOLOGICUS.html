@@ -3088,6 +3088,79 @@ input[type="checkbox"]:active{ transform:scale(.88); }
   box-shadow: 0 0 8px rgba(255,51,102,0.2);
 }
 .memory-item .actions button:active { transform: scale(0.9); }
+/* ═══ MEMORY / LEARNINGS TABS ═══ */
+.mem-tabs { display:flex; gap:6px; margin-bottom:12px; padding-bottom:10px; border-bottom: var(--border); }
+.mem-tab {
+  flex:1; padding:6px 4px; font-family: var(--font-mono); font-size:10px; letter-spacing:1px;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim);
+  border-radius:6px; cursor:pointer; transition: all .2s ease;
+}
+.mem-tab:hover { border-color: var(--cyan); color: var(--text); }
+.mem-tab.active { background: rgba(232,198,90,.14); border-color: rgba(232,198,90,.55); color:#e8c65a; }
+.mem-subhead { margin-bottom:8px; }
+.learnings-toolbar { display:flex; gap:6px; margin-bottom:10px; }
+.learnings-toolbar .btn-ghost {
+  flex:1; padding:5px 6px; font-size:10px; border-radius:6px; cursor:pointer;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim);
+}
+.learnings-toolbar .btn-ghost:hover { border-color:#e8c65a; color:#e8c65a; }
+.learn-autofix {
+  display:flex; align-items:center; gap:5px; margin-bottom:10px;
+  font-family: var(--font-mono); font-size:10px; color: var(--text-dim); cursor:pointer;
+}
+.learn-autofix input { accent-color:#e8c65a; cursor:pointer; }
+.learnings-filter { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+.lf-btn {
+  padding:3px 7px; font-family: var(--font-mono); font-size:9px; border-radius:10px; cursor:pointer;
+  background: transparent; border:1px solid var(--wire); color: var(--text-dim); transition: all .2s ease;
+}
+.lf-btn:hover { border-color:#e8c65a; color:#e8c65a; }
+.lf-btn.active { background: rgba(232,198,90,.18); border-color:#e8c65a; color:#e8c65a; }
+.learnings-list { max-height: 200px; overflow-y:auto; font-size:12px; margin-bottom:10px; }
+.learning-item {
+  padding:8px 0; border-bottom:1px solid var(--grid);
+}
+.learning-item.promoted { background: rgba(232,198,90,.06); border-left:2px solid #e8c65a; padding-left:6px; border-radius:3px; }
+.learning-head { display:flex; align-items:center; gap:6px; margin-bottom:3px; flex-wrap:wrap; }
+.learning-cat {
+  font-family: var(--font-mono); font-size:9px; text-transform:uppercase; letter-spacing:1px;
+  color:#e8c65a; border:1px solid rgba(232,198,90,.4); border-radius:4px; padding:1px 6px;
+}
+.learning-rec { font-family: var(--font-mono); font-size:9px; color: var(--cyan); }
+.learning-promo { font-family: var(--font-mono); font-size:9px; color:#e8c65a; font-weight:700; }
+.learning-content { color: var(--text); font-family: var(--font-mono); font-size:11px; line-height:1.4; }
+.learning-actions { display:flex; gap:6px; margin-top:5px; }
+.learning-actions button {
+  padding:2px 7px; font-size:9px; background: transparent; border:1px solid var(--wire);
+  color: var(--text-dim); border-radius:3px; cursor:pointer; font-family: var(--font-mono); transition: all .2s ease;
+}
+.learning-actions button:hover { border-color:#e8c65a; color:#e8c65a; }
+.learnings-input { display:flex; gap:7px; padding-top:10px; border-top: var(--border); }
+.learnings-input select {
+  background: var(--hull); border: var(--hud-border); color: var(--text); font-size:10px; border-radius:6px; padding:0 4px;
+  font-family: var(--font-mono); max-width:120px;
+}
+.learnings-input input {
+  flex:1; background: var(--hull); border: var(--hud-border); color: var(--text); font-family: var(--font-mono);
+  font-size:11px; border-radius:6px; padding:6px 8px;
+}
+.learnings-input input:focus { outline:none; border-color: rgba(232,198,90,.6); }
+.learnings-input button {
+  background: linear-gradient(135deg,#e8c65a,#b8902f); color:#1a1206; border:none; border-radius:6px;
+  font-weight:700; cursor:pointer; padding:0 12px; font-size:14px;
+}
+.learning-hard {
+  font-family: var(--font-mono); font-size:9px; color:#ff6b6b; font-weight:700;
+  border:1px solid rgba(255,107,107,.5); border-radius:4px; padding:1px 6px;
+}
+.rule-warnings {
+  margin: 10px 0 4px; padding: 8px 10px; border-left: 3px solid #ff6b6b;
+  background: rgba(255,107,107,.08); border-radius: 4px;
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.5;
+}
+.rule-warn-title { font-weight: 700; color: #ff6b6b; margin-bottom: 4px; }
+.rule-warn-item { color: var(--text); }
+.rule-warn-why { color: var(--text-dim); }
 .memory-input {
   display: flex;
   gap: 7px;
@@ -8156,16 +8229,57 @@ window.__ensureTafsirSurah = function(p){
 
 </div>
 
-<button id="memory-toggle" title="Mémoire Globale">⬡</button>
+<button id="memory-toggle" title="Mémoire Globale & Apprentissages">⬡</button>
 <div id="memory-panel">
   <div class="memory-header">
-    <h3>⬡ MÉMOIRE GLOBALE</h3>
-    <button class="btn-ghost" id="memory-clear" style="padding:3px 8px;font-size:10px;border-radius:3px">EFFACER</button>
+    <h3>⬡ MÉMOIRE & APPRENTISSAGES</h3>
   </div>
-  <div class="memory-list" id="memory-list"></div>
-  <div class="memory-input">
-    <input type="text" id="memory-input" placeholder="Ajouter à la mémoire…">
-    <button id="memory-add">+</button>
+  <div class="mem-tabs">
+    <button class="mem-tab active" data-view="mem">Mémoire</button>
+    <button class="mem-tab" data-view="learn">📚 Apprentissages</button>
+  </div>
+  <!-- Vue Mémoire -->
+  <div class="mem-view" data-view="mem">
+    <div class="mem-subhead">
+      <button class="btn-ghost" id="memory-clear" style="padding:3px 8px;font-size:10px;border-radius:3px">EFFACER</button>
+    </div>
+    <div class="memory-list" id="memory-list"></div>
+    <div class="memory-input">
+      <input type="text" id="memory-input" placeholder="Ajouter à la mémoire…">
+      <button id="memory-add">+</button>
+    </div>
+  </div>
+  <!-- Vue Apprentissages (self-improvement) -->
+  <div class="mem-view" data-view="learn" style="display:none">
+    <div class="learnings-toolbar">
+      <button class="btn-ghost" id="learnings-reflect" title="Extraire les apprentissages de la conversation via le LLM">⚡ Réflexion</button>
+      <button class="btn-ghost" id="learnings-clear" title="Effacer tous les apprentissages">Effacer</button>
+    </div>
+    <label class="learn-autofix" title="Régénère automatiquement la réponse si une règle stricte est violée (1 appel LLM de plus, en arrière-plan)">
+      <input type="checkbox" id="learnings-autofix"> Auto-corriger la réponse si violation
+    </label>
+    <div class="learnings-filter" id="learnings-filter">
+      <button class="lf-btn active" data-cat="all">Tous</button>
+      <button class="lf-btn" data-cat="correction">Correction</button>
+      <button class="lf-btn" data-cat="insight">Insight</button>
+      <button class="lf-btn" data-cat="knowledge_gap">Écart</button>
+      <button class="lf-btn" data-cat="best_practice">Pratique</button>
+      <button class="lf-btn" data-cat="error">Erreur</button>
+      <button class="lf-btn" data-cat="feature_request">Fonction</button>
+    </div>
+    <div class="learnings-list" id="learnings-list"></div>
+    <div class="learnings-input">
+      <select id="learnings-cat">
+        <option value="correction">Correction</option>
+        <option value="insight" selected>Insight</option>
+        <option value="knowledge_gap">Écart de connaissance</option>
+        <option value="best_practice">Bonne pratique</option>
+        <option value="error">Erreur</option>
+        <option value="feature_request">Demande de fonction</option>
+      </select>
+      <input type="text" id="learnings-input" placeholder="Ajouter un apprentissage…">
+      <button id="learnings-add">+</button>
+    </div>
   </div>
 </div>
 
@@ -9856,7 +9970,7 @@ const MODELS = [
 ];
 
 const DB_NAME = "THEOLOGICUS_AI_DB";
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 let state = {
   apiKey: null,
@@ -9865,6 +9979,7 @@ let state = {
   agent: null,
   model: "codestral-2508",
   globalMemories: [],
+  learnings: [],   // self-improvement learnings (corrections, insights, errors, …)
   aiConfig: null, // {name, goal} from wizard
   attachedFile: null, // {type, data, name, mimeType}
   customModels: [],  // [{uid, name, model, baseUrl, apiKey, format, vision, audio}]
@@ -9898,7 +10013,15 @@ const PROVIDERS = [
   // `agnes-2.0-flash` : 256K de contexte, 64K de sortie, vision, tool calling.
   // `agnes-2.1-flash` = le nom de la famille IMAGE (elle ne répond pas sur
   // /chat/completions) : ne pas l'ajouter ici, elle serait proposée à tort.
-  { id:"agnes",     label:"Agnes AI",   format:"chat-completions",   base:"https://apihub.agnes-ai.com/v1",      models:["agnes-2.5-flash","agnes-2.0-flash"] }
+  { id:"agnes",     label:"Agnes AI",   format:"chat-completions",   base:"https://apihub.agnes-ai.com/v1",      models:["agnes-2.5-flash","agnes-2.0-flash"] },
+  /* v441 — Ollama local : IA HORS LIGNE, sans clé ni quota, sur la machine
+     même (http://127.0.0.1:11434, OpenAI-compatible). Les modèles listés ne
+     sont qu'un défaut : « + Ajouter modèles » interroge /models et liste les
+     modèles réellement installés. CORS : Ollama autorise les origines
+     localhost (testé), et l'app est servie depuis localhost — l'appel direct
+     passe, en navigateur comme dans l'exe. Aucune clé : resolveModelConfig
+     met une valeur fictive 'local' que Ollama ignore. */
+  { id:"ollama",    label:"Ollama (local)", format:"chat-completions",   base:"http://127.0.0.1:11434/v1",  models:["qwen2.5:0.5b","llama3.2","qwen2.5","mistral"] }
 ];
 const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map(p => [p.id, p]));
 
@@ -11723,7 +11846,10 @@ function resolveModelConfig(activeId) {
     else endpoint = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
     const cle = cleanApiKey(state.keys[pm.prov.id] || '') ||
                 (pm.prov.id === 'mistral' ? cleanApiKey(state.apiKey) : '');
-    return { model: pm.model, endpoint, apiKey: cle, format: fmt, providerId: pm.prov.id };
+    /* v441 — Ollama local n'exige aucune clé : valeur fictive 'local' que
+       Ollama ignore, mais qui passe les garde-fous « clé absente » de l'app. */
+    const cleFinale = cle || (pm.prov.id === 'ollama' ? 'local' : '');
+    return { model: pm.model, endpoint, apiKey: cleFinale, format: fmt, providerId: pm.prov.id };
   }
   // If no Mistral key is configured but AI VIDEO already has an Agnes key,
   // use Agnes as the portable fallback for comments and chat. This keeps the
@@ -12674,21 +12800,35 @@ function initSettingsModal() {
       };
     });
     list.querySelectorAll('.provider-add-models-btn').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const prov = btn.dataset.provider;
         const pdef = PROVIDERS.find(x => x.id === prov);
-        if (!pdef || !pdef.models || !pdef.base) return;
+        if (!pdef || !pdef.base) return;
+        btn.textContent = '⏳';
+        /* v441 — détection RÉELLE : GET <base>/models. Pour Ollama cela liste
+           les modèles effectivement installés sur la machine ; pour les
+           fournisseurs en ligne, leur liste officielle. Échec → repli sur la
+           liste statique du registre. */
+        let ids = null;
+        try {
+          const r = await fetch(apiEndpoint(pdef.base + '/models'), { headers: { 'Authorization': 'Bearer ' + (state.keys[prov] || 'local') } });
+          if (r.ok) {
+            const j = await r.json();
+            const arr = (j && (j.data || j.models)) || [];
+            ids = arr.map(x => x.id || x.name || x.model).filter(Boolean);
+          }
+        } catch (e) { /* fournisseur injoignable : repli statique */ }
+        if (!ids || !ids.length) ids = (pdef.models || []).map(m => typeof m === 'string' ? m : m.model);
         let added = 0;
         const now = Date.now();
-        pdef.models.forEach((m, idx) => {
-          const modelId = typeof m === 'string' ? m : m.model;
+        ids.forEach((modelId, idx) => {
           if (state.customModels.some(x => x.model === modelId)) return;
-          const label = typeof m === 'string' ? m : (m.label || m.model);
-          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: label, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || '', format: pdef.format || 'chat-completions', vision: false, audio: false });
+          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: modelId, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || (prov === 'ollama' ? 'local' : ''), format: pdef.format || 'chat-completions', vision: false, audio: false });
           added++;
         });
+        btn.textContent = '+ Ajouter modèles';
         if (added) { saveCustomModels(); refreshModelSelect(); renderCustomModelsList(); }
-        toast(added ? added + " modèle(s) ajouté(s)" : "Modèles déjà présents", added ? "success" : "info");
+        toast(added ? added + " modèle(s) ajouté(s)" + (prov === 'ollama' ? ' (détectés localement)' : '') : "Modèles déjà présents", added ? "success" : "info");
       };
     });
   }
@@ -13362,7 +13502,7 @@ const db = {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = e => {
       const d = e.target.result;
-      ['chats','agents','settings','global_memory','app_config','auto_backups'].forEach(s => {
+      ['chats','agents','settings','global_memory','app_config','auto_backups','learnings'].forEach(s => {
         if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath:'id' });
       });
     };
@@ -13441,6 +13581,315 @@ const memory = {
       .map(m => `[MEM:${(m.tags||[]).join(',')}] ${m.content}`);
   }
 };
+
+// ════════════════════════════════════════
+// SELF-IMPROVEMENT — LEARNINGS
+// Porte nativement le pattern « self-improving agent » : chaque correction,
+// erreur, écart de connaissance, bonne pratique ou demande de fonctionnalité
+// est journalisée, catégorisée, suivie en récurrence, et les plus durables
+// sont PROMUES en règles injectées dans le system prompt de tout appel LLM.
+// (Idée inspirée de pskoett/self-improving-agent — implémentation originale,
+//  aucun code tiers réutilisé.)
+// ════════════════════════════════════════
+const LEARNING_CATEGORIES = ['correction', 'insight', 'knowledge_gap', 'best_practice', 'error', 'feature_request'];
+const LEARNING_PROMOTE_THRESHOLD = 3; // auto-promotion quand la récurrence atteint ce seuil
+
+// Normalise un texte libre en clé de pattern stable pour le suivi de récurrence.
+function _learningPatternKey(text) {
+  const t = (text || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(w => w.length > 3)
+    .slice(0, 6)
+    .join(' ');
+  return t || (text || '').toLowerCase().slice(0, 40);
+}
+
+function renderLearningsList(catFilter) {
+  const list = document.getElementById('learnings-list');
+  if (!list) return;
+  const all = (state.learnings || []).slice().sort(
+    (a, b) => ((b.promoted ? 1 : 0) - (a.promoted ? 1 : 0)) || ((b.recurrence || 1) - (a.recurrence || 1)) || ((b.updated || 0) - (a.updated || 0))
+  );
+  const items = (!catFilter || catFilter === 'all') ? all : all.filter(l => l.category === catFilter);
+  if (!items.length) {
+    list.innerHTML = '<div style="color:var(--text-dim);font-family:var(--font-mono);font-size:11px;padding:8px 0">Aucun apprentissage enregistré</div>';
+    return;
+  }
+  list.innerHTML = items.map(l => `
+    <div class="learning-item ${l.promoted ? 'promoted' : ''}" data-id="${l.id}">
+      <div class="learning-head">
+        <span class="learning-cat">${l.category}</span>
+        ${l.recurrence > 1 ? `<span class="learning-rec" title="Récurrence">↻${l.recurrence}</span>` : ''}
+        ${l.hard ? `<span class="learning-hard" title="Règle STRICTE (non négociable + vérifiée en sortie)">🛡 DURE</span>` : ''}
+        ${l.promoted ? `<span class="learning-promo" title="Règle durable promue">★ PROMU</span>` : ''}
+      </div>
+      <div class="learning-content">${escapeHtml(l.content)}</div>
+      <div class="learning-actions">
+        <button onclick="window.learningsTogglePromote('${l.id}')">${l.promoted ? '★ Unpromote' : '☆ Promouvoir'}</button>
+        <button onclick="window.learningsToggleHard('${l.id}')">${l.hard ? '🛡 Mou' : '🛡 Dur'}</button>
+        <button onclick="window.learningsDelete('${l.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+const learnings = {
+  add: async (category, content, opts = {}) => {
+    category = LEARNING_CATEGORIES.includes(category) ? category : 'insight';
+    const key = opts.patternKey || _learningPatternKey(content);
+    const nowTs = now();
+    const existing = (state.learnings || []).find(l => l.category === category && (l.patternKey || '') === key);
+    if (existing) {
+      existing.recurrence = (existing.recurrence || 1) + 1;
+      existing.updated = nowTs;
+      existing.content = content;
+      if (!existing.promoted && existing.recurrence >= LEARNING_PROMOTE_THRESHOLD) {
+        existing.promoted = true; existing.promotedAt = nowTs;
+      }
+      await db.put('learnings', existing);
+      renderLearningsList();
+      return existing;
+    }
+    const entry = {
+      id: uuid(),
+      category, content,
+      patternKey: key,
+      tags: Array.isArray(opts.tags) ? opts.tags : (opts.tags ? String(opts.tags).split(',').map(t => t.trim()).filter(Boolean) : []),
+      source: opts.source || 'manual',
+      recurrence: 1,
+      promoted: false,
+      promotedAt: null,
+      hard: false,
+      created: nowTs, updated: nowTs
+    };
+    await db.put('learnings', entry);
+    (state.learnings = state.learnings || []).push(entry);
+    renderLearningsList();
+    return entry;
+  },
+  getAll: async () => {
+    state.learnings = (await db.getAll('learnings')) || [];
+    renderLearningsList();
+    return state.learnings;
+  },
+  remove: async id => {
+    await db.delete('learnings', id);
+    state.learnings = (state.learnings || []).filter(l => l.id !== id);
+    renderLearningsList();
+  },
+  setPromoted: async (id, val) => {
+    const l = (state.learnings || []).find(x => x.id === id);
+    if (!l) return;
+    l.promoted = !!val; l.promotedAt = l.promoted ? now() : null;
+    await db.put('learnings', l);
+    renderLearningsList();
+  },
+  // Une règle DURE est toujours promue (injectée) ; elle est en plus vérifiée en sortie.
+  setHard: async (id, val) => {
+    const l = (state.learnings || []).find(x => x.id === id);
+    if (!l) return;
+    l.hard = !!val;
+    if (l.hard && !l.promoted) { l.promoted = true; l.promotedAt = now(); }
+    await db.put('learnings', l);
+    renderLearningsList();
+  },
+  // Renvoie les chaînes à injecter dans le system prompt. Les apprentissages
+  // PROMUS sont TOUJOURS inclus (règles durables) ; les autres sont filtrés
+  // par pertinence par rapport à la dernière question de l'utilisateur.
+  getRelevant: (query, limit = 6) => {
+    const list = state.learnings || [];
+    if (!list.length) return [];
+    const q = (query || (state.messages || []).filter(m => m.role === 'user').slice(-1)[0]?.content || '').toLowerCase();
+    // Les règles DURES vont dans le bloc strict séparé ; ici on ne garde que les promues NON dures.
+    const promoted = list.filter(l => l.promoted && !l.hard).map(l => `[APPRENTISSAGE·${l.category}·PROMU] ${l.content}`);
+    const candidates = list.filter(l => !l.promoted);
+    const scored = candidates.map(l => {
+      const hay = ((l.content || '') + ' ' + (l.tags || []).join(' ')).toLowerCase();
+      let score = 0;
+      if (q) {
+        if (hay.includes(q)) score += 3;
+        q.split(/\s+/).forEach(w => { if (w.length > 3 && hay.includes(w)) score += 1; });
+        (l.tags || []).forEach(t => { if (q.includes(t.toLowerCase())) score += 2; });
+      }
+      score += Math.min((l.recurrence || 1), 3) * 0.5;
+      return { l, score };
+    }).filter(x => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(x => `[APPRENTISSAGE·${x.l.category}] ${x.l.content}`);
+    return [...promoted, ...scored].slice(0, limit + 4);
+  },
+  // Règles DURES : promues ET marquées hard → injectées dans un bloc strict + vérifiées en sortie.
+  getHardRules: () => (state.learnings || [])
+    .filter(l => l.promoted && l.hard)
+    .map(l => `[RÈGLE DURE·${l.category}] ${l.content}`)
+};
+
+// ── Actions exposées (clics depuis le rendu messages / panneau) ──
+window.learnFromMessage = async ts => {
+  const m = (state.messages || []).find(x => x.ts === ts);
+  if (!m) return;
+  const content = (typeof m.content === 'string') ? m.content.replace(/\s+/g, ' ').trim().slice(0, 400) : '';
+  if (!content) return;
+  const category = m.role === 'user' ? 'correction' : 'insight';
+  await learnings.add(category, content, { source: 'chat-flag' });
+  toast('📚 Apprentissage enregistré — ouvrez 📚 pour promouvoir / re-catégoriser', 'success');
+};
+window.learningsTogglePromote = id => {
+  const l = (state.learnings || []).find(x => x.id === id);
+  if (l) learnings.setPromoted(id, !l.promoted);
+};
+window.learningsToggleHard = id => {
+  const l = (state.learnings || []).find(x => x.id === id);
+  if (l) learnings.setHard(id, !l.hard);
+};
+window.learningsDelete = id => { learnings.remove(id); };
+
+// ── Réflexion de fin de cycle (équivalent du handler.ts) ──
+// Envoie les derniers messages au LLM et extrait les apprentissages structurés.
+window.learningsReflect = async () => {
+  const msgs = (state.messages || []).filter(m => m.role !== 'system').slice(-12);
+  if (msgs.length < 2) { toast('Pas assez de contexte pour la réflexion', 'info'); return; }
+  const cfg = resolveModelConfig(state.model);
+  if (!cfg.apiKey) { toast('Configurez une clé API d\'abord', 'error'); openApiKeyModal(); return; }
+  const convo = msgs.map(m => (m.role === 'user' ? 'UTILISATEUR: ' : 'ASSISTANT: ') + (typeof m.content === 'string' ? m.content : '')).join('\n\n');
+  const sys = `Tu es un extracteur d'apprentissages pour un assistant théologique. À partir de la conversation, identifie les corrections apportées à l'assistant, les erreurs commises, les écarts de connaissance, les bonnes pratiques utiles, et les demandes de fonctionnalités. Réponds STRICTEMENT en JSON valide, sans texte autour : {"learnings":[{"category":"correction|insight|knowledge_gap|best_practice|error|feature_request","content":"texte concis de l'apprentissage"}]}. Maximum 6. Si rien à retenir, retourne {"learnings":[]}.`;
+  toast('⚡ Réflexion en cours…', 'info');
+  try {
+    const reply = await callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: convo }], { temperature: 0.2, max_tokens: 1500 });
+    const m = reply.match(/\{[\s\S]*\}/);
+    const data = m ? JSON.parse(m[0]) : null;
+    const arr = (data && data.learnings) || [];
+    let n = 0;
+    for (const it of arr) {
+      if (it && it.content) { await learnings.add(it.category || 'insight', String(it.content).slice(0, 500), { source: 'reflection' }); n++; }
+    }
+    toast(n ? `⚡ ${n} apprentissage(s) extrait(s) de la conversation` : 'Aucun apprentissage détecté', n ? 'success' : 'info');
+  } catch (e) { toast('Réflexion échouée : ' + (e && e.message ? e.message : e), 'error'); }
+};
+
+// ── Vérification best-effort des règles DURES en sortie (NON bloquante) ──
+// Tourne en arrière-plan APRÈS le rendu : la réponse arrive immédiatement,
+// l'avertissement apparaît quelques secondes plus tard si violation.
+// Chaque message assistant n'est vérifié qu'une fois (gardé par m._ruleChecked).
+window.verifyHardRules = async () => {
+  const hard = (state.learnings || []).filter(l => l.promoted && l.hard);
+  if (!hard.length) return;
+  const last = [...(state.messages || [])].reverse().find(m => m.role === 'assistant' && typeof m.content === 'string');
+  if (!last || last._ruleChecked) return;
+  last._ruleChecked = true; // anti-doublon immédiat (le check LLM est asynchrone)
+  const cfg = resolveModelConfig(state.model);
+  if (!cfg.apiKey) return;
+  const rules = hard.map(l => '- ' + l.content).join('\n');
+  const sys = `Tu es un vérificateur de conformité pour un assistant théologique. On te donne des RÈGLES STRICTES et une RÉPONSE. Détermine si la réponse viole l'une de ces règles. Réponds STRICTEMENT en JSON valide, sans texte autour : {"violations":[{"rule":"<texte exact de la règle violée>","why":"<raison courte>"}]}. Si aucune violation, {"violations":[]}.`;
+  try {
+    const reply = await callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: `RÈGLES STRICTES :\n${rules}\n\nRÉPONSE À VÉRIFIER :\n${last.content}` }], { temperature: 0, max_tokens: 800 });
+    const m = reply.match(/\{[\s\S]*\}/);
+    const data = m ? JSON.parse(m[0]) : null;
+    const v = (data && data.violations) || [];
+    if (!v.length) return;
+    last.ruleWarnings = v.map(x => (x.rule || '') + (x.why ? ' — ' + x.why : ''));
+    const msgEl = document.getElementById('mc-' + (last.ts || ''))?.closest('.message');
+    if (msgEl) {
+      let warn = msgEl.querySelector('.rule-warnings');
+      if (!warn) { warn = document.createElement('div'); warn.className = 'rule-warnings'; msgEl.appendChild(warn); }
+      warn.innerHTML = '<div class="rule-warn-title">⚠️ Règle(s) stricte(s) potentiellement non respectée(s) :</div>' +
+        v.map(x => `<div class="rule-warn-item">• ${escapeHtml(x.rule || '')}${x.why ? ` <span class="rule-warn-why">(${escapeHtml(x.why)})</span>` : ''}</div>`).join('');
+    }
+    toast('⚠️ ' + v.length + ' règle(s) stricte(s) potentiellement violée(s)', 'warning');
+    // ── Correction automatique (opt-in via la case « Auto-corriger ») ──
+    if (localStorage.getItem('theologicus_learnings_autofix') === '1') {
+      await _regenerateRespectingHardRules(last, v, hard);
+    }
+  } catch (e) { /* best-effort : silence */ }
+};
+
+// Régénère une réponse corrigée qui respecte les règles dures violées.
+// Appelé en arrière-plan (non bloquant) UNIQUEMENT si l'option est activée.
+// Le garde _ruleChecked empêche toute boucle de re-vérification.
+async function _regenerateRespectingHardRules(lastMsg, violations, hardRules) {
+  try {
+    const cfg = resolveModelConfig(state.model);
+    if (!cfg.apiKey) return;
+    const rules = hardRules.map(l => '- ' + l.content).join('\n');
+    const violated = violations.map(x => '- ' + (x.rule || '')).join('\n');
+    const sys = buildSystemPrompt();
+    const hist = (state.messages || []).filter(m => m.role !== 'system' && m !== lastMsg).slice(-20).map(m => ({ role: m.role, content: m.content }));
+    const instr = `Ta réponse précédente a violé ces RÈGLES STRICTES :\n${violated}\n\nRÈGLES STRICTES À RESPECTER IMPÉRATIVEMENT :\n${rules}\n\nRégénère une réponse CORRIGÉE et complète qui respecte toutes ces règles. Ne mentionne PAS la correction ni la réponse précédente. Réponds directement.`;
+    const fixed = await callLLM(cfg, [{ role: 'system', content: sys }, ...hist, { role: 'user', content: instr }], { temperature: 0.3, max_tokens: 4096 });
+    if (!fixed || !String(fixed).trim()) return;
+    lastMsg.originalContent = lastMsg.content;
+    lastMsg.content = fixed;
+    lastMsg.ruleWarnings = [];
+    lastMsg.autofixed = true;
+    markChatDirty();
+    await saveChat();
+    if (typeof renderMessages === 'function') renderMessages();
+    toast('🛠 Réponse régénérée automatiquement (règle stricte)', 'success');
+  } catch (e) { /* best-effort : silence */ }
+}
+
+// ── Câblage de l'UI du panneau apprentissages ──
+function bindLearningsUI() {
+  // Onglets Mémoire / Apprentissages dans le panneau existant
+  document.querySelectorAll('.mem-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.mem-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const v = tab.dataset.view;
+      document.querySelectorAll('.mem-view').forEach(vw => { vw.style.display = (vw.dataset.view === v) ? '' : 'none'; });
+      if (v === 'learn') renderLearningsList();
+    };
+  });
+  // Bouton EFFACER mémoire (répare un bouton sinon orphelin)
+  const mc = document.getElementById('memory-clear');
+  if (mc) mc.onclick = () => { if (confirm('Effacer toute la mémoire globale ?')) memory.clear(); };
+  const addBtn = document.getElementById('learnings-add');
+  const input = document.getElementById('learnings-input');
+  const catSel = document.getElementById('learnings-cat');
+  if (addBtn && input) {
+    const doAdd = () => {
+      const txt = input.value.trim();
+      if (!txt) return;
+      learnings.add(catSel ? catSel.value : 'insight', txt, { source: 'manual' });
+      input.value = '';
+      toast('📚 Apprentissage enregistré', 'success');
+    };
+    addBtn.onclick = doAdd;
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doAdd(); });
+  }
+  const clearBtn = document.getElementById('learnings-clear');
+  if (clearBtn) clearBtn.onclick = async () => {
+    if (!confirm('Effacer TOUS les apprentissages ?')) return;
+    const all = state.learnings || [];
+    for (const l of all) await db.delete('learnings', l.id);
+    state.learnings = [];
+    renderLearningsList();
+    toast('Apprentissages effacés', 'success');
+  };
+  const refBtn = document.getElementById('learnings-reflect');
+  if (refBtn) refBtn.onclick = () => window.learningsReflect();
+  // Case « Auto-corriger » : régénère la réponse si une règle stricte est violée
+  const af = document.getElementById('learnings-autofix');
+  if (af) {
+    af.checked = localStorage.getItem('theologicus_learnings_autofix') === '1';
+    af.onchange = () => {
+      localStorage.setItem('theologicus_learnings_autofix', af.checked ? '1' : '0');
+      toast(af.checked ? 'Auto-correction ACTIVÉE (1 appel LLM de plus en arrière-plan si violation)' : 'Auto-correction désactivée', 'info');
+    };
+  }
+  document.querySelectorAll('#learnings-filter .lf-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('#learnings-filter .lf-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderLearningsList(btn.dataset.cat);
+    };
+  });
+}
+document.addEventListener('DOMContentLoaded', bindLearningsUI);
 
 function renderMemoryList() {
   const list = $("#memory-list");
@@ -15805,6 +16254,7 @@ function renderMessages(scrollToTop) {
       ${ratingHtml}
       <div class="msg-actions">
         <button class="msg-action-btn" onclick="copyMsg(${msgId})">⎘ COPIER</button>
+        <button class="msg-action-btn" onclick="learnFromMessage(${msgId})" title="Enregistrer comme apprentissage (auto-amélioration)">📌 APPRENDRE</button>
         ${memoBtn}
         ${printBtn}
         ${deleteBtn}
@@ -15840,6 +16290,9 @@ function renderMessages(scrollToTop) {
       }).catch(() => { if (lastMsg) lastMsg._sugLoading = false; });
     }
   }
+
+  // ── Vérification best-effort des règles dures (non bloquante, 1×/message) ──
+  if (typeof window.verifyHardRules === 'function') window.verifyHardRules();
 
   /* Ré-applique les surlignages persistants (msg.marks) après chaque re-rendu — corrige la perte au F5/loadChat */
   if (typeof window.__applyMarks === 'function') {
@@ -17402,7 +17855,7 @@ function transliterateForSpeech(text, lang) {
     out = out.replace(/([bcdfgklmnprstvz])(?=[bcdfgklmnprstvz])/gi, '$1a');
   } else if (lang === 'grec') {
     // Décomposer les accents polytoniques (ᾶ → α + ◌͂) puis mapper lettre à lettre
-    const base = text.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const base = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     for (const ch of base) {
       const lo = ch.toLowerCase();
       if (_EL_PHON[lo] !== undefined) out += _EL_PHON[lo];
@@ -18802,6 +19255,12 @@ Les suggestions doivent :
   const memLimit = Math.min(memPrio * 2, 8);
   const rel = memory.getRelevant("context", memLimit);
   if (rel.length) prompt += `\n\n[MÉMOIRE GLOBALE ACTIVE]\n${rel.join('\n')}`;
+  // ── SELF-IMPROVEMENT : rappelle les règles apprises (promues + pertinentes) ──
+  const relL = learnings.getRelevant(null, 6);
+  if (relL.length) prompt += `\n\n[APPRENTISSAGES ACTIFS — règles apprises (guidage souple)]\n${relL.join('\n')}`;
+  // ── RÈGLES DURES : bloc strict, non négociable, vérifié en sortie ──
+  const hardR = learnings.getHardRules();
+  if (hardR.length) prompt += `\n\n[RÈGLES STRICTES — NON NÉGOCIABLES, À RESPECTER IMPÉRATIVEMENT]\n${hardR.join('\n')}\nSi une réponse risque de violer l'une de ces règles, ne la donne pas : corrige-toi avant.`;
   prompt += "\n\nRéponds dans la langue de l'utilisateur. Sois précis, structuré et professionnel.";
   return prompt;
 }
@@ -19836,11 +20295,17 @@ async function exportData() {
     const mems = await db.getAll('global_memory') || [];
     const settings = await db.getAll('settings') || [];
     const appConfig = await db.get('app_config', 'main');
+    /* v442 — sauvegarde COMPLÈTE : le localStorage manquait (galerie AI
+       VIDEO, clés du studio, préférences d'interface, modèle choisi) ainsi
+       que le magasin auto_backups. Une restauration ne pouvait donc pas
+       rendre un poste à l'identique. */
+    const ls = {};
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch (e) {}
     const payload = {
-      version: "2.1",
+      version: "2.2",
       exported: new Date().toISOString(),
       source: "THEOLOGICUS",
-      data: { chats, agents, global_memory: mems, settings, app_config: appConfig ? [appConfig] : [] }
+      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: await db.getAll('auto_backups') || [], localStorage: ls }
     };
     const json = JSON.stringify(payload, null, 2);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
@@ -19901,13 +20366,34 @@ async function importData(file) {
     if (data.global_memory?.length) {
       for (const m of data.global_memory) { await db.put('global_memory', m); count++; }
     }
+    if (data.learnings?.length) {
+      for (const l of data.learnings) { await db.put('learnings', l); count++; }
+    }
     if (data.app_config?.length) {
       for (const c of data.app_config) { await db.put('app_config', c); count++; }
     }
+    /* v442 — restauration étendue : settings, auto_backups et localStorage. */
+    if (data.settings?.length) {
+      for (const s of data.settings) { await db.put('settings', s); count++; }
+    }
+    if (data.auto_backups?.length) {
+      for (const b of data.auto_backups) { await db.put('auto_backups', b); count++; }
+    }
+    let nbLs = 0;
+    if (data.localStorage && typeof data.localStorage === 'object') {
+      try {
+        Object.keys(data.localStorage).forEach(k => { localStorage.setItem(k, data.localStorage[k]); nbLs++; });
+        count += nbLs;
+      } catch (e) { /* quota : on continue, l'essentiel est dans l'IDB */ }
+    }
     await memory.getAll();
+    await learnings.getAll();
     await loadAgents();
     await computeStats();
-    toast(`Import réussi — ${count} éléments restaurés`, "success");
+    toast(`Import réussi — ${count} éléments restaurés${nbLs ? ' (+' + nbLs + ' préférences)' : ''}`, "success");
+    /* v442 — le localStorage restauré (préférences, clés studio, galerie)
+       n'est lu qu'au chargement : recharger la page applique tout. */
+    setTimeout(() => { if (confirm('Restauration terminée. Recharger la page pour appliquer toutes les préférences ?')) location.reload(); }, 400);
   } catch(e) {
     toast("Erreur import : " + e.message, "error");
   }
@@ -21165,6 +21651,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Chacun de ces appels est isolé : si IndexedDB échoue, l'initialisation
   // doit continuer jusqu'à bindEvents() (qui câble le bouton SEND).
   try { await memory.getAll(); } catch(e) { console.error("memory init:", e); }
+  try { await learnings.getAll(); } catch(e) { console.error("learnings init:", e); }
   await loadAgents();
   await renderArchives();
 
@@ -24010,7 +24497,7 @@ function bindEvents() {
 
   if ($("#btn-clear-all")) $("#btn-clear-all").onclick = async () => {
     if (!confirm("⚠ Supprimer TOUTES les données locales THEOLOGICUS ? Cette action est irréversible.")) return;
-    const stores = ['chats','agents','settings','global_memory','app_config','auto_backups'];
+    const stores = ['chats','agents','settings','global_memory','app_config','auto_backups','learnings'];
     for (const s of stores) {
       const all = await db.getAll(s) || [];
       for (const r of all) await db.delete(s, r.id);
@@ -28575,24 +29062,67 @@ initTafsirVerseTooltip();
     toast('✓ Note personnelle enregistrée', 'success');
   }
 
-  /* v126l — Configuration de secours pour les commentaires : Agnes chat.
-     La clé Agnes peut venir du magasin THEOLOGICUS (state.keys.agnes) ou de
-     celui d'AI VIDEO (localStorage 'agnes_api_key' — même origine, donc
-     lisible ici). Renvoie null si la config primaire cible déjà Agnes ou si
-     aucune clé Agnes n'existe : dans ce cas l'erreur primaire est propagée. */
-  function cfgCommentaireSecours(cfg) {
+  /* v126l/v441 — CHAÎNE de secours pour les commentaires : Agnes (si clé)
+     puis Ollama local (si joignable). La clé Agnes peut venir du magasin
+     THEOLOGICUS (state.keys.agnes) ou de celui d'AI VIDEO (localStorage
+     'agnes_api_key' — même origine). Renvoie une liste (vide = l'erreur
+     primaire est propagée), la config primaire étant exclue de la chaîne. */
+  let _ollamaJoignable = null;      // null = inconnu, true/false = cache 60s
+  let _ollamaVerifieA = 0;
+  function ollamaEstJoignable() {
+    const mtn = now();
+    if (_ollamaJoignable !== null && (mtn - _ollamaVerifieA) < 60000) return _ollamaJoignable;
+    _ollamaJoignable = false; _ollamaVerifieA = mtn;
     try {
-      if (cfg && cfg.endpoint && String(cfg.endpoint).indexOf('apihub.agnes-ai.com') !== -1) return null;
-      const cle = cleanApiKey((state.keys && state.keys.agnes) || '') ||
-                  cleanApiKey((localStorage.getItem('agnes_api_key') || ''));
-      if (!cle) return null;
-      return { model: 'agnes-2.5-flash', endpoint: 'https://apihub.agnes-ai.com/v1/chat/completions',
-               apiKey: cle, format: 'chat-completions', providerId: 'agnes' };
-    } catch (e) { return null; }
+      const xhr = new XMLHttpRequest();
+      /* SYNCHRONE volontairement (on est dans un catch, pas dans le chemin
+         heureux) — SANS .timeout : sur le fil principal, timeout+sync lève
+         InvalidAccessError, ce qui faisait paraître Ollama « injoignable » à
+         tort. Un port local fermé refuse instantanément : pas de blocage. */
+      xhr.open('GET', 'http://127.0.0.1:11434/api/tags', false);
+      xhr.send(null);
+      _ollamaJoignable = (xhr.status === 200);
+    } catch (e) { _ollamaJoignable = false; }
+    return _ollamaJoignable;
+  }
+  function _cfgOllamaSecours() {
+    if (!ollamaEstJoignable()) return null;
+    let modele = 'qwen2.5:0.5b';
+    try {
+      const deja = (state.customModels || []).filter(m => String(m.baseUrl || '').indexOf('11434') !== -1);
+      if (deja.length && deja[0].model) modele = deja[0].model;
+    } catch (e) {}
+    return { model: modele, endpoint: 'http://127.0.0.1:11434/v1/chat/completions',
+             apiKey: 'local', format: 'chat-completions', providerId: 'ollama' };
+  }
+  function cfgChaineSecours(cfg) {
+    const chaine = [];
+    try {
+      const cibleAgnes = cfg && cfg.endpoint && String(cfg.endpoint).indexOf('apihub.agnes-ai.com') !== -1;
+      const cibleOllama = cfg && cfg.endpoint && String(cfg.endpoint).indexOf('127.0.0.1:11434') !== -1;
+      if (!cibleAgnes) {
+        const cle = cleanApiKey((state.keys && state.keys.agnes) || '') ||
+                    cleanApiKey((localStorage.getItem('agnes_api_key') || ''));
+        if (cle) chaine.push({ model: 'agnes-2.5-flash', endpoint: 'https://apihub.agnes-ai.com/v1/chat/completions',
+                               apiKey: cle, format: 'chat-completions', providerId: 'agnes' });
+      }
+      if (!cibleOllama) {
+        const o = _cfgOllamaSecours();
+        if (o) chaine.push(o);
+      }
+    } catch (e) {}
+    return chaine;
+  }
+  /* Compat : l'ancien appel attendait UNE config ou null. */
+  function cfgCommentaireSecours(cfg) {
+    const chaine = cfgChaineSecours(cfg);
+    return chaine.length ? chaine[0] : null;
   }
   /* Banc v126l : la fonction vit dans cette IIFE — même démarche que
      window.__applyHighlights, on expose le minimum pour le prove-it. */
   window.__atcProveIt = { cfgCommentaireSecours: cfgCommentaireSecours, runCommentLLM: runCommentLLM };
+  /* v445 — la chaîne de secours (Agnes → Ollama) sert aussi à la fiche d'étude. */
+  window.__cfgChaineSecours = cfgChaineSecours;
 
   async function runCommentLLM(ann, s, msg){
     const activeModelId = (state.agent?.modelPref && state.agent.modelPref !== '') ? state.agent.modelPref : state.model;
@@ -28650,10 +29180,20 @@ initTafsirVerseTooltip();
       try {
         reply = await _race60(cfg);
       } catch (ePrim) {
-        const secours = cfgCommentaireSecours(cfg);
-        if (!secours) throw ePrim;
-        console.log('[DIAG] runCommentLLM: primaire a échoué (' + (ePrim && ePrim.message) + ') — repli Agnes');
-        reply = await _race60(secours);
+        /* v441 — chaîne complète : Agnes (si clé) puis Ollama local (si
+           joignable). Le premier fournisseur de secours qui répond gagne. */
+        const chaine = cfgChaineSecours(cfg);
+        if (!chaine.length) throw ePrim;
+        let reussi = false; let derniere = ePrim;
+        for (const secours of chaine) {
+          try {
+            console.log('[DIAG] runCommentLLM: primaire a échoué (' + (ePrim && ePrim.message) + ') — repli ' + (secours.providerId || '?'));
+            reply = await _race60(secours);
+            reussi = true;
+            break;
+          } catch (eSec) { derniere = eSec; }
+        }
+        if (!reussi) throw derniere;
       }
       console.log('[DIAG] runCommentLLM: reply received len=' + (reply ? reply.length : 0));
       ann.a = reply; ann.loading = false; ann.error = null;
@@ -28729,7 +29269,7 @@ initTafsirVerseTooltip();
       // On ignore totalement les espaces afin qu'une sélection traversant plusieurs
       // paragraphes/listes (où le DOM concatène les nœuds texte SANS séparateur)
       // soit retrouvée après rechargement. Renvoie chaîne + table de mapping.
-       const NF = (str || '').normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+       const NF = (str || '').normalize('NFKC').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       let norm = '', map = [];
       for (let i = 0; i < NF.length; i++) {
         const ch = NF[i];
@@ -34865,7 +35405,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.431';
+  var STAMPED = '2.0.404';
   function detect(cb) {
     if (STAMPED !== '__THEO' + '_VERSION__') { cb(STAMPED); return; }
     if (window.__APK_VERSION__) { cb(window.__APK_VERSION__); return; }
@@ -42676,19 +43216,32 @@ window.continueTradApart = async function (msgId) {
       + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
       + '<button id="v170-tab-l">BIBLIOTHÈQUE</button>'
       + '<button id="v170-tab-v">🌊 VALTORTA</button>'
+      + '<button id="v170-tab-s">📜 ASBĀB AL-NUZŪL</button>'
+      + '<button id="v170-tab-c">📕 CATÉCHISME</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function(e){ if (e.target === p) p.classList.remove('open'); });
     p.querySelector('#v170-close').addEventListener('click', function(){ p.classList.remove('open'); });
-    document.getElementById('v170-q').addEventListener('input', render);
+    document.getElementById('v170-q').addEventListener('input', function(){ PAGE_S = 0; PAGE_C = 0; render(); });
     document.getElementById('v170-tab-q').addEventListener('click', function(){ setView('q'); });
     document.getElementById('v170-tab-d').addEventListener('click', function(){ setView('d'); });
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
     document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
     document.getElementById('v170-tab-l').addEventListener('click', function(){ setView('l'); });
     document.getElementById('v170-tab-v').addEventListener('click', function(){ setView('v'); });
+    document.getElementById('v170-tab-s').addEventListener('click', function(){ setView('s'); });
+    document.getElementById('v170-tab-c').addEventListener('click', function(){ setView('c'); });
+    /* v439 — boutons 🇫🇷 des vues ASBĀB : traduction IA partagée (v437) */
+    document.getElementById('v170-body').addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('.asb-tr') : null;
+      if (!b || b.dataset.busy) return;
+      ev.stopPropagation();
+      var ar = b.parentNode.querySelector('[dir="rtl"]');
+      if (!ar) return;
+      if (typeof window.__asbabTranslate === 'function') window.__asbabTranslate(b, ar.textContent || '');
+    });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -42830,15 +43383,20 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
     document.getElementById('v170-tab-l').classList.toggle('on', v === 'l');
     document.getElementById('v170-tab-v').classList.toggle('on', v === 'v');
+    document.getElementById('v170-tab-s').classList.toggle('on', v === 's');
+    document.getElementById('v170-tab-c').classList.toggle('on', v === 'c');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
            : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
            : v === 'v' ? "Rechercher un récit de Valtorta (titre, date de l'événement, lieu, référence d'Évangile, numéro EMV)…"
+           : v === 's' ? 'Filtrer par sourate:verset, source (الواحدي…) ou mot du texte arabe…'
+           : v === 'c' ? 'Filtrer par numéro de paragraphe (ex. 261) ou mot du texte…'
                        : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
     CPCAT = null;
+    PAGE_S = 0; PAGE_C = 0;   /* v440 — changement de vue : retour à la page 1 */
     load();   /* charge le corpus de la vue si absent */
     render();
   }
@@ -43519,13 +44077,176 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de l\'index Valtorta…</div>';
       return;
     }
+    if (VIEW === 's' && !SDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement des asbāb al-nuzūl (94 sourates)…</div>';
+      return;
+    }
+    if (VIEW === 'c' && !CDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du Catéchisme…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
     if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q);
-    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q); else renderP(q);
+    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q);
+    else if (VIEW === 's') renderS(q); else if (VIEW === 'c') renderC(q);
+    else renderP(q);
+  }
+
+  /* ═══ v439 — vues ASBĀB AL-NUZŪL & CATÉCHISME ═══ */
+  var SDATA = null, CDATA = null;
+  /* v440 — pagination des deux vues : sans elle, seuls les 40 PREMIERS
+     résultats s'affichaient (« … et N autres — affinez le filtre »), et
+     l'utilisateur croyait manquer des sourates / paragraphes. */
+  var PAGE_S = 0, PAGE_C = 0;
+
+  /* Asbāb al-nuzūl : 94 fichiers tradition/asbab/sNNN.json, chargés à la
+     première ouverture de l'onglet (6 en parallèle, barre de progression). */
+  function sLoad(){
+    var files = [];
+    for (var i = 1; i <= 114; i++) files.push(i);
+    var done = 0, items = [], idx = 0;
+    var st = document.getElementById('v170-status');
+    function tick(){
+      done++;
+      if (st) st.textContent = '⏳ Asbāb al-nuzūl : ' + done + '/' + files.length + ' sourates…';
+      if (done === files.length) {
+        SDATA = { items: items };
+        LOADING = false;
+        if (st) st.textContent = '✅ ' + items.length + ' notices asbāb al-nuzūl chargées (7 ouvrages Shamela).';
+        render();
+      }
+    }
+    function next(){
+      if (idx >= files.length) return;
+      var s = files[idx++];
+      fetch('tradition/asbab/s' + String(s).padStart(3, '0') + '.json', { cache: 'no-store' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if (j && j.e && j.e.length) {
+            j.e.forEach(function(e){ items.push({ s: s, v: e.v, src: e.src, t: e.t }); });
+          }
+        })
+        .catch(function(){})
+        .then(function(){ tick(); next(); });
+    }
+    for (var k = 0; k < 6; k++) next();
+  }
+
+  /* Catéchisme de l'Église catholique (fr) : un seul fichier JSON. */
+  function cLoad(){
+    var st = document.getElementById('v170-status');
+    fetch('tradition/cec/cec_fr.json').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        CDATA = (j && j.paragraphes && j.paragraphes.length) ? j : false;
+        LOADING = false; render();
+        if (st) st.textContent = CDATA
+          ? '✅ Catéchisme : ' + CDATA.count + ' paragraphes (vatican.va, édition française).'
+          : '⚠ Corpus du Catéchisme indisponible (tradition/cec/cec_fr.json).';
+      })
+      .catch(function(){
+        CDATA = false; LOADING = false; render();
+        if (st) st.textContent = '⚠ Corpus du Catéchisme indisponible.';
+      });
+  }
+
+  /* v440 — barre de pagination commune aux vues paginées (asbāb, catéchisme). */
+  function _barrePages(page, nbPages, total, label){
+    if (nbPages <= 1) return '';
+    var styleBtn = 'background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px';
+    var styleDis = 'opacity:.35;cursor:default;border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:3px 10px;font-size:11px;color:#cfe0ff;background:transparent';
+    return '<div class="v170-pages" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0 4px">'
+      + '<button type="button" class="v170-pg" data-page="' + (page - 1) + '"' + (page <= 0 ? ' disabled style="' + styleDis + '"' : ' style="' + styleBtn + '"') + '>◀ Précédent</button>'
+      + '<span style="font-size:11.5px;color:#8fa3b8">Page ' + (page + 1) + ' / ' + nbPages + ' · ' + total + ' ' + label + '</span>'
+      + '<button type="button" class="v170-pg" data-page="' + (page + 1) + '"' + (page >= nbPages - 1 ? ' disabled style="' + styleDis + '"' : ' style="' + styleBtn + '"') + '>Suivant ▶</button>'
+      + '</div>';
+  }
+  /* v440 — branche les boutons de page produits par _barrePages. */
+  function _branchePages(body, setPg, render){
+    body.querySelectorAll('.v170-pg').forEach(function(b){
+      b.addEventListener('click', function(){
+        setPg(parseInt(b.getAttribute('data-page'), 10));
+        render();
+        body.scrollTop = 0;
+      });
+    });
+  }
+
+  /* ── vue Asbāb al-nuzūl ── */
+  function renderS(q){
+    var body = document.getElementById('v170-body');
+    var items = (SDATA && SDATA.items) || [];
+    var res = items;
+    if (q) {
+      res = items.filter(function(e){
+        return norm(e.t).indexOf(q) !== -1 || norm(e.src).indexOf(q) !== -1 ||
+               (e.s + ':' + e.v).indexOf(q) !== -1 || norm(String(e.s)).indexOf(q) !== -1;
+      });
+    }
+    var max = 40;
+    var nbPages = Math.max(1, Math.ceil(res.length / max));
+    if (PAGE_S >= nbPages) PAGE_S = nbPages - 1;
+    if (PAGE_S < 0) PAGE_S = 0;
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = res.length + ' notice(s) sur ' + items.length + ' — 🇫🇷 traduit un récit à la demande.';
+    if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucune notice.</div>'; return; }
+    var shown = res.slice(PAGE_S * max, PAGE_S * max + max);
+    /* v440 — plage de sourates visible sur la page courante. */
+    var sMin = shown[0].s, sMax = shown[0].s;
+    shown.forEach(function(e){ if (e.s < sMin) sMin = e.s; if (e.s > sMax) sMax = e.s; });
+    var h = _barrePages(PAGE_S, nbPages, res.length, 'notices');
+    if (nbPages > 1) h += '<div style="text-align:center;font-size:10.5px;color:#8fa3b8;padding-bottom:6px">Sourates ' + sMin + ' à ' + sMax + ' sur cette page</div>';
+    shown.forEach(function(e){
+      var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
+      h += '<div style="margin:8px 0;padding:8px 10px;border:1px solid rgba(159,224,160,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+         + '<div style="font-size:10.5px;color:#8fa3b8;margin-bottom:3px">Sourate ' + e.s + ' : ' + e.v
+         + ' &nbsp;<span title="' + esc(full) + '" style="color:#bfe0c8;border:1px solid rgba(159,224,160,.4);border-radius:10px;padding:0 6px;font-size:9.5px">' + esc(e.src) + '</span></div>'
+         + '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;padding:4px 0">' + esc(e.t) + '</div>'
+         + '<button class="asb-tr" style="pointer-events:auto;background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px">🇫🇷 Traduire (IA)</button>'
+         + '</div>';
+    });
+    h += _barrePages(PAGE_S, nbPages, res.length, 'notices');
+    body.innerHTML = h;
+    _branchePages(body, function(p){ PAGE_S = p; }, function(){ renderS(q); });
+  }
+
+  /* ── vue Catéchisme (CEC) ── */
+  function renderC(q){
+    var body = document.getElementById('v170-body');
+    var items = (CDATA && CDATA.paragraphes) || [];
+    var res = items;
+    if (q) {
+      res = items.filter(function(e){
+        return norm(e.t).indexOf(q) !== -1 || norm(e.ctx).indexOf(q) !== -1 ||
+               String(e.n) === q || String(e.n).indexOf(q) === 0;
+      });
+    }
+    var max = 40;
+    var nbPages = Math.max(1, Math.ceil(res.length / max));
+    if (PAGE_C >= nbPages) PAGE_C = nbPages - 1;
+    if (PAGE_C < 0) PAGE_C = 0;
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = res.length + ' paragraphe(s) sur ' + items.length + " — Catéchisme de l'Église catholique (1992).";
+    if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucun paragraphe.</div>'; return; }
+    var shown = res.slice(PAGE_C * max, PAGE_C * max + max);
+    var h = _barrePages(PAGE_C, nbPages, res.length, 'paragraphes');
+    if (nbPages > 1) h += '<div style="text-align:center;font-size:10.5px;color:#8fa3b8;padding-bottom:6px">§ ' + shown[0].n + ' à ' + shown[shown.length - 1].n + ' sur cette page</div>';
+    shown.forEach(function(e){
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,142,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+         + '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:3px">§ ' + e.n + '</div>'
+         + (e.ctx ? '<div style="font-size:10.5px;color:#8fa3b8;margin-bottom:4px">' + esc(e.ctx) + '</div>' : '')
+         + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(e.t) + '</div>'
+         + '</div>';
+    });
+    h += _barrePages(PAGE_C, nbPages, res.length, 'paragraphes');
+    body.innerHTML = h;
+    _branchePages(body, function(p){ PAGE_C = p; }, function(){ renderC(q); });
   }
 
   function load(){
     LOADING = true;
+    /* v439 — asbāb & catéchisme : chargement propre, hors de la chaîne existante */
+    if (VIEW === 's'){ if (!SDATA) sLoad(); else LOADING = false; return; }
+    if (VIEW === 'c'){ if (!CDATA) cLoad(); else LOADING = false; return; }
     if (VIEW === 'q' && !DATA){
       fetch('tradition/ta_sujets.json').then(function(r){ return r.ok ? r.json() : null; })
         .then(function(j){ DATA = (j && j.topics && j.topics.length) ? j : false; LOADING = false; render(); })
@@ -47483,6 +48204,88 @@ window.continueTradApart = async function (msgId) {
       .catch(function(){ _asbCache[s] = null; return null; });
     return _asbProm[s];
   }
+
+  /* ═══ v437 — TRADUCTION IA (LLM) D'UN RÉCIT ASBĀB ═══
+     Le bouton « 🇫🇷 Traduire (IA) » traduit l'arabe en français via le modèle
+     configuré (le même que le tafsir). Deux garde-fous :
+       • mémoire partagée __theoTM (localStorage theo_tm_v1) : un texte déjà
+         traduit par n'importe quelle voie est rendu instantanément, sans appel ;
+       • repli sur la traduction native si aucune clé API n'est configurée. */
+  /* Renvoie toujours une Promise : permet l'enchaînement séquentiel du
+     bouton « Tout traduire » sans sondage ni double appel. */
+  function asbabTraduire(btn, txt){
+    if (!txt) return Promise.resolve();
+    var wrap = btn.parentNode;
+    var out = wrap.querySelector('.asb-tr-out');
+    if (!out) {
+      out = document.createElement('div');
+      out.className = 'asb-tr-out';
+      out.style.cssText = 'margin-top:4px;font-size:12px;line-height:1.65;color:#eaf4ff;' +
+        'background:rgba(79,142,247,.10);border-left:3px solid #4f8ef7;' +
+        'padding:6px 9px;border-radius:0 6px 6px 0;';
+      wrap.appendChild(out);
+    }
+    /* déjà traduit -> on bascule l'affichage */
+    if (out.dataset.done === '1' && out.dataset.busy !== '1') {
+      out.style.display = (out.style.display === 'none') ? '' : 'none';
+      btn.textContent = (out.style.display === 'none') ? '🇫🇷 Traduire (IA)' : '🇫🇷 Masquer';
+      return Promise.resolve();
+    }
+    if (out.dataset.busy === '1') return Promise.resolve();
+    var lang = 'fr';
+    var memo = (window.__theoTM && window.__theoTM.get) ? window.__theoTM.get(txt, lang) : null;
+    if (memo) {
+      out.textContent = memo; out.dataset.done = '1'; btn.textContent = '🇫🇷 Masquer';
+      return Promise.resolve();
+    }
+    var cfg = null;
+    try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
+    if (!cfg || !cfg.apiKey) {
+      out.textContent = '⚠️ Aucune clé API : ouvrez ⬡ CLÉ API. Repli traduction native…';
+      if (window.__LT && typeof window.__LT.translate === 'function') window.__LT.translate(txt, btn.getBoundingClientRect());
+      return Promise.resolve();
+    }
+    out.dataset.busy = '1';
+    btn.disabled = true;
+    out.textContent = '⏳ Traduction IA…';
+    var sys = 'You are a translator specialised in early Islamic sources. Translate the following Arabic text (a report on the occasions of revelation, asbab al-nuzul) into French. Rules: translate faithfully and completely, keep the narrative style, transliterate proper names consistently, keep technical terms and give the Arabic in parentheses for key terms, add no commentary or notes, and return ONLY the French translation.';
+    return callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: txt }], { temperature: 0.2, max_tokens: 2000 })
+      .then(function(r){
+        out.dataset.busy = ''; btn.disabled = false;
+        var tr = String(r || '').trim();
+        if (!tr) { out.textContent = '⚠️ Traduction vide.'; return; }
+        out.textContent = tr; out.dataset.done = '1'; btn.textContent = '🇫🇷 Masquer';
+        try { if (window.__theoTM && window.__theoTM.put) window.__theoTM.put(txt, lang, tr); } catch(e){}
+      })
+      .catch(function(e){
+        out.dataset.busy = ''; btn.disabled = false;
+        out.textContent = '⚠️ Erreur traduction : ' + (e && e.message ? e.message : e);
+      });
+  }
+  /* exposé pour l'onglet ASBĀB du modal SUJETS */
+  window.__asbabTranslate = asbabTraduire;
+
+  /* v438 — traduction EN MASSE : enchaîne tous les récits du verset, avec
+     progression. Séquentiel (pas de rafale) pour ménager le quota API ; les
+     textes déjà en mémoire sont sautés (coût nul). */
+  async function asbabToutTraduire(box, allBtn){
+    var btns = Array.prototype.slice.call(box.querySelectorAll('.asb-tr'));
+    if (!btns.length) return;
+    var total = btns.length;
+    allBtn.disabled = true;
+    for (var i = 0; i < btns.length; i++) {
+      var o = btns[i].parentNode.querySelector('.asb-tr-out');
+      if (o && o.dataset.done === '1') continue;
+      allBtn.textContent = '⏳ ' + (i + 1) + '/' + total;
+      try {
+        var ar = btns[i].parentNode.querySelector('[dir="rtl"]');
+        await asbabTraduire(btns[i], ar ? ar.textContent : '');
+      } catch (e) { /* on continue avec le suivant */ }
+    }
+    allBtn.disabled = false;
+    allBtn.textContent = '✅ Traduit (' + total + ')';
+  }
+
   window.__asbabAppend = function(sura, v1, v2, tip){
     if (!tip || !tip.querySelector('#asbab-src')) return;
     asbabCharger(sura).then(function(j){
@@ -47497,7 +48300,9 @@ window.continueTradApart = async function (msgId) {
       hits.forEach(function(e){ srcs[e.src] = 1; });
       var h = '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed rgba(159,224,160,.4)">' +
         '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Asbāb al-nuzūl — ' +
-        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)</div>';
+        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)' +
+        ' <button class="asb-tr-all" title="Traduire tous les récits de ce verset (IA, séquentiel, avec mémoire)" style="pointer-events:auto;background:rgba(79,142,247,.18);color:#cfe0ff;' +
+        'border:1px solid rgba(79,142,247,.45);border-radius:6px;padding:1px 8px;cursor:pointer;font-size:10px;letter-spacing:0;text-transform:none;">🌐 Tout traduire</button></div>';
       hits.forEach(function(e){
         var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
         h += '<div style="margin:6px 0">' +
@@ -47508,7 +48313,7 @@ window.continueTradApart = async function (msgId) {
              'background:rgba(159,224,160,.07);border-right:3px solid rgba(159,224,160,.5);' +
              'padding:6px 9px;border-radius:6px 0 0 6px">' + esc(e.t) + '</div>' +
              '<button class="asb-tr" style="pointer-events:auto;margin-top:3px;background:rgba(79,142,247,.15);color:#cfe0ff;' +
-             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire</button>' +
+             'border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px;">🇫🇷 Traduire (IA)</button>' +
              '</div>';
       });
       var leg = Object.keys(srcs).map(function(s){ return (window.__ASBAB_SRC && window.__ASBAB_SRC[s]) ? window.__ASBAB_SRC[s] : s; }).join(' · ');
@@ -47517,21 +48322,796 @@ window.continueTradApart = async function (msgId) {
            '<br>الشاملة (shamela.ws) — recueils complets d\'asbāb al-nuzūl (7 ouvrages, 3175 notices). ' +
            'Traditions narratives rapportées : pas des faits établis.</div></div>';
       box.innerHTML = h;
-      /* Le bouton ouvre la traduction NATIVE de l'application (sa popup) :
-         on ne réinvente pas un second chemin de traduction. */
+      /* v437 — traduction IA (LLM) avec mémoire partagée ; repli natif si pas de clé. */
       box.querySelectorAll('.asb-tr').forEach(function(b){
         b.addEventListener('click', function(ev){
           ev.stopPropagation();
           var ar = b.parentNode.querySelector('[dir="rtl"]');
           if (!ar) return;
-          if (window.__LT && typeof window.__LT.translate === 'function') {
-            window.__LT.translate(ar.textContent, b.getBoundingClientRect());
-          } else if (window.toast) { window.toast('Traduction non configurée', 'info'); }
+          asbabTraduire(b, ar.textContent || '');
         });
+      });
+      /* v438 — traduction en masse de tous les récits du verset */
+      var allBtn = box.querySelector('.asb-tr-all');
+      if (allBtn) allBtn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        asbabToutTraduire(box, allBtn);
       });
     }).catch(function(){});
   };
 })();
 </script>
+<script id="v443-biblio">
+/* ═══════════════════════════════════════════════════════════════════
+   v443 — MES ANNOTATIONS : bibliothèque personnelle unifiée.
+   Toutes les annotations (commentaires IA, notes personnelles) de TOUTES
+   les conversations, agrégées, filtrables, exportables (Markdown / PDF).
+   Les annotations vivaient dispersées dans chaque conversation : aucune
+   vue d'ensemble ni export n'existait.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v443-biblio-modal';
+  let ITEMS = [];
+  let FILTRE = '';
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  async function collecte() {
+    const chats = (typeof db !== 'undefined' && db.getAll) ? (await db.getAll('chats') || []) : [];
+    const out = [];
+    (chats || []).forEach(c => {
+      (c.messages || []).forEach(m => {
+        (m.annotations || []).forEach(a => {
+          if (!a || !a.text) return;
+          if (a.error && !a.a && !a.note) return;   // annotations en échec : pas du contenu
+          out.push({
+            passage: a.text,
+            commentaire: a.a || null,
+            note: a.note || null,
+            perso: !!a.personal,
+            question: a.question || null,
+            chat: c.title || c.name || c.id || 'Conversation',
+            chatId: c.id,
+            ts: m.ts || c.updatedAt || 0
+          });
+        });
+      });
+    });
+    out.sort((x, y) => (y.ts || 0) - (x.ts || 0));
+    return out;
+  }
+
+  function filtrees() {
+    const q = FILTRE.trim().toLowerCase();
+    if (!q) return ITEMS;
+    return ITEMS.filter(i =>
+      (i.passage || '').toLowerCase().includes(q) ||
+      (i.commentaire || '').toLowerCase().includes(q) ||
+      (i.note || '').toLowerCase().includes(q) ||
+      (i.chat || '').toLowerCase().includes(q));
+  }
+
+  function rendu() {
+    const liste = filtrees();
+    const body = document.getElementById('v443-biblio-body');
+    const cnt = document.getElementById('v443-biblio-count');
+    if (cnt) cnt.textContent = String(liste.length) + ' / ' + ITEMS.length;
+    if (!liste.length) {
+      body.innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">' + (ITEMS.length ? 'Aucun résultat pour ce filtre.' : 'Aucune annotation encore — sélectionnez un passage dans une conversation, puis « Commentaire » ou « Note personnelle ».') + '</div>';
+      return;
+    }
+    let groupe = null, h = '';
+    liste.forEach(i => {
+      if (i.chat !== groupe) {
+        groupe = i.chat;
+        h += '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#4fc3f7;margin:14px 0 6px;border-bottom:1px solid rgba(79,195,247,.25);padding-bottom:3px">💬 ' + esc(groupe) + '</div>';
+      }
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,195,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+        + '<div style="font-style:italic;color:#e8dcc0;font-size:12.5px;border-left:3px solid rgba(255,204,128,.5);padding-left:8px">« ' + esc((i.passage || '').slice(0, 260)) + (i.passage.length > 260 ? '…' : '') + ' »</div>'
+        + (i.question ? '<div style="font-size:10.5px;color:#ffb300;margin-top:4px">❓ ' + esc(i.question) + '</div>' : '')
+        + (i.commentaire ? '<div style="font-size:12px;line-height:1.6;color:#dbe6f3;margin-top:6px;white-space:pre-wrap">' + esc(i.commentaire) + '</div>' : '')
+        + (i.note ? '<div style="font-size:12px;color:#c8e6c9;margin-top:6px;white-space:pre-wrap">📝 ' + esc(i.note) + '</div>' : '')
+        + (!i.commentaire && !i.note ? '<div style="font-size:11px;color:#ff8a80;margin-top:6px">⚠ Annotation sans contenu généré</div>' : '')
+        + '</div>';
+    });
+    body.innerHTML = h;
+  }
+
+  function markdown() {
+    const liste = filtrees();
+    const lignes = ['# MES ANNOTATIONS — THEOLOGICUS', '', '_' + liste.length + ' annotation(s)' + (FILTRE ? ' (filtre : ' + FILTRE + ')' : '') + ' — exportées le ' + new Date().toLocaleString('fr-FR') + '_', ''];
+    let groupe = null;
+    liste.forEach(i => {
+      if (i.chat !== groupe) { groupe = i.chat; lignes.push('## ' + i.chat, ''); }
+      lignes.push('> ' + String(i.passage || '').replace(/\n/g, '\n> '));
+      if (i.question) lignes.push('', '**Question :** ' + i.question);
+      if (i.commentaire) lignes.push('', i.commentaire);
+      if (i.note) lignes.push('', '**📝 Note personnelle :** ' + i.note);
+      lignes.push('');
+    });
+    return lignes.join('\n');
+  }
+
+  function telecharge() {
+    const blob = new Blob([markdown()], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'MES-ANNOTATIONS-' + new Date().toISOString().slice(0, 10) + '.md';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function imprimer() {
+    const liste = filtrees();
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorisez les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>MES ANNOTATIONS — THEOLOGICUS</title>'
+      + '<style>body{font-family:Georgia,serif;max-width:800px;margin:24px auto;color:#1a1a2e}h1{font-size:20px;border-bottom:2px solid #333;padding-bottom:6px}'
+      + 'h2{font-size:14px;color:#444;margin:18px 0 6px}blockquote{border-left:3px solid #b8860b;margin:8px 0;padding:4px 12px;font-style:italic;background:#faf7f0}'
+      + '.com{font-size:13px;line-height:1.6;white-space:pre-wrap}.note{font-size:13px;color:#2e5d2e;white-space:pre-wrap}.meta{color:#666;font-size:11px}</style></head><body>');
+    w.document.write('<h1>MES ANNOTATIONS — THEOLOGICUS</h1><p class="meta">' + liste.length + ' annotation(s) — ' + new Date().toLocaleString('fr-FR') + '</p>');
+    let g = null;
+    liste.forEach(i => {
+      if (i.chat !== g) { g = i.chat; w.document.write('<h2>' + esc(g) + '</h2>'); }
+      w.document.write('<blockquote>' + esc(String(i.passage || '').slice(0, 400)) + '</blockquote>');
+      if (i.question) w.document.write('<p><b>Question :</b> ' + esc(i.question) + '</p>');
+      if (i.commentaire) w.document.write('<p class="com">' + esc(i.commentaire) + '</p>');
+      if (i.note) w.document.write('<p class="note">📝 ' + esc(i.note) + '</p>');
+    });
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+  }
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(860px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">📚 MES ANNOTATIONS <span id="v443-biblio-count" style="font-size:10.5px;color:#8fa3b8;font-weight:400"></span></div>'
+      + '<div style="flex:1"></div>'
+      + '<input id="v443-biblio-q" placeholder="Filtrer les annotations…" style="width:230px;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,195,247,.35);border-radius:8px;padding:6px 10px;font-size:11.5px">'
+      + '<button id="v443-biblio-md" title="Exporter en Markdown" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">⬇ Markdown</button>'
+      + '<button id="v443-biblio-pdf" title="Imprimer / enregistrer en PDF" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">🖨 PDF</button>'
+      + '<button id="v443-biblio-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div id="v443-biblio-body" style="flex:1;overflow-y:auto;padding:4px 16px 16px;font-family:inherit"></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v443-biblio-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    document.getElementById('v443-biblio-q').addEventListener('input', e => { FILTRE = e.target.value; rendu(); });
+    document.getElementById('v443-biblio-md').onclick = telecharge;
+    document.getElementById('v443-biblio-pdf').onclick = imprimer;
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  async function ouvre() {
+    ensureModal();
+    document.getElementById('v443-biblio-body').innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">Collecte des annotations…</div>';
+    ITEMS = await collecte();
+    FILTRE = '';
+    const q = document.getElementById('v443-biblio-q'); if (q) q.value = '';
+    rendu();
+  }
+
+  /* bouton d'entrée dans le HUD, à côté de « 🎞 AI VIDEO » */
+  function bouton() {
+    const ancre = document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v443-biblio-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v443-biblio-btn';
+    b.className = 'hud-btn';
+    b.title = 'MES ANNOTATIONS — toutes vos annotations et notes, exportables';
+    b.textContent = '📚 BIBLIO';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  /* banc + raccourcis externes */
+  window.__v443Biblio = { ouvre: ouvre, collecte: collecte, markdown: markdown, filtre: (q) => { FILTRE = q; rendu(); } };
+})();
+</script>
+<script id="v444-plans">
+/* ═══════════════════════════════════════════════════════════════════
+   v444 — PLANS DE LECTURE avec progression persistée.
+   Trois plans tirés des corpus locaux (zéro réseau) :
+     • Catéchisme en ~359 jours (8 paragraphes/jour)
+     • Psaumes en 30 jours (5 psaumes/jour)
+     • Coran en 30 jours (~208 versets/jour, arabe + traduction)
+   Progression : localStorage 'v444_plans_progress'. Le bouton HUD
+   « 📅 PLANS » vit à côté de « 📚 BIBLIO ».
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v444-plans-modal';
+  const CLE_PROG = 'v444_plans_progress';
+  let PLAN = null;          // id du plan ouvert
+  let JOUR = 1;             // jour affiché
+  let ITEMS = null;         // items du plan courant (lazy)
+  let TOTAL_J = null;
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function prog() {
+    try { return JSON.parse(localStorage.getItem(CLE_PROG) || '{}'); } catch (e) { return {}; }
+  }
+  function progSet(p) { try { localStorage.setItem(CLE_PROG, JSON.stringify(p)); } catch (e) {} }
+  function joursFaits(pid) { const p = prog(); return (p[pid] && p[pid].fait) || []; }
+
+  /* ── chargeurs de corpus (locaux) ── */
+  async function itemsCec() {
+    const j = await (await fetch('tradition/cec/cec_fr.json')).json();
+    return (j.paragraphes || []).map(p => ({ label: '§ ' + p.n, t: p.t, ar: null }));
+  }
+  async function jsObjets(chemin, cle) {
+    const t = await (await fetch(chemin)).text();
+    /* le fichier est « (window.X=window.X||{})[N]={JSON} ; » : le JSON commence
+       après le « = » qui SUIT l'ancre ||{})[ — le premier « = » du fichier est
+       celui de l'assignation window, pas le notre. */
+    const ancre = t.indexOf('||{})[');
+    const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+    return JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+  }
+  async function itemsPsaumes() {
+    const livres = await jsObjets('bible/b19.js');
+    const ps = livres[19] || {};
+    const out = [];
+    for (let ch = 1; ch <= 150; ch++) {
+      const vs = ps[String(ch)] || {};
+      const texte = Object.keys(vs).map(v => vs[v]).join(' ');
+      out.push({ label: 'Psaume ' + ch, t: texte || '(texte indisponible)', ar: null });
+    }
+    return out;
+  }
+  async function itemsCoran() {
+    const out = [];
+    for (let s = 1; s <= 114; s++) {
+      try {
+        const su = await jsObjets('quran/q' + s + '.js');
+        const vs = su && su.versets || {};
+        Object.keys(vs).forEach(v => out.push({ label: s + ':' + v, t: vs[v].text, ar: vs[v].arabe }));
+      } catch (e) { /* sourate absente : on continue */ }
+    }
+    return out;
+  }
+
+  const PLANS = {
+    cec:      { titre: '📖 Catéchisme en un an',  sous: '8 paragraphes par jour',       tranche: 8,   charge: itemsCec },
+    psaumes:  { titre: '🕊️ Psaumes en 30 jours',  sous: '5 psaumes par jour',           tranche: 5,   charge: itemsPsaumes },
+    coran:    { titre: '☪️ Coran en 30 jours',     sous: '≈ 208 versets par jour',       tranche: 208, charge: itemsCoran },
+  };
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(880px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">📅 PLANS DE LECTURE</div>'
+      + '<div style="flex:1"></div>'
+      + '<button id="v444-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div id="v444-body" style="flex:1;overflow-y:auto;padding:14px 18px;font-family:inherit"></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v444-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  function renduCartes() {
+    const body = document.getElementById('v444-body');
+    const p = prog();
+    let h = '<div style="color:#8fa3b8;font-size:12px;margin-bottom:10px">Choisissez un plan — la progression est enregistrée localement.</div>';
+    Object.keys(PLANS).forEach(pid => {
+      const def = PLANS[pid];
+      const fait = (p[pid] && p[pid].fait) || [];
+      const pct = def.totalJ ? Math.round(100 * fait.length / def.totalJ) : 0;
+      h += '<div class="v444-carte" data-plan="' + pid + '" style="cursor:pointer;margin:10px 0;padding:14px 16px;border:1px solid rgba(79,195,247,.3);border-radius:10px;background:rgba(12,20,36,.55)">'
+        + '<div style="display:flex;align-items:center;gap:10px"><div style="font-size:14px;color:#eaf4ff;font-weight:700">' + def.titre + '</div>'
+        + '<div style="flex:1"></div><div style="font-size:11px;color:#8fa3b8">' + def.sous + (def.totalJ ? ' · ' + def.totalJ + ' jours' : '') + '</div></div>'
+        + '<div style="margin-top:8px;height:8px;background:rgba(79,195,247,.12);border-radius:6px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#4fc3f7,#81d4fa)"></div></div>'
+        + '<div style="margin-top:4px;font-size:10.5px;color:#8fa3b8">' + fait.length + ' jour(s) lu(s)' + (def.totalJ ? ' · ' + pct + '%' : '') + '</div>'
+        + '</div>';
+    });
+    body.innerHTML = h;
+    body.querySelectorAll('.v444-carte').forEach(c => c.addEventListener('click', () => ouvrePlan(c.dataset.plan)));
+  }
+
+  async function ouvrePlan(pid) {
+    PLAN = pid; JOUR = 0;
+    const body = document.getElementById('v444-body');
+    body.innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">Chargement du corpus local…</div>';
+    const def = PLANS[pid];
+    try {
+      ITEMS = await def.charge();
+    } catch (e) { body.innerHTML = '<div style="color:#ff8a80;padding:20px">Corpus indisponible : ' + esc(e.message) + '</div>'; return; }
+    TOTAL_J = Math.max(1, Math.ceil(ITEMS.length / def.tranche));
+    def.totalJ = TOTAL_J;
+    const fait = joursFaits(pid);
+    JOUR = 0;
+    while (JOUR < TOTAL_J && fait.includes(JOUR)) JOUR++;
+    if (JOUR >= TOTAL_J) JOUR = 0;
+    renduJour();
+  }
+
+  function renduJour() {
+    const def = PLANS[PLAN];
+    const body = document.getElementById('v444-body');
+    const fait = joursFaits(PLAN);
+    const debut = JOUR * def.tranche;
+    const tranche = ITEMS.slice(debut, debut + def.tranche);
+    const pct = Math.round(100 * fait.length / TOTAL_J);
+    const lu = fait.includes(JOUR);
+    let h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+      + '<button class="v444-ret" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">← Plans</button>'
+      + '<div style="font-size:14px;color:#eaf4ff;font-weight:700">' + def.titre + '</div>'
+      + '<div style="flex:1"></div><div style="font-size:11px;color:#8fa3b8">' + pct + '% · ' + fait.length + '/' + TOTAL_J + ' jours</div></div>'
+      + '<div style="height:8px;background:rgba(79,195,247,.12);border-radius:6px;overflow:hidden;margin-bottom:12px"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#4fc3f7,#81d4fa)"></div></div>'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+      + '<button class="v444-j" data-j="' + (JOUR - 1) + '" style="background:rgba(79,195,247,.12);color:#cfe0ff;border:1px solid rgba(79,195,247,.25);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">◀</button>'
+      + '<div style="font-size:13px;color:#f5c542;font-weight:700">Jour ' + (JOUR + 1) + ' / ' + TOTAL_J + '</div>'
+      + '<button class="v444-j" data-j="' + (JOUR + 1) + '"' + (JOUR + 1 >= TOTAL_J ? ' disabled style="opacity:.35"' : '') + ' style="background:rgba(79,195,247,.12);color:#cfe0ff;border:1px solid rgba(79,195,247,.25);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">▶</button>'
+      + '<div style="flex:1"></div>'
+      + '<button class="v444-lu" style="background:' + (lu ? 'rgba(102,187,106,.3)' : 'rgba(102,187,106,.15)') + ';color:#c8e6c9;border:1px solid rgba(102,187,106,.5);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px">' + (lu ? '✓ Jour lu' : 'Marquer ce jour lu') + '</button>'
+      + '</div>'
+      + '<div style="font-size:11px;color:#8fa3b8;margin-bottom:8px">' + tranche.length + ' lecture(s) — ' + esc(tranche[0] ? tranche[0].label : '') + (tranche.length > 1 ? ' → ' + esc(tranche[tranche.length - 1].label) : '') + '</div>';
+    tranche.forEach(it => {
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,195,247,.16);border-radius:8px;background:rgba(12,20,36,.5)">'
+        + '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:3px">' + esc(it.label) + '</div>'
+        + (it.ar ? '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:14.5px;line-height:2;color:#e8dcc0;padding:4px 0">' + esc(it.ar) + '</div>' : '')
+        + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(it.t) + '</div></div>';
+    });
+    body.innerHTML = h;
+    body.querySelector('.v444-ret').onclick = () => renduCartes();
+    body.querySelectorAll('.v444-j').forEach(b => b.addEventListener('click', () => {
+      const j = parseInt(b.dataset.j, 10);
+      if (j >= 0 && j < TOTAL_J) { JOUR = j; renduJour(); }
+    }));
+    body.querySelector('.v444-lu').onclick = () => {
+      const p = prog();
+      const f = (p[PLAN] && p[PLAN].fait) || [];
+      const i = f.indexOf(JOUR);
+      if (i >= 0) f.splice(i, 1); else f.push(JOUR);
+      p[PLAN] = { fait: f };
+      progSet(p);
+      if (i < 0) { let nj = JOUR + 1; while (nj < TOTAL_J && f.includes(nj)) nj++; if (nj < TOTAL_J) JOUR = nj; }
+      renduJour();
+    };
+  }
+
+  function ouvre() { ensureModal(); PLAN = null; ITEMS = null; renduCartes(); }
+
+  function bouton() {
+    const ancre = document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v444-plans-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v444-plans-btn';
+    b.className = 'hud-btn';
+    b.title = 'PLANS DE LECTURE — Catéchisme, Psaumes, Coran, avec progression';
+    b.textContent = '📅 PLANS';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v444Plans = { ouvre: ouvre, ouvrePlan: ouvrePlan, PLANS: PLANS, prog: prog, itemsCec: itemsCec };
+})();
+</script>
+<script id="v445-fiche">
+/* ═══════════════════════════════════════════════════════════════════
+   v445 — FICHE D'ÉTUDE IA : génère une fiche structurée à partir du
+   panier 🧺 de la feuille d'étude (v189). Chaîne IA complète :
+   modèle choisi → Agnes (si clé) → Ollama local (si joignable), via
+   window.__cfgChaineSecours. Export MD/PDF + historique local
+   (localStorage 'v445_fiches', couvert par la sauvegarde v442).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v445-fiche-modal';
+  const CLE_FICHES = 'v445_fiches';
+  let DERNIERE = null;   // {titre, contenu}
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ldFiches() { try { return JSON.parse(localStorage.getItem(CLE_FICHES) || '[]'); } catch (e) { return []; } }
+  function svFiches(a) { try { localStorage.setItem(CLE_FICHES, JSON.stringify(a)); } catch (e) {} }
+
+  function panier() { try { return JSON.parse(localStorage.getItem('theo_basket_v1') || '[]'); } catch (e) { return []; } }
+
+  function mdVersHtml(md) {
+    const lignes = String(md || '').split(/\n/);
+    let h = '', inList = false;
+    lignes.forEach(l => {
+      let t = esc(l)
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/(^|\s)_([^_]+)_/g, '$1<i>$2</i>');
+      if (/^###\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h3>' + l.replace(/^###\s*/, '') + '</h3>'; }
+      else if (/^##\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h2>' + l.replace(/^##\s*/, '') + '</h2>'; }
+      else if (/^#\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h1>' + l.replace(/^#\s*/, '') + '</h1>'; }
+      else if (/^[-*•]\s/.test(l)) { if (!inList) { h += '<ul>'; inList = true; } h += '<li>' + t.replace(/^[-*•]\s/, '') + '</li>'; }
+      else if (/^>\s?/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<blockquote>' + t.replace(/^>\s?/, '') + '</blockquote>'; }
+      else if (l.trim() === '') { if (inList) { h += '</ul>'; inList = false; } }
+      else { if (inList) { h += '</ul>'; inList = false; } h += '<p>' + t + '</p>'; }
+    });
+    if (inList) h += '</ul>';
+    return h;
+  }
+
+  function promptDepuisPanier(entrees) {
+    const extraits = entrees.map((e, i) => '[' + (i + 1) + '] ' + (e.src ? '(' + e.src + ') ' : '') + (e.text || '')).join('\n\n');
+    return 'Voici des extraits rassemblés lors d\'une étude :\n\n' + extraits + '\n\n' +
+      'Rédige une FICHE D\'ÉTUDE structurée en français, à partir de CES extraits uniquement (ne rajoute pas de doctrine externe). Structure attendue :\n' +
+      '# Titre de la fiche (court)\n' +
+      '## Définitions et notions clés\n' +
+      '## Enseignements principaux (5 points maximum)\n' +
+      '## Références à approfondir (citations exactes tirées des extraits, avec leur numéro [n])\n' +
+      '## Questions d\'étude (5 questions)\n' +
+      'Texte en français, style sobre, sans commentaire superflu.';
+  }
+
+  function renduFiche(contenu) {
+    const body = document.getElementById('v445-fiche-body');
+    body.innerHTML = '<div style="font-size:12.5px;line-height:1.7;color:#eaf4ff">' + mdVersHtml(contenu) + '</div>';
+  }
+
+  async function generer() {
+    const entrees = panier();
+    const body = document.getElementById('v445-fiche-body');
+    if (!entrees.length) { body.innerHTML = '<div style="opacity:.6;padding:20px;text-align:center">Le panier 🧺 de la feuille d\'étude est vide — sélectionnez du texte puis cliquez 🧺.</div>'; return; }
+    const btn = document.getElementById('v445-fiche-gen');
+    btn.disabled = true; btn.textContent = '⏳ Génération…';
+    body.innerHTML = '<div style="opacity:.7;padding:30px;text-align:center">✨ Rédaction de la fiche en cours…<br><span style="font-size:11px">modèle choisi → Agnes → Ollama local : le premier qui répond gagne</span></div>';
+    const prompt = promptDepuisPanier(entrees);
+    const msgs = [{ role: 'user', content: prompt }];
+    const t0 = Date.now();
+    let contenu = null, err = null;
+    try {
+      const cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig((state.agent && state.agent.modelPref) || state.model) : null;
+      const chaine = [];
+      if (cfg && cfg.apiKey) chaine.push(cfg);
+      try { (window.__cfgChaineSecours ? window.__cfgChaineSecours(cfg) : []).forEach(c => chaine.push(c)); } catch (e) {}
+      if (!chaine.length) throw new Error('Aucun modèle disponible — configurez une clé ou lancez Ollama.');
+      for (const c of chaine) {
+        try {
+          console.log('[FICHE] tentative via', c.providerId || c.endpoint);
+          const r = await Promise.race([
+            callLLM(c, msgs, { temperature: 0.5, max_tokens: 1600 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Délai dépassé (120s)')), 120000))
+          ]);
+          if (r && String(r).trim().length > 40) { contenu = String(r).trim(); break; }
+        } catch (e) { err = e; console.warn('[FICHE] échec:', e.message); }
+      }
+    } catch (e) { err = e; }
+    btn.disabled = false; btn.textContent = '✨ Générer la fiche (IA)';
+    if (!contenu) {
+      body.innerHTML = '<div style="color:#ff8a80;padding:20px">❌ Génération impossible : ' + esc((err && err.message) || 'erreur inconnue') + '</div>';
+      return;
+    }
+    const titreM = contenu.match(/^#\s+(.+)$/m);
+    DERNIERE = { titre: titreM ? titreM[1].trim() : ('Fiche ' + new Date().toLocaleDateString('fr-FR')), contenu: contenu, ts: Date.now(), duree: Date.now() - t0 };
+    renduFiche(contenu);
+  }
+
+  function enregistrer() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const arr = ldFiches();
+    arr.unshift({ id: 'f-' + Date.now(), ts: DERNIERE.ts, titre: DERNIERE.titre, contenu: DERNIERE.contenu });
+    svFiches(arr);
+    renduHistorique();
+    alert('Fiche enregistrée (' + arr.length + ' au total).');
+  }
+
+  function renduHistorique() {
+    const box = document.getElementById('v445-fiche-hist');
+    if (!box) return;
+    const arr = ldFiches();
+    if (!arr.length) { box.innerHTML = '<span style="font-size:10.5px;color:#8fa3b8">Aucune fiche enregistrée</span>'; return; }
+    box.innerHTML = '<span style="font-size:10.5px;color:#8fa3b8;margin-right:6px">🗂 ' + arr.length + ' fiche(s) :</span>' +
+      arr.slice(0, 6).map(f => '<span class="v445-hist-item" data-id="' + f.id + '" title="Ouvrir" style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border:1px solid rgba(79,195,247,.3);border-radius:10px;font-size:10.5px;color:#cfe0ff;cursor:pointer">' + esc(f.titre.slice(0, 34)) + '</span>').join('');
+    box.querySelectorAll('.v445-hist-item').forEach(el => el.addEventListener('click', () => {
+      const f = ldFiches().find(x => x.id === el.dataset.id);
+      if (f) { DERNIERE = { titre: f.titre, contenu: f.contenu }; renduFiche(f.contenu); }
+    }));
+  }
+
+  function telecharge() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const blob = new Blob([DERNIERE.contenu], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fiche-etude-' + new Date().toISOString().slice(0, 10) + '.md';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function imprimer() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorisez les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>' + esc(DERNIERE.titre) + '</title>'
+      + '<style>body{font-family:Georgia,serif;max-width:800px;margin:24px auto;color:#1a1a2e}h1{font-size:20px}h2{font-size:15px;border-bottom:1px solid #999}blockquote{border-left:3px solid #b8860b;padding:4px 12px;background:#faf7f0;font-style:italic}ul{padding-left:20px}</style></head><body>');
+    w.document.write(mdVersHtml(DERNIERE.contenu));
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+  }
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(860px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">✨ FICHE D\'ÉTUDE IA</div>'
+      + '<div style="flex:1"></div>'
+      + '<button id="v445-fiche-hist" style="background:transparent;border:none;max-width:340px;overflow:hidden;white-space:nowrap"></button>'
+      + '<button id="v445-fiche-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(79,195,247,.15)">'
+      + '<button id="v445-fiche-gen" style="background:rgba(102,187,106,.2);color:#c8e6c9;border:1px solid rgba(102,187,106,.5);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px">✨ Générer la fiche (IA)</button>'
+      + '<button id="v445-fiche-save" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">💾 Enregistrer</button>'
+      + '<button id="v445-fiche-md" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">⬇ Markdown</button>'
+      + '<button id="v445-fiche-pdf" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">🖨 PDF</button>'
+      + '<span id="v445-fiche-src" style="font-size:10.5px;color:#8fa3b8"></span>'
+      + '</div>'
+      + '<div id="v445-fiche-body" style="flex:1;overflow-y:auto;padding:14px 18px;font-family:inherit"><div style="opacity:.6;padding:20px;text-align:center">Cliquez « ✨ Générer la fiche (IA) » pour rédiger une fiche d\'étude à partir du panier 🧺.</div></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v445-fiche-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    m.querySelector('#v445-fiche-gen').onclick = generer;
+    m.querySelector('#v445-fiche-save').onclick = enregistrer;
+    m.querySelector('#v445-fiche-md').onclick = telecharge;
+    m.querySelector('#v445-fiche-pdf').onclick = imprimer;
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  function ouvre() {
+    ensureModal();
+    const n = panier().length;
+    document.getElementById('v445-fiche-src').textContent = n ? ('🧺 ' + n + ' sélection(s) dans le panier') : '🧺 panier vide';
+    renduHistorique();
+  }
+
+  function bouton() {
+    const ancre = document.getElementById('v444-plans-btn') || document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v445-fiche-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v445-fiche-btn';
+    b.className = 'hud-btn';
+    b.title = 'FICHE D\'ÉTUDE IA — génère une fiche structurée depuis le panier 🧺 (modèle local Ollama ou cloud)';
+    b.textContent = '✨ FICHE';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v445Fiche = { ouvre: ouvre, generer: generer, promptDepuisPanier: promptDepuisPanier, panier: panier, ldFiches: ldFiches };
+})();
+</script>
+<script id="v446-refs">
+/* ═══════════════════════════════════════════════════════════════════
+   v446 — RÉFÉRENCES CROISÉES LOCALES.
+   Les .bible-ref des messages pointaient vers BibleGateway (web) :
+   hors ligne, un clic ne donnait RIEN. Désormais :
+     • clic sur une référence biblique → popup avec le texte du verset
+       depuis la Bible de Jérusalem EMBARQUÉE (bible/bN.js), sans réseau ;
+     • « CEC 1234 » dans les messages devient cliquable → paragraphe du
+       Catéchisme (tradition/cec/cec_fr.json).
+   Denzinger : corpus hiérarchique sans index numérique simple — hors
+   périmètre de cette passe (Bible + CEC couverts).
+   Table des livres établie EMPIRIQUEMENT depuis bible/bN.js (66 fichiers,
+   premier verset de chaque lu et identifié). Baruch n'a PAS de fichier :
+   après Lm=25, Ez=26 … Ml=39 ; NT standard Mt=40 … Ap=66.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+
+  const LIVRES = {
+    'gn':1,'genese':1,'genèse':1,'ex':2,'exode':2,'lv':3,'levitique':3,'nb':4,'nombres':4,'dt':5,'deuteronome':5,'deutéronome':5,
+    'jos':6,'js':6,'josue':6,'josué':6,'jg':7,'juges':7,'rt':8,'ruth':8,'1s':9,'2s':10,'1r':11,'2r':12,'1ch':13,'2ch':14,
+    'esd':15,'esdras':15,'ne':16,'nehemie':16,'néhémie':16,'et':17,'esther':17,'jb':18,'job':18,'ps':19,'psaume':19,'psaumes':19,
+    'pr':20,'proverbes':20,'ec':21,'qo':21,'ecclesiaste':21,'ecclésiaste':21,'ct':22,'cantique':22,'is':23,'esaie':23,'ésaïe':23,'ésaie':23,
+    'jr':24,'jeremie':24,'jérémie':24,'lm':25,'lamentations':25,'ez':26,'ezekiel':26,'ézéchiel':26,
+    'dn':27,'daniel':27,'os':28,'osee':28,'osée':28,'jl':29,'joel':29,'joël':29,'am':30,'amos':30,'ab':31,'abdias':31,
+    'jon':32,'jonas':32,'mi':33,'michee':33,'michée':33,'na':34,'nahum':34,'ha':35,'habacuc':35,'so':36,'sophonie':36,
+    'ag':37,'aggee':37,'aggée':37,'za':38,'zacharie':38,'ml':39,'malachie':39,
+    'mt':40,'matthieu':40,'mc':41,'marc':41,'lc':42,'luc':42,'jn':43,'jean':43,'ac':44,'actes':44,'rm':45,'romains':45,
+    '1co':46,'2co':47,'ga':48,'galates':48,'ep':49,'ephesiens':49,'éphésiens':49,'ph':50,'philippiens':50,'col':51,'colossiens':51,
+    '1th':52,'2th':53,'1tm':54,'2tm':55,'tt':56,'titre':56,'phm':57,'philemon':57,'philémon':57,'he':58,'hebreux':58,'hébreux':58,
+    'jc':59,'jacques':59,'1p':60,'2p':61,'1jn':62,'2jn':63,'3jn':64,'jd':65,'jude':65,'ap':66,'apocalypse':66
+  };
+  const cacheLivres = new Map();
+  let cecCache = null, cecPromise = null;
+
+  const normNom = s => String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.\s]+/g, '');   /* v446b — garde les chiffres : « 1 co » → « 1co » */
+
+  async function livre(n) {
+    if (cacheLivres.has(n)) return cacheLivres.get(n);
+    const t = await (await fetch('bible/b' + n + '.js')).text();
+    const ancre = t.indexOf('||{})[');
+    const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+    const j = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+    /* le JSON est directement {chapitre: {verset: texte}} — j[n] n'existe que
+       dans le cas (non observé) d'un emballage {n: {…}} à clé unique. */
+    const obj = (j[n] && Object.keys(j).length === 1) ? j[n] : j;
+    cacheLivres.set(n, obj);
+    return obj;
+  }
+  async function cec() {
+    if (cecCache) return cecCache;
+    if (!cecPromise) cecPromise = (async () => {
+      const j = await (await fetch('tradition/cec/cec_fr.json')).json();
+      const idx = {};
+      (j.paragraphes || []).forEach(p => { idx[p.n] = p; });
+      cecCache = idx;
+      return idx;
+    })();
+    return cecPromise;
+  }
+
+  /* « Mt 5:3 » « Gn 5,1 » « 1 Co 13:4-7 » « Psaume 23(22),1 » → {livre, ch, v1, v2} */
+  function parseRef(texte) {
+    /* v446b — « Psaume 23(22),1 » : la parenthèse (numérotation grecque) est
+       retirée avant le découpage, sinon aucun séparateur ne suit « 23 ». */
+    const t = String(texte || '').trim().replace(/\(\d{1,3}\)/g, '');
+    const m = t.match(/^((?:[1-3]\s*)?[A-Za-zÀ-ÿ]+\.?)\s*(\d{1,3})\s*[:,.,]\s*(\d{1,3})(?:\s*[-\u2013]\s*(\d{1,3}))?/);
+    if (!m) return null;
+    const nom = normNom(m[1]);
+    const livre = LIVRES[nom];
+    if (!livre) return null;
+    return { livre: livre, nom: m[1].trim(), ch: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+  }
+
+  /* ── popup unique ── */
+  let POP = null;
+  function popup(html, x, y) {
+    if (!POP) {
+      POP = document.createElement('div');
+      POP.id = 'v446-ref-pop';
+      document.body.appendChild(POP);
+      POP.addEventListener('mousedown', e => e.stopPropagation());
+    }
+    POP.innerHTML = html;
+    POP.style.display = 'block';
+    const w = Math.min(430, window.innerWidth - 24);
+    POP.style.width = w + 'px';
+    const r = POP.getBoundingClientRect();
+    let left = Math.max(8, Math.min(x - w / 2, window.innerWidth - w - 8));
+    let top = y + 14;
+    if (top + r.height > window.innerHeight - 10) top = Math.max(8, y - r.height - 12);
+    POP.style.left = left + 'px';
+    POP.style.top = top + 'px';
+  }
+  function fermePopup() { if (POP) POP.style.display = 'none'; }
+  document.addEventListener('mousedown', e => {
+    if (POP && POP.style.display === 'block' && !POP.contains(e.target)) fermePopup();
+  });
+
+  async function popupBible(texte, x, y) {
+    const r = parseRef(texte);
+    if (!r) return false;
+    popup('<div style="opacity:.7;font-size:11px">📖 Chargement…</div>', x, y);
+    try {
+      const chap = await livre(r.livre);
+      const c = chap[String(r.ch)];
+      if (!c) { popup('<div style="color:#ff8a80">📖 ' + esc(texte) + ' — chapitre introuvable dans la Bible embarquée.</div>', x, y); return true; }
+      let h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#ffc94d;margin-bottom:4px">📖 ' + esc(r.nom + ' ' + r.ch) + (r.v1 !== r.v2 ? ' · ' + r.v1 + '-' + r.v2 : '') + ' — Bible de Jérusalem (locale)</div>';
+      for (let v = r.v1; v <= Math.min(r.v2, 200); v++) {
+        const t = c[String(v)];
+        if (t) h += '<div style="margin:4px 0"><b style="color:#ffc94d">' + v + '</b> <span style="font-size:12.5px;line-height:1.6">' + esc(t) + '</span></div>';
+      }
+      h += '<div style="margin-top:6px;font-size:10px;color:#8fa3b8">Clic ailleurs pour fermer</div>';
+      popup(h, x, y);
+      return true;
+    } catch (e) {
+      popup('<div style="color:#ff8a80">📖 Erreur locale : ' + esc(e.message) + '</div>', x, y);
+      return true;
+    }
+  }
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  async function popupCec(n, x, y) {
+    popup('<div style="opacity:.7;font-size:11px">📕 Chargement…</div>', x, y);
+    try {
+      const idx = await cec();
+      const p = idx[n];
+      if (!p) { popup('<div style="color:#ff8a80">📕 § ' + n + ' introuvable dans le Catéchisme local.</div>', x, y); return true; }
+      const h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:4px">📕 Catéchisme § ' + n + ' — édition française (locale)</div>'
+        + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(p.t) + '</div>';
+      popup(h, x, y);
+      return true;
+    } catch (e) { popup('<div style="color:#ff8a80">📕 Erreur locale : ' + esc(e.message) + '</div>', x, y); return true; }
+  }
+
+  /* capture : on passe AVANT le gestionnaire existant (BibleGateway) */
+  document.addEventListener('click', function(e){
+    const el = e.target.closest && e.target.closest('.bible-ref, .cec-ref');
+    if (!el) return;
+    e.preventDefault(); e.stopPropagation();
+    fermePopup();
+    const x = e.clientX || (el.getBoundingClientRect().left + 40);
+    const y = e.clientY || (el.getBoundingClientRect().top);
+    if (el.classList.contains('cec-ref')) { popupCec(+el.getAttribute('data-n'), x, y); return; }
+    popupBible(el.textContent, x, y);
+  }, true);
+
+  /* ── linkification CEC dans les messages ── */
+  const RE_CEC = /\b(?:CEC|Catéchisme(?:\s+de\s+l'Église\s+catholique)?)\s*(?:§|n°|no\.?|numéro)?\s*(\d{1,4})\b/gi;
+  function applique(root) {
+    if (!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const cibles = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      if (!n.nodeValue || n.nodeValue.length < 6) continue;
+      if (n.parentElement && n.parentElement.closest('.cec-ref, .bible-ref, .quran-ref, a, button, code, pre')) continue;
+      RE_CEC.lastIndex = 0;
+      if (RE_CEC.test(n.nodeValue)) cibles.push(n);
+    }
+    cibles.forEach(node => {
+      RE_CEC.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let dernier = 0, m;
+      const t = node.nodeValue;
+      while ((m = RE_CEC.exec(t)) !== null) {
+        if (m.index > dernier) frag.appendChild(document.createTextNode(t.slice(dernier, m.index)));
+        const span = document.createElement('span');
+        span.className = 'cec-ref';
+        span.setAttribute('data-n', m[1]);
+        span.textContent = m[0];
+        span.style.cssText = 'color:#f5c542;border-bottom:1px dotted rgba(245,197,66,.6);cursor:pointer';
+        frag.appendChild(span);
+        dernier = m.index + m[0].length;
+      }
+      if (dernier < t.length) frag.appendChild(document.createTextNode(t.slice(dernier)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  /* passe automatique sur les nouveaux messages */
+  let timer = null;
+  const obs = new MutationObserver(() => {
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      document.querySelectorAll('.message-content').forEach(el => {
+        if (el.dataset.v446 === '1') return;
+        el.dataset.v446 = '1';
+        applique(el);
+      });
+    }, 250);
+  });
+  function demarre() {
+    try { obs.observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarre);
+  else demarre();
+
+  window.__v446Refs = { applique: applique, parseRef: parseRef, popupBible: popupBible, popupCec: popupCec, livre: livre, LIVRES: LIVRES };
+})();
+</script>
 </body>
+</html>
+</html>
+</html>
+</html>
 </html>
