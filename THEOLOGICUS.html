@@ -49774,6 +49774,174 @@ window.continueTradApart = async function (msgId) {
   window.__v449Phon = { prononce: prononce, prononceChaine: prononceChaine, boutonVerset: boutonVerset };
 })();
 </script>
+<script id="v450-latin">
+/* ═══════════════════════════════════════════════════════════════════
+   v450 — VULGATE LATINE mot-à-mot dans l'infobulle de verset.
+   Le mot-à-mot existait pour l'hébreu (v89), le grec (v93), l'arabe
+   (qwbw) — pas pour le latin. Ce module ajoute, sous la ligne
+   hébraïque/grecque du panneau de verset :
+     • une ligne « ⚓ Vulgate » : chaque mot latin est survolable ;
+     • une fiche de mot (lt-tip) : nature, prononciation syllabée,
+       sens FR et sens EN depuis latin/mots.js (dictionnaire embarqué,
+       chargé paresseusement) ;
+     • 🔊 par mot et 🔊 verset entier — la prononciation latine passe
+       par la voix française (ttsEmission lang « latin » → « fr »,
+       câblage existant) : pas de translittération nécessaire.
+   Corpus : biblelt/bN.js (Vulgate Clémentine, domaine public, 66 livres,
+   31 330 versets, même numérotation que bible/bN.js).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__v450Lt) return;
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  /* ── corpus Vulgate (paresseux) ── */
+  const _lt = new Map(); let _ltP = null;
+  function bibleLt(n) {
+    if (_lt.has(n)) return Promise.resolve(_lt.get(n));
+    if (!_ltP) _ltP = {};
+    if (!_ltP[n]) {
+      _ltP[n] = fetch('biblelt/b' + n + '.js').then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(t => {
+        const ancre = t.indexOf('||{})[');
+        const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+        const j = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+        const obj = (j[n] && Object.keys(j).length === 1) ? j[n] : j;
+        _lt.set(n, obj); return obj;
+      }).catch(() => { _ltP[n] = null; return null; });
+    }
+    return _ltP[n];
+  }
+  /* ── dictionnaire latin (paresseux, 6,9 Mo) ── */
+  let MOTS = null, MOTS_P = null;
+  function mots() {
+    if (MOTS) return Promise.resolve(MOTS);
+    if (!MOTS_P) MOTS_P = fetch('latin/mots.js').then(r => r.text()).then(t => {
+      MOTS = JSON.parse(t.slice(t.indexOf('=') + 1).replace(/;\s*$/, ''));
+      return MOTS;
+    }).catch(() => { MOTS_P = null; return {}; });
+    return MOTS_P;
+  }
+
+  /* ── fiche de mot latine ── */
+  let TIP = null;
+  function tip() {
+    if (TIP) return TIP;
+    TIP = document.createElement('div');
+    TIP.id = 'lt-tip';
+    TIP.setAttribute('role', 'tooltip');
+    TIP.style.cssText = 'position:fixed;z-index:9900;max-width:300px;max-height:60vh;overflow-y:auto;' +
+      'background:#1b2430;color:#e8e0cc;border:1px solid rgba(197,179,255,.45);border-radius:8px;' +
+      'padding:9px 11px;font-size:12px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;pointer-events:auto;';
+    document.body.appendChild(TIP);
+    TIP.addEventListener('mousedown', e => e.stopPropagation());
+    return TIP;
+  }
+  function place(rect) {
+    const t = tip(); let x = rect.left, y = rect.bottom + 8;
+    t.style.left = '0px'; t.style.top = '0px';
+    const r = t.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 10) x = Math.max(10, rect.left - r.width + rect.width);
+    if (y + r.height > window.innerHeight - 10) y = Math.max(10, rect.top - r.height - 8);
+    t.style.left = Math.max(10, x) + 'px'; t.style.top = y + 'px';
+  }
+  function affiche(el) {
+    const mot = el.getAttribute('data-l') || '';
+    const t = tip();
+    t.innerHTML = '<span style="font-size:19px;color:#c5b3ff;display:block;margin-bottom:3px;">' + esc(mot) + '</span>' +
+      '<div style="opacity:.6;font-size:11px">Dictionnaire latin…</div>';
+    t.style.display = 'block'; place(el.getBoundingClientRect());
+    mots().then(d => {
+      const ent = (d[String(mot).toLowerCase()] || [])[0];
+      let h = '<span style="font-size:19px;color:#c5b3ff;display:block;margin-bottom:3px;">' + esc(mot) + '</span>';
+      let vide = true;
+      if (ent) {
+        if (ent[1]) { h += '<div style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">' + esc(ent[1]) + '</div>'; vide = false; }
+        if (ent[2]) { h += '<div style="margin:2px 0;"><span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;">Prononciation</span><br><b style="color:#7fd1a0;">' + esc(ent[2]) + '</b></div>'; vide = false; }
+        if (ent[4]) { h += '<div style="margin:2px 0;"><span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;">Sens</span><br>' + esc(ent[4]) + '</div>'; vide = false; }
+        else if (ent[3]) { h += '<div style="margin:2px 0;"><span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;">Sens (en)</span><br>' + esc(ent[3]) + '</div>'; vide = false; }
+        if (ent[3] && ent[4]) h += '<div style="color:#8fa3b8;font-size:10.5px;">source (en) : ' + esc(ent[3]) + '</div>';
+      }
+      if (vide) h += '<div style="opacity:.6;font-size:11px;">Mot absent du dictionnaire embarqué.</div>';
+      h += '<button type="button" class="lt-say" style="margin-top:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11.5px;">🔊 prononcer</button>';
+      t.innerHTML = h;
+      place(el.getBoundingClientRect());
+      t.querySelector('.lt-say').addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (typeof ttsStop === 'function') ttsStop();
+        if (typeof ttsEmission === 'function') ttsEmission(mot, 'latin', null, null);
+      });
+    });
+  }
+  function cache() { if (TIP) TIP.style.display = 'none'; }
+
+  document.addEventListener('mouseover', function (e) {
+    const m = e.target && e.target.closest ? e.target.closest('.lt') : null;
+    if (m) { affiche(m); return; }
+    if (TIP && TIP.style.display === 'block' && !(e.target && e.target.closest && e.target.closest('#lt-tip'))) cache();
+  });
+
+  /* ── ligne latine dans le panneau de verset (wrap de __hbRemplir) ── */
+  function remplirLatin(p, panneau) {
+    const slot = panneau && panneau.querySelector('#hb-slot');
+    if (!slot || slot.querySelector('.lt-slot')) return;
+    const ligne = document.createElement('div');
+    ligne.className = 'lt-slot';
+    ligne.innerHTML = '<span style="color:#8fa3b8;font-size:10.5px;">⚓ Vulgate…</span>';
+    slot.appendChild(ligne);
+    const livre = parseInt(p.book, 10);
+    bibleLt(livre).then(liv => {
+      if (!liv) { ligne.innerHTML = ''; return; }
+      const v1 = p.v1, v2 = p.v2 || p.v1;
+      const txt = [];
+      for (let n = v1; n <= v2; n++) {
+        const t = (liv[String(p.ch)] || {})[String(n)];
+        if (t) txt.push(t);
+      }
+      if (!txt.length) { ligne.innerHTML = ''; return; }
+      let h = '<span style="color:#c5b3ff;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">⚓ Vulgate (latin)</span> ';
+      txt.join(' ').split(/\s+/).forEach(w => {
+        const nu = w.replace(/[.,;:!?«»"]/g, '');
+        if (!nu) return;
+        h += '<span class="lt" data-l="' + esc(nu) + '" style="pointer-events:auto;cursor:pointer;color:#c5b3ff;border-bottom:1px dotted rgba(197,179,255,.5);">' + esc(nu) + '</span> ';
+      });
+      h += '<button type="button" class="lt-verse-btn" title="Écouter le verset en latin" style="pointer-events:auto;margin-left:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px;">🔊 latin</button>';
+      ligne.innerHTML = h;
+      ligne.querySelector('.lt-verse-btn').addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        if (typeof ttsStop === 'function') ttsStop();
+        if (typeof ttsEmission === 'function') ttsEmission(txt.join(' '), 'latin', null, null);
+      });
+    });
+  }
+  if (typeof window.__hbRemplir === 'function') {
+    const _remplir = window.__hbRemplir;
+    window.__hbRemplir = function (p, panneau) {
+      try { _remplir(p, panneau); } catch (e) {}
+      try { remplirLatin(p, panneau); } catch (e) {}
+    };
+  } else {
+    /* v89 pas encore chargé : réessaie au prochain tour de mécanique */
+    let essais = 0;
+    const iv = setInterval(function () {
+      if (typeof window.__hbRemplir === 'function' || ++essais > 40) {
+        clearInterval(iv);
+        if (typeof window.__hbRemplir === 'function') {
+          const _remplir = window.__hbRemplir;
+          window.__hbRemplir = function (p, panneau) {
+            try { _remplir(p, panneau); } catch (e) {}
+            try { remplirLatin(p, panneau); } catch (e) {}
+          };
+        }
+      }
+    }, 250);
+  }
+
+  window.__v450Lt = { bibleLt: bibleLt, mots: mots, remplirLatin: remplirLatin, dictLookup: w => ((MOTS || {})[String(w || '').toLowerCase()] || [])[0] || null };
+})();
+</script>
 </body>
 </html>
 </html>
