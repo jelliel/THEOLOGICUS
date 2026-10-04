@@ -43123,7 +43123,7 @@ window.continueTradApart = async function (msgId) {
     document.body.appendChild(p);
     p.addEventListener('click', function(e){ if (e.target === p) p.classList.remove('open'); });
     p.querySelector('#v170-close').addEventListener('click', function(){ p.classList.remove('open'); });
-    document.getElementById('v170-q').addEventListener('input', render);
+    document.getElementById('v170-q').addEventListener('input', function(){ PAGE_S = 0; PAGE_C = 0; render(); });
     document.getElementById('v170-tab-q').addEventListener('click', function(){ setView('q'); });
     document.getElementById('v170-tab-d').addEventListener('click', function(){ setView('d'); });
     document.getElementById('v170-tab-a').addEventListener('click', function(){ setView('a'); });
@@ -43295,6 +43295,7 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
     CPCAT = null;
+    PAGE_S = 0; PAGE_C = 0;   /* v440 — changement de vue : retour à la page 1 */
     load();   /* charge le corpus de la vue si absent */
     render();
   }
@@ -43992,6 +43993,10 @@ window.continueTradApart = async function (msgId) {
 
   /* ═══ v439 — vues ASBĀB AL-NUZŪL & CATÉCHISME ═══ */
   var SDATA = null, CDATA = null;
+  /* v440 — pagination des deux vues : sans elle, seuls les 40 PREMIERS
+     résultats s'affichaient (« … et N autres — affinez le filtre »), et
+     l'utilisateur croyait manquer des sourates / paragraphes. */
+  var PAGE_S = 0, PAGE_C = 0;
 
   /* Asbāb al-nuzūl : 94 fichiers tradition/asbab/sNNN.json, chargés à la
      première ouverture de l'onglet (6 en parallèle, barre de progression). */
@@ -44043,6 +44048,28 @@ window.continueTradApart = async function (msgId) {
       });
   }
 
+  /* v440 — barre de pagination commune aux vues paginées (asbāb, catéchisme). */
+  function _barrePages(page, nbPages, total, label){
+    if (nbPages <= 1) return '';
+    var styleBtn = 'background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px';
+    var styleDis = 'opacity:.35;cursor:default;border:1px solid rgba(79,142,247,.2);border-radius:6px;padding:3px 10px;font-size:11px;color:#cfe0ff;background:transparent';
+    return '<div class="v170-pages" style="display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0 4px">'
+      + '<button type="button" class="v170-pg" data-page="' + (page - 1) + '"' + (page <= 0 ? ' disabled style="' + styleDis + '"' : ' style="' + styleBtn + '"') + '>◀ Précédent</button>'
+      + '<span style="font-size:11.5px;color:#8fa3b8">Page ' + (page + 1) + ' / ' + nbPages + ' · ' + total + ' ' + label + '</span>'
+      + '<button type="button" class="v170-pg" data-page="' + (page + 1) + '"' + (page >= nbPages - 1 ? ' disabled style="' + styleDis + '"' : ' style="' + styleBtn + '"') + '>Suivant ▶</button>'
+      + '</div>';
+  }
+  /* v440 — branche les boutons de page produits par _barrePages. */
+  function _branchePages(body, setPg, render){
+    body.querySelectorAll('.v170-pg').forEach(function(b){
+      b.addEventListener('click', function(){
+        setPg(parseInt(b.getAttribute('data-page'), 10));
+        render();
+        body.scrollTop = 0;
+      });
+    });
+  }
+
   /* ── vue Asbāb al-nuzūl ── */
   function renderS(q){
     var body = document.getElementById('v170-body');
@@ -44054,11 +44081,19 @@ window.continueTradApart = async function (msgId) {
                (e.s + ':' + e.v).indexOf(q) !== -1 || norm(String(e.s)).indexOf(q) !== -1;
       });
     }
+    var max = 40;
+    var nbPages = Math.max(1, Math.ceil(res.length / max));
+    if (PAGE_S >= nbPages) PAGE_S = nbPages - 1;
+    if (PAGE_S < 0) PAGE_S = 0;
     var st = document.getElementById('v170-status');
     if (st) st.textContent = res.length + ' notice(s) sur ' + items.length + ' — 🇫🇷 traduit un récit à la demande.';
     if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucune notice.</div>'; return; }
-    var max = 40, shown = res.slice(0, max);
-    var h = '';
+    var shown = res.slice(PAGE_S * max, PAGE_S * max + max);
+    /* v440 — plage de sourates visible sur la page courante. */
+    var sMin = shown[0].s, sMax = shown[0].s;
+    shown.forEach(function(e){ if (e.s < sMin) sMin = e.s; if (e.s > sMax) sMax = e.s; });
+    var h = _barrePages(PAGE_S, nbPages, res.length, 'notices');
+    if (nbPages > 1) h += '<div style="text-align:center;font-size:10.5px;color:#8fa3b8;padding-bottom:6px">Sourates ' + sMin + ' à ' + sMax + ' sur cette page</div>';
     shown.forEach(function(e){
       var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
       h += '<div style="margin:8px 0;padding:8px 10px;border:1px solid rgba(159,224,160,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
@@ -44068,8 +44103,9 @@ window.continueTradApart = async function (msgId) {
          + '<button class="asb-tr" style="pointer-events:auto;background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px">🇫🇷 Traduire (IA)</button>'
          + '</div>';
     });
-    if (res.length > max) h += '<div style="opacity:.6;padding:10px;font-size:11.5px">… et ' + (res.length - max) + ' autre(s) — affinez le filtre.</div>';
+    h += _barrePages(PAGE_S, nbPages, res.length, 'notices');
     body.innerHTML = h;
+    _branchePages(body, function(p){ PAGE_S = p; }, function(){ renderS(q); });
   }
 
   /* ── vue Catéchisme (CEC) ── */
@@ -44083,11 +44119,16 @@ window.continueTradApart = async function (msgId) {
                String(e.n) === q || String(e.n).indexOf(q) === 0;
       });
     }
+    var max = 40;
+    var nbPages = Math.max(1, Math.ceil(res.length / max));
+    if (PAGE_C >= nbPages) PAGE_C = nbPages - 1;
+    if (PAGE_C < 0) PAGE_C = 0;
     var st = document.getElementById('v170-status');
-    if (st) st.textContent = res.length + ' paragraphe(s) sur ' + items.length + ' — Catéchisme de l\'Église catholique (1992).';
+    if (st) st.textContent = res.length + ' paragraphe(s) sur ' + items.length + " — Catéchisme de l'Église catholique (1992).";
     if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucun paragraphe.</div>'; return; }
-    var max = 40, shown = res.slice(0, max);
-    var h = '';
+    var shown = res.slice(PAGE_C * max, PAGE_C * max + max);
+    var h = _barrePages(PAGE_C, nbPages, res.length, 'paragraphes');
+    if (nbPages > 1) h += '<div style="text-align:center;font-size:10.5px;color:#8fa3b8;padding-bottom:6px">§ ' + shown[0].n + ' à ' + shown[shown.length - 1].n + ' sur cette page</div>';
     shown.forEach(function(e){
       h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,142,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
          + '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:3px">§ ' + e.n + '</div>'
@@ -44095,8 +44136,9 @@ window.continueTradApart = async function (msgId) {
          + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(e.t) + '</div>'
          + '</div>';
     });
-    if (res.length > max) h += '<div style="opacity:.6;padding:10px;font-size:11.5px">… et ' + (res.length - max) + ' autre(s) — affinez (ex. « 261 »).</div>';
+    h += _barrePages(PAGE_C, nbPages, res.length, 'paragraphes');
     body.innerHTML = h;
+    _branchePages(body, function(p){ PAGE_C = p; }, function(){ renderC(q); });
   }
 
   function load(){
