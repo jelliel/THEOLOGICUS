@@ -29121,6 +29121,8 @@ initTafsirVerseTooltip();
   /* Banc v126l : la fonction vit dans cette IIFE — même démarche que
      window.__applyHighlights, on expose le minimum pour le prove-it. */
   window.__atcProveIt = { cfgCommentaireSecours: cfgCommentaireSecours, runCommentLLM: runCommentLLM };
+  /* v445 — la chaîne de secours (Agnes → Ollama) sert aussi à la fiche d'étude. */
+  window.__cfgChaineSecours = cfgChaineSecours;
 
   async function runCommentLLM(ann, s, msg){
     const activeModelId = (state.agent?.modelPref && state.agent.modelPref !== '') ? state.agent.modelPref : state.model;
@@ -48708,7 +48710,203 @@ window.continueTradApart = async function (msgId) {
   window.__v444Plans = { ouvre: ouvre, ouvrePlan: ouvrePlan, PLANS: PLANS, prog: prog, itemsCec: itemsCec };
 })();
 </script>
+<script id="v445-fiche">
+/* ═══════════════════════════════════════════════════════════════════
+   v445 — FICHE D'ÉTUDE IA : génère une fiche structurée à partir du
+   panier 🧺 de la feuille d'étude (v189). Chaîne IA complète :
+   modèle choisi → Agnes (si clé) → Ollama local (si joignable), via
+   window.__cfgChaineSecours. Export MD/PDF + historique local
+   (localStorage 'v445_fiches', couvert par la sauvegarde v442).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v445-fiche-modal';
+  const CLE_FICHES = 'v445_fiches';
+  let DERNIERE = null;   // {titre, contenu}
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function ldFiches() { try { return JSON.parse(localStorage.getItem(CLE_FICHES) || '[]'); } catch (e) { return []; } }
+  function svFiches(a) { try { localStorage.setItem(CLE_FICHES, JSON.stringify(a)); } catch (e) {} }
+
+  function panier() { try { return JSON.parse(localStorage.getItem('theo_basket_v1') || '[]'); } catch (e) { return []; } }
+
+  function mdVersHtml(md) {
+    const lignes = String(md || '').split(/\n/);
+    let h = '', inList = false;
+    lignes.forEach(l => {
+      let t = esc(l)
+        .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+        .replace(/(^|\s)_([^_]+)_/g, '$1<i>$2</i>');
+      if (/^###\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h3>' + l.replace(/^###\s*/, '') + '</h3>'; }
+      else if (/^##\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h2>' + l.replace(/^##\s*/, '') + '</h2>'; }
+      else if (/^#\s/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<h1>' + l.replace(/^#\s*/, '') + '</h1>'; }
+      else if (/^[-*•]\s/.test(l)) { if (!inList) { h += '<ul>'; inList = true; } h += '<li>' + t.replace(/^[-*•]\s/, '') + '</li>'; }
+      else if (/^>\s?/.test(l)) { if (inList) { h += '</ul>'; inList = false; } h += '<blockquote>' + t.replace(/^>\s?/, '') + '</blockquote>'; }
+      else if (l.trim() === '') { if (inList) { h += '</ul>'; inList = false; } }
+      else { if (inList) { h += '</ul>'; inList = false; } h += '<p>' + t + '</p>'; }
+    });
+    if (inList) h += '</ul>';
+    return h;
+  }
+
+  function promptDepuisPanier(entrees) {
+    const extraits = entrees.map((e, i) => '[' + (i + 1) + '] ' + (e.src ? '(' + e.src + ') ' : '') + (e.text || '')).join('\n\n');
+    return 'Voici des extraits rassemblés lors d\'une étude :\n\n' + extraits + '\n\n' +
+      'Rédige une FICHE D\'ÉTUDE structurée en français, à partir de CES extraits uniquement (ne rajoute pas de doctrine externe). Structure attendue :\n' +
+      '# Titre de la fiche (court)\n' +
+      '## Définitions et notions clés\n' +
+      '## Enseignements principaux (5 points maximum)\n' +
+      '## Références à approfondir (citations exactes tirées des extraits, avec leur numéro [n])\n' +
+      '## Questions d\'étude (5 questions)\n' +
+      'Texte en français, style sobre, sans commentaire superflu.';
+  }
+
+  function renduFiche(contenu) {
+    const body = document.getElementById('v445-fiche-body');
+    body.innerHTML = '<div style="font-size:12.5px;line-height:1.7;color:#eaf4ff">' + mdVersHtml(contenu) + '</div>';
+  }
+
+  async function generer() {
+    const entrees = panier();
+    const body = document.getElementById('v445-fiche-body');
+    if (!entrees.length) { body.innerHTML = '<div style="opacity:.6;padding:20px;text-align:center">Le panier 🧺 de la feuille d\'étude est vide — sélectionnez du texte puis cliquez 🧺.</div>'; return; }
+    const btn = document.getElementById('v445-fiche-gen');
+    btn.disabled = true; btn.textContent = '⏳ Génération…';
+    body.innerHTML = '<div style="opacity:.7;padding:30px;text-align:center">✨ Rédaction de la fiche en cours…<br><span style="font-size:11px">modèle choisi → Agnes → Ollama local : le premier qui répond gagne</span></div>';
+    const prompt = promptDepuisPanier(entrees);
+    const msgs = [{ role: 'user', content: prompt }];
+    const t0 = Date.now();
+    let contenu = null, err = null;
+    try {
+      const cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig((state.agent && state.agent.modelPref) || state.model) : null;
+      const chaine = [];
+      if (cfg && cfg.apiKey) chaine.push(cfg);
+      try { (window.__cfgChaineSecours ? window.__cfgChaineSecours(cfg) : []).forEach(c => chaine.push(c)); } catch (e) {}
+      if (!chaine.length) throw new Error('Aucun modèle disponible — configurez une clé ou lancez Ollama.');
+      for (const c of chaine) {
+        try {
+          console.log('[FICHE] tentative via', c.providerId || c.endpoint);
+          const r = await Promise.race([
+            callLLM(c, msgs, { temperature: 0.5, max_tokens: 1600 }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Délai dépassé (120s)')), 120000))
+          ]);
+          if (r && String(r).trim().length > 40) { contenu = String(r).trim(); break; }
+        } catch (e) { err = e; console.warn('[FICHE] échec:', e.message); }
+      }
+    } catch (e) { err = e; }
+    btn.disabled = false; btn.textContent = '✨ Générer la fiche (IA)';
+    if (!contenu) {
+      body.innerHTML = '<div style="color:#ff8a80;padding:20px">❌ Génération impossible : ' + esc((err && err.message) || 'erreur inconnue') + '</div>';
+      return;
+    }
+    const titreM = contenu.match(/^#\s+(.+)$/m);
+    DERNIERE = { titre: titreM ? titreM[1].trim() : ('Fiche ' + new Date().toLocaleDateString('fr-FR')), contenu: contenu, ts: Date.now(), duree: Date.now() - t0 };
+    renduFiche(contenu);
+  }
+
+  function enregistrer() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const arr = ldFiches();
+    arr.unshift({ id: 'f-' + Date.now(), ts: DERNIERE.ts, titre: DERNIERE.titre, contenu: DERNIERE.contenu });
+    svFiches(arr);
+    renduHistorique();
+    alert('Fiche enregistrée (' + arr.length + ' au total).');
+  }
+
+  function renduHistorique() {
+    const box = document.getElementById('v445-fiche-hist');
+    if (!box) return;
+    const arr = ldFiches();
+    if (!arr.length) { box.innerHTML = '<span style="font-size:10.5px;color:#8fa3b8">Aucune fiche enregistrée</span>'; return; }
+    box.innerHTML = '<span style="font-size:10.5px;color:#8fa3b8;margin-right:6px">🗂 ' + arr.length + ' fiche(s) :</span>' +
+      arr.slice(0, 6).map(f => '<span class="v445-hist-item" data-id="' + f.id + '" title="Ouvrir" style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border:1px solid rgba(79,195,247,.3);border-radius:10px;font-size:10.5px;color:#cfe0ff;cursor:pointer">' + esc(f.titre.slice(0, 34)) + '</span>').join('');
+    box.querySelectorAll('.v445-hist-item').forEach(el => el.addEventListener('click', () => {
+      const f = ldFiches().find(x => x.id === el.dataset.id);
+      if (f) { DERNIERE = { titre: f.titre, contenu: f.contenu }; renduFiche(f.contenu); }
+    }));
+  }
+
+  function telecharge() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const blob = new Blob([DERNIERE.contenu], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fiche-etude-' + new Date().toISOString().slice(0, 10) + '.md';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function imprimer() {
+    if (!DERNIERE) { alert('Générez d\'abord une fiche.'); return; }
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorisez les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>' + esc(DERNIERE.titre) + '</title>'
+      + '<style>body{font-family:Georgia,serif;max-width:800px;margin:24px auto;color:#1a1a2e}h1{font-size:20px}h2{font-size:15px;border-bottom:1px solid #999}blockquote{border-left:3px solid #b8860b;padding:4px 12px;background:#faf7f0;font-style:italic}ul{padding-left:20px}</style></head><body>');
+    w.document.write(mdVersHtml(DERNIERE.contenu));
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+  }
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(860px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">✨ FICHE D\'ÉTUDE IA</div>'
+      + '<div style="flex:1"></div>'
+      + '<button id="v445-fiche-hist" style="background:transparent;border:none;max-width:340px;overflow:hidden;white-space:nowrap"></button>'
+      + '<button id="v445-fiche-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid rgba(79,195,247,.15)">'
+      + '<button id="v445-fiche-gen" style="background:rgba(102,187,106,.2);color:#c8e6c9;border:1px solid rgba(102,187,106,.5);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px">✨ Générer la fiche (IA)</button>'
+      + '<button id="v445-fiche-save" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">💾 Enregistrer</button>'
+      + '<button id="v445-fiche-md" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">⬇ Markdown</button>'
+      + '<button id="v445-fiche-pdf" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">🖨 PDF</button>'
+      + '<span id="v445-fiche-src" style="font-size:10.5px;color:#8fa3b8"></span>'
+      + '</div>'
+      + '<div id="v445-fiche-body" style="flex:1;overflow-y:auto;padding:14px 18px;font-family:inherit"><div style="opacity:.6;padding:20px;text-align:center">Cliquez « ✨ Générer la fiche (IA) » pour rédiger une fiche d\'étude à partir du panier 🧺.</div></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v445-fiche-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    m.querySelector('#v445-fiche-gen').onclick = generer;
+    m.querySelector('#v445-fiche-save').onclick = enregistrer;
+    m.querySelector('#v445-fiche-md').onclick = telecharge;
+    m.querySelector('#v445-fiche-pdf').onclick = imprimer;
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  function ouvre() {
+    ensureModal();
+    const n = panier().length;
+    document.getElementById('v445-fiche-src').textContent = n ? ('🧺 ' + n + ' sélection(s) dans le panier') : '🧺 panier vide';
+    renduHistorique();
+  }
+
+  function bouton() {
+    const ancre = document.getElementById('v444-plans-btn') || document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v445-fiche-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v445-fiche-btn';
+    b.className = 'hud-btn';
+    b.title = 'FICHE D\'ÉTUDE IA — génère une fiche structurée depuis le panier 🧺 (modèle local Ollama ou cloud)';
+    b.textContent = '✨ FICHE';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v445Fiche = { ouvre: ouvre, generer: generer, promptDepuisPanier: promptDepuisPanier, panier: panier, ldFiches: ldFiches };
+})();
+</script>
 </body>
+</html>
 </html>
 </html>
 </html>
