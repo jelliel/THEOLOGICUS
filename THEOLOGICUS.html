@@ -20295,11 +20295,17 @@ async function exportData() {
     const mems = await db.getAll('global_memory') || [];
     const settings = await db.getAll('settings') || [];
     const appConfig = await db.get('app_config', 'main');
+    /* v442 — sauvegarde COMPLÈTE : le localStorage manquait (galerie AI
+       VIDEO, clés du studio, préférences d'interface, modèle choisi) ainsi
+       que le magasin auto_backups. Une restauration ne pouvait donc pas
+       rendre un poste à l'identique. */
+    const ls = {};
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch (e) {}
     const payload = {
-      version: "2.1",
+      version: "2.2",
       exported: new Date().toISOString(),
       source: "THEOLOGICUS",
-      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [] }
+      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: await db.getAll('auto_backups') || [], localStorage: ls }
     };
     const json = JSON.stringify(payload, null, 2);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
@@ -20366,11 +20372,28 @@ async function importData(file) {
     if (data.app_config?.length) {
       for (const c of data.app_config) { await db.put('app_config', c); count++; }
     }
+    /* v442 — restauration étendue : settings, auto_backups et localStorage. */
+    if (data.settings?.length) {
+      for (const s of data.settings) { await db.put('settings', s); count++; }
+    }
+    if (data.auto_backups?.length) {
+      for (const b of data.auto_backups) { await db.put('auto_backups', b); count++; }
+    }
+    let nbLs = 0;
+    if (data.localStorage && typeof data.localStorage === 'object') {
+      try {
+        Object.keys(data.localStorage).forEach(k => { localStorage.setItem(k, data.localStorage[k]); nbLs++; });
+        count += nbLs;
+      } catch (e) { /* quota : on continue, l'essentiel est dans l'IDB */ }
+    }
     await memory.getAll();
     await learnings.getAll();
     await loadAgents();
     await computeStats();
-    toast(`Import réussi — ${count} éléments restaurés`, "success");
+    toast(`Import réussi — ${count} éléments restaurés${nbLs ? ' (+' + nbLs + ' préférences)' : ''}`, "success");
+    /* v442 — le localStorage restauré (préférences, clés studio, galerie)
+       n'est lu qu'au chargement : recharger la page applique tout. */
+    setTimeout(() => { if (confirm('Restauration terminée. Recharger la page pour appliquer toutes les préférences ?')) location.reload(); }, 400);
   } catch(e) {
     toast("Erreur import : " + e.message, "error");
   }
@@ -48316,5 +48339,184 @@ window.continueTradApart = async function (msgId) {
   };
 })();
 </script>
+<script id="v443-biblio">
+/* ═══════════════════════════════════════════════════════════════════
+   v443 — MES ANNOTATIONS : bibliothèque personnelle unifiée.
+   Toutes les annotations (commentaires IA, notes personnelles) de TOUTES
+   les conversations, agrégées, filtrables, exportables (Markdown / PDF).
+   Les annotations vivaient dispersées dans chaque conversation : aucune
+   vue d'ensemble ni export n'existait.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v443-biblio-modal';
+  let ITEMS = [];
+  let FILTRE = '';
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  async function collecte() {
+    const chats = (typeof db !== 'undefined' && db.getAll) ? (await db.getAll('chats') || []) : [];
+    const out = [];
+    (chats || []).forEach(c => {
+      (c.messages || []).forEach(m => {
+        (m.annotations || []).forEach(a => {
+          if (!a || !a.text) return;
+          if (a.error && !a.a && !a.note) return;   // annotations en échec : pas du contenu
+          out.push({
+            passage: a.text,
+            commentaire: a.a || null,
+            note: a.note || null,
+            perso: !!a.personal,
+            question: a.question || null,
+            chat: c.title || c.name || c.id || 'Conversation',
+            chatId: c.id,
+            ts: m.ts || c.updatedAt || 0
+          });
+        });
+      });
+    });
+    out.sort((x, y) => (y.ts || 0) - (x.ts || 0));
+    return out;
+  }
+
+  function filtrees() {
+    const q = FILTRE.trim().toLowerCase();
+    if (!q) return ITEMS;
+    return ITEMS.filter(i =>
+      (i.passage || '').toLowerCase().includes(q) ||
+      (i.commentaire || '').toLowerCase().includes(q) ||
+      (i.note || '').toLowerCase().includes(q) ||
+      (i.chat || '').toLowerCase().includes(q));
+  }
+
+  function rendu() {
+    const liste = filtrees();
+    const body = document.getElementById('v443-biblio-body');
+    const cnt = document.getElementById('v443-biblio-count');
+    if (cnt) cnt.textContent = String(liste.length) + ' / ' + ITEMS.length;
+    if (!liste.length) {
+      body.innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">' + (ITEMS.length ? 'Aucun résultat pour ce filtre.' : 'Aucune annotation encore — sélectionnez un passage dans une conversation, puis « Commentaire » ou « Note personnelle ».') + '</div>';
+      return;
+    }
+    let groupe = null, h = '';
+    liste.forEach(i => {
+      if (i.chat !== groupe) {
+        groupe = i.chat;
+        h += '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#4fc3f7;margin:14px 0 6px;border-bottom:1px solid rgba(79,195,247,.25);padding-bottom:3px">💬 ' + esc(groupe) + '</div>';
+      }
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,195,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+        + '<div style="font-style:italic;color:#e8dcc0;font-size:12.5px;border-left:3px solid rgba(255,204,128,.5);padding-left:8px">« ' + esc((i.passage || '').slice(0, 260)) + (i.passage.length > 260 ? '…' : '') + ' »</div>'
+        + (i.question ? '<div style="font-size:10.5px;color:#ffb300;margin-top:4px">❓ ' + esc(i.question) + '</div>' : '')
+        + (i.commentaire ? '<div style="font-size:12px;line-height:1.6;color:#dbe6f3;margin-top:6px;white-space:pre-wrap">' + esc(i.commentaire) + '</div>' : '')
+        + (i.note ? '<div style="font-size:12px;color:#c8e6c9;margin-top:6px;white-space:pre-wrap">📝 ' + esc(i.note) + '</div>' : '')
+        + (!i.commentaire && !i.note ? '<div style="font-size:11px;color:#ff8a80;margin-top:6px">⚠ Annotation sans contenu généré</div>' : '')
+        + '</div>';
+    });
+    body.innerHTML = h;
+  }
+
+  function markdown() {
+    const liste = filtrees();
+    const lignes = ['# MES ANNOTATIONS — THEOLOGICUS', '', '_' + liste.length + ' annotation(s)' + (FILTRE ? ' (filtre : ' + FILTRE + ')' : '') + ' — exportées le ' + new Date().toLocaleString('fr-FR') + '_', ''];
+    let groupe = null;
+    liste.forEach(i => {
+      if (i.chat !== groupe) { groupe = i.chat; lignes.push('## ' + i.chat, ''); }
+      lignes.push('> ' + String(i.passage || '').replace(/\n/g, '\n> '));
+      if (i.question) lignes.push('', '**Question :** ' + i.question);
+      if (i.commentaire) lignes.push('', i.commentaire);
+      if (i.note) lignes.push('', '**📝 Note personnelle :** ' + i.note);
+      lignes.push('');
+    });
+    return lignes.join('\n');
+  }
+
+  function telecharge() {
+    const blob = new Blob([markdown()], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'MES-ANNOTATIONS-' + new Date().toISOString().slice(0, 10) + '.md';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  function imprimer() {
+    const liste = filtrees();
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorisez les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>MES ANNOTATIONS — THEOLOGICUS</title>'
+      + '<style>body{font-family:Georgia,serif;max-width:800px;margin:24px auto;color:#1a1a2e}h1{font-size:20px;border-bottom:2px solid #333;padding-bottom:6px}'
+      + 'h2{font-size:14px;color:#444;margin:18px 0 6px}blockquote{border-left:3px solid #b8860b;margin:8px 0;padding:4px 12px;font-style:italic;background:#faf7f0}'
+      + '.com{font-size:13px;line-height:1.6;white-space:pre-wrap}.note{font-size:13px;color:#2e5d2e;white-space:pre-wrap}.meta{color:#666;font-size:11px}</style></head><body>');
+    w.document.write('<h1>MES ANNOTATIONS — THEOLOGICUS</h1><p class="meta">' + liste.length + ' annotation(s) — ' + new Date().toLocaleString('fr-FR') + '</p>');
+    let g = null;
+    liste.forEach(i => {
+      if (i.chat !== g) { g = i.chat; w.document.write('<h2>' + esc(g) + '</h2>'); }
+      w.document.write('<blockquote>' + esc(String(i.passage || '').slice(0, 400)) + '</blockquote>');
+      if (i.question) w.document.write('<p><b>Question :</b> ' + esc(i.question) + '</p>');
+      if (i.commentaire) w.document.write('<p class="com">' + esc(i.commentaire) + '</p>');
+      if (i.note) w.document.write('<p class="note">📝 ' + esc(i.note) + '</p>');
+    });
+    w.document.write('</body></html>');
+    w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 300);
+  }
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(860px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">📚 MES ANNOTATIONS <span id="v443-biblio-count" style="font-size:10.5px;color:#8fa3b8;font-weight:400"></span></div>'
+      + '<div style="flex:1"></div>'
+      + '<input id="v443-biblio-q" placeholder="Filtrer les annotations…" style="width:230px;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,195,247,.35);border-radius:8px;padding:6px 10px;font-size:11.5px">'
+      + '<button id="v443-biblio-md" title="Exporter en Markdown" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">⬇ Markdown</button>'
+      + '<button id="v443-biblio-pdf" title="Imprimer / enregistrer en PDF" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:11px">🖨 PDF</button>'
+      + '<button id="v443-biblio-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div id="v443-biblio-body" style="flex:1;overflow-y:auto;padding:4px 16px 16px;font-family:inherit"></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v443-biblio-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    document.getElementById('v443-biblio-q').addEventListener('input', e => { FILTRE = e.target.value; rendu(); });
+    document.getElementById('v443-biblio-md').onclick = telecharge;
+    document.getElementById('v443-biblio-pdf').onclick = imprimer;
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  async function ouvre() {
+    ensureModal();
+    document.getElementById('v443-biblio-body').innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">Collecte des annotations…</div>';
+    ITEMS = await collecte();
+    FILTRE = '';
+    const q = document.getElementById('v443-biblio-q'); if (q) q.value = '';
+    rendu();
+  }
+
+  /* bouton d'entrée dans le HUD, à côté de « 🎞 AI VIDEO » */
+  function bouton() {
+    const ancre = document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v443-biblio-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v443-biblio-btn';
+    b.className = 'hud-btn';
+    b.title = 'MES ANNOTATIONS — toutes vos annotations et notes, exportables';
+    b.textContent = '📚 BIBLIO';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  /* banc + raccourcis externes */
+  window.__v443Biblio = { ouvre: ouvre, collecte: collecte, markdown: markdown, filtre: (q) => { FILTRE = q; rendu(); } };
+})();
+</script>
 </body>
+</html>
 </html>
