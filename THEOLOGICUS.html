@@ -10013,7 +10013,15 @@ const PROVIDERS = [
   // `agnes-2.0-flash` : 256K de contexte, 64K de sortie, vision, tool calling.
   // `agnes-2.1-flash` = le nom de la famille IMAGE (elle ne répond pas sur
   // /chat/completions) : ne pas l'ajouter ici, elle serait proposée à tort.
-  { id:"agnes",     label:"Agnes AI",   format:"chat-completions",   base:"https://apihub.agnes-ai.com/v1",      models:["agnes-2.5-flash","agnes-2.0-flash"] }
+  { id:"agnes",     label:"Agnes AI",   format:"chat-completions",   base:"https://apihub.agnes-ai.com/v1",      models:["agnes-2.5-flash","agnes-2.0-flash"] },
+  /* v441 — Ollama local : IA HORS LIGNE, sans clé ni quota, sur la machine
+     même (http://127.0.0.1:11434, OpenAI-compatible). Les modèles listés ne
+     sont qu'un défaut : « + Ajouter modèles » interroge /models et liste les
+     modèles réellement installés. CORS : Ollama autorise les origines
+     localhost (testé), et l'app est servie depuis localhost — l'appel direct
+     passe, en navigateur comme dans l'exe. Aucune clé : resolveModelConfig
+     met une valeur fictive 'local' que Ollama ignore. */
+  { id:"ollama",    label:"Ollama (local)", format:"chat-completions",   base:"http://127.0.0.1:11434/v1",  models:["qwen2.5:0.5b","llama3.2","qwen2.5","mistral"] }
 ];
 const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map(p => [p.id, p]));
 
@@ -11838,7 +11846,10 @@ function resolveModelConfig(activeId) {
     else endpoint = base.endsWith('/chat/completions') ? base : base + '/chat/completions';
     const cle = cleanApiKey(state.keys[pm.prov.id] || '') ||
                 (pm.prov.id === 'mistral' ? cleanApiKey(state.apiKey) : '');
-    return { model: pm.model, endpoint, apiKey: cle, format: fmt, providerId: pm.prov.id };
+    /* v441 — Ollama local n'exige aucune clé : valeur fictive 'local' que
+       Ollama ignore, mais qui passe les garde-fous « clé absente » de l'app. */
+    const cleFinale = cle || (pm.prov.id === 'ollama' ? 'local' : '');
+    return { model: pm.model, endpoint, apiKey: cleFinale, format: fmt, providerId: pm.prov.id };
   }
   // If no Mistral key is configured but AI VIDEO already has an Agnes key,
   // use Agnes as the portable fallback for comments and chat. This keeps the
@@ -12789,21 +12800,35 @@ function initSettingsModal() {
       };
     });
     list.querySelectorAll('.provider-add-models-btn').forEach(btn => {
-      btn.onclick = () => {
+      btn.onclick = async () => {
         const prov = btn.dataset.provider;
         const pdef = PROVIDERS.find(x => x.id === prov);
-        if (!pdef || !pdef.models || !pdef.base) return;
+        if (!pdef || !pdef.base) return;
+        btn.textContent = '⏳';
+        /* v441 — détection RÉELLE : GET <base>/models. Pour Ollama cela liste
+           les modèles effectivement installés sur la machine ; pour les
+           fournisseurs en ligne, leur liste officielle. Échec → repli sur la
+           liste statique du registre. */
+        let ids = null;
+        try {
+          const r = await fetch(apiEndpoint(pdef.base + '/models'), { headers: { 'Authorization': 'Bearer ' + (state.keys[prov] || 'local') } });
+          if (r.ok) {
+            const j = await r.json();
+            const arr = (j && (j.data || j.models)) || [];
+            ids = arr.map(x => x.id || x.name || x.model).filter(Boolean);
+          }
+        } catch (e) { /* fournisseur injoignable : repli statique */ }
+        if (!ids || !ids.length) ids = (pdef.models || []).map(m => typeof m === 'string' ? m : m.model);
         let added = 0;
         const now = Date.now();
-        pdef.models.forEach((m, idx) => {
-          const modelId = typeof m === 'string' ? m : m.model;
+        ids.forEach((modelId, idx) => {
           if (state.customModels.some(x => x.model === modelId)) return;
-          const label = typeof m === 'string' ? m : (m.label || m.model);
-          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: label, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || '', format: pdef.format || 'chat-completions', vision: false, audio: false });
+          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: modelId, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || (prov === 'ollama' ? 'local' : ''), format: pdef.format || 'chat-completions', vision: false, audio: false });
           added++;
         });
+        btn.textContent = '+ Ajouter modèles';
         if (added) { saveCustomModels(); refreshModelSelect(); renderCustomModelsList(); }
-        toast(added ? added + " modèle(s) ajouté(s)" : "Modèles déjà présents", added ? "success" : "info");
+        toast(added ? added + " modèle(s) ajouté(s)" + (prov === 'ollama' ? ' (détectés localement)' : '') : "Modèles déjà présents", added ? "success" : "info");
       };
     });
   }
@@ -29014,20 +29039,61 @@ initTafsirVerseTooltip();
     toast('✓ Note personnelle enregistrée', 'success');
   }
 
-  /* v126l — Configuration de secours pour les commentaires : Agnes chat.
-     La clé Agnes peut venir du magasin THEOLOGICUS (state.keys.agnes) ou de
-     celui d'AI VIDEO (localStorage 'agnes_api_key' — même origine, donc
-     lisible ici). Renvoie null si la config primaire cible déjà Agnes ou si
-     aucune clé Agnes n'existe : dans ce cas l'erreur primaire est propagée. */
-  function cfgCommentaireSecours(cfg) {
+  /* v126l/v441 — CHAÎNE de secours pour les commentaires : Agnes (si clé)
+     puis Ollama local (si joignable). La clé Agnes peut venir du magasin
+     THEOLOGICUS (state.keys.agnes) ou de celui d'AI VIDEO (localStorage
+     'agnes_api_key' — même origine). Renvoie une liste (vide = l'erreur
+     primaire est propagée), la config primaire étant exclue de la chaîne. */
+  let _ollamaJoignable = null;      // null = inconnu, true/false = cache 60s
+  let _ollamaVerifieA = 0;
+  function ollamaEstJoignable() {
+    const mtn = now();
+    if (_ollamaJoignable !== null && (mtn - _ollamaVerifieA) < 60000) return _ollamaJoignable;
+    _ollamaJoignable = false; _ollamaVerifieA = mtn;
     try {
-      if (cfg && cfg.endpoint && String(cfg.endpoint).indexOf('apihub.agnes-ai.com') !== -1) return null;
-      const cle = cleanApiKey((state.keys && state.keys.agnes) || '') ||
-                  cleanApiKey((localStorage.getItem('agnes_api_key') || ''));
-      if (!cle) return null;
-      return { model: 'agnes-2.5-flash', endpoint: 'https://apihub.agnes-ai.com/v1/chat/completions',
-               apiKey: cle, format: 'chat-completions', providerId: 'agnes' };
-    } catch (e) { return null; }
+      const xhr = new XMLHttpRequest();
+      /* SYNCHRONE volontairement (on est dans un catch, pas dans le chemin
+         heureux) — SANS .timeout : sur le fil principal, timeout+sync lève
+         InvalidAccessError, ce qui faisait paraître Ollama « injoignable » à
+         tort. Un port local fermé refuse instantanément : pas de blocage. */
+      xhr.open('GET', 'http://127.0.0.1:11434/api/tags', false);
+      xhr.send(null);
+      _ollamaJoignable = (xhr.status === 200);
+    } catch (e) { _ollamaJoignable = false; }
+    return _ollamaJoignable;
+  }
+  function _cfgOllamaSecours() {
+    if (!ollamaEstJoignable()) return null;
+    let modele = 'qwen2.5:0.5b';
+    try {
+      const deja = (state.customModels || []).filter(m => String(m.baseUrl || '').indexOf('11434') !== -1);
+      if (deja.length && deja[0].model) modele = deja[0].model;
+    } catch (e) {}
+    return { model: modele, endpoint: 'http://127.0.0.1:11434/v1/chat/completions',
+             apiKey: 'local', format: 'chat-completions', providerId: 'ollama' };
+  }
+  function cfgChaineSecours(cfg) {
+    const chaine = [];
+    try {
+      const cibleAgnes = cfg && cfg.endpoint && String(cfg.endpoint).indexOf('apihub.agnes-ai.com') !== -1;
+      const cibleOllama = cfg && cfg.endpoint && String(cfg.endpoint).indexOf('127.0.0.1:11434') !== -1;
+      if (!cibleAgnes) {
+        const cle = cleanApiKey((state.keys && state.keys.agnes) || '') ||
+                    cleanApiKey((localStorage.getItem('agnes_api_key') || ''));
+        if (cle) chaine.push({ model: 'agnes-2.5-flash', endpoint: 'https://apihub.agnes-ai.com/v1/chat/completions',
+                               apiKey: cle, format: 'chat-completions', providerId: 'agnes' });
+      }
+      if (!cibleOllama) {
+        const o = _cfgOllamaSecours();
+        if (o) chaine.push(o);
+      }
+    } catch (e) {}
+    return chaine;
+  }
+  /* Compat : l'ancien appel attendait UNE config ou null. */
+  function cfgCommentaireSecours(cfg) {
+    const chaine = cfgChaineSecours(cfg);
+    return chaine.length ? chaine[0] : null;
   }
   /* Banc v126l : la fonction vit dans cette IIFE — même démarche que
      window.__applyHighlights, on expose le minimum pour le prove-it. */
@@ -29089,10 +29155,20 @@ initTafsirVerseTooltip();
       try {
         reply = await _race60(cfg);
       } catch (ePrim) {
-        const secours = cfgCommentaireSecours(cfg);
-        if (!secours) throw ePrim;
-        console.log('[DIAG] runCommentLLM: primaire a échoué (' + (ePrim && ePrim.message) + ') — repli Agnes');
-        reply = await _race60(secours);
+        /* v441 — chaîne complète : Agnes (si clé) puis Ollama local (si
+           joignable). Le premier fournisseur de secours qui répond gagne. */
+        const chaine = cfgChaineSecours(cfg);
+        if (!chaine.length) throw ePrim;
+        let reussi = false; let derniere = ePrim;
+        for (const secours of chaine) {
+          try {
+            console.log('[DIAG] runCommentLLM: primaire a échoué (' + (ePrim && ePrim.message) + ') — repli ' + (secours.providerId || '?'));
+            reply = await _race60(secours);
+            reussi = true;
+            break;
+          } catch (eSec) { derniere = eSec; }
+        }
+        if (!reussi) throw derniere;
       }
       console.log('[DIAG] runCommentLLM: reply received len=' + (reply ? reply.length : 0));
       ann.a = reply; ann.loading = false; ann.error = null;

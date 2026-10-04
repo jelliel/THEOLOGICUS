@@ -2585,7 +2585,15 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    server = http.server.HTTPServer(('0.0.0.0', PORT), CORSProxyHandler)
+    # v441 — MULTI-THREADS. HTTPServer est mono-thread : un long appel IA
+    # (génération vidéo, traduction de masse, chat) BLOQUAIT toutes les
+    # autres requêtes — y compris le rafraîchissement de la page — pendant
+    # toute sa durée. ThreadingHTTPServer traite chaque requête dans son
+    # propre fil : l'UI reste fluide pendant les appels longs. L'exe
+    # (app.py) utilisait déjà ThreadingHTTPServer ; le relais autonome
+    # lancé par THEOLOGICUS.bat est le seul qui restait mono-thread.
+    server = http.server.ThreadingHTTPServer(('0.0.0.0', PORT), CORSProxyHandler)
+    server.daemon_threads = True
     print(f"\033[32m╔══════════════════════════════════════════╗")
     print(f"║  THEOLOGICUS Proxy Server               ║")
     print(f"║  http://localhost:{PORT}/THEOLOGICUS.html  ║")
