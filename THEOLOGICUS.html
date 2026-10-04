@@ -43115,6 +43115,8 @@ window.continueTradApart = async function (msgId) {
       + '<button id="v170-tab-p">ARTICLES (CPH)</button>'
       + '<button id="v170-tab-l">BIBLIOTHÈQUE</button>'
       + '<button id="v170-tab-v">🌊 VALTORTA</button>'
+      + '<button id="v170-tab-s">📜 ASBĀB AL-NUZŪL</button>'
+      + '<button id="v170-tab-c">📕 CATÉCHISME</button>'
       + '</div><input id="v170-q" placeholder="Filtrer par sujet, auteur, doctrine, témoin ou mot du texte…" /></div>'
       + '<div id="v170-status"></div>'
       + '<div id="v170-body"></div></div>';
@@ -43128,6 +43130,17 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-p').addEventListener('click', function(){ setView('p'); });
     document.getElementById('v170-tab-l').addEventListener('click', function(){ setView('l'); });
     document.getElementById('v170-tab-v').addEventListener('click', function(){ setView('v'); });
+    document.getElementById('v170-tab-s').addEventListener('click', function(){ setView('s'); });
+    document.getElementById('v170-tab-c').addEventListener('click', function(){ setView('c'); });
+    /* v439 — boutons 🇫🇷 des vues ASBĀB : traduction IA partagée (v437) */
+    document.getElementById('v170-body').addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('.asb-tr') : null;
+      if (!b || b.dataset.busy) return;
+      ev.stopPropagation();
+      var ar = b.parentNode.querySelector('[dir="rtl"]');
+      if (!ar) return;
+      if (typeof window.__asbabTranslate === 'function') window.__asbabTranslate(b, ar.textContent || '');
+    });
     /* v173 — boutons 🌐 FR de la vue Doctrines : traduction partagée v167 */
     document.getElementById('v170-body').addEventListener('click', function (ev) {
       var b = ev.target.closest ? ev.target.closest('.v167-tr') : null;
@@ -43269,11 +43282,15 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v170-tab-p').classList.toggle('on', v === 'p');
     document.getElementById('v170-tab-l').classList.toggle('on', v === 'l');
     document.getElementById('v170-tab-v').classList.toggle('on', v === 'v');
+    document.getElementById('v170-tab-s').classList.toggle('on', v === 's');
+    document.getElementById('v170-tab-c').classList.toggle('on', v === 'c');
     var ph = v === 'q' ? 'Filtrer par sujet, auteur, œuvre ou mot du texte…'
            : v === 'd' ? 'Filtrer par doctrine, témoin, argument ou mot du texte…'
            : v === 'a' ? 'Filtrer par question, thèse, argument ou mot du texte…'
            : v === 'p' ? 'Rechercher parmi 9 365 articles (titre, extrait, catégorie, texte)…'
            : v === 'v' ? "Rechercher un récit de Valtorta (titre, date de l'événement, lieu, référence d'Évangile, numéro EMV)…"
+           : v === 's' ? 'Filtrer par sourate:verset, source (الواحدي…) ou mot du texte arabe…'
+           : v === 'c' ? 'Filtrer par numéro de paragraphe (ex. 261) ou mot du texte…'
                        : 'Rechercher dans le Talmud, la Mishna et Philon (œuvre, chapitre, texte)…';
     document.getElementById('v170-q').placeholder = ph;
     document.getElementById('v170-q').value = '';
@@ -43958,13 +43975,135 @@ window.continueTradApart = async function (msgId) {
       body.innerHTML = '<div style="opacity:.6;padding:16px">chargement de l\'index Valtorta…</div>';
       return;
     }
+    if (VIEW === 's' && !SDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement des asbāb al-nuzūl (94 sourates)…</div>';
+      return;
+    }
+    if (VIEW === 'c' && !CDATA){
+      body.innerHTML = '<div style="opacity:.6;padding:16px">chargement du Catéchisme…</div>';
+      return;
+    }
     var q = norm((document.getElementById('v170-q') || {}).value || '').trim();
     if (VIEW === 'q') renderQ(q); else if (VIEW === 'd') renderD(q); else if (VIEW === 'a') renderA(q);
-    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q); else renderP(q);
+    else if (VIEW === 'l') renderL(q); else if (VIEW === 'v') renderV(q);
+    else if (VIEW === 's') renderS(q); else if (VIEW === 'c') renderC(q);
+    else renderP(q);
+  }
+
+  /* ═══ v439 — vues ASBĀB AL-NUZŪL & CATÉCHISME ═══ */
+  var SDATA = null, CDATA = null;
+
+  /* Asbāb al-nuzūl : 94 fichiers tradition/asbab/sNNN.json, chargés à la
+     première ouverture de l'onglet (6 en parallèle, barre de progression). */
+  function sLoad(){
+    var files = [];
+    for (var i = 1; i <= 114; i++) files.push(i);
+    var done = 0, items = [], idx = 0;
+    var st = document.getElementById('v170-status');
+    function tick(){
+      done++;
+      if (st) st.textContent = '⏳ Asbāb al-nuzūl : ' + done + '/' + files.length + ' sourates…';
+      if (done === files.length) {
+        SDATA = { items: items };
+        LOADING = false;
+        if (st) st.textContent = '✅ ' + items.length + ' notices asbāb al-nuzūl chargées (7 ouvrages Shamela).';
+        render();
+      }
+    }
+    function next(){
+      if (idx >= files.length) return;
+      var s = files[idx++];
+      fetch('tradition/asbab/s' + String(s).padStart(3, '0') + '.json', { cache: 'no-store' })
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(j){
+          if (j && j.e && j.e.length) {
+            j.e.forEach(function(e){ items.push({ s: s, v: e.v, src: e.src, t: e.t }); });
+          }
+        })
+        .catch(function(){})
+        .then(function(){ tick(); next(); });
+    }
+    for (var k = 0; k < 6; k++) next();
+  }
+
+  /* Catéchisme de l'Église catholique (fr) : un seul fichier JSON. */
+  function cLoad(){
+    var st = document.getElementById('v170-status');
+    fetch('tradition/cec/cec_fr.json').then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        CDATA = (j && j.paragraphes && j.paragraphes.length) ? j : false;
+        LOADING = false; render();
+        if (st) st.textContent = CDATA
+          ? '✅ Catéchisme : ' + CDATA.count + ' paragraphes (vatican.va, édition française).'
+          : '⚠ Corpus du Catéchisme indisponible (tradition/cec/cec_fr.json).';
+      })
+      .catch(function(){
+        CDATA = false; LOADING = false; render();
+        if (st) st.textContent = '⚠ Corpus du Catéchisme indisponible.';
+      });
+  }
+
+  /* ── vue Asbāb al-nuzūl ── */
+  function renderS(q){
+    var body = document.getElementById('v170-body');
+    var items = (SDATA && SDATA.items) || [];
+    var res = items;
+    if (q) {
+      res = items.filter(function(e){
+        return norm(e.t).indexOf(q) !== -1 || norm(e.src).indexOf(q) !== -1 ||
+               (e.s + ':' + e.v).indexOf(q) !== -1 || norm(String(e.s)).indexOf(q) !== -1;
+      });
+    }
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = res.length + ' notice(s) sur ' + items.length + ' — 🇫🇷 traduit un récit à la demande.';
+    if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucune notice.</div>'; return; }
+    var max = 40, shown = res.slice(0, max);
+    var h = '';
+    shown.forEach(function(e){
+      var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
+      h += '<div style="margin:8px 0;padding:8px 10px;border:1px solid rgba(159,224,160,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+         + '<div style="font-size:10.5px;color:#8fa3b8;margin-bottom:3px">Sourate ' + e.s + ' : ' + e.v
+         + ' &nbsp;<span title="' + esc(full) + '" style="color:#bfe0c8;border:1px solid rgba(159,224,160,.4);border-radius:10px;padding:0 6px;font-size:9.5px">' + esc(e.src) + '</span></div>'
+         + '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:13.5px;line-height:1.9;color:#e8dcc0;padding:4px 0">' + esc(e.t) + '</div>'
+         + '<button class="asb-tr" style="pointer-events:auto;background:rgba(79,142,247,.15);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:10.5px">🇫🇷 Traduire (IA)</button>'
+         + '</div>';
+    });
+    if (res.length > max) h += '<div style="opacity:.6;padding:10px;font-size:11.5px">… et ' + (res.length - max) + ' autre(s) — affinez le filtre.</div>';
+    body.innerHTML = h;
+  }
+
+  /* ── vue Catéchisme (CEC) ── */
+  function renderC(q){
+    var body = document.getElementById('v170-body');
+    var items = (CDATA && CDATA.paragraphes) || [];
+    var res = items;
+    if (q) {
+      res = items.filter(function(e){
+        return norm(e.t).indexOf(q) !== -1 || norm(e.ctx).indexOf(q) !== -1 ||
+               String(e.n) === q || String(e.n).indexOf(q) === 0;
+      });
+    }
+    var st = document.getElementById('v170-status');
+    if (st) st.textContent = res.length + ' paragraphe(s) sur ' + items.length + ' — Catéchisme de l\'Église catholique (1992).';
+    if (!res.length) { body.innerHTML = '<div style="opacity:.6;padding:16px">Aucun paragraphe.</div>'; return; }
+    var max = 40, shown = res.slice(0, max);
+    var h = '';
+    shown.forEach(function(e){
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,142,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+         + '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:3px">§ ' + e.n + '</div>'
+         + (e.ctx ? '<div style="font-size:10.5px;color:#8fa3b8;margin-bottom:4px">' + esc(e.ctx) + '</div>' : '')
+         + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(e.t) + '</div>'
+         + '</div>';
+    });
+    if (res.length > max) h += '<div style="opacity:.6;padding:10px;font-size:11.5px">… et ' + (res.length - max) + ' autre(s) — affinez (ex. « 261 »).</div>';
+    body.innerHTML = h;
   }
 
   function load(){
     LOADING = true;
+    /* v439 — asbāb & catéchisme : chargement propre, hors de la chaîne existante */
+    if (VIEW === 's'){ if (!SDATA) sLoad(); else LOADING = false; return; }
+    if (VIEW === 'c'){ if (!CDATA) cLoad(); else LOADING = false; return; }
     if (VIEW === 'q' && !DATA){
       fetch('tradition/ta_sujets.json').then(function(r){ return r.ok ? r.json() : null; })
         .then(function(j){ DATA = (j && j.topics && j.topics.length) ? j : false; LOADING = false; render(); })
@@ -47929,8 +48068,10 @@ window.continueTradApart = async function (msgId) {
        • mémoire partagée __theoTM (localStorage theo_tm_v1) : un texte déjà
          traduit par n'importe quelle voie est rendu instantanément, sans appel ;
        • repli sur la traduction native si aucune clé API n'est configurée. */
+  /* Renvoie toujours une Promise : permet l'enchaînement séquentiel du
+     bouton « Tout traduire » sans sondage ni double appel. */
   function asbabTraduire(btn, txt){
-    if (!txt) return;
+    if (!txt) return Promise.resolve();
     var wrap = btn.parentNode;
     var out = wrap.querySelector('.asb-tr-out');
     if (!out) {
@@ -47945,27 +48086,27 @@ window.continueTradApart = async function (msgId) {
     if (out.dataset.done === '1' && out.dataset.busy !== '1') {
       out.style.display = (out.style.display === 'none') ? '' : 'none';
       btn.textContent = (out.style.display === 'none') ? '🇫🇷 Traduire (IA)' : '🇫🇷 Masquer';
-      return;
+      return Promise.resolve();
     }
-    if (out.dataset.busy === '1') return;
+    if (out.dataset.busy === '1') return Promise.resolve();
     var lang = 'fr';
     var memo = (window.__theoTM && window.__theoTM.get) ? window.__theoTM.get(txt, lang) : null;
     if (memo) {
       out.textContent = memo; out.dataset.done = '1'; btn.textContent = '🇫🇷 Masquer';
-      return;
+      return Promise.resolve();
     }
     var cfg = null;
     try { cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig(state && state.model) : null; } catch(e){ cfg = null; }
     if (!cfg || !cfg.apiKey) {
       out.textContent = '⚠️ Aucune clé API : ouvrez ⬡ CLÉ API. Repli traduction native…';
       if (window.__LT && typeof window.__LT.translate === 'function') window.__LT.translate(txt, btn.getBoundingClientRect());
-      return;
+      return Promise.resolve();
     }
     out.dataset.busy = '1';
     btn.disabled = true;
     out.textContent = '⏳ Traduction IA…';
     var sys = 'You are a translator specialised in early Islamic sources. Translate the following Arabic text (a report on the occasions of revelation, asbab al-nuzul) into French. Rules: translate faithfully and completely, keep the narrative style, transliterate proper names consistently, keep technical terms and give the Arabic in parentheses for key terms, add no commentary or notes, and return ONLY the French translation.';
-    callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: txt }], { temperature: 0.2, max_tokens: 2000 })
+    return callLLM(cfg, [{ role: 'system', content: sys }, { role: 'user', content: txt }], { temperature: 0.2, max_tokens: 2000 })
       .then(function(r){
         out.dataset.busy = ''; btn.disabled = false;
         var tr = String(r || '').trim();
@@ -47977,6 +48118,29 @@ window.continueTradApart = async function (msgId) {
         out.dataset.busy = ''; btn.disabled = false;
         out.textContent = '⚠️ Erreur traduction : ' + (e && e.message ? e.message : e);
       });
+  }
+  /* exposé pour l'onglet ASBĀB du modal SUJETS */
+  window.__asbabTranslate = asbabTraduire;
+
+  /* v438 — traduction EN MASSE : enchaîne tous les récits du verset, avec
+     progression. Séquentiel (pas de rafale) pour ménager le quota API ; les
+     textes déjà en mémoire sont sautés (coût nul). */
+  async function asbabToutTraduire(box, allBtn){
+    var btns = Array.prototype.slice.call(box.querySelectorAll('.asb-tr'));
+    if (!btns.length) return;
+    var total = btns.length;
+    allBtn.disabled = true;
+    for (var i = 0; i < btns.length; i++) {
+      var o = btns[i].parentNode.querySelector('.asb-tr-out');
+      if (o && o.dataset.done === '1') continue;
+      allBtn.textContent = '⏳ ' + (i + 1) + '/' + total;
+      try {
+        var ar = btns[i].parentNode.querySelector('[dir="rtl"]');
+        await asbabTraduire(btns[i], ar ? ar.textContent : '');
+      } catch (e) { /* on continue avec le suivant */ }
+    }
+    allBtn.disabled = false;
+    allBtn.textContent = '✅ Traduit (' + total + ')';
   }
 
   window.__asbabAppend = function(sura, v1, v2, tip){
@@ -47993,7 +48157,9 @@ window.continueTradApart = async function (msgId) {
       hits.forEach(function(e){ srcs[e.src] = 1; });
       var h = '<div style="margin-top:7px;padding-top:6px;border-top:1px dashed rgba(159,224,160,.4)">' +
         '<div style="color:#9fe0a0;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;">📖 Asbāb al-nuzūl — ' +
-        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)</div>';
+        hits.length + ' récit(s) · ' + Object.keys(srcs).length + ' source(s)' +
+        ' <button class="asb-tr-all" title="Traduire tous les récits de ce verset (IA, séquentiel, avec mémoire)" style="pointer-events:auto;background:rgba(79,142,247,.18);color:#cfe0ff;' +
+        'border:1px solid rgba(79,142,247,.45);border-radius:6px;padding:1px 8px;cursor:pointer;font-size:10px;letter-spacing:0;text-transform:none;">🌐 Tout traduire</button></div>';
       hits.forEach(function(e){
         var full = (window.__ASBAB_SRC && window.__ASBAB_SRC[e.src]) ? window.__ASBAB_SRC[e.src] : e.src;
         h += '<div style="margin:6px 0">' +
@@ -48021,6 +48187,12 @@ window.continueTradApart = async function (msgId) {
           if (!ar) return;
           asbabTraduire(b, ar.textContent || '');
         });
+      });
+      /* v438 — traduction en masse de tous les récits du verset */
+      var allBtn = box.querySelector('.asb-tr-all');
+      if (allBtn) allBtn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        asbabToutTraduire(box, allBtn);
       });
     }).catch(function(){});
   };
