@@ -49356,6 +49356,274 @@ window.continueTradApart = async function (msgId) {
   window.__v447Par = { ouvre: ouvre, cherche: cherche, chercheValtorta: chercheValtorta, chercheParBible: chercheParBible, chercheParCoran: chercheParCoran };
 })();
 </script>
+<script id="v448-sem">
+/* ═══════════════════════════════════════════════════════════════════
+   v448 — RECHERCHE SÉMANTIQUE LOCALE (Ollama + embeddings).
+   La recherche littérale ne trouve pas « fils par adoption » dans
+   « fils adoptifs ». Ce module offre :
+     • index vectoriel LOCAL : les corpus choisis sont découpés en
+       passages, embeddés via Ollama (nomic-embed-text, 768 d) et
+       persistés dans IndexedDB (base dédiée « theologicus_sem ») ;
+     • recherche par SENS : la requête est embeddée, produit scalaire
+       sur vecteurs normalisés, top-k avec score ;
+     • repli LITTÉRAL renforcé (accents, pluriels, ET de tokens) si
+       Ollama est absent ou si le corpus n'est pas encore indexé.
+   Corpora : CEC (2 865 §), Valtorta (693 épisodes), Denzinger
+   (130 œuvres aplatties). Aucune donnée ne quitte la machine.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v448-sem-modal';
+  const MODEL = 'nomic-embed-text', DIM = 768, BASE = 'http://127.0.0.1:11434';
+  const DB_NAME = 'theologicus_sem', STORE = 'v448_vec';
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  /* ── IndexedDB dédiée ── */
+  let DBP = null;
+  function db() {
+    if (DBP) return DBP;
+    DBP = new Promise((res, rej) => {
+      const rq = indexedDB.open(DB_NAME, 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore(STORE);
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+    return DBP;
+  }
+  const tx = async (mode, fn) => {
+    const d = await db();
+    return new Promise((res, rej) => {
+      const t = d.transaction(STORE, mode), s = t.objectStore(STORE);
+      const rq = fn(s);
+      t.oncomplete = () => res(rq && rq.result);
+      t.onerror = () => rej(t.error);
+    });
+  };
+  const idbPut = (k, v) => tx('readwrite', s => s.put(v, k));
+  const idbGet = k => tx('readonly', s => s.get(k));
+  const idbCount = () => tx('readonly', s => s.count());
+  const idbRange = corpus => new Promise(async (res, rej) => {
+    const d = await db();
+    const out = [];
+    const t = d.transaction(STORE, 'readonly'), s = t.objectStore(STORE);
+    const c = s.openCursor(IDBKeyRange.bound(corpus + '::', corpus + '::\uffff'));
+    c.onsuccess = () => { const cur = c.result; if (cur) { out.push(cur.value); cur.continue(); } };
+    t.oncomplete = () => res(out);
+    t.onerror = () => rej(t.error);
+  });
+  const idbDelRange = corpus => new Promise(async (res, rej) => {
+    const d = await db();
+    const t = d.transaction(STORE, 'readwrite'), s = t.objectStore(STORE);
+    const c = s.openCursor(IDBKeyRange.bound(corpus + '::', corpus + '::\uffff'));
+    c.onsuccess = () => { const cur = c.result; if (cur) { cur.delete(); cur.continue(); } };
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+
+  /* ── corpus ── */
+  const STATS = { cec: 0, vlt: 0, ddz: 0 };
+  async function corpusCec() {
+    const j = await (await fetch('tradition/cec/cec_fr.json')).json();
+    return (j.paragraphes || []).map(p => ({ ref: 'CEC ' + p.n, text: p.t, ctx: (p.ctx || '').split('›').pop().trim().slice(0, 60) }));
+  }
+  async function corpusVlt() {
+    const j = await (await fetch('tradition/valtorta.json')).json();
+    return (j.episodes || []).map(e => ({
+      ref: (e.emv ? 'EMV ' + e.emv : 'Tome ' + e.tome) + ' — ' + (e.title || e.t || '').slice(0, 70),
+      text: (e.title || e.t || '') + '. ' + (e.lieu || '') + '. ' + ((e.refs || []).concat(e.cit || []).map(r => r.raw || '').join(' ; ')),
+      ctx: 'Valtorta — Tome ' + e.tome, u: e.u
+    })).filter(x => x.text.replace(/[. ;]/g, '').length > 8);
+  }
+  async function corpusDdz() {
+    const out = [];
+    for (let i = 1; i <= 130; i++) {
+      const f = 'denzinger/ddz_' + ('00' + i).slice(-3) + '.js';
+      try {
+        const t = await (await fetch(f)).text();
+        const j = JSON.parse(t.slice(t.indexOf('{')).replace(/;\s*$/, ''));
+        let n = 0;
+        (j.c || []).forEach(ch => (ch.s || []).forEach(se => (se.p || []).forEach(p => {
+          n++; if (String(p).trim().length > 20) out.push({ ref: 'Denz. ' + j.id + ' §' + n, text: String(p), ctx: (ch.t || '').slice(0, 60) });
+        })));
+      } catch (e) { /* fichier absent : on continue */ }
+    }
+    return out;
+  }
+  const LOADERS = { cec: corpusCec, vlt: corpusVlt, ddz: corpusDdz };
+  const LIBELLES = { cec: '📕 Catéchisme (CEC)', vlt: '🌊 Valtorta (épisodes)', ddz: '⚖️ Denzinger' };
+
+  /* ── embeddings ── */
+  async function ollamaOk() {
+    try {
+      const c = new AbortController(); const t = setTimeout(() => c.abort(), 1500);
+      const r = await fetch(BASE + '/v1/models', { signal: c.signal }); clearTimeout(t);
+      return r.ok;
+    } catch (e) { return false; }
+  }
+  async function embed(texts) {
+    const r = await fetch(BASE + '/v1/embeddings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, input: texts })
+    });
+    if (!r.ok) throw new Error('embeddings HTTP ' + r.status);
+    const j = await r.json();
+    return j.data.sort((a, b) => a.index - b.index).map(d => d.embedding);
+  }
+  const normVec = v => { let s = 0; for (let i = 0; i < v.length; i++) s += v[i] * v[i]; s = Math.sqrt(s) || 1; return v.map(x => x / s); };
+  const cos = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+
+  /* ── indexation ── */
+  let INDEXATION = false;
+  async function indexer(corpus, opts) {
+    const o = opts || {};
+    const statut = document.getElementById('v448-sem-statut');
+    const bar = document.getElementById('v448-sem-bar');
+    const say = m => { if (statut) statut.textContent = m; };
+    if (INDEXATION) return { ok: false, err: 'indexation déjà en cours' };
+    if (!(await ollamaOk())) return { ok: false, err: 'Ollama injoignable (lancer Ollama, ou utiliser le repli littéral)' };
+    INDEXATION = true;
+    try {
+      say('Chargement du corpus…');
+      let items = await LOADERS[corpus]();
+      if (o.limite) items = items.slice(0, o.limite);
+      /* invalider si le modèle a changé */
+      const meta = await idbGet(corpus + '::__meta__');
+      if (meta && (meta.model !== MODEL || meta.dim !== DIM)) await idbDelRange(corpus);
+      const faits = {};
+      (await idbRange(corpus)).forEach(r => faits[r.k] = true);
+      const todo = items.map((it, i) => ({ it: it, i: i })).filter(x => !faits[corpus + '::' + x.i]);
+      if (!todo.length) { say(corpus + ' : déjà indexé (' + items.length + ' passages).'); INDEXATION = false; return { ok: true, indexed: 0, total: items.length }; }
+      const B = 24;
+      for (let d = 0; d < todo.length; d += B) {
+        const lot = todo.slice(d, d + B);
+        const vecs = await embed(lot.map(x => x.it.text));
+        for (let k = 0; k < lot.length; k++) {
+          await idbPut(corpus + '::' + lot[k].i, { k: corpus + '::' + lot[k].i, corpus: corpus, ref: lot[k].it.ref, text: lot[k].it.text, ctx: lot[k].it.ctx || '', u: lot[k].it.u || '', vec: normVec(vecs[k]) });
+        }
+        if (bar) bar.style.width = Math.min(100, Math.round((d + lot.length) / todo.length * 100)) + '%';
+        say('Indexation ' + corpus + ' : ' + Math.min(d + B, todo.length) + ' / ' + todo.length);
+      }
+      await idbPut(corpus + '::__meta__', { k: corpus + '::__meta__', model: MODEL, dim: DIM });
+      STATS[corpus] = (await idbRange(corpus)).length;
+      say(corpus + ' indexé : ' + items.length + ' passages · modèle ' + MODEL);
+      return { ok: true, indexed: todo.length, total: items.length };
+    } catch (e) {
+      say('Erreur d\u2019indexation : ' + e.message);
+      return { ok: false, err: String(e.message || e) };
+    } finally { INDEXATION = false; }
+  }
+
+  /* ── recherche ── */
+  async function recherche(q, opts) {
+    const o = opts || {};
+    const statut = document.getElementById('v448-sem-statut');
+    const say = m => { if (statut) statut.textContent = m; };
+    const corpora = o.corpora || Object.keys(LOADERS);
+    const items = [];
+    for (const c of corpora) (await idbRange(c)).forEach(r => items.push(r));
+    const tn = norm(q).split(/\s+/).filter(w => w.length > 2).map(w => w.replace(/s$/, ''));
+    const ai = tn.join(' ');
+    const litt = it => { const t = norm(it.text); return tn.every(w => t.indexOf(w) >= 0); };
+    if (items.length && (await ollamaOk())) {
+      say('Recherche sémantique (' + items.length + ' passages indexés)…');
+      const qv = normVec((await embed([q]))[0]);
+      items.forEach(it => { it._s = it.vec && it.vec.length === qv.length ? cos(qv, it.vec) : -1; });
+      items.sort((a, b) => b._s - a._s);
+      const top = items.filter(x => x._s > 0.2).slice(0, o.k || 12);
+      rendu(top, true);
+      say('Sémantique — ' + items.length + ' passages · seuil 0.20 · ' + top.length + ' résultat(s).');
+      return { mode: 'sem', n: top.length, hits: top.map(x => ({ ref: x.ref, text: x.text, score: x._s })) };
+    }
+    /* repli littéral renforcé */
+    say('Ollama absent ou corpus non indexé — repli littéral renforcé.');
+    let hits = [];
+    for (const c of corpora) {
+      try { (await LOADERS[c]()).forEach((it, i) => { if (litt(it) || (ai && norm(it.text).indexOf(ai) >= 0)) hits.push({ ref: it.ref, text: it.text, ctx: it.ctx || '', u: it.u || '', _s: null }); }); } catch (e) {}
+    }
+    hits = hits.slice(0, o.k || 12);
+    rendu(hits, false);
+    say('Littéral renforcé — ' + hits.length + ' résultat(s). Indexez un corpus pour la recherche par sens.');
+    return { mode: 'lit', n: hits.length, hits: hits.map(x => ({ ref: x.ref, text: x.text })) };
+  }
+  function rendu(hits, sem) {
+    const el = document.getElementById('v448-sem-res');
+    if (!el) return;
+    if (!hits.length) { el.innerHTML = '<div style="opacity:.6;padding:14px;font-size:12px">Aucun résultat.</div>'; return; }
+    el.innerHTML = hits.map(h =>
+      '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,195,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+      + '<div style="font-size:10.5px;color:#8fa3b8">' + (sem && h._s != null ? '<span style="color:#81c784;font-weight:700">' + Math.round(h._s * 100) + '%</span> · ' : '') + esc(h.ref) + (h.ctx ? ' · ' + esc(h.ctx) : '') + '</div>'
+      + '<div style="font-size:12.5px;line-height:1.6;color:#eaf4ff;margin-top:3px">' + esc(String(h.text).slice(0, 320)) + (String(h.text).length > 320 ? '…' : '') + '</div>'
+      + (h.u ? '<a href="' + esc(h.u) + '" target="_blank" style="font-size:11px;color:#4fc3f7">ouvrir ↗</a>' : '')
+      + '</div>').join('');
+  }
+
+  /* ── modal ── */
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(880px,95vw);max-height:90vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6)">'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">🔎 RECHERCHE PAR SENS <span style="font-weight:400;font-size:10.5px;color:#8fa3b8">(locale · Ollama)</span></div>'
+      + '<div style="flex:1"></div>'
+      + '<label style="font-size:11px;color:#cfe0ff"><input type="checkbox" class="v448-corpus" value="cec" checked> 📕 CEC</label>'
+      + '<label style="font-size:11px;color:#cfe0ff"><input type="checkbox" class="v448-corpus" value="vlt" checked> 🌊 Valtorta</label>'
+      + '<label style="font-size:11px;color:#cfe0ff"><input type="checkbox" class="v448-corpus" value="ddz"> ⚖️ Denzinger</label>'
+      + '<button id="v448-idx" title="Embedder les corpus cochés (une fois, persistant)" style="background:rgba(129,199,132,.18);color:#c8e6c9;border:1px solid rgba(129,199,132,.4);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">⚙️ Indexer</button>'
+      + '<button id="v448-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div style="height:3px;background:rgba(79,195,247,.1)"><div id="v448-sem-bar" style="height:3px;width:0;background:#4fc3f7;transition:width .3s"></div></div>'
+      + '<div style="display:flex;gap:8px;padding:12px 16px">'
+      + '<input id="v448-sem-q" placeholder="Ex : « la liberté religieuse », « Dieu se révèle aux hommes », « fils par adoption »…" style="flex:1;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,195,247,.35);border-radius:8px;padding:8px 12px;font-size:12.5px">'
+      + '<button id="v448-go" style="background:rgba(79,195,247,.25);color:#fff;border:1px solid rgba(79,195,247,.5);border-radius:8px;padding:6px 16px;cursor:pointer;font-size:12px;font-weight:700">Chercher</button>'
+      + '</div>'
+      + '<div id="v448-sem-res" style="flex:1;overflow-y:auto;padding:2px 16px 12px"></div>'
+      + '<div id="v448-sem-statut" style="padding:7px 16px;border-top:1px solid rgba(79,195,247,.15);font-size:10.5px;color:#8fa3b8">Indexez un corpus (⚙️) pour la recherche par sens — sinon repli littéral renforcé.</div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v448-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    m.querySelector('#v448-go').onclick = () => chercheUI();
+    m.querySelector('#v448-sem-q').addEventListener('keydown', e => { if (e.key === 'Enter') chercheUI(); });
+    m.querySelector('#v448-idx').onclick = async () => {
+      const cs = Array.from(m.querySelectorAll('.v448-corpus:checked')).map(x => x.value);
+      for (const c of cs) await indexer(c);
+    };
+    return m;
+  }
+  async function chercheUI() {
+    const q = (document.getElementById('v448-sem-q') || {}).value || '';
+    const cs = Array.from(document.querySelectorAll('.v448-corpus:checked')).map(x => x.value);
+    if (!q.trim()) return;
+    document.getElementById('v448-sem-res').innerHTML = '<div style="opacity:.6;padding:14px;font-size:12px">Recherche…</div>';
+    await recherche(q, { corpora: cs });
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+  function ouvre(q) {
+    ensureModal();
+    if (q) { document.getElementById('v448-sem-q').value = q; chercheUI(); }
+  }
+
+  function bouton() {
+    const ancre = document.getElementById('v447-par-btn') || document.getElementById('v445-fiche-btn') || document.getElementById('v444-plans-btn') || document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v448-sem-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v448-sem-btn';
+    b.className = 'hud-btn';
+    b.title = 'RECHERCHE PAR SENS — embeddings locaux Ollama, index persistant, repli littéral';
+    b.textContent = '🔎 SENS';
+    b.addEventListener('click', () => ouvre());
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v448Sem = { ouvre: ouvre, recherche: recherche, indexer: indexer, ollamaOk: ollamaOk, stats: () => STATS, idbCount: idbCount };
+})();
+</script>
 </body>
 </html>
 </html>
