@@ -49624,6 +49624,156 @@ window.continueTradApart = async function (msgId) {
   window.__v448Sem = { ouvre: ouvre, recherche: recherche, indexer: indexer, ollamaOk: ollamaOk, stats: () => STATS, idbCount: idbCount };
 })();
 </script>
+<script id="v449-phon-tts">
+/* ═══════════════════════════════════════════════════════════════════
+   v449 — PRONONCIATION 🔊 DANS LES INFOBULLES DE MOTS ET DE VERSETS.
+   Les infobulles de mot-à-mot (hébreu v89, grec v93, arabe qwbw) montrent
+   déjà la translittération, mais rien ne se prononce. Ce module ajoute :
+     • un bouton 🔊 dans chaque infobulle de mot (hb-tip, gr-tip, qw-tip) ;
+     • un bouton 🔊 en fin de ligne mot-à-mot du panneau de verset pour
+       écouter le verset dans sa langue source, mot après mot.
+   Routage : la chaîne TTS existante (Supertonic 3 local par défaut,
+   ElevenLabs en option, voix système en repli) via ttsEmission(texte, lang).
+   Stratégie par mot : tentative NATIVE (arabe et grec ont des voix
+   Supertonic ; hébreu via eleven_v3 si configuré) puis repli automatique
+   sur la PHONÉTIQUE latine du moteur v37 (niqqud, dagesh, aleph/ayin muets,
+   harakat) lue par la voix française.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__v449Phon) return;
+
+  var TIPS = [
+    { id: 'hb-tip', sel: '.hb-mot', lig: 'hb-lig', cle: 'hb-cle', lang: 'hebrew', nom: 'hébreu' },
+    { id: 'gr-tip', sel: '.gr-mot', lig: 'gr-lig', cle: 'gr-cle', lang: 'greek',  nom: 'grec'  },
+    { id: 'qw-tip', sel: '.qw-mot', lig: 'qw-ligne', cle: 'qw-cle', lang: 'arabic', nom: 'arabe' }
+  ];
+  var LANG_TTS = { hebrew: 'hebreu', greek: 'grec', arabic: 'arabe' };
+
+  function lireTranslit(tip, cfg) {
+    var lig = tip.querySelector('.' + cfg.lig);
+    if (!lig) return '';
+    var cle = lig.querySelector('.' + cfg.cle);
+    var t = lig.textContent || '';
+    if (cle) t = t.replace(cle.textContent, '');
+    return t.replace(/^\s*:?\s*/, '').trim();
+  }
+
+  /* prononce un mot : natif puis repli phonétique latin. Retourne le canal. */
+  function prononce(mot, lang, translit) {
+    mot = String(mot || '').trim();
+    if (!mot) return null;
+    if (typeof ttsStop === 'function') ttsStop();
+    var tr = translit || (window.__V37 && typeof window.__V37[lang] === 'function' ? window.__V37[lang](mot) : null);
+    if (typeof ttsEmission === 'function') {
+      var okNatif = ttsEmission(mot, LANG_TTS[lang] || 'francais', null, function () {
+        /* voix native absente (ex : hébreu sans eleven_v3) → phonétique */
+        if (tr && typeof ttsEmission === 'function') ttsEmission(tr, 'francais', null, null);
+      });
+      if (okNatif) return 'natif';
+    }
+    if (tr && typeof ttsEmission === 'function' && ttsEmission(tr, 'francais', null, null)) return 'translit';
+    return null;
+  }
+
+  /* prononce une suite de mots {txt, lang} l'un après l'autre */
+  function prononceChaine(mots) {
+    if (typeof ttsStop === 'function') ttsStop();
+    if (!mots || !mots.length) return 0;
+    var i = 0;
+    (function next() {
+      if (i >= mots.length) return;
+      var m = mots[i++];
+      var tr = window.__V37 && window.__V37[m.lang] ? window.__V37[m.lang](m.txt) : null;
+      var ok = typeof ttsEmission === 'function' && ttsEmission(m.txt, LANG_TTS[m.lang] || 'francais', next, function () {
+        if (tr && typeof ttsEmission === 'function') ttsEmission(tr, 'francais', next, function () { next(); });
+      });
+      if (!ok && tr && typeof ttsEmission === 'function') { if (!ttsEmission(tr, 'francais', next, function () { next(); })) next(); }
+      else if (!ok) next();
+    })();
+    return mots.length;
+  }
+
+  /* ── bouton 🔊 dans les trois infobulles de mots ── */
+  var BTN_CSS = 'position:absolute;top:5px;right:6px;background:rgba(79,195,247,.18);' +
+    'color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;' +
+    'padding:2px 7px;cursor:pointer;font-size:13px;line-height:1.4;z-index:2;';
+  function ajouteBouton(tip, cfg) {
+    if (!tip || tip.querySelector('.v449-btn')) return;
+    var mot = tip.querySelector(cfg.sel);
+    if (!mot || !String(mot.textContent || '').trim()) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'v449-btn';
+    b.title = 'Prononcer (' + cfg.nom + ')';
+    b.textContent = '🔊';
+    b.setAttribute('data-v449', '1');
+    b.style.cssText = BTN_CSS;
+    var tr = lireTranslit(tip, cfg);
+    b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    b.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      prononce(mot.textContent, cfg.lang, tr);
+    });
+    tip.appendChild(b);
+  }
+  var raf = window.requestAnimationFrame || function (f) { setTimeout(f, 16); };
+  function observeTip(id, cfg) {
+    var el = document.getElementById(id);
+    if (!el || el.__v449Obs) return;
+    el.__v449Obs = true;
+    new MutationObserver(function () { raf(function () { ajouteBouton(el, cfg); }); })
+      .observe(el, { childList: true, attributes: true, attributeFilter: ['style'] });
+  }
+
+  /* ── bouton 🔊 « verset en langue source » dans le panneau de verset ── */
+  function boutonVerset(slot) {
+    if (!slot || slot.querySelector('.v449-verse-btn')) return;
+    var hb = slot.querySelectorAll('.hb[data-h]').length;
+    var gr = slot.querySelectorAll('.gr[data-g]').length;
+    if (!hb && !gr) return;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'v449-verse-btn';
+    b.title = 'Écouter le verset en ' + (gr ? 'grec' : 'hébreu') + ' (mot à mot)';
+    b.textContent = '🔊 ' + (gr ? 'grec' : 'hébreu');
+    b.setAttribute('data-v449', '1');
+    b.style.cssText = 'display:inline-block;margin-left:8px;background:rgba(79,195,247,.18);' +
+      'color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;' +
+      'padding:2px 8px;cursor:pointer;font-size:11px;vertical-align:middle;';
+    b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    b.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      var mots = [];
+      slot.querySelectorAll('.hb[data-h]').forEach(function (s) {
+        mots.push({ txt: s.getAttribute('data-h'), lang: 'hebrew' });
+      });
+      slot.querySelectorAll('.gr[data-g]').forEach(function (s) {
+        mots.push({ txt: s.getAttribute('data-g'), lang: 'greek' });
+      });
+      prononceChaine(mots);
+    });
+    slot.appendChild(b);
+  }
+  /* le slot se remplit au survol du verset : on injecte le bouton à ce moment */
+  document.addEventListener('mouseover', function (e) {
+    var m = e.target && e.target.closest ? e.target.closest('.hb, .gr') : null;
+    if (!m) return;
+    var slot = m.closest ? m.closest('#hb-slot') : null;
+    if (slot) boutonVerset(slot);
+  }, true);
+
+  function boot() {
+    TIPS.forEach(function (cfg) { observeTip(cfg.id, cfg); });
+    var slot = document.getElementById('hb-slot');
+    if (slot) boutonVerset(slot);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  window.__v449Phon = { prononce: prononce, prononceChaine: prononceChaine, boutonVerset: boutonVerset };
+})();
+</script>
 </body>
 </html>
 </html>
