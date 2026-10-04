@@ -49109,6 +49109,253 @@ window.continueTradApart = async function (msgId) {
   window.__v446Refs = { applique: applique, parseRef: parseRef, popupBible: popupBible, popupCec: popupCec, livre: livre, LIVRES: LIVRES };
 })();
 </script>
+<script id="v447-parallele">
+/* ═══════════════════════════════════════════════════════════════════
+   v447 — LECTEUR PARALLÈLE LIÉ.
+   Les corpus magnifiques de l'app (Bible de Jérusalem, index Valtorta,
+   parallèles Biblie-Coran curés v190, panneau Tafsīr v183) étaient
+   consultés SÉPARÉMENT : aucune mise en regard automatique.
+   Ce module offre une vue 3 colonnes :
+     • Mode BIBLE  : référence (ex « Jn 2,1-11 ») → texte BJ | épisodes
+       Valtorta correspondants | parallèles coraniques curés ;
+     • Mode CORAN  : « 2:255 » → verset arabe+fr | parallèles bibliques
+       (texte BJ réel) | épisodes Valtorta reliés à ces parallèles.
+   Tout est local (valtorta.json, paralleles.json, bible/bN.js,
+   quran/qN.js) ; le parseur de références est celui de v446.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v447-par-modal';
+  let MODE = 'bible';
+  let VLT = null, PAR = null;
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  async function valtorta(){ if (VLT) return VLT; const r = await fetch('tradition/valtorta.json'); VLT = await r.json(); return VLT; }
+  async function paralleles(){ if (PAR) return PAR; const r = await fetch('tradition/paralleles.json'); PAR = await r.json(); return PAR; }
+
+  /* id numérique v446 → abréviations des corpus curés (valtorta.json,
+     paralleles.json). Certains livres ont deux graphies (Hab/Heb…). */
+  const CODES = {1:'gn',2:'ex',3:'lv',4:'nb',5:'dt',6:'js',7:'jg',8:'rt',9:'1s',10:'2s',11:'1r',12:'2r',13:'1ch',14:'2ch',15:'esd',16:'ne',17:'est',18:'jb',19:'ps',20:'pr',21:'qo',22:'ct',23:'is',24:'jr',25:'lm',26:'ez',27:'dn',28:'os',29:'jl',30:'am',31:'ab',32:'jon',33:'mi',34:'na',35:'hab',36:'so',37:'ag',38:'za',39:'ml',40:'mt',41:'mc',42:'lc',43:'jn',44:'ac',45:'rm',46:'1co',47:'2co',48:'ga',49:'ep',50:'ph',51:'col',52:'1th',53:'2th',54:'1tm',55:'2tm',56:'tt',57:'phm',58:'hb',59:'jc',60:'1p',61:'2p',62:'1jn',63:'2jn',64:'3jn',65:'jd',66:'ap'};
+  const ALT = {21:['qo','ec','sg'],22:['ct','sg'],35:['hab','hb'],58:['hb','he'],17:['est','et']};
+
+  const chevauche = (r, v1, v2) => {
+    const a = r.v1 || 1, b = r.v2 || r.v1 || 1;
+    return a <= v2 && b >= v1;
+  };
+
+  function chercheValtorta(code, ch, v1, v2){
+    if (!VLT) return [];
+    const alts = [code].concat(ALT[code] || []);
+    return VLT.episodes.filter(e =>
+      ((e.refs || []).concat(e.cit || [])).some(r =>
+        alts.indexOf(r.b) >= 0 && r.c === ch && chevauche(r, v1, v2)));
+  }
+  /* « Ex 3:14 — glose » → {ref parsée, glose} */
+  function parseRefLoose(s){
+    if (!window.__v446Refs) return null;
+    const t = String(s || '').split('—')[0].split('–')[0].trim();
+    return window.__v446Refs.parseRef(t);
+  }
+  function chercheParBible(livre, ch, v1, v2){
+    if (!PAR) return [];
+    return PAR.paralleles.filter(p => (p.refs || []).some(s => {
+      const r = parseRefLoose(s);
+      return r && r.livre === livre && r.ch === ch && chevauche(r, v1, v2);
+    }));
+  }
+  function chercheParCoran(s, v){
+    if (!PAR) return [];
+    return PAR.paralleles.filter(p => {
+      const m = /^(\d{1,3}):(\d{1,3})(?:-(\d{1,3}))?$/.exec(String(p.q || '').trim());
+      if (!m) return false;
+      return +m[1] === s && (+m[2]) <= v && (+(m[3] || m[2])) >= v;
+    });
+  }
+  async function texteBible(livre, ch, v1, v2){
+    if (!window.__v446Refs) return null;
+    try {
+      const c = (await window.__v446Refs.livre(livre))[String(ch)];
+      if (!c) return null;
+      const out = [];
+      for (let v = v1; v <= Math.min(v2, 200); v++) if (c[String(v)]) out.push({ v: v, t: c[String(v)] });
+      return out.length ? out : null;
+    } catch (e) { return null; }
+  }
+  async function texteCoran(s, v1, v2){
+    try {
+      const t = await (await fetch('quran/q' + s + '.js')).text();
+      const ancre = t.indexOf('||{})[');
+      const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+      const j = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+      const sur = j[s] || (Object.keys(j).length === 1 ? j[Object.keys(j)[0]] : j);
+      const vv = sur.versets || sur;
+      const out = [];
+      for (let v = v1; v <= Math.min(v2, 286); v++) if (vv[String(v)]) out.push({ v: v, t: vv[String(v)].text || vv[String(v)].fr || '', ar: vv[String(v)].arabe || '' });
+      return { nom: sur.nomPhon || ('sourate ' + s), versets: out.length ? out : null };
+    } catch (e) { return { nom: null, versets: null }; }
+  }
+
+  /* ── rendu des colonnes ── */
+  function colTitre(ico, txt) {
+    return '<div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#4fc3f7;margin-bottom:6px;border-bottom:1px solid rgba(79,195,247,.25);padding-bottom:3px">' + ico + ' ' + esc(txt) + '</div>';
+  }
+  function renduTexte(el, versets, titre) {
+    el.innerHTML = colTitre('📖', titre || 'Texte — Bible de Jérusalem (locale)');
+    if (!versets) { el.innerHTML += '<div style="opacity:.6;font-size:12px">Texte introuvable dans le corpus local.</div>'; return; }
+    versets.forEach(x => {
+      el.innerHTML += '<div style="margin:5px 0"><b style="color:#ffc94d">' + x.v + '</b> <span style="font-size:12.5px;line-height:1.6">' + esc(x.t) + '</span>' + (x.ar ? '<div dir="rtl" style="font-size:15px;line-height:1.9;margin-top:2px">' + x.ar + '</div>' : '') + '</div>';
+    });
+  }
+  function renduValtorta(el, eps) {
+    el.innerHTML = colTitre('🌊', 'Maria Valtorta — L\u2019Évangile tel qu\u2019il m\u2019a été révélé');
+    if (!eps.length) { el.innerHTML += '<div style="opacity:.6;font-size:12px">Aucun épisode indexé pour ce passage.</div>'; return; }
+    eps.slice(0, 8).forEach(e => {
+      el.innerHTML += '<div style="margin:6px 0;padding:8px 10px;border:1px solid rgba(79,195,247,.18);border-radius:8px;background:rgba(12,20,36,.5)">'
+        + '<div style="font-size:12.5px;color:#e8dcc0;font-weight:600">' + esc(e.title || e.t || '') + '</div>'
+        + '<div style="font-size:10.5px;color:#8fa3b8;margin-top:2px">' + (e.emv ? 'EMV ' + esc(e.emv) + ' · ' : '') + 'Tome ' + esc(e.tome) + (e.lieu ? ' · ' + esc(e.lieu) : '') + '</div>'
+        + '<a href="' + esc(e.u) + '" target="_blank" style="font-size:11px;color:#4fc3f7">ouvrir sur maria-valtorta.org ↗</a></div>';
+    });
+    if (eps.length > 8) el.innerHTML += '<div style="opacity:.6;font-size:11px">… et ' + (eps.length - 8) + ' autre(s)</div>';
+  }
+  function renduParBible(el, hits) {
+    el.innerHTML = colTitre('🕌', 'Parallèles coraniques curés (v190)');
+    if (!hits.length) { el.innerHTML += '<div style="opacity:.6;font-size:12px">Aucun parallèle curé pour ce passage.</div>'; return; }
+    hits.forEach(h => {
+      el.innerHTML += '<div style="margin:6px 0;padding:8px 10px;border:1px solid rgba(129,199,132,.25);border-radius:8px;background:rgba(12,24,16,.4)">'
+        + '<div style="font-size:12.5px;color:#c8e6c9;font-weight:600">🕌 Coran ' + esc(h.q) + ' — ' + esc(h.t) + '</div>'
+        + '<ul style="margin:4px 0 0 16px;padding:0">' + (h.refs || []).map(s => '<li style="font-size:11.5px;color:#dbe6f3;line-height:1.55">' + esc(s) + '</li>').join('') + '</ul>'
+        + (h.n ? '<div style="font-size:11px;color:#8fa3b8;margin-top:4px;font-style:italic">' + esc(h.n) + '</div>' : '')
+        + (window.__v183Open ? '<button data-v183="' + esc(h.q) + '" style="margin-top:5px;background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10.5px">Tafsīr & asbāb ↗</button>' : '')
+        + '</div>';
+    });
+    el.querySelectorAll('[data-v183]').forEach(b => b.addEventListener('click', () => {
+      const m = /^(\d+):(\d+)/.exec(b.getAttribute('data-v183'));
+      if (m && window.__v183Open) window.__v183Open(+m[1], +m[2]);
+    }));
+  }
+  async function renduParCoran(el, hits) {
+    el.innerHTML = colTitre('📖', 'Parallèles bibliques — texte réel (BJ locale)');
+    if (!hits.length) { el.innerHTML += '<div style="opacity:.6;font-size:12px">Aucun parallèle curé pour ce verset.</div>'; return; }
+    for (const h of hits) {
+      el.innerHTML += '<div style="margin:6px 0"><div style="font-size:12.5px;color:#c8e6c9;font-weight:600">🕌 ' + esc(h.q) + ' — ' + esc(h.t) + '</div></div>';
+      for (const s of (h.refs || [])) {
+        const r = parseRefLoose(s);
+        if (!r) { el.innerHTML += '<div style="font-size:11.5px;color:#dbe6f3;margin:3px 0 8px 14px">' + esc(s) + '</div>'; continue; }
+        const tv = await texteBible(r.livre, r.ch, r.v1, r.v2);
+        el.innerHTML += '<div style="margin:3px 0 10px 14px;padding-left:8px;border-left:2px solid rgba(255,204,128,.4)">'
+          + '<div style="font-size:10.5px;color:#ffc94d">' + esc(String(s).split('—')[0].trim()) + (tv ? '' : ' (texte indisponible)') + '</div>'
+          + (tv ? tv.map(x => '<div style="font-size:12px;line-height:1.6;color:#eaf4ff"><b style="color:#ffc94d">' + x.v + '</b> ' + esc(x.t) + '</div>').join('') : '')
+          + '</div>';
+        const veps = chercheValtorta(CODES[r.livre] || '', r.ch, r.v1, r.v2);
+        if (veps.length) {
+          el.innerHTML += '<div style="margin:0 0 8px 14px;font-size:11px;color:#8fa3b8">🌊 Valtorta : ' + veps.slice(0, 3).map(e => esc(e.title || e.t || '')).join(' · ') + (veps.length > 3 ? ' …' : '') + '</div>';
+        }
+      }
+      if (h.n) el.innerHTML += '<div style="font-size:11px;color:#8fa3b8;font-style:italic">' + esc(h.n) + '</div>';
+    }
+  }
+
+  /* ── recherche ── */
+  async function cherche(q, mode) {
+    if (mode) MODE = mode;
+    ensureModal();   /* cherche() doit marcher même appelé hors UI (bancs, raccourcis) */
+    const inp = document.getElementById('v447-par-q');
+    const b1 = document.getElementById('v447-mb'), b2 = document.getElementById('v447-mc');
+    if (b1 && b2) { b1.classList.toggle('on', MODE === 'bible'); b2.classList.toggle('on', MODE === 'coran'); }
+    const c1 = document.getElementById('v447-c1'), c2 = document.getElementById('v447-c2'), c3 = document.getElementById('v447-c3');
+    const erreur = m => { [c1, c2, c3].forEach(c => c.innerHTML = '<div style="color:#ff8a80;font-size:12px">' + esc(m) + '</div>'); };
+    if (!window.__v446Refs) return erreur('Module de références v446 absent.');
+    await Promise.all([valtorta(), paralleles()]).catch(() => {});
+    const tq = String(q || (inp && inp.value) || '').trim();
+    if (MODE === 'bible') {
+      const r = window.__v446Refs.parseRef(tq);
+      if (!r) return erreur('Référence non reconnue (ex : « Jn 2,1-11 », « Mt 5,3 », « Psaume 23(22),1 »).');
+      const code = CODES[r.livre];
+      const tv = await texteBible(r.livre, r.ch, r.v1, r.v2);
+      renduTexte(c1, tv, r.nom + ' ' + r.ch + (r.v1 !== r.v2 ? ',' + r.v1 + '-' + r.v2 : ',' + r.v1) + ' — BJ locale');
+      renduValtorta(c2, code ? chercheValtorta(code, r.ch, r.v1, r.v2) : []);
+      renduParBible(c3, chercheParBible(r.livre, r.ch, r.v1, r.v2));
+    } else {
+      const m = /^(\d{1,3})\s*[:,.\s]\s*(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?$/.exec(tq);
+      if (!m) return erreur('Référence coranique attendue : « 2:255 », « 19,16-33 »…');
+      const s = +m[1], v1 = +m[2], v2 = +(m[3] || m[2]);
+      const tc = await texteCoran(s, v1, v2);
+      c1.innerHTML = colTitre('🕌', 'Coran ' + s + ':' + (v1 !== v2 ? v1 + '-' + v2 : v1) + (tc.nom ? ' — ' + tc.nom : '') + ' (local)');
+      if (!tc.versets) c1.innerHTML += '<div style="opacity:.6;font-size:12px">Verset introuvable dans le corpus local.</div>';
+      else tc.versets.forEach(x => {
+        c1.innerHTML += '<div style="margin:6px 0"><b style="color:#ffc94d">' + x.v + '</b>' + (x.ar ? '<div dir="rtl" style="font-size:16px;line-height:2">' + x.ar + '</div>' : '') + '<div style="font-size:12.5px;line-height:1.6">' + esc(x.t) + '</div></div>';
+      });
+      const hits = chercheParCoran(s, v1);
+      await renduParCoran(c2, hits);
+      /* Valtota via les refs bibliques des parallèles */
+      const codes = new Set();
+      hits.forEach(h => (h.refs || []).forEach(x => { const r = parseRefLoose(x); if (r) codes.add((CODES[r.livre] || '') + ':' + r.ch + ':' + r.v1 + ':' + r.v2); }));
+      const eps = [];
+      codes.forEach(k => { const [cd, ch, a, b] = k.split(':'); chercheValtorta(cd, +ch, +a, +b).forEach(e => { if (eps.indexOf(e) < 0) eps.push(e); }); });
+      renduValtorta(c3, eps);
+    }
+    return { ok: true, mode: MODE, q: tq };
+  }
+
+  /* ── modal ── */
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(1080px,96vw);max-height:90vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6)">'
+      + '<div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">🔀 PARALLÈLE LIÉ</div>'
+      + '<button id="v447-mb" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">📖 Bible</button>'
+      + '<button id="v447-mc" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">🕌 Coran</button>'
+      + '<input id="v447-par-q" placeholder="Jn 2,1-11   ·   Mt 5,3   ·   2:255…" style="flex:1;min-width:120px;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,195,247,.35);border-radius:8px;padding:6px 10px;font-size:12px">'
+      + '<button id="v447-go" style="background:rgba(79,195,247,.25);color:#fff;border:1px solid rgba(79,195,247,.5);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:11.5px;font-weight:700">Afficher</button>'
+      + '<button id="v447-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;padding:12px 16px;overflow:hidden;flex:1">'
+      + '<div id="v447-c1" style="overflow-y:auto;padding-right:4px"></div>'
+      + '<div id="v447-c2" style="overflow-y:auto;padding-right:4px;border-left:1px solid rgba(79,195,247,.12)"></div>'
+      + '<div id="v447-c3" style="overflow-y:auto;padding-right:4px;border-left:1px solid rgba(79,195,247,.12)"></div>'
+      + '</div>'
+      + '<div style="padding:7px 16px;border-top:1px solid rgba(79,195,247,.15);font-size:10px;color:#8fa3b8">Bible de Jérusalem + index Valtorta + parallèles curés — 100 % local · Clic ailleurs ou ✕ pour fermer</div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v447-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    m.querySelector('#v447-go').onclick = () => cherche();
+    m.querySelector('#v447-par-q').addEventListener('keydown', e => { if (e.key === 'Enter') cherche(); });
+    m.querySelector('#v447-mb').addEventListener('click', () => cherche(null, 'bible'));
+    m.querySelector('#v447-mc').addEventListener('click', () => cherche(null, 'coran'));
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+  function ouvre(q) {
+    ensureModal();
+    const qEl = document.getElementById('v447-par-q');
+    if (q) qEl.value = q;
+    if (qEl.value.trim()) cherche();
+    else { document.getElementById('v447-c1').innerHTML = '<div style="opacity:.6;font-size:12px;padding:10px">Entrez une référence biblique (« Jn 2,1-11 ») ou coranique (« 2:255 ») puis Afficher.</div>'; document.getElementById('v447-c2').innerHTML = ''; document.getElementById('v447-c3').innerHTML = ''; }
+    qEl.focus();
+  }
+
+  function bouton() {
+    const ancre = document.getElementById('v445-fiche-btn') || document.getElementById('v444-plans-btn') || document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v447-par-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v447-par-btn';
+    b.className = 'hud-btn';
+    b.title = 'PARALLÈLE LIÉ — verset ↔ Valtorta ↔ parallèles coraniques, tout en vis-à-vis';
+    b.textContent = '🔀 PARALLÈLE';
+    b.addEventListener('click', () => ouvre());
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v447Par = { ouvre: ouvre, cherche: cherche, chercheValtorta: chercheValtorta, chercheParBible: chercheParBible, chercheParCoran: chercheParCoran };
+})();
+</script>
 </body>
 </html>
 </html>
