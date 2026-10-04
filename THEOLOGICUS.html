@@ -48517,6 +48517,198 @@ window.continueTradApart = async function (msgId) {
   window.__v443Biblio = { ouvre: ouvre, collecte: collecte, markdown: markdown, filtre: (q) => { FILTRE = q; rendu(); } };
 })();
 </script>
+<script id="v444-plans">
+/* ═══════════════════════════════════════════════════════════════════
+   v444 — PLANS DE LECTURE avec progression persistée.
+   Trois plans tirés des corpus locaux (zéro réseau) :
+     • Catéchisme en ~359 jours (8 paragraphes/jour)
+     • Psaumes en 30 jours (5 psaumes/jour)
+     • Coran en 30 jours (~208 versets/jour, arabe + traduction)
+   Progression : localStorage 'v444_plans_progress'. Le bouton HUD
+   « 📅 PLANS » vit à côté de « 📚 BIBLIO ».
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  const MID = 'v444-plans-modal';
+  const CLE_PROG = 'v444_plans_progress';
+  let PLAN = null;          // id du plan ouvert
+  let JOUR = 1;             // jour affiché
+  let ITEMS = null;         // items du plan courant (lazy)
+  let TOTAL_J = null;
+
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function prog() {
+    try { return JSON.parse(localStorage.getItem(CLE_PROG) || '{}'); } catch (e) { return {}; }
+  }
+  function progSet(p) { try { localStorage.setItem(CLE_PROG, JSON.stringify(p)); } catch (e) {} }
+  function joursFaits(pid) { const p = prog(); return (p[pid] && p[pid].fait) || []; }
+
+  /* ── chargeurs de corpus (locaux) ── */
+  async function itemsCec() {
+    const j = await (await fetch('tradition/cec/cec_fr.json')).json();
+    return (j.paragraphes || []).map(p => ({ label: '§ ' + p.n, t: p.t, ar: null }));
+  }
+  async function jsObjets(chemin, cle) {
+    const t = await (await fetch(chemin)).text();
+    /* le fichier est « (window.X=window.X||{})[N]={JSON} ; » : le JSON commence
+       après le « = » qui SUIT l'ancre ||{})[ — le premier « = » du fichier est
+       celui de l'assignation window, pas le notre. */
+    const ancre = t.indexOf('||{})[');
+    const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+    return JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+  }
+  async function itemsPsaumes() {
+    const livres = await jsObjets('bible/b19.js');
+    const ps = livres[19] || {};
+    const out = [];
+    for (let ch = 1; ch <= 150; ch++) {
+      const vs = ps[String(ch)] || {};
+      const texte = Object.keys(vs).map(v => vs[v]).join(' ');
+      out.push({ label: 'Psaume ' + ch, t: texte || '(texte indisponible)', ar: null });
+    }
+    return out;
+  }
+  async function itemsCoran() {
+    const out = [];
+    for (let s = 1; s <= 114; s++) {
+      try {
+        const su = await jsObjets('quran/q' + s + '.js');
+        const vs = su && su.versets || {};
+        Object.keys(vs).forEach(v => out.push({ label: s + ':' + v, t: vs[v].text, ar: vs[v].arabe }));
+      } catch (e) { /* sourate absente : on continue */ }
+    }
+    return out;
+  }
+
+  const PLANS = {
+    cec:      { titre: '📖 Catéchisme en un an',  sous: '8 paragraphes par jour',       tranche: 8,   charge: itemsCec },
+    psaumes:  { titre: '🕊️ Psaumes en 30 jours',  sous: '5 psaumes par jour',           tranche: 5,   charge: itemsPsaumes },
+    coran:    { titre: '☪️ Coran en 30 jours',     sous: '≈ 208 versets par jour',       tranche: 208, charge: itemsCoran },
+  };
+
+  function ensureModal() {
+    let m = document.getElementById(MID);
+    if (m) return m;
+    m = document.createElement('div');
+    m.id = MID;
+    m.innerHTML = '<div style="position:fixed;inset:0;background:rgba(4,8,16,.82);z-index:2147480000;display:flex;align-items:center;justify-content:center">'
+      + '<div style="width:min(880px,94vw);max-height:88vh;display:flex;flex-direction:column;background:linear-gradient(160deg,#0b1220,#0d1524);border:1px solid rgba(79,195,247,.35);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);font-family:inherit">'
+      + '<div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(79,195,247,.25)">'
+      + '<div style="font-size:14px;color:#4fc3f7;font-weight:700;letter-spacing:1px">📅 PLANS DE LECTURE</div>'
+      + '<div style="flex:1"></div>'
+      + '<button id="v444-x" style="background:transparent;color:#8fa3b8;border:none;font-size:18px;cursor:pointer">✕</button>'
+      + '</div>'
+      + '<div id="v444-body" style="flex:1;overflow-y:auto;padding:14px 18px;font-family:inherit"></div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#v444-x').onclick = ferme;
+    m.addEventListener('mousedown', e => { if (e.target === m.firstChild || e.target === m) ferme(); });
+    return m;
+  }
+  function ferme() { const m = document.getElementById(MID); if (m) m.remove(); }
+
+  function renduCartes() {
+    const body = document.getElementById('v444-body');
+    const p = prog();
+    let h = '<div style="color:#8fa3b8;font-size:12px;margin-bottom:10px">Choisissez un plan — la progression est enregistrée localement.</div>';
+    Object.keys(PLANS).forEach(pid => {
+      const def = PLANS[pid];
+      const fait = (p[pid] && p[pid].fait) || [];
+      const pct = def.totalJ ? Math.round(100 * fait.length / def.totalJ) : 0;
+      h += '<div class="v444-carte" data-plan="' + pid + '" style="cursor:pointer;margin:10px 0;padding:14px 16px;border:1px solid rgba(79,195,247,.3);border-radius:10px;background:rgba(12,20,36,.55)">'
+        + '<div style="display:flex;align-items:center;gap:10px"><div style="font-size:14px;color:#eaf4ff;font-weight:700">' + def.titre + '</div>'
+        + '<div style="flex:1"></div><div style="font-size:11px;color:#8fa3b8">' + def.sous + (def.totalJ ? ' · ' + def.totalJ + ' jours' : '') + '</div></div>'
+        + '<div style="margin-top:8px;height:8px;background:rgba(79,195,247,.12);border-radius:6px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#4fc3f7,#81d4fa)"></div></div>'
+        + '<div style="margin-top:4px;font-size:10.5px;color:#8fa3b8">' + fait.length + ' jour(s) lu(s)' + (def.totalJ ? ' · ' + pct + '%' : '') + '</div>'
+        + '</div>';
+    });
+    body.innerHTML = h;
+    body.querySelectorAll('.v444-carte').forEach(c => c.addEventListener('click', () => ouvrePlan(c.dataset.plan)));
+  }
+
+  async function ouvrePlan(pid) {
+    PLAN = pid; JOUR = 0;
+    const body = document.getElementById('v444-body');
+    body.innerHTML = '<div style="opacity:.6;padding:24px;text-align:center">Chargement du corpus local…</div>';
+    const def = PLANS[pid];
+    try {
+      ITEMS = await def.charge();
+    } catch (e) { body.innerHTML = '<div style="color:#ff8a80;padding:20px">Corpus indisponible : ' + esc(e.message) + '</div>'; return; }
+    TOTAL_J = Math.max(1, Math.ceil(ITEMS.length / def.tranche));
+    def.totalJ = TOTAL_J;
+    const fait = joursFaits(pid);
+    JOUR = 0;
+    while (JOUR < TOTAL_J && fait.includes(JOUR)) JOUR++;
+    if (JOUR >= TOTAL_J) JOUR = 0;
+    renduJour();
+  }
+
+  function renduJour() {
+    const def = PLANS[PLAN];
+    const body = document.getElementById('v444-body');
+    const fait = joursFaits(PLAN);
+    const debut = JOUR * def.tranche;
+    const tranche = ITEMS.slice(debut, debut + def.tranche);
+    const pct = Math.round(100 * fait.length / TOTAL_J);
+    const lu = fait.includes(JOUR);
+    let h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+      + '<button class="v444-ret" style="background:rgba(79,195,247,.15);color:#cfe0ff;border:1px solid rgba(79,195,247,.35);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px">← Plans</button>'
+      + '<div style="font-size:14px;color:#eaf4ff;font-weight:700">' + def.titre + '</div>'
+      + '<div style="flex:1"></div><div style="font-size:11px;color:#8fa3b8">' + pct + '% · ' + fait.length + '/' + TOTAL_J + ' jours</div></div>'
+      + '<div style="height:8px;background:rgba(79,195,247,.12);border-radius:6px;overflow:hidden;margin-bottom:12px"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#4fc3f7,#81d4fa)"></div></div>'
+      + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+      + '<button class="v444-j" data-j="' + (JOUR - 1) + '" style="background:rgba(79,195,247,.12);color:#cfe0ff;border:1px solid rgba(79,195,247,.25);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">◀</button>'
+      + '<div style="font-size:13px;color:#f5c542;font-weight:700">Jour ' + (JOUR + 1) + ' / ' + TOTAL_J + '</div>'
+      + '<button class="v444-j" data-j="' + (JOUR + 1) + '"' + (JOUR + 1 >= TOTAL_J ? ' disabled style="opacity:.35"' : '') + ' style="background:rgba(79,195,247,.12);color:#cfe0ff;border:1px solid rgba(79,195,247,.25);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px">▶</button>'
+      + '<div style="flex:1"></div>'
+      + '<button class="v444-lu" style="background:' + (lu ? 'rgba(102,187,106,.3)' : 'rgba(102,187,106,.15)') + ';color:#c8e6c9;border:1px solid rgba(102,187,106,.5);border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px">' + (lu ? '✓ Jour lu' : 'Marquer ce jour lu') + '</button>'
+      + '</div>'
+      + '<div style="font-size:11px;color:#8fa3b8;margin-bottom:8px">' + tranche.length + ' lecture(s) — ' + esc(tranche[0] ? tranche[0].label : '') + (tranche.length > 1 ? ' → ' + esc(tranche[tranche.length - 1].label) : '') + '</div>';
+    tranche.forEach(it => {
+      h += '<div style="margin:8px 0;padding:9px 12px;border:1px solid rgba(79,195,247,.16);border-radius:8px;background:rgba(12,20,36,.5)">'
+        + '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:3px">' + esc(it.label) + '</div>'
+        + (it.ar ? '<div dir="rtl" lang="ar" style="direction:rtl;text-align:right;font-size:14.5px;line-height:2;color:#e8dcc0;padding:4px 0">' + esc(it.ar) + '</div>' : '')
+        + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(it.t) + '</div></div>';
+    });
+    body.innerHTML = h;
+    body.querySelector('.v444-ret').onclick = () => renduCartes();
+    body.querySelectorAll('.v444-j').forEach(b => b.addEventListener('click', () => {
+      const j = parseInt(b.dataset.j, 10);
+      if (j >= 0 && j < TOTAL_J) { JOUR = j; renduJour(); }
+    }));
+    body.querySelector('.v444-lu').onclick = () => {
+      const p = prog();
+      const f = (p[PLAN] && p[PLAN].fait) || [];
+      const i = f.indexOf(JOUR);
+      if (i >= 0) f.splice(i, 1); else f.push(JOUR);
+      p[PLAN] = { fait: f };
+      progSet(p);
+      if (i < 0) { let nj = JOUR + 1; while (nj < TOTAL_J && f.includes(nj)) nj++; if (nj < TOTAL_J) JOUR = nj; }
+      renduJour();
+    };
+  }
+
+  function ouvre() { ensureModal(); PLAN = null; ITEMS = null; renduCartes(); }
+
+  function bouton() {
+    const ancre = document.getElementById('v443-biblio-btn') || document.getElementById('open-aivideo-modal');
+    if (!ancre || document.getElementById('v444-plans-btn')) return;
+    const b = document.createElement('button');
+    b.id = 'v444-plans-btn';
+    b.className = 'hud-btn';
+    b.title = 'PLANS DE LECTURE — Catéchisme, Psaumes, Coran, avec progression';
+    b.textContent = '📅 PLANS';
+    b.addEventListener('click', ouvre);
+    ancre.parentElement.insertBefore(b, ancre);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bouton);
+  else bouton();
+
+  window.__v444Plans = { ouvre: ouvre, ouvrePlan: ouvrePlan, PLANS: PLANS, prog: prog, itemsCec: itemsCec };
+})();
+</script>
 </body>
+</html>
 </html>
 </html>
