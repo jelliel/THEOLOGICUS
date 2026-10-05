@@ -33929,6 +33929,38 @@ html[data-theme="v6-cyber"] #v37-tip{ background:rgba(18,12,28,.96); }
     'ѯ':'ks','ѱ':'ps','ѳ':'f','ѵ':'i'
   };
   /* ─────────── SYRIAQUE (bloc séquentiel 0x0710) ─────────── */
+  /* v451b — le bloc Unicode syriaque INTERCALE des marques entre les lettres
+     (U+0711 superscript alaph, U+0714/071C/071E… garshuni) : l'indexation
+     « codepoint − 0x0710 » de SY_SEQ décalait tout (ܒ beth tombait sur
+     l'index de ܓ gamal → « g »). Table explicite par lettre + points-voyelles
+     ouest-syriaques rendus comme voyelles. */
+  var SY_MAP = {
+    '\u0710': "'",  /* alaph */
+    '\u0711': 'a',  /* superscript alaph (porte-voyelle ā) */
+    '\u0712': 'b',  '\u0713': 'g',  '\u0714': 'g',
+    '\u0715': 'd',  '\u0716': 'd',
+    '\u0717': 'h',  '\u0718': 'w',  '\u0719': 'z',
+    '\u071A': 'h',  '\u071B': 't',  '\u071C': 't',
+    '\u071D': 'y',  '\u071E': 'yh',
+    '\u071F': 'k',  '\u0720': 'l',  '\u0721': 'm',
+    '\u0722': 'n',  '\u0723': 's',  '\u0724': 's',
+    '\u0725': "'",  '\u0726': 'p',  '\u0727': 'p',
+    '\u0728': 's',  '\u0729': 'q',  '\u072A': 'r',
+    '\u072B': 'sh', '\u072C': 't'
+  };
+  /* points-voyelles ouest-syriaques (U+0730–U+074A) et signes de lecture */
+  var SY_VOW = {
+    '\u0730': 'a', '\u0731': 'a', '\u0732': 'a',
+    '\u0733': 'o', '\u0734': 'o', '\u0735': 'o',
+    '\u0736': 'e', '\u0737': 'e', '\u0738': 'e', '\u0739': 'e',
+    '\u073A': 'i', '\u073B': 'i', '\u073C': 'i',
+    '\u073D': 'u', '\u073E': 'u',
+    '\u073F': 'a',
+    '\u0740': '', '\u0741': '', '\u0742': '', '\u0743': '',
+    '\u0744': '', '\u0745': '', '\u0746': '', '\u0747': '',
+    '\u0748': '', '\u0749': '', '\u074A': '',
+    '\u0742': '', '\u074D': '', '\u074E': '', '\u074F': ''
+  };
   var SY_SEQ = ["'",'b','g','d','h','w','z','h','t','y','k','l','m','n','s',"'",'p','s','q','r','sh','t'];
   /* ─────────── COPTE ─────────── */
   var CO_SEQ = ['a','b','g','d','e','st','z','è','th','i','k','l','m','n','ks','o','p','r','s','t','u','ph','kh','ps','ô'];
@@ -33955,8 +33987,11 @@ html[data-theme="v6-cyber"] #v37-tip{ background:rgba(18,12,28,.96); }
       ch = s.charAt(i); v = undefined;
       if (sc === 'cyrillic') v = CY[ch];
       else if (sc === 'syriac'){
-        d = ch.charCodeAt(0) - 0x0710;
-        v = (d >= 0 && d < SY_SEQ.length) ? SY_SEQ[d] : undefined;
+        /* v451b — table par lettre (le bloc intercale des marques) puis
+           points-voyelles ; tout autre caractère est ignoré. */
+        if (Object.prototype.hasOwnProperty.call(SY_MAP, ch)) v = SY_MAP[ch];
+        else if (Object.prototype.hasOwnProperty.call(SY_VOW, ch)) v = SY_VOW[ch];
+        else v = '';
       }
       else if (sc === 'coptic'){
         v = CO_GK[ch];
@@ -49940,6 +49975,172 @@ window.continueTradApart = async function (msgId) {
   }
 
   window.__v450Lt = { bibleLt: bibleLt, mots: mots, remplirLatin: remplirLatin, dictLookup: w => ((MOTS || {})[String(w || '').toLowerCase()] || [])[0] || null };
+})();
+</script>
+<script id="v451-syriaque">
+/* ═══════════════════════════════════════════════════════════════════
+   v451 — PESHITTA SYRIAQUE (araméen) mot-à-mot dans l'infobulle de verset.
+   Dernier alphabet demandé qui manquait au mot-à-mot : le syriaque.
+   Corpus : syriaque/bN.js — Peshitta ouest-syriaque VOCALISÉE
+   (édition numérique jcogitation, alignée sur la versification KJV),
+   39 livres de l'Ancien Testament, 23 145 versets. Le NT Peshitta n'a
+   pas de source libre propre : pour les livres 40-66 la ligne ne
+   s'affiche pas (limitation documentée, pas un oubli).
+   Ligne « ܀ Peshitta » sous les lignes hébraïque/grecque/latine du
+   panneau ; fiche de mot (syr-tip) : mot syriaque, translittération
+   (moteur v37 generic/syriac), 🔊 par mot et 🔊 verset entier.
+   Prononciation : la TRANSLITTÉRATION d'abord (voix française — un
+   texte syriaque lu par une voix arabe serait un pari), puis repli
+   natif (voix arabe, le mapping script syriaque→arabe existe déjà).
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if (window.__v451Syr) return;
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  /* ── corpus (paresseux, livres 1-39 seulement) ── */
+  const _sy = new Map(); const _syP = {};
+  function bibleSyr(n) {
+    n = parseInt(n, 10);
+    if (!(n >= 1 && n <= 39)) return Promise.resolve(null);
+    if (_sy.has(n)) return Promise.resolve(_sy.get(n));
+    if (!_syP[n]) {
+      _syP[n] = fetch('syriaque/b' + n + '.js').then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(t => {
+        const ancre = t.indexOf('||{})[');
+        const i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+        const j = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+        const obj = (j[n] && Object.keys(j).length === 1) ? j[n] : j;
+        _sy.set(n, obj); return obj;
+      }).catch(() => { _syP[n] = null; return null; });
+    }
+    return _syP[n];
+  }
+  function translit(mot) {
+    try {
+      if (window.__V37 && typeof window.__V37.generic === 'function') {
+        const t = window.__V37.generic(mot, 'syriac');
+        if (t && /[a-z]/i.test(t)) return t;
+      }
+    } catch (e) {}
+    return '';
+  }
+  function prononce(mot) {
+    mot = String(mot || '').trim();
+    if (!mot) return null;
+    if (typeof ttsStop === 'function') ttsStop();
+    const tr = translit(mot);
+    if (tr && typeof ttsEmission === 'function' && ttsEmission(tr, 'francais', null, null)) return 'translit';
+    if (typeof ttsEmission === 'function' && ttsEmission(mot, 'arabe', null, null)) return 'natif';
+    return null;
+  }
+  function prononceChaine(mots) {
+    if (typeof ttsStop === 'function') ttsStop();
+    let i = 0;
+    (function next() {
+      if (i >= mots.length) return;
+      const m = mots[i++];
+      const tr = translit(m);
+      const ok = typeof ttsEmission === 'function' && ttsEmission(tr || m, 'francais', next, function () { next(); });
+      if (!ok) next();
+    })();
+    return mots.length;
+  }
+
+  /* ── fiche de mot syriaque ── */
+  let TIP = null;
+  function tip() {
+    if (TIP) return TIP;
+    TIP = document.createElement('div');
+    TIP.id = 'syr-tip';
+    TIP.setAttribute('role', 'tooltip');
+    TIP.style.cssText = 'position:fixed;z-index:9900;max-width:300px;max-height:60vh;overflow-y:auto;' +
+      'background:#1b2430;color:#e8e0cc;border:1px solid rgba(126,200,190,.45);border-radius:8px;' +
+      'padding:9px 11px;font-size:12px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none;pointer-events:auto;';
+    document.body.appendChild(TIP);
+    TIP.addEventListener('mousedown', e => e.stopPropagation());
+    return TIP;
+  }
+  function place(rect) {
+    const t = tip(); let x = rect.left, y = rect.bottom + 8;
+    t.style.left = '0px'; t.style.top = '0px';
+    const r = t.getBoundingClientRect();
+    if (x + r.width > window.innerWidth - 10) x = Math.max(10, rect.left - r.width + rect.width);
+    if (y + r.height > window.innerHeight - 10) y = Math.max(10, rect.top - r.height - 8);
+    t.style.left = Math.max(10, x) + 'px'; t.style.top = y + 'px';
+  }
+  function affiche(el) {
+    const mot = el.getAttribute('data-syr') || '';
+    const t = tip(); const tr = translit(mot);
+    let h = '<span dir="rtl" style="font-size:21px;color:#7ec8be;display:block;margin-bottom:3px;">' + esc(mot) + '</span>';
+    if (tr) h += '<div style="margin:2px 0;"><span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">Translittération</span><br><b style="color:#7fd1a0;">' + esc(tr) + '</b></div>';
+    else h += '<div style="opacity:.6;font-size:11px;">Translittération indisponible pour ce mot.</div>';
+    h += '<button type="button" class="syr-say" style="margin-top:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11.5px;">🔊 prononcer</button>';
+    t.innerHTML = h;
+    t.style.display = 'block'; place(el.getBoundingClientRect());
+    t.querySelector('.syr-say').addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation(); prononce(mot);
+    });
+  }
+  function cache() { if (TIP) TIP.style.display = 'none'; }
+  document.addEventListener('mouseover', function (e) {
+    const m = e.target && e.target.closest ? e.target.closest('.syr') : null;
+    if (m) { affiche(m); return; }
+    if (TIP && TIP.style.display === 'block' && !(e.target && e.target.closest && e.target.closest('#syr-tip'))) cache();
+  });
+
+  /* ── ligne syriaque dans le panneau de verset ── */
+  function remplirSyriaque(p, panneau) {
+    const slot = panneau && panneau.querySelector('#hb-slot');
+    if (!slot || slot.querySelector('.syr-slot')) return;
+    const livre = parseInt(p.book, 10);
+    if (!(livre >= 1 && livre <= 39)) return;   /* NT Peshitta non disponible */
+    const ligne = document.createElement('div');
+    ligne.className = 'syr-slot';
+    ligne.innerHTML = '<span style="color:#8fa3b8;font-size:10.5px;">܀ Peshitta…</span>';
+    slot.appendChild(ligne);
+    bibleSyr(livre).then(liv => {
+      if (!liv) { ligne.innerHTML = ''; return; }
+      const v1 = p.v1, v2 = p.v2 || p.v1;
+      const txt = [];
+      for (let n = v1; n <= v2; n++) {
+        const t = (liv[String(p.ch)] || {})[String(n)];
+        if (t) txt.push(t);
+      }
+      if (!txt.length) { ligne.innerHTML = ''; return; }
+      let h = '<span style="color:#7ec8be;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">܀ Peshitta (syriaque)</span> ';
+      txt.join(' ').split(/\s+/).forEach(w => {
+        const nu = w.replace(/[\u0700-\u0702.,;:!?]+$/g, '').replace(/^[\u0700-\u0702]+/g, '');
+        if (!nu) return;
+        h += '<span class="syr" dir="rtl" data-syr="' + esc(nu) + '" style="pointer-events:auto;cursor:pointer;color:#7ec8be;border-bottom:1px dotted rgba(126,200,190,.5);font-size:15px;">' + esc(nu) + '</span> ';
+      });
+      h += '<button type="button" class="syr-verse-btn" title="Écouter le verset en syriaque (translittéré)" style="pointer-events:auto;margin-left:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px;">🔊 syriaque</button>';
+      ligne.innerHTML = h;
+      ligne.querySelector('.syr-verse-btn').addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        const mots = Array.from(ligne.querySelectorAll('.syr')).map(x => x.getAttribute('data-syr'));
+        prononceChaine(mots);
+      });
+    });
+  }
+  /* chaînage du wrap : v450 a peut-être déjà enveloppé __hbRemplir */
+  function enveloppe() {
+    if (typeof window.__hbRemplir !== 'function') return false;
+    const _r = window.__hbRemplir;
+    window.__hbRemplir = function (p, panneau) {
+      try { _r(p, panneau); } catch (e) {}
+      try { remplirSyriaque(p, panneau); } catch (e) {}
+    };
+    return true;
+  }
+  if (!enveloppe()) {
+    let n = 0;
+    const iv = setInterval(function () { if (enveloppe() || ++n > 40) clearInterval(iv); }, 250);
+  }
+
+  window.__v451Syr = { bibleSyr: bibleSyr, remplirSyriaque: remplirSyriaque, translit: translit, prononce: prononce };
 })();
 </script>
 </body>
