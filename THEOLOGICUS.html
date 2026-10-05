@@ -49798,15 +49798,56 @@ window.continueTradApart = async function (msgId) {
     if (slot) boutonVerset(slot);
   }, true);
 
+  /* ── 🔊 du verset coranique : l'infobulle #quran-verse-tip a déjà la
+     récitation enregistrée (🎧) ; on ajoute la prononciation TTS arabe
+     (moteur choisi : Supertonic local ou ElevenLabs) pour la parité avec
+     les versets bibliques. ── */
+  function boutonCoran(tip) {
+    if (!tip || tip.querySelector('.v449-quran-btn')) return;
+    const ancre = tip.querySelector('#quran-audio-btn');
+    if (!ancre) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'v449-quran-btn';
+    b.setAttribute('data-v449', '1');
+    b.textContent = '🔊 arabe (TTS)';
+    b.title = 'Prononcer le verset en arabe avec le moteur vocal choisi';
+    b.style.cssText = 'margin-top:8px;margin-left:6px;background:rgba(79,195,247,.18);color:#cfe0ff;' +
+      'border:1px solid rgba(79,195,247,.4);padding:5px 12px;border-radius:6px;cursor:pointer;font-weight:700;font-size:11px;';
+    b.addEventListener('mousedown', e => e.stopPropagation());
+    b.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      const mots = Array.from(tip.querySelectorAll('.qw .qw-h')).map(x => String(x.textContent || '').trim()).filter(Boolean);
+      const txt = mots.join(' ');
+      if (!txt) return;
+      if (typeof ttsStop === 'function') ttsStop();
+      if (typeof ttsEmission === 'function') ttsEmission(txt, 'arabe', null, null);
+    });
+    ancre.parentNode.insertBefore(b, ancre.nextSibling);
+  }
+
+  /* l'infobulle coranique n'existe qu'à la première ouverture : on attache
+     l'observateur dès qu'elle apparaît (survol) et on injecte tout de suite. */
+  function attacheCoran() {
+    const qtip = document.getElementById('quran-verse-tip');
+    if (!qtip || qtip.__v449Obs) return;
+    qtip.__v449Obs = true;
+    new MutationObserver(function () { raf(function () { boutonCoran(qtip); }); })
+      .observe(qtip, { childList: true });
+    boutonCoran(qtip);
+  }
+  document.addEventListener('mouseover', function () { attacheCoran(); }, true);
+
   function boot() {
     TIPS.forEach(function (cfg) { observeTip(cfg.id, cfg); });
+    attacheCoran();
     var slot = document.getElementById('hb-slot');
     if (slot) boutonVerset(slot);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  window.__v449Phon = { prononce: prononce, prononceChaine: prononceChaine, boutonVerset: boutonVerset };
+  window.__v449Phon = { prononce: prononce, prononceChaine: prononceChaine, boutonVerset: boutonVerset, boutonCoran: boutonCoran };
 })();
 </script>
 <script id="v450-latin">
@@ -49981,14 +50022,15 @@ window.continueTradApart = async function (msgId) {
 /* ═══════════════════════════════════════════════════════════════════
    v451 — PESHITTA SYRIAQUE (araméen) mot-à-mot dans l'infobulle de verset.
    Dernier alphabet demandé qui manquait au mot-à-mot : le syriaque.
-   Corpus : syriaque/bN.js — Peshitta ouest-syriaque VOCALISÉE
-   (édition numérique jcogitation, alignée sur la versification KJV),
-   39 livres de l'Ancien Testament, 23 145 versets. Le NT Peshitta n'a
-   pas de source libre propre : pour les livres 40-66 la ligne ne
-   s'affiche pas (limitation documentée, pas un oubli).
+   Corpus : syriaque/bN.js — Peshitta VOCALISÉE.
+     • Ancien Testament : édition ouest-syriaque jcogitation, alignée KJV
+       (39 livres, 23 145 versets) ;
+     • Nouveau Testament : texte BFBS/SEDRA (domaine public), 27 livres,
+       7 958 versets — livre source 52-78 → numérotation app 40-66.
    Ligne « ܀ Peshitta » sous les lignes hébraïque/grecque/latine du
    panneau ; fiche de mot (syr-tip) : mot syriaque, translittération
-   (moteur v37 generic/syriac), 🔊 par mot et 🔊 verset entier.
+   (moteur v37 generic/syriac), gloss du lexique embarqué
+   (syriaque/lexique.js, 18 269 formes), 🔊 par mot et 🔊 verset entier.
    Prononciation : la TRANSLITTÉRATION d'abord (voix française — un
    texte syriaque lu par une voix arabe serait un pari), puis repli
    natif (voix arabe, le mapping script syriaque→arabe existe déjà).
@@ -49998,11 +50040,11 @@ window.continueTradApart = async function (msgId) {
   if (window.__v451Syr) return;
   const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-  /* ── corpus (paresseux, livres 1-39 seulement) ── */
+  /* ── corpus (paresseux, livres 1-66 : OT jcogitation + NT BFBS/SEDRA) ── */
   const _sy = new Map(); const _syP = {};
   function bibleSyr(n) {
     n = parseInt(n, 10);
-    if (!(n >= 1 && n <= 39)) return Promise.resolve(null);
+    if (!(n >= 1 && n <= 66)) return Promise.resolve(null);
     if (_sy.has(n)) return Promise.resolve(_sy.get(n));
     if (!_syP[n]) {
       _syP[n] = fetch('syriaque/b' + n + '.js').then(r => {
@@ -50026,6 +50068,16 @@ window.continueTradApart = async function (msgId) {
       }
     } catch (e) {}
     return '';
+  }
+  /* ── lexique syriaque (paresseux, 818 Ko : forme → [lemme, gloss en]) ── */
+  let LEX = null, LEX_P = null;
+  function lexique() {
+    if (LEX) return Promise.resolve(LEX);
+    if (!LEX_P) LEX_P = fetch('syriaque/lexique.js').then(r => r.text()).then(t => {
+      LEX = JSON.parse(t.slice(t.indexOf('=') + 1).replace(/;\s*$/, ''));
+      return LEX;
+    }).catch(() => { LEX_P = null; return {}; });
+    return LEX_P;
   }
   function prononce(mot) {
     mot = String(mot || '').trim();
@@ -50077,11 +50129,25 @@ window.continueTradApart = async function (msgId) {
     let h = '<span dir="rtl" style="font-size:21px;color:#7ec8be;display:block;margin-bottom:3px;">' + esc(mot) + '</span>';
     if (tr) h += '<div style="margin:2px 0;"><span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">Translittération</span><br><b style="color:#7fd1a0;">' + esc(tr) + '</b></div>';
     else h += '<div style="opacity:.6;font-size:11px;">Translittération indisponible pour ce mot.</div>';
+    h += '<div class="syr-sens" style="opacity:.6;font-size:11px;">Lexique…</div>';
     h += '<button type="button" class="syr-say" style="margin-top:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11.5px;">🔊 prononcer</button>';
     t.innerHTML = h;
     t.style.display = 'block'; place(el.getBoundingClientRect());
     t.querySelector('.syr-say').addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation(); prononce(mot);
+    });
+    lexique().then(d => {
+      const ent = d[mot];
+      const el2 = t.querySelector('.syr-sens');
+      if (!el2) return;
+      if (ent && ent[1]) {
+        el2.innerHTML = '<span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">Sens (en)</span><br>' +
+          esc(ent[1]) + (ent[0] && ent[0] !== mot ? ' <span style="color:#8fa3b8;font-size:10.5px;">· lemme ' + esc(ent[0]) + '</span>' : '');
+        el2.style.opacity = '1';
+        place(el.getBoundingClientRect());
+      } else {
+        el2.textContent = 'Mot absent du lexique embarqué (couverture : Nouveau Testament).';
+      }
     });
   }
   function cache() { if (TIP) TIP.style.display = 'none'; }
@@ -50096,7 +50162,7 @@ window.continueTradApart = async function (msgId) {
     const slot = panneau && panneau.querySelector('#hb-slot');
     if (!slot || slot.querySelector('.syr-slot')) return;
     const livre = parseInt(p.book, 10);
-    if (!(livre >= 1 && livre <= 39)) return;   /* NT Peshitta non disponible */
+    if (!(livre >= 1 && livre <= 66)) return;
     const ligne = document.createElement('div');
     ligne.className = 'syr-slot';
     ligne.innerHTML = '<span style="color:#8fa3b8;font-size:10.5px;">܀ Peshitta…</span>';
@@ -50140,7 +50206,7 @@ window.continueTradApart = async function (msgId) {
     const iv = setInterval(function () { if (enveloppe() || ++n > 40) clearInterval(iv); }, 250);
   }
 
-  window.__v451Syr = { bibleSyr: bibleSyr, remplirSyriaque: remplirSyriaque, translit: translit, prononce: prononce };
+  window.__v451Syr = { bibleSyr: bibleSyr, remplirSyriaque: remplirSyriaque, translit: translit, prononce: prononce, lexique: lexique };
 })();
 </script>
 </body>

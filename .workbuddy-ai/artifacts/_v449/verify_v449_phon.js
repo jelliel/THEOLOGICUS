@@ -99,8 +99,25 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   const n4 = await page.evaluate(() => window.__spy.length);
   ok('bouton 🔊 verset : chaîne des 2 mots hébreux prononcée', r4.btn === true && n4 >= 2, 'appels : ' + n4);
 
+  // 5. infobulle de verset coranique : 🔊 TTS arabe à côté de la récitation
+  const r5 = await page.evaluate(async () => {
+    /* l'infobulle coranique est créée à la demande : on simule son ouverture */
+    let tip = document.getElementById('quran-verse-tip');
+    if (!tip) { tip = document.createElement('div'); tip.id = 'quran-verse-tip'; document.body.appendChild(tip); }
+    tip.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    tip.innerHTML = '<button id="quran-audio-btn">🎧 Écouter la récitation</button>'
+      + '<div><span class="qw"><span class="qw-h">بِسْمِ</span></span> <span class="qw"><span class="qw-h">ٱللَّهِ</span></span></div>';
+    await new Promise(r => setTimeout(r, 200));
+    const b = tip.querySelector('.v449-quran-btn');
+    if (!b) return { tip: true, btn: false };
+    window.__spy = [];
+    b.click();
+    return { tip: true, btn: true, n: window.__spy.length, txt: window.__spy[0] ? window.__spy[0].txt : '', lang: window.__spy[0] ? window.__spy[0].lang : '' };
+  });
+  ok('infobulle de verset coranique → bouton 🔊 TTS arabe', r5.btn === true && r5.lang === 'arabe' && /بِسْمِ/.test(r5.txt), JSON.stringify(r5).slice(0, 90));
+
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/9`);
-  process.exitCode = pass === 9 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/10`);
+  process.exitCode = pass === 10 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

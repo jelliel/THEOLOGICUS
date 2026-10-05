@@ -38,9 +38,9 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   const gn = await page.evaluate(() => window.__v451Syr.bibleSyr(1).then(l => l['1']['1']));
   ok('Peshitta Gn 1:1 servie depuis syriaque/b1.js', /ܒܪܺܝܫܺܝܬ/.test(gn), String(gn).slice(0, 40));
 
-  // 2. NT non couvert (pas de source libre) : garde propre
-  const nt = await page.evaluate(() => window.__v451Syr.bibleSyr(43));
-  ok('livre 43 (Jean) → null (NT Peshitta absent, pas d’erreur)', nt === null, String(nt));
+  // 2. NT désormais couvert (BFBS/SEDRA) : Jean 1:1 en syriaque
+  const nt = await page.evaluate(() => window.__v451Syr.bibleSyr(43).then(l => l['1']['1']));
+  ok('Peshitta NT : Jean 1:1 servie depuis syriaque/b43.js', /ܒ݁ܪܺܫܺܝܬ|ܒܪܫܝܬ|ܡܠܬܐ/.test(nt || ''), String(nt).slice(0, 40));
 
   // 3. translittération syriaque réelle
   const tr = await page.evaluate(() => window.__v451Syr.translit('ܒܪܺܝܫܺܝܬ݂'));
@@ -62,19 +62,22 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('ligne « ܀ Peshitta » : mots syriaques survolables injectés', r4.n >= 10 && /ܒܪܺܝܫܺܝܬ/.test(r4.premier), JSON.stringify(r4).slice(0, 80));
   ok('bouton 🔊 verset syriaque présent', r4.btn === true);
 
-  // 5. panneau NT → pas de ligne syriaque
+  // 5. panneau NT → ligne syriaque présente elle aussi
   const r5 = await page.evaluate(() => {
     const panneau = document.createElement('div');
+    panneau.id = 'v451-nt';
     panneau.innerHTML = '<div id="hb-slot"></div>';
     document.body.appendChild(panneau);
     window.__v451Syr.remplirSyriaque({ book: '43', ch: 1, v1: 1, v2: 1 }, panneau);
-    return panneau.querySelectorAll('.syr-slot').length;
+    return { slots: panneau.querySelectorAll('.syr-slot').length };
   });
-  ok('panneau NT (Jean) → aucune ligne syriaque (limitation documentée)', r5 === 0, 'lignes : ' + r5);
+  await page.waitForTimeout(500);
+  const r5b = await page.evaluate(() => document.querySelectorAll('#v451-nt .syr[data-syr]').length);
+  ok('panneau NT (Jean) → ligne syriaque injectée avec ses mots', r5.slots === 1 && r5b >= 8, 'mots : ' + r5b);
 
   // 6. fiche de mot + clic 🔊 (translittération d'abord)
   await page.evaluate(() => {
-    const el = document.querySelector('#hb-slot .syr[data-syr]');
+    const el = document.querySelector('#v451-nt .syr[data-syr]');
     el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
   });
   await page.waitForTimeout(300);
@@ -83,13 +86,19 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     return { ouvert: t && t.style.display === 'block', say: !!(t && t.querySelector('.syr-say')), texte: (t ? t.textContent : '').slice(0, 80) };
   });
   ok('survol mot syriaque → fiche avec translittération et 🔊', r6.ouvert && r6.say, JSON.stringify(r6).slice(0, 100));
+  // 6b. lexique embarqué : le sens anglais apparaît dans la fiche
+  const r6b = await page.evaluate(() => {
+    const t = document.getElementById('syr-tip');
+    return (t.querySelector('.syr-sens') || {}).textContent || '';
+  });
+  ok('lexique syriaque : sens anglais affiché dans la fiche', /Sens \(en\)/i.test(r6b) && r6b.length > 14, r6b.slice(0, 60));
   await page.evaluate(() => { window.__spy = []; document.querySelector('#syr-tip .syr-say').click(); });
   await page.waitForTimeout(150);
   const spy = await page.evaluate(() => window.__spy);
   ok('clic 🔊 → translittération lue en voix française', spy.length >= 1 && spy[0].lang === 'francais' && /[a-z]/i.test(spy[0].txt), JSON.stringify(spy));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/10`);
-  process.exitCode = pass === 10 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/11`);
+  process.exitCode = pass === 11 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
