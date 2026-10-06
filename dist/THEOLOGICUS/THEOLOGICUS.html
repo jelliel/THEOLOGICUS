@@ -25924,39 +25924,73 @@ if (document.readyState === 'loading') {
 })();
 </script>
 
+
+
 <script id="v453-remember-cookie">
-/* v453 — « Se souvenir de moi » : le cookie survit au changement de PORT.
-   localStorage est propre à une origine (port compris) : quand l'app sert
-   sur 8766 au lieu de 8765, l'enregistrement écrit la veille est invisible
-   et le verrou revient. Les cookies ignorent le port. Ce script recopie le
-   cookie vers localStorage AVANT la lecture du module d'auth. */
+/* v453 — « Se souvenir de moi » face à la fermeture complète et au quota.
+   sessionStorage meurt à la fermeture ; localStorage peut être PLEIN (l'app y
+   met l'image de fond en data URL) et l'écriture échoue alors en silence.
+   Le cookie, lui, survit au port ET au quota. On restaure ici, AVANT que le
+   module d'auth ne lise — et on alimente aussi le chemin sessionStorage de
+   `unlock`, pour que le verrou ne revienne pas même si localStorage refuse. */
 (function () {
+  var CLE = 'theologicus_remember';
   try {
-    if (localStorage.getItem('theologicus_remember')) return;   /* déjà là */
-    var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
-    if (!m) return;
-    var val = decodeURIComponent(m[1]);
-    var o = JSON.parse(val);
-    if (!o || o.v !== 1 || typeof o.exp !== 'number' || Date.now() > o.exp) return;
-    localStorage.setItem('theologicus_remember', val);
+    var rec = null;
+    try { rec = localStorage.getItem(CLE); } catch (e) {}
+    if (!rec) {
+      var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
+      if (m) {
+        var val = decodeURIComponent(m[1]);
+        var o = null;
+        try { o = JSON.parse(val); } catch (e) {}
+        if (o && o.v === 1 && typeof o.exp === 'number' && Date.now() < o.exp) {
+          rec = val;
+          try { localStorage.setItem(CLE, val); } catch (e) { /* quota : sans effet */ }
+        }
+      }
+    }
+    if (rec) {
+      /* même effet que unlock() : le jeton de session, qui ouvre au démarrage */
+      try {
+        sessionStorage.setItem('theologicus_auth', 'true');
+        sessionStorage.setItem('theologicus_auth_mode', 'admin');
+      } catch (e) {}
+    }
   } catch (e) {}
 })();
 </script>
 <script id="v453-remember-cookie">
-/* v453 — « Se souvenir de moi » : le cookie survit au changement de PORT.
-   localStorage est propre à une origine (port compris) : quand l'app sert
-   sur 8766 au lieu de 8765, l'enregistrement écrit la veille est invisible
-   et le verrou revient. Les cookies ignorent le port. Ce script recopie le
-   cookie vers localStorage AVANT la lecture du module d'auth. */
+/* v453 — « Se souvenir de moi » face à la fermeture complète et au quota.
+   sessionStorage meurt à la fermeture ; localStorage peut être PLEIN (l'app y
+   met l'image de fond en data URL) et l'écriture échoue alors en silence.
+   Le cookie, lui, survit au port ET au quota. On restaure ici, AVANT que le
+   module d'auth ne lise — et on alimente aussi le chemin sessionStorage de
+   `unlock`, pour que le verrou ne revienne pas même si localStorage refuse. */
 (function () {
+  var CLE = 'theologicus_remember';
   try {
-    if (localStorage.getItem('theologicus_remember')) return;   /* déjà là */
-    var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
-    if (!m) return;
-    var val = decodeURIComponent(m[1]);
-    var o = JSON.parse(val);
-    if (!o || o.v !== 1 || typeof o.exp !== 'number' || Date.now() > o.exp) return;
-    localStorage.setItem('theologicus_remember', val);
+    var rec = null;
+    try { rec = localStorage.getItem(CLE); } catch (e) {}
+    if (!rec) {
+      var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
+      if (m) {
+        var val = decodeURIComponent(m[1]);
+        var o = null;
+        try { o = JSON.parse(val); } catch (e) {}
+        if (o && o.v === 1 && typeof o.exp === 'number' && Date.now() < o.exp) {
+          rec = val;
+          try { localStorage.setItem(CLE, val); } catch (e) { /* quota : sans effet */ }
+        }
+      }
+    }
+    if (rec) {
+      /* même effet que unlock() : le jeton de session, qui ouvre au démarrage */
+      try {
+        sessionStorage.setItem('theologicus_auth', 'true');
+        sessionStorage.setItem('theologicus_auth_mode', 'admin');
+      } catch (e) {}
+    }
   } catch (e) {}
 })();
 </script>
@@ -50414,14 +50448,18 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+
+
 <script id="v453-remember-sync">
 /* ═══════════════════════════════════════════════════════════════════
-   v453 — SYNCHRONISATION de « Se souvenir de moi » vers un cookie.
-   Le module d'auth écrit dans localStorage ; on recopie cet
-   enregistrement dans un cookie (même hôte, donc partagé entre les
-   ports 8765/8766/8767…). Au démarrage suivant, quel que soit le port,
-   le script précoce le restaure. Aucun autre comportement n'est modifié :
-   la révocation (⚙ PARAMÈTRES → ACCLÈS) efface les deux.
+   v453 — SYNCHRONISATION de « Se souvenir de moi ».
+   • localStorage → cookie : à l'écriture (en interceptant Storage.setItem,
+     donc MÊME si le quota fait échouer l'écriture) et périodiquement ;
+   • cookie → localStorage : au démarrage (script précoce) et au retour ;
+   • révocation : si l'enregistrement a été vu dans la page puis disparaît,
+     c'est une révocation → le cookie est effacé aussi (sinon la
+     restauration l'annulerait) ;
+   • diagnostic dans ⚙ PARAMÈTRES → état réel des supports + espace utilisé.
    ═══════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
@@ -50441,12 +50479,27 @@ window.continueTradApart = async function (msgId) {
   function effacerCookie() {
     try { document.cookie = CLE + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax'; } catch (e) {}
   }
-  /* Un enregistrement VU dans cette page : sert à distinguer
-       — « localStorage vide » = autre port  → on restaure depuis le cookie ;
-       — « enregistrement disparu » = l'utilisateur a RÉVOQUÉ → on efface le
-         cookie, sinon la restauration annulerait sa révocation. */
-  var vuDansLaPage = false;
 
+  /* ── interception de l'écriture : le cookie prend le relais au quota ── */
+  try {
+    var proto = window.Storage && window.Storage.prototype;
+    if (proto && !proto.__v453) {
+      var _set = proto.setItem;
+      proto.setItem = function (k, v) {
+        var err = null;
+        try { _set.call(this, k, v); } catch (e) { err = e; }
+        if (k === CLE && v) {
+          /* TOUJOURS : le cookie est le support qui survit au port ET au quota
+             (et qui est lu par le script précoce avant tout le reste). */
+          ecrireCookie(String(v));
+        }
+        if (err) throw err;                          /* les appelants voient l'échec */
+      };
+      proto.__v453 = true;
+    }
+  } catch (e) {}
+
+  var vuDansLaPage = false;
   function synchroniser() {
     try {
       var ls = localStorage.getItem(CLE);
@@ -50457,27 +50510,55 @@ window.continueTradApart = async function (msgId) {
           if (cookie() !== ls) ecrireCookie(ls);
           return 'ecrit';
         }
-        /* enregistrement expiré : on nettoie les deux */
         localStorage.removeItem(CLE); effacerCookie(); return 'purge';
       }
-      /* localStorage vide */
       if (vuDansLaPage) { effacerCookie(); vuDansLaPage = false; return 'revoque'; }
       var ck = cookie();
       if (ck) {
         var o2 = JSON.parse(ck);
         if (o2 && o2.v === 1 && typeof o2.exp === 'number' && Date.now() < o2.exp) {
-          localStorage.setItem(CLE, ck); vuDansLaPage = true; return 'restaure';
+          try { localStorage.setItem(CLE, ck); } catch (e) {}
+          vuDansLaPage = true; return 'restaure';
         }
         effacerCookie();
       }
       return 'rien';
     } catch (e) { return 'erreur'; }
   }
-  /* au démarrage, au retour d'onglet, et pendant la minute qui suit */
-  synchroniser();
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) synchroniser(); });
-  window.addEventListener('focus', synchroniser);
-  var n = 0, iv = setInterval(function () { synchroniser(); if (++n > 20) clearInterval(iv); }, 3000);
+
+  /* ── diagnostic : où vit l'enregistrement, et quelle place reste-t-il ? ── */
+  function octets() {
+    var n = 0;
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        n += (k ? k.length : 0) + String(localStorage.getItem(k) || '').length;
+      }
+    } catch (e) { return -1; }
+    return n;   /* ~ octets (le quota se compte en caractères) */
+  }
+  function etat() {
+    var ls = false, ck = !!cookie();
+    try { ls = !!localStorage.getItem(CLE); } catch (e) {}
+    var ss = false;
+    try { ss = sessionStorage.getItem('theologicus_auth') === 'true'; } catch (e) {}
+    return { ls: ls, cookie: ck, session: ss, ko: Math.round(octets() / 1024) };
+  }
+  function peindre() {
+    var el = document.getElementById('remember-state');
+    if (!el) return;
+    var e = etat();
+    var d = document.createElement('div');
+    d.id = 'v453-etat';
+    d.style.cssText = 'margin-top:4px;font-size:10.5px;color:#8fa3b8';
+    d.textContent = 'Supports — localStorage : ' + (e.ls ? '✓' : '✗') +
+      ' · cookie : ' + (e.cookie ? '✓' : '✗') +
+      ' · session : ' + (e.session ? '✓' : '✗') +
+      ' · espace local : ' + e.ko + ' Ko' + (e.ko > 4000 ? ' (⚠ proche du quota ~5 Mo)' : '');
+    var ancien = document.getElementById('v453-etat');
+    if (ancien) ancien.remove();
+    el.parentNode.insertBefore(d, el.nextSibling);
+  }
 
   /* la révocation des Paramètres passe par clearRemember (interne) : on
      surveille aussi la voie globale quand elle existe */
@@ -50493,7 +50574,18 @@ window.continueTradApart = async function (msgId) {
     }
   } catch (e) {}
 
-  window.__v453Remember = { synchroniser: synchroniser, cookie: cookie, ecrireCookie: ecrireCookie, effacerCookie: effacerCookie, vu: function () { return vuDansLaPage; } };
+  synchroniser();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) synchroniser(); });
+  window.addEventListener('focus', synchroniser);
+  var n = 0, iv = setInterval(function () { synchroniser(); if (++n > 20) clearInterval(iv); }, 3000);
+  /* le diagnostic se pose quand les Paramètres existent */
+  var n2 = 0, iv2 = setInterval(function () { peindre(); if (++n2 > 20) clearInterval(iv2); }, 500);
+
+  window.__v453Remember = {
+    synchroniser: synchroniser, cookie: cookie, ecrireCookie: ecrireCookie,
+    effacerCookie: effacerCookie, etat: etat, peindre: peindre,
+    vu: function () { return vuDansLaPage; }
+  };
 })();
 </script>
 </body>
