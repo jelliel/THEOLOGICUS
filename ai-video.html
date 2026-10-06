@@ -2235,6 +2235,7 @@ async function startGeneration() {
     document.getElementById('stop-btn').classList.add('visible');
     document.getElementById('generate-btn').disabled = true;
     let completed = 0, failed = 0;
+    const echecs = [];   /* v460 : les causes, pour que le résumé les dise */
     const totalStart = Date.now();
     const totalJobs = items.length * modelsToUse.length;
     let jobIndex = 0;
@@ -2270,6 +2271,7 @@ async function startGeneration() {
             } catch (e) {
                 if (e.message === 'Arrêt') break;
                 failed++;
+                echecs.push(String(e.message || e));
                 logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
             }
             if (jobIndex < totalJobs && !state.stopRequested) {
@@ -2286,9 +2288,42 @@ async function startGeneration() {
     if (failed > 0) logError('❌ Échecs : <strong>' + failed + '</strong>');
     logInfo('⏱️ Total : <strong>' + totalElapsed + 's</strong>');
     if (completed > 0) { setLogStatusDot('success'); setStatus('✦ ' + completed + ' / ' + totalJobs + ' ✦'); showToast(completed + ' vidéo(s)', 'success'); }
-    else { setLogStatusDot('error'); showToast('Aucune vidéo', 'error'); }
+    else {
+        setLogStatusDot('error');
+        var cause = causeProbable(echecs);
+        logError('❌ <strong>Aucune vidéo</strong>' + (cause ? ' — ' + cause : ''));
+        showToast('Aucune vidéo — ' + (cause || 'voir le journal'), 'error', 8000);
+    }
     await sleep(4000); setStatus(null);
     setTimeout(() => setLogStatusDot('idle'), 5000);
+}
+/* v460 — traduit les messages du fournisseur en cause lisible.
+   Le résumé disait « Aucune vidéo » sans dire pourquoi : le motif n'était que
+   dans la ligne `💥` du journal. */
+function causeProbable(echecs) {
+    if (!echecs || !echecs.length) return '';
+    var compte = {}, ordre = [];
+    echecs.forEach(function (m) {
+        var c = classerEchec(m);
+        if (!compte[c]) { compte[c] = 0; ordre.push(c); }
+        compte[c]++;
+    });
+    ordre.sort(function (a, b) { return compte[b] - compte[a]; });
+    var principale = ordre[0];
+    var nb = compte[principale];
+    var txt = nb > 1 ? (nb + ' échecs : ') : '';
+    return txt + principale;
+}
+function classerEchec(m) {
+    m = String(m || '');
+    if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'clé Agnes refusée (invalide ou expirée) — vérifiez-la dans la section API';
+    if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour) — réessayez plus tard';
+    if (/\b400\b|bad request/i.test(m)) return 'requête refusée par le fournisseur (paramètre) — le détail est dans le journal';
+    if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service du fournisseur momentanément indisponible — réessayez';
+    if (/réseau|network|failed to fetch|load failed|timeout/i.test(m)) return 'connexion au fournisseur impossible (réseau ou relais arrêté)';
+    if (/ffmpeg|montage|assemblage/i.test(m)) return 'assemblage des segments impossible — les segments restent dans la galerie';
+    if (/URL PUBLIQUE|data:/i.test(m)) return 'média joint refusé par ce modèle — voir le journal';
+    return m.slice(0, 140);
 }
 function stopGeneration() { if (!state.isRunning) return; state.stopRequested = true; logWarn('⏹ Arrêt…'); setStatus('Arrêt…'); }
 
