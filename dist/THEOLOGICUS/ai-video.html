@@ -583,6 +583,8 @@
                     <option value="601">25 secondes</option>
                     <option value="1201">50 secondes</option>
                     <option value="2161">1 minute 30</option>
+                    <option value="2881">2 minutes (segments assemblés)</option>
+                    <option value="4321">3 minutes (segments assemblés)</option>
                 </select>
             </div>
             <div class="control-row">
@@ -2471,6 +2473,8 @@ async function enrichWithMistral(btn, textareaId) {
 
 
 
+
+
 <script id="v455-long-video">
 /* ═══════════════════════════════════════════════════════════════════
    v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
@@ -2526,7 +2530,13 @@ async function enrichWithMistral(btn, textareaId) {
   var FF_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js';
   var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
 
-  function necessaire() { return !valide(state.durationFrames); }
+  function necessaire() {
+    if (!valide(state.durationFrames)) return true;
+    /* un modèle 2.5 plafonne à 12 s : on passe par le planificateur */
+    var modeles = state.activeModels && state.activeModels.length ? state.activeModels : [getSelectedModelId()];
+    for (var i = 0; i < modeles.length; i++) { if (est25(modeles[i])) return true; }
+    return false;
+  }
 
   /* La doc officielle : « pour des vidéos plus longues, augmenter num_frames
      OU BAISSER frame_rate » (1 à 60 accepté). On préfère donc, quand c'est
@@ -2544,15 +2554,62 @@ async function enrichWithMistral(btn, textareaId) {
     }
     return null;                          /* il faudra découper */
   }
+  /* ── DEUX DIALECTES ──────────────────────────────────────────────────
+     agnes-video-v2.0 : { num_frames (8n+1, ≤ 441), frame_rate 1-60 }
+     agnes-video-2.5 / 2.5-flash : API compatible OpenAI Videos
+        { mode: text|keyframe|reference, seconds: "4".."12", size, aspect_ratio }
+        — refuse num_frames, fps, width, height (HTTP 400), et exige des
+        médias par URL PUBLIQUE (un data: base64 est refusé). */
+  var MOD_25 = /^agnes-video-2\.5/;
+  function est25(m) { return MOD_25.test(String(m || '')); }
+  function secondes25(frames) { return Math.max(4, Math.min(12, Math.round(frames / FRAME_RATE))); }
+  /* découpe une durée en secondes en segments de 4 à 12 s (contrainte 2.5) */
+  function decouperSecondes(totalSec) {
+    var max = 12, min = 4;
+    var n = Math.ceil(totalSec / max);
+    if (n <= 1) return [Math.max(min, Math.min(max, Math.round(totalSec)))];
+    var parts = [], reste = Math.round(totalSec);
+    while (reste > max) { parts.push(max); reste -= max; }
+    if (reste < min) {
+      /* reliquat trop court : on partage le dernier segment en deux valides */
+      var dernier = parts.pop() + reste;
+      var a = Math.floor(dernier / 2), b2 = dernier - a;
+      if (a >= min && b2 <= max) { parts.push(a, b2); return parts; }
+      parts.push(max);
+      reste = Math.min(max, Math.max(min, dernier - max));
+    }
+    parts.push(reste);
+    return parts;
+  }
   /* frame_rate n'est pas dans state : on réécrit le corps de la requête /videos */
   var _apiFetch = apiFetch;
   apiFetch = async function (url, options) {
-    if (window.__v455Cadence && options && options.body && /\/videos$/.test(String(url))) {
+    if (options && options.body && /\/videos$/.test(String(url))) {
       try {
         var b = JSON.parse(options.body);
-        b.frame_rate = window.__v455Cadence;
-        options = Object.assign({}, options, { body: JSON.stringify(b) });
-      } catch (e) {}
+        if (est25(b.model)) {
+          /* média par URL publique exigé : un data: serait refusé en 400 */
+          var medias = [b.image, b.audio, b.video].filter(Boolean);
+          for (var mi = 0; mi < medias.length; mi++) {
+            if (/^data:/i.test(String(medias[mi]))) {
+              throw new Error('Agnes ' + b.model + ' exige des médias par URL PUBLIQUE (un fichier joint en base64 est refusé). Utilisez agnes-video-v2.0 pour les images/audio joints.');
+            }
+          }
+          var corps = {
+            model: b.model, prompt: b.prompt, mode: 'text',
+            seconds: String(window.__v456Secondes || secondes25(b.num_frames)),
+            size: /flash/.test(b.model) ? '720P' : '720P',
+            aspect_ratio: '16:9'
+          };
+          if (b.image) { corps.mode = 'keyframe'; corps.first_frame = b.image; }
+          if (b.audio) { corps.mode = 'reference'; corps.audios = [b.audio]; }
+          if (b.video) { corps.mode = 'reference'; corps.videos = [{ url: b.video }]; }
+          options = Object.assign({}, options, { body: JSON.stringify(corps) });
+        } else if (window.__v455Cadence) {
+          b.frame_rate = window.__v455Cadence;
+          options = Object.assign({}, options, { body: JSON.stringify(b) });
+        }
+      } catch (e) { if (/URL PUBLIQUE/.test(e.message)) throw e; }
     }
     return _apiFetch(url, options);
   };
@@ -2610,6 +2667,53 @@ async function enrichWithMistral(btn, textareaId) {
   /* ── exécution : segments puis assemblage ── */
   async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
     var total = state.durationFrames;
+    /* ── modèle 2.5 : durée en SECONDES, segments de 4 à 12 s ── */
+    if (est25(modelId)) {
+      var dureeSec = total / FRAME_RATE;
+      var planS = decouperSecondes(dureeSec);
+      if (planS.length === 1) {
+        logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → un plan de <strong>' + planS[0] + 's</strong>');
+        window.__v456Secondes = planS[0];
+        try { var id25 = await createVideoTask(prompt, img, aud, modelId, vid); await pollUntilDone(id25, modelId, sceneLabel + ' — ' + planS[0] + 's'); }
+        finally { window.__v456Secondes = null; }
+        return;
+      }
+      logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → ' + planS.length + ' segments (' + planS.join('s + ') + 's)');
+      var urls25 = [], ids25 = [];
+      for (var k2 = 0; k2 < planS.length; k2++) {
+        if (state.stopRequested) throw new Error('Arrêt');
+        var lab25 = sceneLabel + ' · segment ' + (k2 + 1) + '/' + planS.length + ' (' + planS[k2] + 's)';
+        logStep('━━━ Segment ' + (k2 + 1) + '/' + planS.length + ' — ' + planS[k2] + 's ━━━');
+        var p25 = prompt + '\n\n[CONTINUITY — segment ' + (k2 + 1) + ' of ' + planS.length + ': direct continuation of the previous shot, same subject, framing, lighting and style.]';
+        window.__v456Secondes = planS[k2];
+        try {
+          var idk = await createVideoTask(p25, img, aud, modelId, vid);
+          await pollUntilDone(idk, modelId, lab25);
+        } finally { window.__v456Secondes = null; }
+        var g25 = loadGallery(), e25 = null;
+        for (var j25 = 0; j25 < g25.length; j25++) { if (g25[j25].scene === lab25) { e25 = g25[j25]; break; } }
+        if (!e25) e25 = g25[0];
+        if (!e25 || !e25.url) throw new Error('segment ' + (k2 + 1) + ' : aucune vidéo récupérée');
+        urls25.push(e25.url); ids25.push(e25.id);
+        if (k2 < planS.length - 1 && !state.stopRequested) {
+          for (var s2 = PAUSE_SEGMENT; s2 > 0; s2--) { if (state.stopRequested) throw new Error('Arrêt'); setStatus('Pause entre segments… ' + s2 + 's'); await sleep(1000); }
+        }
+      }
+      try {
+        setStatus('Assemblage…');
+        var blob25 = await assembler(urls25);
+        var o25 = URL.createObjectURL(blob25);
+        var idF25 = await addVideoToGallery(o25, sceneLabel + ' — ' + dureeSec.toFixed(1) + 's assemblées', { model: modelId, scene: sceneLabel });
+        try { saveGallery(loadGallery().filter(function (e) { return ids25.indexOf(e.id) < 0; })); renderGallery(); } catch (e) {}
+        logSuccess('🎉 Vidéo assemblée : <strong>' + dureeSec.toFixed(1) + 's</strong> (' + formatBytes(blob25.size) + ')');
+        try { if (typeof downloadVideoEntry === 'function') await downloadVideoEntry(idF25, false); } catch (e) {}
+      } catch (e) {
+        logError('❌ Assemblage impossible : ' + escapeHtml(e.message));
+        logWarn('⚠️ Les <strong>' + urls25.length + ' segments</strong> restent dans la galerie (rien n’est perdu).');
+        showToast('Assemblage impossible — segments conservés', 'warn', 4000);
+      }
+      return;
+    }
     /* 1) un seul plan, cadence réduite (doc officielle) — le plus propre */
     var unique = planOptimal(total);
     if (unique) {
@@ -2691,6 +2795,22 @@ async function enrichWithMistral(btn, textareaId) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', note); else note();
   var n = 0, iv = setInterval(function () { note(); if (++n > 20) clearInterval(iv); }, 500);
 
+  /* les modèles 2.5 n'apparaissent pas toujours dans la détection : on les
+     ajoute à la liste pour qu'ils soient sélectionnables. */
+  try {
+    var _loadDet = loadDetectedAgnes;
+    loadDetectedAgnes = function () {
+      var l = _loadDet.apply(this, arguments) || [];
+      var connus = [
+        { id: 'agnes-video-v2.0', name: 'Agnes Video v2.0', desc: 'Frames 8n+1 (≤441), 24 i/s, images/audio joints' },
+        { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'OpenAI Videos : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' },
+        { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' }
+      ];
+      connus.forEach(function (m) { if (!l.some(function (x) { return x.id === m.id; })) l.push(m); });
+      return l;
+    };
+  } catch (e) {}
+
   window.__v455Long = {
     necessaire: necessaire, executer: executer, assembler: assembler,
     plafond: function () { return PLAFOND_FRAMES; },
@@ -2698,6 +2818,9 @@ async function enrichWithMistral(btn, textareaId) {
     valide: valide,
     planOptimal: planOptimal,
     decouper: decouper,
+    est25: est25,
+    secondes25: secondes25,
+    decouperSecondes: decouperSecondes,
     segmentsPour: function (frames) { return decouper(frames).length; }
   };
 })();

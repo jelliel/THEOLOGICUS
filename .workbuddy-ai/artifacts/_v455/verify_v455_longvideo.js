@@ -144,8 +144,58 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   const note = await page.evaluate(() => { const d = document.getElementById('v455-note'); return d ? d.textContent : null; });
   ok('note d’interface sous le sélecteur de durée (limite 18,4 s expliquée)', !!note && /18,4 s/.test(note) && /découpée en segments/.test(note), String(note).slice(0, 90));
 
+  // ── 4. DIALECTE 2.5 (agnes-video-2.5 / 2.5-flash) ──
+  const d25 = await page.evaluate(() => ({
+    est25a: window.__v455Long.est25('agnes-video-2.5'),
+    est25b: window.__v455Long.est25('agnes-video-2.5-flash'),
+    est25c: window.__v455Long.est25('agnes-video-v2.0'),
+    sec25: window.__v455Long.secondes25(441),
+    p50: window.__v455Long.decouperSecondes(50),
+    p90: window.__v455Long.decouperSecondes(90),
+    p8: window.__v455Long.decouperSecondes(8),
+    modeles: (loadDetectedAgnes() || []).map(m => m.id)
+  }));
+  ok('détection du dialecte 2.5 (et pas v2.0)', d25.est25a && d25.est25b && !d25.est25c, JSON.stringify(d25).slice(0, 80));
+  ok('2.5 : 441 images -> 12 s (plafond du modèle)', d25.sec25 === 12, String(d25.sec25));
+  ok('2.5 : 50 s -> [12,12,12,7,7] (segments 4..12 s valides)', JSON.stringify(d25.p50) === '[12,12,12,7,7]', JSON.stringify(d25.p50));
+  ok('2.5 : 90 s -> 8 segments dont un de 6 s', d25.p90.length === 8 && d25.p90[7] === 6, JSON.stringify(d25.p90));
+  ok('2.5 : 8 s -> un seul segment', JSON.stringify(d25.p8) === '[8]', JSON.stringify(d25.p8));
+  ok('les 3 modèles sont proposés dans la grille (v2.0, 2.5, 2.5-flash)',
+     d25.modeles.indexOf('agnes-video-v2.0') >= 0 && d25.modeles.indexOf('agnes-video-2.5') >= 0 && d25.modeles.indexOf('agnes-video-2.5-flash') >= 0,
+     JSON.stringify(d25.modeles));
+
+  // 4b/4c/4d. corps réellement envoyé : page NEUVE (les tests précédents ont
+  // doublé createVideoTask), l'app passe par le relais local /proxy/…
+  const page2 = await browser.newPage();
+  page2.on('pageerror', e => errors.push('p2:' + String(e).slice(0, 100)));
+  let corps = null;
+  await page2.route('**/proxy/**', async route => {
+    if (route.request().method() === 'POST' && /videos$/.test(route.request().url())) corps = route.request().postData();
+    await route.fulfill({ status: 401, contentType: 'application/json', body: '{"detail":"test"}' });
+  });
+  await page2.goto(`http://127.0.0.1:${PORT}/ai-video.html`, { waitUntil: 'domcontentloaded' });
+  await page2.waitForTimeout(1200);
+  await page2.evaluate(() => createVideoTask('PROMPT 25', null, null, 'agnes-video-2.5-flash', null).catch(() => {}));
+  await page2.waitForTimeout(500);
+  let c = null; try { c = JSON.parse(corps); } catch (e) {}
+  ok('requête 2.5 : mode/seconds/size/aspect_ratio, SANS num_frames ni frame_rate',
+     !!c && c.mode === 'text' && typeof c.seconds === 'string' && c.size === '720P' && c.aspect_ratio === '16:9' && c.num_frames === undefined && c.frame_rate === undefined,
+     JSON.stringify(c).slice(0, 110));
+
+  const refus = await page2.evaluate(async () => {
+    try { await createVideoTask('P', 'data:image/png;base64,AAAA', null, 'agnes-video-2.5-flash', null); return 'aucune erreur'; }
+    catch (e) { return e.message; }
+  });
+  ok('2.5 + image base64 → refus explicite (URL publique exigée)', /URL PUBLIQUE/.test(String(refus)), String(refus).slice(0, 90));
+
+  corps = null;
+  await page2.evaluate(() => createVideoTask('P', 'data:image/png;base64,AAAA', null, 'agnes-video-v2.0', null).catch(() => {}));
+  await page2.waitForTimeout(500);
+  let c2 = null; try { c2 = JSON.parse(corps); } catch (e) {}
+  ok('v2.0 : corps inchangé (num_frames + frame_rate + image)', !!c2 && c2.num_frames !== undefined && c2.frame_rate !== undefined && !!c2.image, JSON.stringify(c2).slice(0, 100));
+
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/18`);
-  process.exitCode = pass === 18 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/27`);
+  process.exitCode = pass === 27 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
