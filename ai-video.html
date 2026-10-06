@@ -2825,5 +2825,167 @@ async function enrichWithMistral(btn, textareaId) {
   };
 })();
 </script>
+
+<script id="v456-galerie-idb">
+/* ═══════════════════════════════════════════════════════════════════
+   v456 — GALERIE DANS IndexedDB + MODÈLES TYPÉS.
+   1) La galerie était un JSON dans localStorage : quelques vidéos
+      suffisaient à saturer les ~5 Mo et « ❌ Sauvegarde impossible »
+      laissait la vidéo en mémoire seulement (perdue au rechargement).
+      Elle vit désormais dans IndexedDB (settings/gallery-idb), avec un
+      MIROIR EN MÉMOIRE pour que le code existant, synchrone, continue de
+      fonctionner sans changement.
+   2) La grille mêlait modèles d'image et de vidéo : on les type, on met
+      les modèles vidéo en tête, et activer un modèle non-vidéo dans
+      AI VIDEO est refusé avec un message clair.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v456) return;
+  var CLE_LS = 'cinema_noir_gallery_v1';   /* clé historique localStorage */
+  var CLE_IDB = 'gallery-idb';             /* clé dans le store settings */
+  var miroir = null, origine = 'attente';
+
+  /* ai-video.html est une page SÉPARÉE : elle n'a pas le wrapper `db` de
+     l'app principale. On ouvre donc une base DÉDIÉE à la galerie. */
+  var DB_NOM = 'cinema_noir_video', STORE = 'kv';
+  var _base = null;
+  function base() {
+    if (_base) return _base;
+    _base = new Promise(function (res, rej) {
+      try {
+        var rq = indexedDB.open(DB_NOM, 1);
+        rq.onupgradeneeded = function () { if (!rq.result.objectStoreNames.contains(STORE)) rq.result.createObjectStore(STORE); };
+        rq.onsuccess = function () { res(rq.result); };
+        rq.onerror = function () { rej(rq.error); };
+        rq.onblocked = function () { rej(new Error('IndexedDB bloquée')); };
+      } catch (e) { rej(e); }
+    });
+    return _base;
+  }
+  function DB() { return !!indexedDB; }
+  function lireIDB() {
+    return base().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, 'readonly'), r = t.objectStore(STORE).get(CLE_IDB);
+        r.onsuccess = function () { res(r.result ? JSON.parse(r.result) : null); };
+        r.onerror = function () { rej(r.error); };
+      });
+    }).catch(function () { return null; });
+  }
+  function ecrireIDB(list) {
+    return base().then(function (d) {
+      return new Promise(function (res, rej) {
+        var t = d.transaction(STORE, 'readwrite');
+        t.objectStore(STORE).put(JSON.stringify(list), CLE_IDB);
+        t.oncomplete = function () { res(true); };
+        t.onerror = function () { rej(t.error); };
+      });
+    }).catch(function () { return false; });
+  }
+
+  /* ── enveloppes : le miroir rend l'API existante synchrone ── */
+  var _load = loadGallery, _save = saveGallery;
+  loadGallery = function () {
+    if (miroir) return miroir;
+    return _load.apply(this, arguments) || [];
+  };
+  saveGallery = function (list) {
+    list = list || [];
+    if (list.length > MAX_GALLERY) list = list.slice(0, MAX_GALLERY);
+    miroir = list;
+    return ecrireIDB(list).then(function (ok) {
+      if (ok) {
+        /* plus besoin de la copie localStorage : on libère le quota */
+        try { localStorage.removeItem(CLE_LS); } catch (e) {}
+        return true;
+      }
+      /* IndexedDB indisponible : comportement d'origine en secours */
+      try { _save(list); return true; } catch (e) { logError('❌ Sauvegarde impossible'); return false; }
+    });
+  };
+
+  /* ── démarrage : charger, migrer, re-rendre ── */
+  function amorcer(n) {
+    if (!DB()) {
+      if (n > 0) return new Promise(function (r) { setTimeout(function () { r(amorcer(n - 1)); }, 400); });
+      origine = 'sans-idb'; return Promise.resolve(origine);
+    }
+    return lireIDB().then(function (depuisIdb) {
+      if (depuisIdb && depuisIdb.length) { miroir = depuisIdb; origine = 'idb'; return origine; }
+      var ls = null;
+      try { ls = JSON.parse(localStorage.getItem(CLE_LS) || 'null'); } catch (e) {}
+      if (ls && ls.length) {
+        miroir = ls;
+        return ecrireIDB(ls).then(function (ok) {
+          if (ok) { try { localStorage.removeItem(CLE_LS); } catch (e) {} origine = 'migre'; }
+          else { miroir = null; origine = 'echec'; }
+          return origine;
+        });
+      }
+      miroir = [];
+      return 'vide';
+    });
+  }
+  amorcer(25).then(function (o) {
+    if (typeof renderGallery === 'function') renderGallery();
+    if (typeof logInfo === 'function' && (o === 'migre' || o === 'idb')) {
+      logInfo('🗂️ Galerie dans IndexedDB (' + (miroir ? miroir.length : 0) + ' vidéo(s))' + (o === 'migre' ? ' — quota localStorage libéré' : ''));
+    }
+  });
+
+  /* ── modèles : type, ordre, refus des non-vidéo ── */
+  function typeDe(id) {
+    id = String(id || '');
+    if (/^agnes-video/.test(id)) return 'video';
+    if (/^agnes-image/.test(id)) return 'image';
+    if (/^agnes-(text|chat|llm)|flash$/.test(id)) return 'texte';
+    return 'autre';
+  }
+  var ICONE = { video: '🎬 VIDÉO', image: '🖼️ IMAGE', texte: '💬 TEXTE', autre: '•' };
+
+  var _det = loadDetectedAgnes;
+  loadDetectedAgnes = function () {
+    var l = _det.apply(this, arguments) || [];
+    l.forEach(function (m) { m.kind = typeDe(m.id); if (!/^(🎬|🖼️|💬)/.test(m.desc || '')) m.desc = ICONE[m.kind] + (m.desc ? ' — ' + m.desc : ''); });
+    l.sort(function (a, b) { return (a.kind === 'video' ? 0 : 1) - (b.kind === 'video' ? 0 : 1); });
+    return l;
+  };
+
+  var _toggle = toggleActiveModel;
+  toggleActiveModel = function (id) {
+    var kind = typeDe(id);
+    if (kind !== 'video' && /^agnes-/.test(String(id || ''))) {
+      logError('⛔ <code>' + escapeHtml(id) + '</code> est un modèle d\u2019' + (kind === 'image' ? 'IMAGE' : 'TEXTE') + ' : AI VIDEO ne génère qu\u2019avec les modèles <code>agnes-video-*</code>.');
+      showToast('Modèle non vidéo — choisissez agnes-video-*', 'warn', 4000);
+      return;
+    }
+    return _toggle.apply(this, arguments);
+  };
+
+  /* au démarrage : retirer d'éventuels modèles non-vidéo restés actifs */
+  try {
+    var actifs = state.activeModels || [];
+    var propres = actifs.filter(function (m) { return typeDe(m) === 'video' || !/^agnes-/.test(String(m || '')); });
+    if (propres.length !== actifs.length) {
+      var retires = actifs.filter(function (m) { return propres.indexOf(m) < 0; });
+      state.activeModels = propres;
+      saveActiveModels(propres);
+      logWarn('⚠️ Modèle(s) non vidéo désactivé(s) : <code>' + retires.map(escapeHtml).join(', ') + '</code>');
+      if (typeof renderActiveModelsBar === 'function') renderActiveModelsBar();
+      if (typeof renderAgnesModelGrid === 'function') renderAgnesModelGrid(loadDetectedAgnes());
+    }
+  } catch (e) {}
+
+  window.__v456 = {
+    typeDe: typeDe,
+    amorcer: amorcer,
+    origine: function () { return origine; },
+    miroir: function () { return miroir; },
+    enLocalStorage: function () { try { return !!localStorage.getItem(CLE_LS); } catch (e) { return null; } },
+    forcerSauvegarde: function (l) { return saveGallery(l); }
+  };
+})();
+</script>
 </body>
 </html>

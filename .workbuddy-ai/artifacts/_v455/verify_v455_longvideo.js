@@ -89,6 +89,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 2. plan de 25 s : UN SEUL appel, cadence abaissée, aucun assemblage
   await page.evaluate(() => {
+    saveGallery([]);
     window.__rec = { frames: [], cadence: [], ffWrite: [] };
     state.durationFrames = 601;
     state.stopRequested = false;
@@ -97,7 +98,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
       window.__rec.cadence.push(window.__v455Cadence);
       return 'task_' + window.__rec.frames.length;
     };
-    localStorage.removeItem('cinema_noir_gallery_v1');
+    saveGallery([]);
     return window.__v455Long.executer('PROMPT DE BASE', null, null, 'agnes-video-v2.0', null, 'Scene 1/1');
   });
   await page.waitForTimeout(400);
@@ -119,7 +120,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
       window.__rec.frames.push(state.durationFrames);
       return 'task_' + window.__rec.frames.length;
     };
-    localStorage.removeItem('cinema_noir_gallery_v1');
+    saveGallery([]);
     await window.__v455Long.executer('P50', null, null, 'm', null, 'Scene 1/1');
     return { frames: window.__rec.frames, ffExec: window.__rec.ffExec, galerie: loadGallery().map(v => v.label) };
   });
@@ -129,7 +130,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 3. repli : assemblage impossible → les segments restent
   const repli = await page.evaluate(async () => {
-    localStorage.removeItem('cinema_noir_gallery_v1');
+    saveGallery([]);
     window.__rec = { frames: [], prompts: [], ffWrite: [], ffExec: [] };
     /* échec réel d'assemblage : les segments sont illisibles (réseau coupé) */
     window.fetchVideoBlob = async function () { return null; };
