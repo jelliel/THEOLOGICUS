@@ -67,15 +67,20 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   // 1. seuil
   const seuil = await page.evaluate(() => ({
     plafond: window.__v455Long.plafond(),
-    court: (function () { state.durationFrames = 361; return window.__v455Long.necessaire(); })(),
-    long: (function () { state.durationFrames = 362; return window.__v455Long.necessaire(); })(),
-    seg25: window.__v455Long.segmentsPour(601),
-    seg90: window.__v455Long.segmentsPour(2161)
+    minimum: window.__v455Long.minimum(),
+    court: (function () { state.durationFrames = 441; return window.__v455Long.necessaire(); })(),
+    long: (function () { state.durationFrames = 601; return window.__v455Long.necessaire(); })(),
+    p25: window.__v455Long.decouper(601),
+    p50: window.__v455Long.decouper(1201),
+    p90: window.__v455Long.decouper(2161)
   }));
-  ok('plafond fournisseur = 361 images (15 s à 24 i/s)', seuil.plafond === 361, 'plafond=' + seuil.plafond);
-  ok('≤ 15 s → chemin d’origine (pas de découpage)', seuil.court === false);
-  ok('> 15 s → découpage déclenché', seuil.long === true);
-  ok('25 s → 2 segments ; 1 min 30 → 6 segments', seuil.seg25 === 2 && seuil.seg90 === 6, JSON.stringify({ s25: seuil.seg25, s90: seuil.seg90 }));
+  ok('plafond fournisseur = 441 images (18,4 s à 24 i/s), minimum 81', seuil.plafond === 441 && seuil.minimum === 81, JSON.stringify({ p: seuil.plafond, m: seuil.minimum }));
+  ok('une durée VALIDE (441) → chemin d’origine (pas de découpage)', seuil.court === false);
+  ok('une durée invalide (601) → découpage déclenché', seuil.long === true);
+  ok('25 s → [441, 161] (25,1 s) ; 50 s → [441,441,321]', JSON.stringify(seuil.p25) === '[441,161]' && JSON.stringify(seuil.p50) === '[441,441,321]', JSON.stringify({ p25: seuil.p25, p50: seuil.p50 }));
+  ok('TOUS les segments sont conformes à la règle 8n+1 (min 81, max 441)',
+     seuil.p25.concat(seuil.p50, seuil.p90).every(n => n >= 81 && n <= 441 && (n % 8) === 1),
+     JSON.stringify(seuil.p90));
 
   // 2. exécution complète d'un plan de 25 s (2 segments)
   await page.evaluate(() => {
@@ -101,7 +106,9 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     ffExec: window.__rec.ffExec,
     galerie: loadGallery().map(v => ({ label: v.label, scene: v.scene }))
   }));
-  ok('2 segments générés avec les bonnes durées (361 + 240)', JSON.stringify(r.frames) === '[361,240]', JSON.stringify(r.frames));
+  ok('2 segments générés aux durées CONFORMES (441 + 161)', JSON.stringify(r.frames) === '[441,161]', JSON.stringify(r.frames));
+  ok('chaque valeur envoyée est un 8n+1 valide (jamais 240, qui bloquait la file)',
+     r.frames.every(n => n >= 81 && n <= 441 && (n % 8) === 1), JSON.stringify(r.frames));
   ok('chaque segment porte la consigne de CONTINUITÉ', r.prompts.length === 2 && /CONTINUITY/.test(r.prompts[0]) && /segment 1 of 2/.test(r.prompts[0]) && /segment 2 of 2/.test(r.prompts[1]), (r.prompts[0] || '').slice(-60));
   ok('ffmpeg a reçu les 2 segments + la liste', r.ffWrite.filter(n => /^seg/.test(n)).length === 2 && r.ffWrite.indexOf('liste.txt') >= 0, JSON.stringify(r.ffWrite));
   ok('assemblage par concat', r.ffExec.length >= 1 && /-f concat -safe 0 -i liste\.txt/.test(r.ffExec[0]), r.ffExec[0]);
@@ -122,10 +129,10 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 4. note d'interface
   const note = await page.evaluate(() => { const d = document.getElementById('v455-note'); return d ? d.textContent : null; });
-  ok('note d’interface sous le sélecteur de durée', !!note && /découpée en segments/.test(note), String(note).slice(0, 80));
+  ok('note d’interface sous le sélecteur de durée (limite 18,4 s expliquée)', !!note && /18,4 s/.test(note) && /découpée en segments/.test(note), String(note).slice(0, 90));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/13`);
-  process.exitCode = pass === 13 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/15`);
+  process.exitCode = pass === 15 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

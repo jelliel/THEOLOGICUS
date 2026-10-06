@@ -579,6 +579,7 @@
                     <option value="153" selected>6,4 secondes</option>
                     <option value="241">10 secondes</option>
                     <option value="361">15 secondes</option>
+                    <option value="441">18,4 secondes (maximum en un seul plan)</option>
                     <option value="601">25 secondes</option>
                     <option value="1201">50 secondes</option>
                     <option value="2161">1 minute 30</option>
@@ -2467,6 +2468,7 @@ async function enrichWithMistral(btn, textareaId) {
 </script>
 
 
+
 <script id="v455-long-video">
 /* ═══════════════════════════════════════════════════════════════════
    v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
@@ -2483,13 +2485,46 @@ async function enrichWithMistral(btn, textareaId) {
   'use strict';
   if (window.__v455Long) return;
 
-  var PLAFOND_FRAMES = 361;          /* 15 s à 24 i/s — maximum du fournisseur */
+  /* MESURÉ (doc Agnes + retours d'usage) : num_frames doit valoir 8n+1, avec un
+     MINIMUM de 81, et le maximum accepté est 441 (18,4 s à 24 i/s). Au-delà —
+     ou pour une valeur non conforme — la tâche reste EN FILE SANS ERREUR :
+     c'est le « ça ne génère pas » constaté. */
+  var PLAFOND_FRAMES = 441;          /* 18,4 s à 24 i/s : maximum du fournisseur */
+  var MIN_FRAMES = 81;               /* 3,4 s : minimum accepté */
+  function valide(n) { return n >= MIN_FRAMES && n <= PLAFOND_FRAMES && (n % 8) === 1; }
+  function arrondir(n) {             /* 8n+1 le plus proche, dans les bornes */
+    var k = Math.round((n - 1) / 8);
+    var v = 8 * k + 1;
+    if (v < MIN_FRAMES) v = MIN_FRAMES;
+    if (v > PLAFOND_FRAMES) v = PLAFOND_FRAMES;
+    return v;
+  }
+  /* découpe une durée demandée en segments TOUS valides (8n+1), au plus près
+     de la durée voulue */
+  function decouper(total) {
+    if (valide(total)) return [total];
+    var parts = [];
+    var reste = total;
+    while (reste > PLAFOND_FRAMES) { parts.push(PLAFOND_FRAMES); reste -= PLAFOND_FRAMES; }
+    if (reste < MIN_FRAMES) {
+      /* le reliquat est trop court : on emprunte au segment précédent */
+      if (parts.length) {
+        var dernier = parts.pop() + reste;
+        var moitie = Math.round((dernier - 1) / 16) * 8 + 1;   /* deux 8n+1 */
+        if (valide(moitie) && valide(dernier - moitie)) { parts.push(moitie, dernier - moitie); return parts; }
+        parts.push(PLAFOND_FRAMES);
+      }
+      reste = MIN_FRAMES;
+    }
+    parts.push(arrondir(reste));
+    return parts;
+  }
   var PAUSE_SEGMENT = 20;            /* respiration entre deux segments (s) */
   var FF_JS = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
   var FF_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js';
   var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
 
-  function necessaire() { return state.durationFrames > PLAFOND_FRAMES; }
+  function necessaire() { return !valide(state.durationFrames); }
   function secondes(n) { return (n / FRAME_RATE).toFixed(1) + 's'; }
 
   /* ── ffmpeg.wasm chargé à la demande (même source que la conversion v104) ── */
@@ -2544,13 +2579,15 @@ async function enrichWithMistral(btn, textareaId) {
   /* ── exécution : segments puis assemblage ── */
   async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
     var total = state.durationFrames;
-    var nb = Math.ceil(total / PLAFOND_FRAMES);
-    logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments de ' + secondes(PLAFOND_FRAMES) + ' max');
+    var plan = decouper(total);
+    var nb = plan.length;
+    logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments (' +
+      plan.map(function (f) { return secondes(f); }).join(' + ') + ')');
     logInfo('ℹ️ Le fournisseur plafonne un plan à ' + secondes(PLAFOND_FRAMES) + ' : les segments seront assemblés en une seule vidéo.');
     var urls = [], ids = [];
     for (var k = 0; k < nb; k++) {
       if (state.stopRequested) throw new Error('Arrêt');
-      var frames = Math.min(PLAFOND_FRAMES, total - k * PLAFOND_FRAMES);
+      var frames = plan[k];
       var lab = sceneLabel + ' · segment ' + (k + 1) + '/' + nb + ' (' + secondes(frames) + ')';
       logStep('━━━ Segment ' + (k + 1) + '/' + nb + ' — ' + secondes(frames) + ' ━━━');
       var p = prompt + '\n\n[CONTINUITY — segment ' + (k + 1) + ' of ' + nb + ': this is a direct continuation of the previous shot. Same subject, same framing, same lighting, same style; the action continues seamlessly.]';
@@ -2599,7 +2636,7 @@ async function enrichWithMistral(btn, textareaId) {
     var d = document.createElement('div');
     d.id = 'v455-note';
     d.style.cssText = 'font-size:0.72rem;color:var(--muted,#8a8a8a);margin-top:0.3rem;line-height:1.35;';
-    d.textContent = 'Au-delà de 15 s, la durée est découpée en segments de 15 s puis assemblée en une seule vidéo.';
+    d.textContent = 'Un plan est limité à 18,4 s par le fournisseur : au-delà, la durée est découpée en segments (tous conformes à la règle 8n+1) puis assemblée en une seule vidéo.';
     sel.parentNode.appendChild(d);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', note); else note();
@@ -2608,7 +2645,10 @@ async function enrichWithMistral(btn, textareaId) {
   window.__v455Long = {
     necessaire: necessaire, executer: executer, assembler: assembler,
     plafond: function () { return PLAFOND_FRAMES; },
-    segmentsPour: function (frames) { return Math.ceil(frames / PLAFOND_FRAMES); }
+    minimum: function () { return MIN_FRAMES; },
+    valide: valide,
+    decouper: decouper,
+    segmentsPour: function (frames) { return decouper(frames).length; }
   };
 })();
 </script>
