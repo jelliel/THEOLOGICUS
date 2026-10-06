@@ -165,6 +165,28 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
      d25.modeles.indexOf('agnes-video-v2.0') >= 0 && d25.modeles.indexOf('agnes-video-2.5') >= 0 && d25.modeles.indexOf('agnes-video-2.5-flash') >= 0,
      JSON.stringify(d25.modeles));
 
+  // 3b. LE CAS SIGNALÉ : modèle 2.5 + image jointe (base64) + 50 s
+  //     → bascule automatique sur v2.0, sinon « aucune vidéo ».
+  const bascule = await page.evaluate(async () => {
+    saveGallery([]);
+    window.fetchVideoBlob = async function () { return new Blob([new Uint8Array([0, 0, 0, 24])], { type: 'video/mp4' }); };
+    state.durationFrames = 1201;      /* 50 s */
+    state.stopRequested = false;
+    const rec = { modeles: [], frames: [] };
+    window.createVideoTask = async function (prompt, img, aud, modelId, vid) {
+      rec.modeles.push(modelId); rec.frames.push(state.durationFrames);
+      return 't' + rec.modeles.length;
+    };
+    logState.entries = [];
+    await window.__v455Long.executer('PROMPT SCENARIO', 'data:image/png;base64,AAAA', null, 'agnes-video-2.5-flash', null, 'Scene 1/1');
+    return { rec: rec, avert: logState.entries.filter(e => e.level === 'warn').map(e => e.message), galerie: loadGallery().length };
+  });
+  ok('2.5 + image jointe + 50 s → bascule sur v2.0, 3 segments conformes (441+441+321)',
+     bascule.rec.modeles.length === 3 && bascule.rec.modeles.every(m => m === 'agnes-video-v2.0') && JSON.stringify(bascule.rec.frames) === '[441,441,321]',
+     JSON.stringify(bascule.rec).slice(0, 120));
+  ok('la bascule est ANNONCÉE dans le journal (pas silencieuse)', bascule.avert.some(m => /bascule/.test(m)), JSON.stringify(bascule.avert).slice(0, 90));
+  ok('résultat : une seule vidéo assemblée (plus de « aucune vidéo »)', bascule.galerie === 1, String(bascule.galerie));
+
   // 4b/4c/4d. corps réellement envoyé : page NEUVE (les tests précédents ont
   // doublé createVideoTask), l'app passe par le relais local /proxy/…
   const page2 = await browser.newPage();
@@ -196,7 +218,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('v2.0 : corps inchangé (num_frames + frame_rate + image)', !!c2 && c2.num_frames !== undefined && c2.frame_rate !== undefined && !!c2.image, JSON.stringify(c2).slice(0, 100));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/27`);
-  process.exitCode = pass === 27 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/30`);
+  process.exitCode = pass === 30 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

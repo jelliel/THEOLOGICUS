@@ -2475,356 +2475,7 @@ async function enrichWithMistral(btn, textareaId) {
 
 
 
-<script id="v455-long-video">
-/* ═══════════════════════════════════════════════════════════════════
-   v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
-   Le fournisseur (Agnes) refuse un plan de plus de 361 images (15 s à
-   24 i/s) : au-delà, la génération échouait sans explication.
-   Ici : on découpe la durée demandée en segments de 15 s au plus, on les
-   génère l'un après l'autre (même prompt + consigne de continuité), puis
-   on les ASSEMBLE en une seule vidéo (ffmpeg.wasm, concat).
-   Si l'assemblage est impossible (hors ligne, wasm refusé), les segments
-   restent dans la galerie : rien n'est perdu, et c'est dit.
-   Le chemin d'origine (≤ 15 s) n'est pas modifié.
-   ═══════════════════════════════════════════════════════════════════ */
-(function () {
-  'use strict';
-  if (window.__v455Long) return;
 
-  /* MESURÉ (doc Agnes + retours d'usage) : num_frames doit valoir 8n+1, avec un
-     MINIMUM de 81, et le maximum accepté est 441 (18,4 s à 24 i/s). Au-delà —
-     ou pour une valeur non conforme — la tâche reste EN FILE SANS ERREUR :
-     c'est le « ça ne génère pas » constaté. */
-  var PLAFOND_FRAMES = 441;          /* 18,4 s à 24 i/s : maximum du fournisseur */
-  var MIN_FRAMES = 81;               /* 3,4 s : minimum accepté */
-  function valide(n) { return n >= MIN_FRAMES && n <= PLAFOND_FRAMES && (n % 8) === 1; }
-  function arrondir(n) {             /* 8n+1 le plus proche, dans les bornes */
-    var k = Math.round((n - 1) / 8);
-    var v = 8 * k + 1;
-    if (v < MIN_FRAMES) v = MIN_FRAMES;
-    if (v > PLAFOND_FRAMES) v = PLAFOND_FRAMES;
-    return v;
-  }
-  /* découpe une durée demandée en segments TOUS valides (8n+1), au plus près
-     de la durée voulue */
-  function decouper(total) {
-    if (valide(total)) return [total];
-    var parts = [];
-    var reste = total;
-    while (reste > PLAFOND_FRAMES) { parts.push(PLAFOND_FRAMES); reste -= PLAFOND_FRAMES; }
-    if (reste < MIN_FRAMES) {
-      /* le reliquat est trop court : on emprunte au segment précédent */
-      if (parts.length) {
-        var dernier = parts.pop() + reste;
-        var moitie = Math.round((dernier - 1) / 16) * 8 + 1;   /* deux 8n+1 */
-        if (valide(moitie) && valide(dernier - moitie)) { parts.push(moitie, dernier - moitie); return parts; }
-        parts.push(PLAFOND_FRAMES);
-      }
-      reste = MIN_FRAMES;
-    }
-    parts.push(arrondir(reste));
-    return parts;
-  }
-  var PAUSE_SEGMENT = 20;            /* respiration entre deux segments (s) */
-  var FF_JS = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
-  var FF_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js';
-  var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
-
-  function necessaire() {
-    if (!valide(state.durationFrames)) return true;
-    /* un modèle 2.5 plafonne à 12 s : on passe par le planificateur */
-    var modeles = state.activeModels && state.activeModels.length ? state.activeModels : [getSelectedModelId()];
-    for (var i = 0; i < modeles.length; i++) { if (est25(modeles[i])) return true; }
-    return false;
-  }
-
-  /* La doc officielle : « pour des vidéos plus longues, augmenter num_frames
-     OU BAISSER frame_rate » (1 à 60 accepté). On préfère donc, quand c'est
-     possible, UN SEUL plan à cadence réduite : pas d'assemblage, pas de
-     réencodage, aucune couture. L'assemblage ne sert plus que de repli. */
-  var CADENCES = [24, 20, 16, 12];       /* du plus fluide au plus lent acceptable */
-  function planOptimal(totalFrames) {
-    var dureeSec = totalFrames / FRAME_RATE;
-    for (var i = 0; i < CADENCES.length; i++) {
-      var f = CADENCES[i];
-      /* 8n+1 le plus proche SANS BORNAGE : borner à 441 ferait « tenir » une
-         durée trop longue en la raccourcissant en silence (25 s → 18,4 s). */
-      var n = 8 * Math.round((dureeSec * f - 1) / 8) + 1;
-      if (valide(n)) return { fps: f, frames: n, sec: n / f };
-    }
-    return null;                          /* il faudra découper */
-  }
-  /* ── DEUX DIALECTES ──────────────────────────────────────────────────
-     agnes-video-v2.0 : { num_frames (8n+1, ≤ 441), frame_rate 1-60 }
-     agnes-video-2.5 / 2.5-flash : API compatible OpenAI Videos
-        { mode: text|keyframe|reference, seconds: "4".."12", size, aspect_ratio }
-        — refuse num_frames, fps, width, height (HTTP 400), et exige des
-        médias par URL PUBLIQUE (un data: base64 est refusé). */
-  var MOD_25 = /^agnes-video-2\.5/;
-  function est25(m) { return MOD_25.test(String(m || '')); }
-  function secondes25(frames) { return Math.max(4, Math.min(12, Math.round(frames / FRAME_RATE))); }
-  /* découpe une durée en secondes en segments de 4 à 12 s (contrainte 2.5) */
-  function decouperSecondes(totalSec) {
-    var max = 12, min = 4;
-    var n = Math.ceil(totalSec / max);
-    if (n <= 1) return [Math.max(min, Math.min(max, Math.round(totalSec)))];
-    var parts = [], reste = Math.round(totalSec);
-    while (reste > max) { parts.push(max); reste -= max; }
-    if (reste < min) {
-      /* reliquat trop court : on partage le dernier segment en deux valides */
-      var dernier = parts.pop() + reste;
-      var a = Math.floor(dernier / 2), b2 = dernier - a;
-      if (a >= min && b2 <= max) { parts.push(a, b2); return parts; }
-      parts.push(max);
-      reste = Math.min(max, Math.max(min, dernier - max));
-    }
-    parts.push(reste);
-    return parts;
-  }
-  /* frame_rate n'est pas dans state : on réécrit le corps de la requête /videos */
-  var _apiFetch = apiFetch;
-  apiFetch = async function (url, options) {
-    if (options && options.body && /\/videos$/.test(String(url))) {
-      try {
-        var b = JSON.parse(options.body);
-        if (est25(b.model)) {
-          /* média par URL publique exigé : un data: serait refusé en 400 */
-          var medias = [b.image, b.audio, b.video].filter(Boolean);
-          for (var mi = 0; mi < medias.length; mi++) {
-            if (/^data:/i.test(String(medias[mi]))) {
-              throw new Error('Agnes ' + b.model + ' exige des médias par URL PUBLIQUE (un fichier joint en base64 est refusé). Utilisez agnes-video-v2.0 pour les images/audio joints.');
-            }
-          }
-          var corps = {
-            model: b.model, prompt: b.prompt, mode: 'text',
-            seconds: String(window.__v456Secondes || secondes25(b.num_frames)),
-            size: /flash/.test(b.model) ? '720P' : '720P',
-            aspect_ratio: '16:9'
-          };
-          if (b.image) { corps.mode = 'keyframe'; corps.first_frame = b.image; }
-          if (b.audio) { corps.mode = 'reference'; corps.audios = [b.audio]; }
-          if (b.video) { corps.mode = 'reference'; corps.videos = [{ url: b.video }]; }
-          options = Object.assign({}, options, { body: JSON.stringify(corps) });
-        } else if (window.__v455Cadence) {
-          b.frame_rate = window.__v455Cadence;
-          options = Object.assign({}, options, { body: JSON.stringify(b) });
-        }
-      } catch (e) { if (/URL PUBLIQUE/.test(e.message)) throw e; }
-    }
-    return _apiFetch(url, options);
-  };
-  function secondes(n) { return (n / FRAME_RATE).toFixed(1) + 's'; }
-
-  /* ── ffmpeg.wasm chargé à la demande (même source que la conversion v104) ── */
-  var ffCharge = null;
-  function chargerFFmpeg() {
-    if (ffCharge) return ffCharge;
-    ffCharge = (async function () {
-      if (!window.FFmpegWASM) {
-        await new Promise(function (res, rej) {
-          var s = document.createElement('script');
-          s.src = FF_JS; s.onload = res; s.onerror = function () { rej(new Error('ffmpeg.wasm introuvable (réseau ?)')); };
-          document.head.appendChild(s);
-        });
-      }
-      var ff = new FFmpegWASM.FFmpeg();
-      await ff.load({ coreURL: FF_CORE, wasmURL: FF_WASM });
-      return ff;
-    })();
-    ffCharge.catch(function () { ffCharge = null; });   /* un échec ne bloque pas un nouvel essai */
-    return ffCharge;
-  }
-
-  /* ── assemblage des segments en une seule vidéo ── */
-  async function assembler(urls) {
-    logStep('🧵 Assemblage de <strong>' + urls.length + '</strong> segments (ffmpeg)');
-    var ff = await chargerFFmpeg();
-    var noms = [], ext = 'mp4';
-    for (var i = 0; i < urls.length; i++) {
-      var blob = await fetchVideoBlob(urls[i]);
-      if (!blob) throw new Error('segment ' + (i + 1) + ' illisible');
-      if (/webm/i.test(blob.type || '')) ext = 'webm';
-      var nom = 'seg' + i + '.' + ext;
-      await ff.writeFile(nom, new Uint8Array(await blob.arrayBuffer()));
-      noms.push(nom);
-      logInfo('📦 Segment ' + (i + 1) + '/' + urls.length + ' prêt (' + formatBytes(blob.size) + ')');
-    }
-    var liste = noms.map(function (n) { return "file '" + n + "'"; }).join('\n');
-    await ff.writeFile('liste.txt', new TextEncoder().encode(liste));
-    var sortie = 'assemble.' + ext;
-    try {
-      await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'liste.txt', '-c', 'copy', sortie]);
-    } catch (e) {
-      logWarn('⚠️ Copie directe impossible — réencodage');
-      await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'liste.txt', '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', sortie]);
-    }
-    var data = await ff.readFile(sortie);
-    var out = new Blob([data.buffer || data], { type: ext === 'webm' ? 'video/webm' : 'video/mp4' });
-    noms.concat(['liste.txt', sortie]).forEach(function (n) { try { ff.deleteFile(n); } catch (e) {} });
-    return out;
-  }
-
-  /* ── exécution : segments puis assemblage ── */
-  async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
-    var total = state.durationFrames;
-    /* ── modèle 2.5 : durée en SECONDES, segments de 4 à 12 s ── */
-    if (est25(modelId)) {
-      var dureeSec = total / FRAME_RATE;
-      var planS = decouperSecondes(dureeSec);
-      if (planS.length === 1) {
-        logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → un plan de <strong>' + planS[0] + 's</strong>');
-        window.__v456Secondes = planS[0];
-        try { var id25 = await createVideoTask(prompt, img, aud, modelId, vid); await pollUntilDone(id25, modelId, sceneLabel + ' — ' + planS[0] + 's'); }
-        finally { window.__v456Secondes = null; }
-        return;
-      }
-      logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → ' + planS.length + ' segments (' + planS.join('s + ') + 's)');
-      var urls25 = [], ids25 = [];
-      for (var k2 = 0; k2 < planS.length; k2++) {
-        if (state.stopRequested) throw new Error('Arrêt');
-        var lab25 = sceneLabel + ' · segment ' + (k2 + 1) + '/' + planS.length + ' (' + planS[k2] + 's)';
-        logStep('━━━ Segment ' + (k2 + 1) + '/' + planS.length + ' — ' + planS[k2] + 's ━━━');
-        var p25 = prompt + '\n\n[CONTINUITY — segment ' + (k2 + 1) + ' of ' + planS.length + ': direct continuation of the previous shot, same subject, framing, lighting and style.]';
-        window.__v456Secondes = planS[k2];
-        try {
-          var idk = await createVideoTask(p25, img, aud, modelId, vid);
-          await pollUntilDone(idk, modelId, lab25);
-        } finally { window.__v456Secondes = null; }
-        var g25 = loadGallery(), e25 = null;
-        for (var j25 = 0; j25 < g25.length; j25++) { if (g25[j25].scene === lab25) { e25 = g25[j25]; break; } }
-        if (!e25) e25 = g25[0];
-        if (!e25 || !e25.url) throw new Error('segment ' + (k2 + 1) + ' : aucune vidéo récupérée');
-        urls25.push(e25.url); ids25.push(e25.id);
-        if (k2 < planS.length - 1 && !state.stopRequested) {
-          for (var s2 = PAUSE_SEGMENT; s2 > 0; s2--) { if (state.stopRequested) throw new Error('Arrêt'); setStatus('Pause entre segments… ' + s2 + 's'); await sleep(1000); }
-        }
-      }
-      try {
-        setStatus('Assemblage…');
-        var blob25 = await assembler(urls25);
-        var o25 = URL.createObjectURL(blob25);
-        var idF25 = await addVideoToGallery(o25, sceneLabel + ' — ' + dureeSec.toFixed(1) + 's assemblées', { model: modelId, scene: sceneLabel });
-        try { saveGallery(loadGallery().filter(function (e) { return ids25.indexOf(e.id) < 0; })); renderGallery(); } catch (e) {}
-        logSuccess('🎉 Vidéo assemblée : <strong>' + dureeSec.toFixed(1) + 's</strong> (' + formatBytes(blob25.size) + ')');
-        try { if (typeof downloadVideoEntry === 'function') await downloadVideoEntry(idF25, false); } catch (e) {}
-      } catch (e) {
-        logError('❌ Assemblage impossible : ' + escapeHtml(e.message));
-        logWarn('⚠️ Les <strong>' + urls25.length + ' segments</strong> restent dans la galerie (rien n’est perdu).');
-        showToast('Assemblage impossible — segments conservés', 'warn', 4000);
-      }
-      return;
-    }
-    /* 1) un seul plan, cadence réduite (doc officielle) — le plus propre */
-    var unique = planOptimal(total);
-    if (unique) {
-      logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → UN plan à <strong>' + unique.fps + ' i/s</strong>');
-      logInfo('ℹ️ Durée obtenue en abaissant la cadence (' + unique.fps + ' i/s) : aucun assemblage nécessaire, ' + unique.sec.toFixed(1) + 's.');
-      var avant = state.durationFrames;
-      state.durationFrames = unique.frames;
-      window.__v455Cadence = unique.fps;
-      try {
-        var idU = await createVideoTask(prompt, img, aud, modelId, vid);
-        await pollUntilDone(idU, modelId, sceneLabel + ' — ' + unique.sec.toFixed(1) + 's');
-      } finally {
-        window.__v455Cadence = null;
-        state.durationFrames = avant;
-      }
-      return;                              /* terminé : une seule vidéo */
-    }
-    /* 2) repli : découpage en segments valides + assemblage */
-    var plan = decouper(total);
-    var nb = plan.length;
-    logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments (' +
-      plan.map(function (f) { return secondes(f); }).join(' + ') + ')');
-    logInfo('ℹ️ Le fournisseur plafonne un plan à ' + secondes(PLAFOND_FRAMES) + ' : les segments seront assemblés en une seule vidéo.');
-    var urls = [], ids = [];
-    for (var k = 0; k < nb; k++) {
-      if (state.stopRequested) throw new Error('Arrêt');
-      var frames = plan[k];
-      var lab = sceneLabel + ' · segment ' + (k + 1) + '/' + nb + ' (' + secondes(frames) + ')';
-      logStep('━━━ Segment ' + (k + 1) + '/' + nb + ' — ' + secondes(frames) + ' ━━━');
-      var p = prompt + '\n\n[CONTINUITY — segment ' + (k + 1) + ' of ' + nb + ': this is a direct continuation of the previous shot. Same subject, same framing, same lighting, same style; the action continues seamlessly.]';
-      /* createVideoTask lit state.durationFrames pour num_frames : on lui donne
-         la durée DU SEGMENT (sinon le fournisseur refuserait encore), puis on
-         rend l'état intact — le reste de l'app n'est pas affecté. */
-      state.durationFrames = frames;
-      try {
-        var id = await createVideoTask(p, img, aud, modelId, vid);
-        await pollUntilDone(id, modelId, lab);
-      } finally {
-        state.durationFrames = total;
-      }
-      /* pollUntilDone dépose le segment dans la galerie : on le récupère */
-      var g = loadGallery();
-      var entree = null;
-      for (var j = 0; j < g.length; j++) { if (g[j].scene === lab) { entree = g[j]; break; } }
-      if (!entree) entree = g[0];
-      if (!entree || !entree.url) throw new Error('segment ' + (k + 1) + ' : aucune vidéo récupérée');
-      urls.push(entree.url); ids.push(entree.id);
-      if (k < nb - 1 && !state.stopRequested) {
-        for (var s = PAUSE_SEGMENT; s > 0; s--) { if (state.stopRequested) throw new Error('Arrêt'); setStatus('Pause entre segments… ' + s + 's'); await sleep(1000); }
-      }
-    }
-    /* assemblage */
-    try {
-      setStatus('Assemblage…');
-      var blob = await assembler(urls);
-      var objUrl = URL.createObjectURL(blob);
-      var idFinal = await addVideoToGallery(objUrl, sceneLabel + ' — ' + secondes(total) + ' assemblées', { model: modelId, scene: sceneLabel });
-      /* les segments ne sont plus nécessaires : on nettoie la galerie */
-      try { saveGallery(loadGallery().filter(function (e) { return ids.indexOf(e.id) < 0; })); renderGallery(); } catch (e) {}
-      logSuccess('🎉 Vidéo assemblée : <strong>' + secondes(total) + '</strong> (' + formatBytes(blob.size) + ')');
-      try { if (typeof downloadVideoEntry === 'function') await downloadVideoEntry(idFinal, false); } catch (e) {}
-    } catch (e) {
-      logError('❌ Assemblage impossible : ' + escapeHtml(e.message));
-      logWarn('⚠️ Les <strong>' + urls.length + ' segments</strong> restent dans la galerie (rien n’est perdu).');
-      showToast('Assemblage impossible — segments conservés', 'warn', 4000);
-    }
-  }
-
-  /* ── note d'interface sous le sélecteur de durée ── */
-  function note() {
-    var sel = document.getElementById('duration-select');
-    if (!sel || document.getElementById('v455-note')) return;
-    var d = document.createElement('div');
-    d.id = 'v455-note';
-    d.style.cssText = 'font-size:0.72rem;color:var(--muted,#8a8a8a);margin-top:0.3rem;line-height:1.35;';
-    d.textContent = 'Un plan est limité à 18,4 s par le fournisseur : au-delà, la durée est découpée en segments (tous conformes à la règle 8n+1) puis assemblée en une seule vidéo.';
-    sel.parentNode.appendChild(d);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', note); else note();
-  var n = 0, iv = setInterval(function () { note(); if (++n > 20) clearInterval(iv); }, 500);
-
-  /* les modèles 2.5 n'apparaissent pas toujours dans la détection : on les
-     ajoute à la liste pour qu'ils soient sélectionnables. */
-  try {
-    var _loadDet = loadDetectedAgnes;
-    loadDetectedAgnes = function () {
-      var l = _loadDet.apply(this, arguments) || [];
-      var connus = [
-        { id: 'agnes-video-v2.0', name: 'Agnes Video v2.0', desc: 'Frames 8n+1 (≤441), 24 i/s, images/audio joints' },
-        { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'OpenAI Videos : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' },
-        { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' }
-      ];
-      connus.forEach(function (m) { if (!l.some(function (x) { return x.id === m.id; })) l.push(m); });
-      return l;
-    };
-  } catch (e) {}
-
-  window.__v455Long = {
-    necessaire: necessaire, executer: executer, assembler: assembler,
-    plafond: function () { return PLAFOND_FRAMES; },
-    minimum: function () { return MIN_FRAMES; },
-    valide: valide,
-    planOptimal: planOptimal,
-    decouper: decouper,
-    est25: est25,
-    secondes25: secondes25,
-    decouperSecondes: decouperSecondes,
-    segmentsPour: function (frames) { return decouper(frames).length; }
-  };
-})();
-</script>
 
 <script id="v456-galerie-idb">
 /* ═══════════════════════════════════════════════════════════════════
@@ -2984,6 +2635,369 @@ async function enrichWithMistral(btn, textareaId) {
     miroir: function () { return miroir; },
     enLocalStorage: function () { try { return !!localStorage.getItem(CLE_LS); } catch (e) { return null; } },
     forcerSauvegarde: function (l) { return saveGallery(l); }
+  };
+})();
+</script>
+<script id="v455-long-video">
+/* ═══════════════════════════════════════════════════════════════════
+   v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
+   Le fournisseur (Agnes) refuse un plan de plus de 361 images (15 s à
+   24 i/s) : au-delà, la génération échouait sans explication.
+   Ici : on découpe la durée demandée en segments de 15 s au plus, on les
+   génère l'un après l'autre (même prompt + consigne de continuité), puis
+   on les ASSEMBLE en une seule vidéo (ffmpeg.wasm, concat).
+   Si l'assemblage est impossible (hors ligne, wasm refusé), les segments
+   restent dans la galerie : rien n'est perdu, et c'est dit.
+   Le chemin d'origine (≤ 15 s) n'est pas modifié.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v455Long) return;
+
+  /* MESURÉ (doc Agnes + retours d'usage) : num_frames doit valoir 8n+1, avec un
+     MINIMUM de 81, et le maximum accepté est 441 (18,4 s à 24 i/s). Au-delà —
+     ou pour une valeur non conforme — la tâche reste EN FILE SANS ERREUR :
+     c'est le « ça ne génère pas » constaté. */
+  var PLAFOND_FRAMES = 441;          /* 18,4 s à 24 i/s : maximum du fournisseur */
+  var MIN_FRAMES = 81;               /* 3,4 s : minimum accepté */
+  function valide(n) { return n >= MIN_FRAMES && n <= PLAFOND_FRAMES && (n % 8) === 1; }
+  function arrondir(n) {             /* 8n+1 le plus proche, dans les bornes */
+    var k = Math.round((n - 1) / 8);
+    var v = 8 * k + 1;
+    if (v < MIN_FRAMES) v = MIN_FRAMES;
+    if (v > PLAFOND_FRAMES) v = PLAFOND_FRAMES;
+    return v;
+  }
+  /* découpe une durée demandée en segments TOUS valides (8n+1), au plus près
+     de la durée voulue */
+  function decouper(total) {
+    if (valide(total)) return [total];
+    var parts = [];
+    var reste = total;
+    while (reste > PLAFOND_FRAMES) { parts.push(PLAFOND_FRAMES); reste -= PLAFOND_FRAMES; }
+    if (reste < MIN_FRAMES) {
+      /* le reliquat est trop court : on emprunte au segment précédent */
+      if (parts.length) {
+        var dernier = parts.pop() + reste;
+        var moitie = Math.round((dernier - 1) / 16) * 8 + 1;   /* deux 8n+1 */
+        if (valide(moitie) && valide(dernier - moitie)) { parts.push(moitie, dernier - moitie); return parts; }
+        parts.push(PLAFOND_FRAMES);
+      }
+      reste = MIN_FRAMES;
+    }
+    parts.push(arrondir(reste));
+    return parts;
+  }
+  var PAUSE_SEGMENT = 20;            /* respiration entre deux segments (s) */
+  var FF_JS = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
+  var FF_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js';
+  var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
+
+  function necessaire() {
+    if (!valide(state.durationFrames)) return true;
+    /* un modèle 2.5 plafonne à 12 s : on passe par le planificateur */
+    var modeles = state.activeModels && state.activeModels.length ? state.activeModels : [getSelectedModelId()];
+    for (var i = 0; i < modeles.length; i++) { if (est25(modeles[i])) return true; }
+    return false;
+  }
+
+  /* La doc officielle : « pour des vidéos plus longues, augmenter num_frames
+     OU BAISSER frame_rate » (1 à 60 accepté). On préfère donc, quand c'est
+     possible, UN SEUL plan à cadence réduite : pas d'assemblage, pas de
+     réencodage, aucune couture. L'assemblage ne sert plus que de repli. */
+  var CADENCES = [24, 20, 16, 12];       /* du plus fluide au plus lent acceptable */
+  function planOptimal(totalFrames) {
+    var dureeSec = totalFrames / FRAME_RATE;
+    for (var i = 0; i < CADENCES.length; i++) {
+      var f = CADENCES[i];
+      /* 8n+1 le plus proche SANS BORNAGE : borner à 441 ferait « tenir » une
+         durée trop longue en la raccourcissant en silence (25 s → 18,4 s). */
+      var n = 8 * Math.round((dureeSec * f - 1) / 8) + 1;
+      if (valide(n)) return { fps: f, frames: n, sec: n / f };
+    }
+    return null;                          /* il faudra découper */
+  }
+  /* ── DEUX DIALECTES ──────────────────────────────────────────────────
+     agnes-video-v2.0 : { num_frames (8n+1, ≤ 441), frame_rate 1-60 }
+     agnes-video-2.5 / 2.5-flash : API compatible OpenAI Videos
+        { mode: text|keyframe|reference, seconds: "4".."12", size, aspect_ratio }
+        — refuse num_frames, fps, width, height (HTTP 400), et exige des
+        médias par URL PUBLIQUE (un data: base64 est refusé). */
+  var MOD_25 = /^agnes-video-2\.5/;
+  function est25(m) { return MOD_25.test(String(m || '')); }
+  function secondes25(frames) { return Math.max(4, Math.min(12, Math.round(frames / FRAME_RATE))); }
+  /* découpe une durée en secondes en segments de 4 à 12 s (contrainte 2.5) */
+  function decouperSecondes(totalSec) {
+    var max = 12, min = 4;
+    var n = Math.ceil(totalSec / max);
+    if (n <= 1) return [Math.max(min, Math.min(max, Math.round(totalSec)))];
+    var parts = [], reste = Math.round(totalSec);
+    while (reste > max) { parts.push(max); reste -= max; }
+    if (reste < min) {
+      /* reliquat trop court : on partage le dernier segment en deux valides */
+      var dernier = parts.pop() + reste;
+      var a = Math.floor(dernier / 2), b2 = dernier - a;
+      if (a >= min && b2 <= max) { parts.push(a, b2); return parts; }
+      parts.push(max);
+      reste = Math.min(max, Math.max(min, dernier - max));
+    }
+    parts.push(reste);
+    return parts;
+  }
+  /* frame_rate n'est pas dans state : on réécrit le corps de la requête /videos */
+  var _apiFetch = apiFetch;
+  apiFetch = async function (url, options) {
+    if (options && options.body && /\/videos$/.test(String(url))) {
+      try {
+        var b = JSON.parse(options.body);
+        if (est25(b.model)) {
+          /* média par URL publique exigé : un data: serait refusé en 400 */
+          var medias = [b.image, b.audio, b.video].filter(Boolean);
+          for (var mi = 0; mi < medias.length; mi++) {
+            if (/^data:/i.test(String(medias[mi]))) {
+              throw new Error('Agnes ' + b.model + ' exige des médias par URL PUBLIQUE (fichier joint en base64 refusé). Relancez : l’app bascule normalement sur agnes-video-v2.0.');
+            }
+          }
+          var corps = {
+            model: b.model, prompt: b.prompt, mode: 'text',
+            seconds: String(window.__v456Secondes || secondes25(b.num_frames)),
+            size: /flash/.test(b.model) ? '720P' : '720P',
+            aspect_ratio: '16:9'
+          };
+          if (b.image) { corps.mode = 'keyframe'; corps.first_frame = b.image; }
+          if (b.audio) { corps.mode = 'reference'; corps.audios = [b.audio]; }
+          if (b.video) { corps.mode = 'reference'; corps.videos = [{ url: b.video }]; }
+          options = Object.assign({}, options, { body: JSON.stringify(corps) });
+        } else if (window.__v455Cadence) {
+          b.frame_rate = window.__v455Cadence;
+          options = Object.assign({}, options, { body: JSON.stringify(b) });
+        }
+      } catch (e) { if (/URL PUBLIQUE/.test(e.message)) throw e; }
+    }
+    return _apiFetch(url, options);
+  };
+  function secondes(n) { return (n / FRAME_RATE).toFixed(1) + 's'; }
+
+  /* ── ffmpeg.wasm chargé à la demande (même source que la conversion v104) ── */
+  var ffCharge = null;
+  function chargerFFmpeg() {
+    if (ffCharge) return ffCharge;
+    ffCharge = (async function () {
+      if (!window.FFmpegWASM) {
+        await new Promise(function (res, rej) {
+          var s = document.createElement('script');
+          s.src = FF_JS; s.onload = res; s.onerror = function () { rej(new Error('ffmpeg.wasm introuvable (réseau ?)')); };
+          document.head.appendChild(s);
+        });
+      }
+      var ff = new FFmpegWASM.FFmpeg();
+      await ff.load({ coreURL: FF_CORE, wasmURL: FF_WASM });
+      return ff;
+    })();
+    ffCharge.catch(function () { ffCharge = null; });   /* un échec ne bloque pas un nouvel essai */
+    return ffCharge;
+  }
+
+  /* ── assemblage des segments en une seule vidéo ── */
+  async function assembler(urls) {
+    logStep('🧵 Assemblage de <strong>' + urls.length + '</strong> segments (ffmpeg)');
+    var ff = await chargerFFmpeg();
+    var noms = [], ext = 'mp4';
+    for (var i = 0; i < urls.length; i++) {
+      var blob = await fetchVideoBlob(urls[i]);
+      if (!blob) throw new Error('segment ' + (i + 1) + ' illisible');
+      if (/webm/i.test(blob.type || '')) ext = 'webm';
+      var nom = 'seg' + i + '.' + ext;
+      await ff.writeFile(nom, new Uint8Array(await blob.arrayBuffer()));
+      noms.push(nom);
+      logInfo('📦 Segment ' + (i + 1) + '/' + urls.length + ' prêt (' + formatBytes(blob.size) + ')');
+    }
+    var liste = noms.map(function (n) { return "file '" + n + "'"; }).join('\n');
+    await ff.writeFile('liste.txt', new TextEncoder().encode(liste));
+    var sortie = 'assemble.' + ext;
+    try {
+      await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'liste.txt', '-c', 'copy', sortie]);
+    } catch (e) {
+      logWarn('⚠️ Copie directe impossible — réencodage');
+      await ff.exec(['-f', 'concat', '-safe', '0', '-i', 'liste.txt', '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', sortie]);
+    }
+    var data = await ff.readFile(sortie);
+    var out = new Blob([data.buffer || data], { type: ext === 'webm' ? 'video/webm' : 'video/mp4' });
+    noms.concat(['liste.txt', sortie]).forEach(function (n) { try { ff.deleteFile(n); } catch (e) {} });
+    return out;
+  }
+
+  /* ── exécution : segments puis assemblage ── */
+  async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
+    var total = state.durationFrames;
+    /* ── 2.5 n'accepte QUE des médias par URL publique : avec un fichier joint
+       (base64), rien ne se générait et le résumé disait « aucune vidéo ». On
+       bascule sur v2.0, qui les accepte — dit clairement, et le modèle
+       réellement utilisé est celui enregistré dans la galerie. ── */
+    if (est25(modelId)) {
+      var joints = [img, aud, vid].filter(Boolean);
+      var enBase64 = joints.some(function (m) { return /^data:/i.test(String(m)); });
+      if (enBase64) {
+        logWarn('⚠️ <code>' + escapeHtml(modelId) + '</code> n’accepte pas les fichiers joints (il exige des URL publiques) → <strong>bascule sur <code>agnes-video-v2.0</code></strong> pour cette génération.');
+        showToast('Image jointe → agnes-video-v2.0', 'warn', 4500);
+        modelId = 'agnes-video-v2.0';
+      }
+    }
+    /* ── modèle 2.5 : durée en SECONDES, segments de 4 à 12 s ── */
+    if (est25(modelId)) {
+      var dureeSec = total / FRAME_RATE;
+      var planS = decouperSecondes(dureeSec);
+      if (planS.length === 1) {
+        logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → un plan de <strong>' + planS[0] + 's</strong>');
+        window.__v456Secondes = planS[0];
+        try { var id25 = await createVideoTask(prompt, img, aud, modelId, vid); await pollUntilDone(id25, modelId, sceneLabel + ' — ' + planS[0] + 's'); }
+        finally { window.__v456Secondes = null; }
+        return;
+      }
+      logStep('🎬 <strong>' + escapeHtml(modelId) + ' : ' + dureeSec.toFixed(1) + 's</strong> → ' + planS.length + ' segments (' + planS.join('s + ') + 's)');
+      var urls25 = [], ids25 = [];
+      for (var k2 = 0; k2 < planS.length; k2++) {
+        if (state.stopRequested) throw new Error('Arrêt');
+        var lab25 = sceneLabel + ' · segment ' + (k2 + 1) + '/' + planS.length + ' (' + planS[k2] + 's)';
+        logStep('━━━ Segment ' + (k2 + 1) + '/' + planS.length + ' — ' + planS[k2] + 's ━━━');
+        var p25 = prompt + '\n\n[CONTINUITY — segment ' + (k2 + 1) + ' of ' + planS.length + ': direct continuation of the previous shot, same subject, framing, lighting and style.]';
+        window.__v456Secondes = planS[k2];
+        try {
+          var idk = await createVideoTask(p25, img, aud, modelId, vid);
+          await pollUntilDone(idk, modelId, lab25);
+        } finally { window.__v456Secondes = null; }
+        var g25 = loadGallery(), e25 = null;
+        for (var j25 = 0; j25 < g25.length; j25++) { if (g25[j25].scene === lab25) { e25 = g25[j25]; break; } }
+        if (!e25) e25 = g25[0];
+        if (!e25 || !e25.url) throw new Error('segment ' + (k2 + 1) + ' : aucune vidéo récupérée');
+        urls25.push(e25.url); ids25.push(e25.id);
+        if (k2 < planS.length - 1 && !state.stopRequested) {
+          for (var s2 = PAUSE_SEGMENT; s2 > 0; s2--) { if (state.stopRequested) throw new Error('Arrêt'); setStatus('Pause entre segments… ' + s2 + 's'); await sleep(1000); }
+        }
+      }
+      try {
+        setStatus('Assemblage…');
+        var blob25 = await assembler(urls25);
+        var o25 = URL.createObjectURL(blob25);
+        var idF25 = await addVideoToGallery(o25, sceneLabel + ' — ' + dureeSec.toFixed(1) + 's assemblées', { model: modelId, scene: sceneLabel });
+        try { saveGallery(loadGallery().filter(function (e) { return ids25.indexOf(e.id) < 0; })); renderGallery(); } catch (e) {}
+        logSuccess('🎉 Vidéo assemblée : <strong>' + dureeSec.toFixed(1) + 's</strong> (' + formatBytes(blob25.size) + ')');
+        try { if (typeof downloadVideoEntry === 'function') await downloadVideoEntry(idF25, false); } catch (e) {}
+      } catch (e) {
+        logError('❌ Assemblage impossible : ' + escapeHtml(e.message));
+        logWarn('⚠️ Les <strong>' + urls25.length + ' segments</strong> restent dans la galerie (rien n’est perdu).');
+        showToast('Assemblage impossible — segments conservés', 'warn', 4000);
+      }
+      return;
+    }
+    /* 1) un seul plan, cadence réduite (doc officielle) — le plus propre */
+    var unique = planOptimal(total);
+    if (unique) {
+      logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → UN plan à <strong>' + unique.fps + ' i/s</strong>');
+      logInfo('ℹ️ Durée obtenue en abaissant la cadence (' + unique.fps + ' i/s) : aucun assemblage nécessaire, ' + unique.sec.toFixed(1) + 's.');
+      var avant = state.durationFrames;
+      state.durationFrames = unique.frames;
+      window.__v455Cadence = unique.fps;
+      try {
+        var idU = await createVideoTask(prompt, img, aud, modelId, vid);
+        await pollUntilDone(idU, modelId, sceneLabel + ' — ' + unique.sec.toFixed(1) + 's');
+      } finally {
+        window.__v455Cadence = null;
+        state.durationFrames = avant;
+      }
+      return;                              /* terminé : une seule vidéo */
+    }
+    /* 2) repli : découpage en segments valides + assemblage */
+    var plan = decouper(total);
+    var nb = plan.length;
+    logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments (' +
+      plan.map(function (f) { return secondes(f); }).join(' + ') + ')');
+    logInfo('ℹ️ Le fournisseur plafonne un plan à ' + secondes(PLAFOND_FRAMES) + ' : les segments seront assemblés en une seule vidéo.');
+    var urls = [], ids = [];
+    for (var k = 0; k < nb; k++) {
+      if (state.stopRequested) throw new Error('Arrêt');
+      var frames = plan[k];
+      var lab = sceneLabel + ' · segment ' + (k + 1) + '/' + nb + ' (' + secondes(frames) + ')';
+      logStep('━━━ Segment ' + (k + 1) + '/' + nb + ' — ' + secondes(frames) + ' ━━━');
+      var p = prompt + '\n\n[CONTINUITY — segment ' + (k + 1) + ' of ' + nb + ': this is a direct continuation of the previous shot. Same subject, same framing, same lighting, same style; the action continues seamlessly.]';
+      /* createVideoTask lit state.durationFrames pour num_frames : on lui donne
+         la durée DU SEGMENT (sinon le fournisseur refuserait encore), puis on
+         rend l'état intact — le reste de l'app n'est pas affecté. */
+      state.durationFrames = frames;
+      try {
+        var id = await createVideoTask(p, img, aud, modelId, vid);
+        await pollUntilDone(id, modelId, lab);
+      } finally {
+        state.durationFrames = total;
+      }
+      /* pollUntilDone dépose le segment dans la galerie : on le récupère */
+      var g = loadGallery();
+      var entree = null;
+      for (var j = 0; j < g.length; j++) { if (g[j].scene === lab) { entree = g[j]; break; } }
+      if (!entree) entree = g[0];
+      if (!entree || !entree.url) throw new Error('segment ' + (k + 1) + ' : aucune vidéo récupérée');
+      urls.push(entree.url); ids.push(entree.id);
+      if (k < nb - 1 && !state.stopRequested) {
+        for (var s = PAUSE_SEGMENT; s > 0; s--) { if (state.stopRequested) throw new Error('Arrêt'); setStatus('Pause entre segments… ' + s + 's'); await sleep(1000); }
+      }
+    }
+    /* assemblage */
+    try {
+      setStatus('Assemblage…');
+      var blob = await assembler(urls);
+      var objUrl = URL.createObjectURL(blob);
+      var idFinal = await addVideoToGallery(objUrl, sceneLabel + ' — ' + secondes(total) + ' assemblées', { model: modelId, scene: sceneLabel });
+      /* les segments ne sont plus nécessaires : on nettoie la galerie */
+      try { saveGallery(loadGallery().filter(function (e) { return ids.indexOf(e.id) < 0; })); renderGallery(); } catch (e) {}
+      logSuccess('🎉 Vidéo assemblée : <strong>' + secondes(total) + '</strong> (' + formatBytes(blob.size) + ')');
+      try { if (typeof downloadVideoEntry === 'function') await downloadVideoEntry(idFinal, false); } catch (e) {}
+    } catch (e) {
+      logError('❌ Assemblage impossible : ' + escapeHtml(e.message));
+      logWarn('⚠️ Les <strong>' + urls.length + ' segments</strong> restent dans la galerie (rien n’est perdu).');
+      showToast('Assemblage impossible — segments conservés', 'warn', 4000);
+    }
+  }
+
+  /* ── note d'interface sous le sélecteur de durée ── */
+  function note() {
+    var sel = document.getElementById('duration-select');
+    if (!sel || document.getElementById('v455-note')) return;
+    var d = document.createElement('div');
+    d.id = 'v455-note';
+    d.style.cssText = 'font-size:0.72rem;color:var(--muted,#8a8a8a);margin-top:0.3rem;line-height:1.35;';
+    d.textContent = 'Un plan est limité à 18,4 s par le fournisseur : au-delà, la durée est découpée en segments (tous conformes à la règle 8n+1) puis assemblée en une seule vidéo.';
+    sel.parentNode.appendChild(d);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', note); else note();
+  var n = 0, iv = setInterval(function () { note(); if (++n > 20) clearInterval(iv); }, 500);
+
+  /* les modèles 2.5 n'apparaissent pas toujours dans la détection : on les
+     ajoute à la liste pour qu'ils soient sélectionnables. */
+  try {
+    var _loadDet = loadDetectedAgnes;
+    loadDetectedAgnes = function () {
+      var l = _loadDet.apply(this, arguments) || [];
+      var connus = [
+        { id: 'agnes-video-v2.0', name: 'Agnes Video v2.0', desc: 'Frames 8n+1 (≤441), 24 i/s, images/audio joints' },
+        { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'OpenAI Videos : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' },
+        { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' }
+      ];
+      connus.forEach(function (m) { if (!l.some(function (x) { return x.id === m.id; })) l.push(m); });
+      return l;
+    };
+  } catch (e) {}
+
+  window.__v455Long = {
+    necessaire: necessaire, executer: executer, assembler: assembler,
+    plafond: function () { return PLAFOND_FRAMES; },
+    minimum: function () { return MIN_FRAMES; },
+    valide: valide,
+    planOptimal: planOptimal,
+    decouper: decouper,
+    est25: est25,
+    secondes25: secondes25,
+    decouperSecondes: decouperSecondes,
+    segmentsPour: function (frames) { return decouper(frames).length; }
   };
 })();
 </script>
