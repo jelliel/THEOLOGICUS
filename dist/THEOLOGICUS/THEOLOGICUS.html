@@ -50588,6 +50588,139 @@ window.continueTradApart = async function (msgId) {
   };
 })();
 </script>
+
+
+
+<script id="v454-fond-idb">
+/* ═══════════════════════════════════════════════════════════════════
+   v454 — LE FOND D'ÉCRAN NE SATURE PLUS localStorage.
+   L'image de fond vit en data URL (plusieurs Mo). L'app la rangeait dans
+   localStorage ET dans IndexedDB : la copie localStorage remplissait le
+   quota (~5 Mo) — c'est ce qui faisait échouer en silence l'enregistrement
+   de « Se souvenir de moi ». Ici :
+     • à l'écriture : une valeur de fond volumineuse part dans IndexedDB
+       (settings/bg-image) et N'EST PLUS écrite dans localStorage ;
+     • à la lecture : un cache mémoire la sert quand localStorage est vide
+       (l'app et l'aperçu des Paramètres ne changent pas d'une ligne) ;
+     • migration : une image déjà présente dans localStorage est recopiée
+       dans IndexedDB puis retirée → le quota se libère.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v454Fond) return;
+  var CLE = 'theologicus-bg', SEUIL = 20000;   /* > 20 Ko : c'est une image */
+  var cache = null;                             /* copie mémoire (lecture) */
+  var _getBrut = null;                          /* getItem natif, pour mesurer */
+
+  /* L'app declare « const db = … » : un const de portee script n'est PAS une
+     propriete de window. On y accede par son nom (lien lexical global), avec
+     un typeof qui ne jette pas si la declaration n'existe pas encore. */
+  function DB() {
+    try { return (typeof db !== 'undefined' && db && db.conn && db.put) ? db : null; } catch (e) { return null; }
+  }
+  function dbPret() { return !!DB(); }
+  function idbPut(v) { var d = DB(); if (!d) return Promise.reject(new Error('db indisponible')); try { return d.put('settings', { id: 'bg-image', value: v }); } catch (e) { return Promise.reject(e); } }
+  function idbGet() { var d = DB(); if (!d) return Promise.reject(new Error('db indisponible')); try { return d.get('settings', 'bg-image'); } catch (e) { return Promise.reject(e); } }
+
+  /* ── interception de l'écriture : le fond ne va plus dans localStorage ── */
+  try {
+    var proto = window.Storage && window.Storage.prototype;
+    if (proto && !proto.__v454) {
+      var _set = proto.setItem;
+      proto.setItem = function (k, v) {
+        if (k === CLE && typeof v === 'string' && v.length > SEUIL) {
+          if (dbPret()) {
+            cache = v;                    /* lecture immédiate servie */
+            try { idbPut(v); } catch (e) { return _set.call(this, k, v); }
+            return;                       /* PAS d'écriture localStorage */
+          }
+        }
+        return _set.call(this, k, v);
+      };
+      proto.__v454 = true;
+    }
+  } catch (e) {}
+
+  /* ── interception de la lecture : localStorage d'abord, puis le cache ── */
+  try {
+    var proto2 = window.Storage && window.Storage.prototype;
+    if (proto2 && !proto2.__v454g) {
+      var _get = proto2.getItem;
+      _getBrut = _get;
+      proto2.getItem = function (k) {
+        var v = _get.call(this, k);
+        if (v === null && k === CLE && this === window.localStorage && cache) return cache;
+        return v;
+      };
+      proto2.__v454g = true;
+    }
+  } catch (e) {}
+
+  /* ── migration : libérer ce qui est déjà stocké ── */
+  function migrer() {
+    var v = null;
+    try { v = localStorage.getItem(CLE); } catch (e) { return Promise.resolve('err'); }
+    if (!v || v.length <= SEUIL) return Promise.resolve('rien');
+    if (!dbPret()) return Promise.resolve('db-indisponible');
+    return idbGet().then(function (rec) {
+      if (rec && rec.value === v) { cache = v; try { localStorage.removeItem(CLE); } catch (e) {} return 'libere'; }
+      return idbPut(v).then(function () {
+        cache = v;
+        try { localStorage.removeItem(CLE); } catch (e) {}
+        return 'migre';
+      });
+    }).catch(function () { return 'echec'; });
+  }
+  /* la base s'ouvre au démarrage : on retente jusqu'à ce qu'elle soit prête */
+  function tenter(n) {
+    if (dbPret()) return migrer();
+    if (n > 0) return new Promise(function (r) { setTimeout(function () { r(tenter(n - 1)); }, 400); });
+    return Promise.resolve('db-jamais-prete');
+  }
+
+  var etat = 'attente';
+  tenter(25).then(function (r) { etat = r; if (typeof window.__v454Fond.majEtat === 'function') window.__v454Fond.majEtat(); });
+
+  window.__v454Fond = {
+    etat: function () { return etat; },
+    migrer: migrer,
+    cache: function () { return cache; },
+    /* mesure le stockage RÉEL (sans le cache de lecture) */
+    tailleLocale: function () {
+      var n = 0;
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          var v = _getBrut ? _getBrut.call(localStorage, k) : localStorage.getItem(k);
+          n += (k ? k.length : 0) + String(v || '').length;
+        }
+      } catch (e) { return -1; }
+      return n;
+    },
+    enLocal: function (k) {
+      try { for (var i = 0; i < localStorage.length; i++) if (localStorage.key(i) === k) return true; } catch (e) {}
+      return false;
+    },
+    majEtat: function () {
+      var el = document.getElementById('v454-etat');
+      if (!el) {
+        /* se pose à côté du diagnostic de session (v453), s'il existe */
+        var ancre = document.getElementById('v453-etat') || document.getElementById('remember-state');
+        if (!ancre || !ancre.parentNode) return;
+        el = document.createElement('div');
+        el.id = 'v454-etat';
+        el.style.cssText = 'margin-top:4px;font-size:10.5px;color:#8fa3b8';
+        ancre.parentNode.insertBefore(el, ancre.nextSibling);
+      }
+      var ko = Math.round(window.__v454Fond.tailleLocale() / 1024);
+      el.textContent = 'Fond d\u2019écran : ' + (etat === 'migre' ? 'déplacé dans IndexedDB (quota libéré)' :
+        etat === 'libere' ? 'déjà dans IndexedDB (quota libéré)' :
+        etat === 'db-indisponible' || etat === 'db-jamais-prete' ? 'conservé dans localStorage (base indisponible)' :
+        etat === 'rien' ? 'aucun fond volumineux' : etat) + ' · espace local : ' + ko + ' Ko';
+    }
+  };
+})();
+</script>
 </body>
 </html>
 </html>
