@@ -25924,6 +25924,42 @@ if (document.readyState === 'loading') {
 })();
 </script>
 
+<script id="v453-remember-cookie">
+/* v453 — « Se souvenir de moi » : le cookie survit au changement de PORT.
+   localStorage est propre à une origine (port compris) : quand l'app sert
+   sur 8766 au lieu de 8765, l'enregistrement écrit la veille est invisible
+   et le verrou revient. Les cookies ignorent le port. Ce script recopie le
+   cookie vers localStorage AVANT la lecture du module d'auth. */
+(function () {
+  try {
+    if (localStorage.getItem('theologicus_remember')) return;   /* déjà là */
+    var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
+    if (!m) return;
+    var val = decodeURIComponent(m[1]);
+    var o = JSON.parse(val);
+    if (!o || o.v !== 1 || typeof o.exp !== 'number' || Date.now() > o.exp) return;
+    localStorage.setItem('theologicus_remember', val);
+  } catch (e) {}
+})();
+</script>
+<script id="v453-remember-cookie">
+/* v453 — « Se souvenir de moi » : le cookie survit au changement de PORT.
+   localStorage est propre à une origine (port compris) : quand l'app sert
+   sur 8766 au lieu de 8765, l'enregistrement écrit la veille est invisible
+   et le verrou revient. Les cookies ignorent le port. Ce script recopie le
+   cookie vers localStorage AVANT la lecture du module d'auth. */
+(function () {
+  try {
+    if (localStorage.getItem('theologicus_remember')) return;   /* déjà là */
+    var m = document.cookie.match(/(?:^|;\s*)theologicus_remember=([^;]*)/);
+    if (!m) return;
+    var val = decodeURIComponent(m[1]);
+    var o = JSON.parse(val);
+    if (!o || o.v !== 1 || typeof o.exp !== 'number' || Date.now() > o.exp) return;
+    localStorage.setItem('theologicus_remember', val);
+  } catch (e) {}
+})();
+</script>
 <div id="watermark-overlay"></div>
 
 <div id="devtools-warning">
@@ -49763,7 +49799,11 @@ window.continueTradApart = async function (msgId) {
 
   /* ── bouton 🔊 « verset en langue source » dans le panneau de verset ── */
   function boutonVerset(slot) {
-    if (!slot || slot.querySelector('.v449-verse-btn')) return;
+    if (!slot || !slot.parentNode) return;
+    /* v449b — à CÔTÉ du slot : le remplissage hébreu asynchrone (v89) remplace
+       le contenu du slot (`innerHTML = …`) et effaçait le bouton. */
+    const panneau = slot.parentNode;
+    if (panneau.querySelector('.v449-verse-btn')) return;
     var hb = slot.querySelectorAll('.hb[data-h]').length;
     var gr = slot.querySelectorAll('.gr[data-g]').length;
     if (!hb && !gr) return;
@@ -49788,7 +49828,7 @@ window.continueTradApart = async function (msgId) {
       });
       prononceChaine(mots);
     });
-    slot.appendChild(b);
+    slot.parentNode.insertBefore(b, slot.nextSibling);
   }
   /* le slot se remplit au survol du verset : on injecte le bouton à ce moment */
   document.addEventListener('mouseover', function (e) {
@@ -49962,11 +50002,14 @@ window.continueTradApart = async function (msgId) {
   /* ── ligne latine dans le panneau de verset (wrap de __hbRemplir) ── */
   function remplirLatin(p, panneau) {
     const slot = panneau && panneau.querySelector('#hb-slot');
-    if (!slot || slot.querySelector('.lt-slot')) return;
+    if (!slot || panneau.querySelector('.lt-slot')) return;
+    /* v450b — la ligne vit À CÔTÉ du slot, pas dedans : le remplissage
+       hébreu (v89) est ASYNCHRONE et fait `slot.innerHTML = …` quand ses
+       données arrivent, ce qui effaçait tout ce qu'on y avait ajouté. */
     const ligne = document.createElement('div');
     ligne.className = 'lt-slot';
     ligne.innerHTML = '<span style="color:#8fa3b8;font-size:10.5px;">⚓ Vulgate…</span>';
-    slot.appendChild(ligne);
+    slot.parentNode.insertBefore(ligne, slot.nextSibling);
     const livre = parseInt(p.book, 10);
     bibleLt(livre).then(liv => {
       if (!liv) { ligne.innerHTML = ''; return; }
@@ -50132,7 +50175,9 @@ window.continueTradApart = async function (msgId) {
     h += '<div class="syr-sens" style="opacity:.6;font-size:11px;">Lexique…</div>';
     h += '<button type="button" class="syr-say" style="margin-top:6px;background:rgba(79,195,247,.18);color:#cfe0ff;border:1px solid rgba(79,195,247,.4);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11.5px;">🔊 prononcer</button>';
     t.innerHTML = h;
-    t.style.display = 'block'; place(el.getBoundingClientRect());
+    t.style.display = 'block';
+    /* v451d — placement partagé, comme v450c */
+    if (window.__placerFiche) window.__placerFiche(t, el); else place(el.getBoundingClientRect());
     t.querySelector('.syr-say').addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation(); prononce(mot);
     });
@@ -50144,7 +50189,7 @@ window.continueTradApart = async function (msgId) {
         el2.innerHTML = '<span style="color:#8fa3b8;font-size:10px;text-transform:uppercase;letter-spacing:.6px;">Sens (en)</span><br>' +
           esc(ent[1]) + (ent[0] && ent[0] !== mot ? ' <span style="color:#8fa3b8;font-size:10.5px;">· lemme ' + esc(ent[0]) + '</span>' : '');
         el2.style.opacity = '1';
-        place(el.getBoundingClientRect());
+        if (window.__placerFiche) window.__placerFiche(t, el); else place(el.getBoundingClientRect());
       } else {
         el2.textContent = 'Mot absent du lexique embarqué (couverture : Nouveau Testament).';
       }
@@ -50160,13 +50205,15 @@ window.continueTradApart = async function (msgId) {
   /* ── ligne syriaque dans le panneau de verset ── */
   function remplirSyriaque(p, panneau) {
     const slot = panneau && panneau.querySelector('#hb-slot');
-    if (!slot || slot.querySelector('.syr-slot')) return;
+    if (!slot || panneau.querySelector('.syr-slot')) return;
     const livre = parseInt(p.book, 10);
     if (!(livre >= 1 && livre <= 66)) return;
+    /* v451c — même raison que v450b : à CÔTÉ du slot, sinon le remplissage
+       hébreu asynchrone (`slot.innerHTML = …`) emporte la ligne syriaque. */
     const ligne = document.createElement('div');
     ligne.className = 'syr-slot';
     ligne.innerHTML = '<span style="color:#8fa3b8;font-size:10.5px;">܀ Peshitta…</span>';
-    slot.appendChild(ligne);
+    slot.parentNode.insertBefore(ligne, slot.nextSibling);
     bibleSyr(livre).then(liv => {
       if (!liv) { ligne.innerHTML = ''; return; }
       const v1 = p.v1, v2 = p.v2 || p.v1;
@@ -50207,6 +50254,246 @@ window.continueTradApart = async function (msgId) {
   }
 
   window.__v451Syr = { bibleSyr: bibleSyr, remplirSyriaque: remplirSyriaque, translit: translit, prononce: prononce, lexique: lexique };
+})();
+</script>
+
+
+
+
+
+
+<script id="v452-fiches-mots">
+/* ═══════════════════════════════════════════════════════════════════
+   v452 — LES FICHES DE MOT NE S'ÉVAPORENT PLUS EN CHEMIN.
+   SIGNALÉ PAR L'UTILISATEUR : dans l'infobulle d'un verset, survoler un
+   mot ouvre bien sa fiche — mais dès qu'on bouge la souris vers elle,
+   la fiche disparaît : impossible de lire la translittération ou
+   d'atteindre le bouton 🔊.
+
+   MESURÉ (banc Playwright, parcours pas à pas) : le panneau du verset
+   survit (machinerie v105c), mais la fiche du mot, elle, se ferme au
+   PREMIER `mouseover` qui ne vise ni le mot ni la fiche — c'est-à-dire
+   pendant la traversée de l'espace vide entre les deux. Les fiches de
+   mot n'avaient jamais reçu la protection que v100/v105c avaient
+   donnée au panneau.
+
+   CORRECTIF : on ne touche pas aux modules existants. Un garde en
+   CAPTURE (donc avant leurs écouteurs, qui sont en phase bulle) rend
+   silencieuse la traversée : tant que le pointeur reste dans le
+   COULOIR — boîte de la fiche, boîte du mot d'origine, et le rectangle
+   qui les relie — l'événement ne parvient pas aux gestionnaires qui
+   referment. Dès que le pointeur sort réellement, la fermeture normale
+   reprend ses droits : le comportement d'origine est préservé.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v452Cartes) return;
+  var CARTES = ['hb-tip', 'gr-tip', 'qw-tip', 'lt-tip', 'syr-tip'];
+  var SELS_MOT = '.hb,.gr,.qw,.lt,.syr';
+  var SELS_CARTE = '#hb-tip,#gr-tip,#qw-tip,#lt-tip,#syr-tip';
+  var ancre = null, tAncre = 0, MARGE = 60, MARGE_COULOIR = 24;
+
+  function visible(el) {
+    return !!el && el.style.display !== 'none' && getComputedStyle(el).display !== 'none';
+  }
+  function carteOuverte() {
+    for (var i = 0; i < CARTES.length; i++) {
+      var el = document.getElementById(CARTES[i]);
+      if (visible(el)) return el;
+    }
+    return null;
+  }
+  function dansBoite(pt, b, marge) {
+    if (!pt || !b) return false;
+    /* accepte un DOMRect (width/height) comme une boîte mémorisée (right/bottom) */
+    var l = b.left, t = b.top;
+    var r = (b.right !== undefined && b.right !== null) ? b.right : b.left + b.width;
+    var bo = (b.bottom !== undefined && b.bottom !== null) ? b.bottom : b.top + b.height;
+    if (!(r > l) || !(bo > t)) return false;
+    return pt.x >= l - marge && pt.x <= r + marge &&
+           pt.y >= t - marge && pt.y <= bo + marge;
+  }
+  function dansCouloir(pt, carte) {
+    if (!pt) return false;
+    var b = carte.getBoundingClientRect();
+    if (dansBoite(pt, b, MARGE)) return true;
+    /* le mot d'où l'on vient : on ne le perd pas de vue tant qu'on est près */
+    if (ancre && ancre.isConnected && (Date.now() - tAncre) < 8000) {
+      var a = ancre.getBoundingClientRect();
+      if (dansBoite(pt, a, MARGE)) return true;
+      /* rectangle englobant : c'est le trajet réel entre le mot et la fiche */
+      var g = {
+        left: Math.min(a.left, b.left), right: Math.max(a.right, b.right),
+        top: Math.min(a.top, b.top), bottom: Math.max(a.bottom, b.bottom)
+      };
+      if (dansBoite(pt, g, MARGE_COULOIR)) return true;
+    }
+    return false;
+  }
+  /* Les écouteurs des fiches existantes sont en CAPTURE et enregistrés AVANT
+     ce module : `stopPropagation` ne peut pas les précéder. On ne les combat
+     pas non plus : quand une fiche se referme alors que le pointeur est
+     ENCORE dans le couloir (trajet mot → fiche), on la rouvre par le chemin
+     de l'app elle-même — un `mouseover` redirigé sur le mot d'origine — ce
+     qui restaure aussi le contenu et la mise en évidence. */
+  var boites = {};   /* PAR FICHE : une boîte globale faisait juger la fiche
+                        courante avec les coordonnées de la précédente. */
+  var ancres = {};   /* PAR FICHE : le mot qui l'a ouverte. En traversant
+                        d'autres lignes de mots, `ancre` change ; rouvrir avec
+                        la mauvaise ancre ouvrait la mauvaise fiche. */
+  function memoriserBoite(carte) {
+    if (!carte || !visible(carte)) return;
+    var b = carte.getBoundingClientRect();
+    if (b.width) {
+      boites[carte.id] = { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+      if (ancre) ancres[carte.id] = ancre;
+    }
+  }
+  function couloirConnu(pt, carte) {
+    var bb = carte && boites[carte.id];
+    if (!pt || !bb) return false;
+    var an = ancres[carte.id];
+    if (dansBoite(pt, bb, MARGE)) return true;
+    if (an && an.isConnected) {
+      var a = an.getBoundingClientRect();
+      if (dansBoite(pt, a, MARGE)) return true;
+      var g = { left: Math.min(a.left, bb.left), right: Math.max(a.right, bb.right), top: Math.min(a.top, bb.top), bottom: Math.max(a.bottom, bb.bottom) };
+      if (dansBoite(pt, g, MARGE_COULOIR)) return true;
+    }
+    return false;
+  }
+  /* le pointeur est dans la zone de CETTE fiche : c'est elle que l'on veut */
+  function dansLaFiche(pt, carte) { return !!carte && dansBoite(pt, boites[carte.id], 8); }
+  function surveiller(carte) {
+    if (!carte || carte.__v452Obs) return;
+    carte.__v452Obs = true;
+    memoriserBoite(carte);   /* la fiche peut etre DEJA ouverte quand on s'attache */
+
+    new MutationObserver(function () {
+      var pt = (window.__v105cPointeur && window.__v105cPointeur.point) ? window.__v105cPointeur.point() : null;
+      if (visible(carte)) { memoriserBoite(carte); return; }
+      if (!couloirConnu(pt, carte)) return;             /* sortie réelle : on laisse fermé */
+      var an = ancres[carte.id];
+      if (!an || !an.isConnected) return;
+      /* on rouvre la fiche que l'on visait ; les autres fiches ouvertes au
+         passage (lignes de mots traversées) sont refermées pour ne pas empiler */
+      if (dansLaFiche(pt, carte)) {
+        CARTES.forEach(function (id) {
+          if (id === carte.id) return;
+          var autre = document.getElementById(id);
+          if (autre && visible(autre)) { autre.style.display = 'none'; autre.__v452Masquee = Date.now(); }
+        });
+      }
+      an.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: pt.x, clientY: pt.y }));
+    }).observe(carte, { attributes: true, attributeFilter: ['style'] });
+  }
+  function boot() {
+    CARTES.forEach(function (id) { surveiller(document.getElementById(id)); });
+    /* les fiches peuvent être créées plus tard (modules différés) */
+    var n = 0, iv = setInterval(function () {
+      CARTES.forEach(function (id) {
+        var c = document.getElementById(id);
+        surveiller(c);
+        if (c && visible(c)) memoriserBoite(c);
+      });
+      if (++n > 40) clearInterval(iv);
+    }, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+
+  /* on mémorise aussi le mot d'origine à chaque survol (capture, avant l'app) */
+  document.addEventListener('mouseover', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var mot = t.closest(SELS_MOT);
+    if (mot) { ancre = mot; tAncre = Date.now(); }
+  }, true);
+
+  window.__v452Cartes = { carteOuverte: carteOuverte, dansCouloir: dansCouloir, couloirConnu: couloirConnu, ancre: function () { return ancre; }, boites: function () { return boites; }, ancres: function () { return ancres; } };
+})();
+</script>
+
+<script id="v453-remember-sync">
+/* ═══════════════════════════════════════════════════════════════════
+   v453 — SYNCHRONISATION de « Se souvenir de moi » vers un cookie.
+   Le module d'auth écrit dans localStorage ; on recopie cet
+   enregistrement dans un cookie (même hôte, donc partagé entre les
+   ports 8765/8766/8767…). Au démarrage suivant, quel que soit le port,
+   le script précoce le restaure. Aucun autre comportement n'est modifié :
+   la révocation (⚙ PARAMÈTRES → ACCLÈS) efface les deux.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v453Remember) return;
+  var CLE = 'theologicus_remember';
+
+  function cookie() {
+    var m = document.cookie.match(new RegExp('(?:^|;\\s*)' + CLE + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function ecrireCookie(val) {
+    try {
+      var d = new Date(Date.now() + 7 * 86400000).toUTCString();
+      document.cookie = CLE + '=' + encodeURIComponent(val) + '; expires=' + d + '; path=/; SameSite=Lax';
+    } catch (e) {}
+  }
+  function effacerCookie() {
+    try { document.cookie = CLE + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax'; } catch (e) {}
+  }
+  /* Un enregistrement VU dans cette page : sert à distinguer
+       — « localStorage vide » = autre port  → on restaure depuis le cookie ;
+       — « enregistrement disparu » = l'utilisateur a RÉVOQUÉ → on efface le
+         cookie, sinon la restauration annulerait sa révocation. */
+  var vuDansLaPage = false;
+
+  function synchroniser() {
+    try {
+      var ls = localStorage.getItem(CLE);
+      if (ls) {
+        var o = JSON.parse(ls);
+        if (o && o.v === 1 && typeof o.exp === 'number' && Date.now() < o.exp) {
+          vuDansLaPage = true;
+          if (cookie() !== ls) ecrireCookie(ls);
+          return 'ecrit';
+        }
+        /* enregistrement expiré : on nettoie les deux */
+        localStorage.removeItem(CLE); effacerCookie(); return 'purge';
+      }
+      /* localStorage vide */
+      if (vuDansLaPage) { effacerCookie(); vuDansLaPage = false; return 'revoque'; }
+      var ck = cookie();
+      if (ck) {
+        var o2 = JSON.parse(ck);
+        if (o2 && o2.v === 1 && typeof o2.exp === 'number' && Date.now() < o2.exp) {
+          localStorage.setItem(CLE, ck); vuDansLaPage = true; return 'restaure';
+        }
+        effacerCookie();
+      }
+      return 'rien';
+    } catch (e) { return 'erreur'; }
+  }
+  /* au démarrage, au retour d'onglet, et pendant la minute qui suit */
+  synchroniser();
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) synchroniser(); });
+  window.addEventListener('focus', synchroniser);
+  var n = 0, iv = setInterval(function () { synchroniser(); if (++n > 20) clearInterval(iv); }, 3000);
+
+  /* la révocation des Paramètres passe par clearRemember (interne) : on
+     surveille aussi la voie globale quand elle existe */
+  try {
+    var _oubli = window.theologicusForgetRemember;
+    if (typeof _oubli === 'function' && !_oubli.__v453) {
+      var enveloppe = function () {
+        try { _oubli.apply(this, arguments); } catch (e) {}
+        effacerCookie(); vuDansLaPage = false;
+      };
+      enveloppe.__v453 = true;
+      window.theologicusForgetRemember = enveloppe;
+    }
+  } catch (e) {}
+
+  window.__v453Remember = { synchroniser: synchroniser, cookie: cookie, ecrireCookie: ecrireCookie, effacerCookie: effacerCookie, vu: function () { return vuDansLaPage; } };
 })();
 </script>
 </body>
