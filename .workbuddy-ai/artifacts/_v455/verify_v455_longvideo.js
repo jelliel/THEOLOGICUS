@@ -70,6 +70,8 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     minimum: window.__v455Long.minimum(),
     court: (function () { state.durationFrames = 441; return window.__v455Long.necessaire(); })(),
     long: (function () { state.durationFrames = 601; return window.__v455Long.necessaire(); })(),
+    o25: window.__v455Long.planOptimal(601),
+    o50: window.__v455Long.planOptimal(1201),
     p25: window.__v455Long.decouper(601),
     p50: window.__v455Long.decouper(1201),
     p90: window.__v455Long.decouper(2161)
@@ -78,41 +80,52 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('une durée VALIDE (441) → chemin d’origine (pas de découpage)', seuil.court === false);
   ok('une durée invalide (601) → découpage déclenché', seuil.long === true);
   ok('25 s → [441, 161] (25,1 s) ; 50 s → [441,441,321]', JSON.stringify(seuil.p25) === '[441,161]' && JSON.stringify(seuil.p50) === '[441,441,321]', JSON.stringify({ p25: seuil.p25, p50: seuil.p50 }));
+  ok('25 s tient en UN SEUL plan en baissant la cadence (16 i/s, 401 images)',
+     seuil.o25 && seuil.o25.fps === 16 && seuil.o25.frames === 401 && Math.abs(seuil.o25.sec - 25) < 0.6, JSON.stringify(seuil.o25));
+  ok('50 s ne tient plus en un plan (planOptimal = null)', seuil.o50 === null, JSON.stringify(seuil.o50));
   ok('TOUS les segments sont conformes à la règle 8n+1 (min 81, max 441)',
      seuil.p25.concat(seuil.p50, seuil.p90).every(n => n >= 81 && n <= 441 && (n % 8) === 1),
      JSON.stringify(seuil.p90));
 
-  // 2. exécution complète d'un plan de 25 s (2 segments)
+  // 2. plan de 25 s : UN SEUL appel, cadence abaissée, aucun assemblage
   await page.evaluate(() => {
-    window.__rec = { frames: [], prompts: [], ffWrite: [], ffExec: [] };
+    window.__rec = { frames: [], cadence: [], ffWrite: [] };
     state.durationFrames = 601;
     state.stopRequested = false;
-    /* le module fixe la durée de chaque segment : on l'observe en lisant
-       state.durationFrames au moment de l'appel réseau */
-    const _create = window.createVideoTask;
-    window.createVideoTask = async function (prompt) {
+    window.createVideoTask = async function () {
       window.__rec.frames.push(state.durationFrames);
-      window.__rec.prompts.push(prompt);
+      window.__rec.cadence.push(window.__v455Cadence);
       return 'task_' + window.__rec.frames.length;
     };
     localStorage.removeItem('cinema_noir_gallery_v1');
-    return window.__v455Long.executer('PROMPT DE BASE', null, null, 'agnes-video-v2.0', null, 'Scène 1/1');
+    return window.__v455Long.executer('PROMPT DE BASE', null, null, 'agnes-video-v2.0', null, 'Scene 1/1');
   });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
   const r = await page.evaluate(() => ({
-    frames: window.__rec.frames,
-    prompts: window.__rec.prompts,
-    ffWrite: window.__rec.ffWrite,
-    ffExec: window.__rec.ffExec,
-    galerie: loadGallery().map(v => ({ label: v.label, scene: v.scene }))
+    frames: window.__rec.frames, cadence: window.__rec.cadence, ffWrite: window.__rec.ffWrite,
+    galerie: loadGallery().map(v => v.label), cadenceRendue: window.__v455Cadence
   }));
-  ok('2 segments générés aux durées CONFORMES (441 + 161)', JSON.stringify(r.frames) === '[441,161]', JSON.stringify(r.frames));
-  ok('chaque valeur envoyée est un 8n+1 valide (jamais 240, qui bloquait la file)',
-     r.frames.every(n => n >= 81 && n <= 441 && (n % 8) === 1), JSON.stringify(r.frames));
-  ok('chaque segment porte la consigne de CONTINUITÉ', r.prompts.length === 2 && /CONTINUITY/.test(r.prompts[0]) && /segment 1 of 2/.test(r.prompts[0]) && /segment 2 of 2/.test(r.prompts[1]), (r.prompts[0] || '').slice(-60));
-  ok('ffmpeg a reçu les 2 segments + la liste', r.ffWrite.filter(n => /^seg/.test(n)).length === 2 && r.ffWrite.indexOf('liste.txt') >= 0, JSON.stringify(r.ffWrite));
-  ok('assemblage par concat', r.ffExec.length >= 1 && /-f concat -safe 0 -i liste\.txt/.test(r.ffExec[0]), r.ffExec[0]);
-  ok('une SEULE vidéo assemblée dans la galerie (segments retirés)', r.galerie.length === 1 && /assembl/.test(r.galerie[0].label), JSON.stringify(r.galerie));
+  ok('25 s -> UN seul appel reseau (401 images, jamais 601 ni 441)', JSON.stringify(r.frames) === '[401]', JSON.stringify(r.frames));
+  ok('cadence abaissee a 16 i/s pendant l appel, puis rendue intacte',
+     JSON.stringify(r.cadence) === '[16]' && r.cadenceRendue === null, JSON.stringify({ p: r.cadence, apres: r.cadenceRendue }));
+  ok('aucun assemblage necessaire (pas d appel ffmpeg)', r.ffWrite.length === 0, JSON.stringify(r.ffWrite));
+  ok('une seule video dans la galerie', r.galerie.length === 1, JSON.stringify(r.galerie));
+
+  // 2b. plan de 50 s : decoupage + assemblage (repli)
+  const r2 = await page.evaluate(async () => {
+    window.__rec = { frames: [], ffWrite: [], ffExec: [] };
+    state.durationFrames = 1201;
+    window.createVideoTask = async function () {
+      window.__rec.frames.push(state.durationFrames);
+      return 'task_' + window.__rec.frames.length;
+    };
+    localStorage.removeItem('cinema_noir_gallery_v1');
+    await window.__v455Long.executer('P50', null, null, 'm', null, 'Scene 1/1');
+    return { frames: window.__rec.frames, ffExec: window.__rec.ffExec, galerie: loadGallery().map(v => v.label) };
+  });
+  ok('50 s -> 3 segments conformes (441+441+321)', JSON.stringify(r2.frames) === '[441,441,321]', JSON.stringify(r2.frames));
+  ok('50 s -> assemblage concat', r2.ffExec.length >= 1 && /-f concat/.test(r2.ffExec[0]), String(r2.ffExec[0]).slice(0, 50));
+  ok('50 s -> une seule video assemblee dans la galerie', r2.galerie.length === 1 && /assembl/.test(r2.galerie[0]), JSON.stringify(r2.galerie));
 
   // 3. repli : assemblage impossible → les segments restent
   const repli = await page.evaluate(async () => {
@@ -121,18 +134,18 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     /* échec réel d'assemblage : les segments sont illisibles (réseau coupé) */
     window.fetchVideoBlob = async function () { return null; };
     // forcer un rechargement du module ffmpeg (le précédent est en échec)
-    state.durationFrames = 601;
+    state.durationFrames = 1201;
     try { await window.__v455Long.executer('P2', null, null, 'm', null, 'Scène 1/1'); } catch (e) {}
     return { galerie: loadGallery().map(v => v.label) };
   });
-  ok('assemblage impossible → les 2 SEGMENTS sont conservés (rien perdu)', repli.galerie.length === 2, JSON.stringify(repli.galerie));
+  ok('assemblage impossible → les 3 SEGMENTS sont conservés (rien perdu)', repli.galerie.length === 3, JSON.stringify(repli.galerie));
 
   // 4. note d'interface
   const note = await page.evaluate(() => { const d = document.getElementById('v455-note'); return d ? d.textContent : null; });
   ok('note d’interface sous le sélecteur de durée (limite 18,4 s expliquée)', !!note && /18,4 s/.test(note) && /découpée en segments/.test(note), String(note).slice(0, 90));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/15`);
-  process.exitCode = pass === 15 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/18`);
+  process.exitCode = pass === 18 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

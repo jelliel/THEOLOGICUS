@@ -2469,6 +2469,8 @@ async function enrichWithMistral(btn, textareaId) {
 
 
 
+
+
 <script id="v455-long-video">
 /* ═══════════════════════════════════════════════════════════════════
    v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
@@ -2525,6 +2527,35 @@ async function enrichWithMistral(btn, textareaId) {
   var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
 
   function necessaire() { return !valide(state.durationFrames); }
+
+  /* La doc officielle : « pour des vidéos plus longues, augmenter num_frames
+     OU BAISSER frame_rate » (1 à 60 accepté). On préfère donc, quand c'est
+     possible, UN SEUL plan à cadence réduite : pas d'assemblage, pas de
+     réencodage, aucune couture. L'assemblage ne sert plus que de repli. */
+  var CADENCES = [24, 20, 16, 12];       /* du plus fluide au plus lent acceptable */
+  function planOptimal(totalFrames) {
+    var dureeSec = totalFrames / FRAME_RATE;
+    for (var i = 0; i < CADENCES.length; i++) {
+      var f = CADENCES[i];
+      /* 8n+1 le plus proche SANS BORNAGE : borner à 441 ferait « tenir » une
+         durée trop longue en la raccourcissant en silence (25 s → 18,4 s). */
+      var n = 8 * Math.round((dureeSec * f - 1) / 8) + 1;
+      if (valide(n)) return { fps: f, frames: n, sec: n / f };
+    }
+    return null;                          /* il faudra découper */
+  }
+  /* frame_rate n'est pas dans state : on réécrit le corps de la requête /videos */
+  var _apiFetch = apiFetch;
+  apiFetch = async function (url, options) {
+    if (window.__v455Cadence && options && options.body && /\/videos$/.test(String(url))) {
+      try {
+        var b = JSON.parse(options.body);
+        b.frame_rate = window.__v455Cadence;
+        options = Object.assign({}, options, { body: JSON.stringify(b) });
+      } catch (e) {}
+    }
+    return _apiFetch(url, options);
+  };
   function secondes(n) { return (n / FRAME_RATE).toFixed(1) + 's'; }
 
   /* ── ffmpeg.wasm chargé à la demande (même source que la conversion v104) ── */
@@ -2579,6 +2610,24 @@ async function enrichWithMistral(btn, textareaId) {
   /* ── exécution : segments puis assemblage ── */
   async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
     var total = state.durationFrames;
+    /* 1) un seul plan, cadence réduite (doc officielle) — le plus propre */
+    var unique = planOptimal(total);
+    if (unique) {
+      logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → UN plan à <strong>' + unique.fps + ' i/s</strong>');
+      logInfo('ℹ️ Durée obtenue en abaissant la cadence (' + unique.fps + ' i/s) : aucun assemblage nécessaire, ' + unique.sec.toFixed(1) + 's.');
+      var avant = state.durationFrames;
+      state.durationFrames = unique.frames;
+      window.__v455Cadence = unique.fps;
+      try {
+        var idU = await createVideoTask(prompt, img, aud, modelId, vid);
+        await pollUntilDone(idU, modelId, sceneLabel + ' — ' + unique.sec.toFixed(1) + 's');
+      } finally {
+        window.__v455Cadence = null;
+        state.durationFrames = avant;
+      }
+      return;                              /* terminé : une seule vidéo */
+    }
+    /* 2) repli : découpage en segments valides + assemblage */
     var plan = decouper(total);
     var nb = plan.length;
     logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments (' +
@@ -2647,6 +2696,7 @@ async function enrichWithMistral(btn, textareaId) {
     plafond: function () { return PLAFOND_FRAMES; },
     minimum: function () { return MIN_FRAMES; },
     valide: valide,
+    planOptimal: planOptimal,
     decouper: decouper,
     segmentsPour: function (frames) { return decouper(frames).length; }
   };
