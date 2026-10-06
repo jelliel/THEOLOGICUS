@@ -22,3 +22,6 @@ THEOLOGICUS_signing.pfx
 # de Mo). Un `git add dist` les embarquait par accident.
 *.oldrun/
 *.oldrun.exe
+
+# serveur de test temporaire du banc d'assemblage (v458)
+_montage_test_serveur.py

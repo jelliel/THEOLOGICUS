@@ -26,13 +26,16 @@ OUT = os.path.join(ROOT, "mobile", "www")
 
 COPY_DIRS = ["bible", "quran", "tafsir", "libs", "summa", "summafr", "fathers",
              "reformed", "orthodox", "islamic", "denzinger",
-             "quranwbw", "quranroots", "biblehb", "biblegr", "latin"]
+             "quranwbw", "quranroots", "biblehb", "biblegr", "latin",
+             "biblelt", "syriaque", "ffmpeg"]
 EXPECTED = {
     "bible": ("b", ".js", 66),
     "quran": ("q", ".js", 114),
     "tafsir": ("s", ".js", 114),
     "biblehb": ("b", ".js", 39),
     "biblegr": ("b", ".js", 27),
+    "biblelt": ("b", ".js", 66),   # Vulgate
+    "syriaque": ("b", ".js", 66),  # Peshitta (39 OT + 27 NT)
 }
 
 

@@ -20,7 +20,7 @@ try:
 except Exception:
     pass
 
-PORT = 8765
+PORT = 8899
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 

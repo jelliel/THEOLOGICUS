@@ -34,7 +34,13 @@ PFP = "theologicus2026"
 # Les memes corpus que l'APK : sans eux les onglets de bibliotheque renvoient 404.
 CORPUS = ["bible", "quran", "tafsir", "summa", "summafr", "fathers", "reformed",
           "orthodox", "islamic", "denzinger", "quranwbw", "quranroots",
-          "biblehb", "biblegr", "latin"]
+          "biblehb", "biblegr", "latin",
+          # oublies jusqu'ici : la Vulgate (biblelt) et la Peshitta (syriaque)
+          # etaient chargees par le HTML mais absentes des binaires -> 404.
+          "biblelt", "syriaque",
+          # script worker de ffmpeg.wasm (2,6 Ko) : doit etre servi par l'app,
+          # un Worker ne peut pas etre construit depuis une autre origine.
+          "ffmpeg"]
 
 
 def log(msg):

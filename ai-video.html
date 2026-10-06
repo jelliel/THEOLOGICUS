@@ -2638,6 +2638,11 @@ async function enrichWithMistral(btn, textareaId) {
   };
 })();
 </script>
+
+
+
+
+
 <script id="v455-long-video">
 /* ═══════════════════════════════════════════════════════════════════
    v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
@@ -2690,6 +2695,12 @@ async function enrichWithMistral(btn, textareaId) {
   }
   var PAUSE_SEGMENT = 20;            /* respiration entre deux segments (s) */
   var FF_JS = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
+  /* URL ABSOLUE du script worker. La bibliothèque fait
+     `new Worker(new URL(classWorkerURL, "file:///home/jeromewu/ffmpeg.wasm/
+     packages/ffmpeg/dist/esm/classes.js"))` — une base FIGÉE sur la machine de
+     l'auteur du paquet : un chemin relatif y est résolu et échoue. Une URL
+     absolue l'emporte sur cette base. */
+  var FF_WORKER = new URL('ffmpeg/814.ffmpeg.js', location.href).href;
   var FF_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js';
   var FF_WASM = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm';
 
@@ -2779,6 +2790,22 @@ async function enrichWithMistral(btn, textareaId) {
   function secondes(n) { return (n / FRAME_RATE).toFixed(1) + 's'; }
 
   /* ── ffmpeg.wasm chargé à la demande (même source que la conversion v104) ── */
+  var coeurURLs = null;
+  function chargerCoeur() {
+    if (coeurURLs) return coeurURLs;
+    coeurURLs = (async function () {
+      logInfo('⬇️ Téléchargement du cœur ffmpeg (~30 Mo, mis en cache par le navigateur)');
+      var js = await fetch(FF_CORE).then(function (r) { if (!r.ok) throw new Error('cœur ffmpeg : HTTP ' + r.status); return r.text(); });
+      var wasm = await fetch(FF_WASM).then(function (r) { if (!r.ok) throw new Error('wasm ffmpeg : HTTP ' + r.status); return r.arrayBuffer(); });
+      return {
+        coreURL: URL.createObjectURL(new Blob([js], { type: 'text/javascript' })),
+        wasmURL: URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }))
+      };
+    })();
+    coeurURLs.catch(function () { coeurURLs = null; });
+    return coeurURLs;
+  }
+
   var ffCharge = null;
   function chargerFFmpeg() {
     if (ffCharge) return ffCharge;
@@ -2790,8 +2817,18 @@ async function enrichWithMistral(btn, textareaId) {
           document.head.appendChild(s);
         });
       }
+      /* Le cœur est téléchargé ICI puis servi au worker par une URL blob :
+         un worker ne peut pas `importScripts` une URL distante de façon
+         fiable (échec constaté : « failed to import ffmpeg-core.js »), alors
+         qu'une URL blob est de même origine. Les blobs sont mémorisés. */
+      var coeur = await chargerCoeur();
       var ff = new FFmpegWASM.FFmpeg();
-      await ff.load({ coreURL: FF_CORE, wasmURL: FF_WASM });
+      /* Le Worker ne peut PAS être construit depuis une autre origine :
+         « Failed to construct 'Worker': Script at 'https://unpkg.com/…'
+         cannot be accessed from origin 'http://127.0.0.1:8765' ». On sert
+         donc le script worker (2,6 Ko) DEPUIS L'APP (même origine), et on
+         garde le cœur wasm sur le CDN (simple fetch, autorisé). */
+      await ff.load({ coreURL: coeur.coreURL, wasmURL: coeur.wasmURL, classWorkerURL: FF_WORKER });
       return ff;
     })();
     ffCharge.catch(function () { ffCharge = null; });   /* un échec ne bloque pas un nouvel essai */
@@ -2800,7 +2837,31 @@ async function enrichWithMistral(btn, textareaId) {
 
   /* ── assemblage des segments en une seule vidéo ── */
   async function assembler(urls) {
-    logStep('🧵 Assemblage de <strong>' + urls.length + '</strong> segments (ffmpeg)');
+    /* 1) RELAIS LOCAL — l'assemblage par le PC, avec SON ffmpeg : sans wasm,
+       sans 32 Mo à télécharger, sans perte (-c copy) et bien plus rapide.
+       C'est la voie normale : l'app est servie par son propre serveur. */
+    if (typeof _VIA_RELAIS !== 'undefined' && _VIA_RELAIS) {
+      try {
+        logStep('🧵 Assemblage de <strong>' + urls.length + '</strong> segments (ffmpeg du PC)');
+        var rep = await fetch('/montage', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: urls })
+        });
+        var ctype = rep.headers.get('Content-Type') || '';
+        if (/json/i.test(ctype)) {          /* erreur renvoyée en JSON */
+          var j = null; try { j = await rep.json(); } catch (e) {}
+          throw new Error((j && j.erreur) || ('montage : HTTP ' + rep.status));
+        }
+        if (!rep.ok) throw new Error('montage : HTTP ' + rep.status);
+        var blobLocal = await rep.blob();
+        if (!blobLocal.size) throw new Error('montage : fichier vide');
+        logSuccess('✅ Assemblage local : <strong>' + formatBytes(blobLocal.size) + '</strong>');
+        return blobLocal;
+      } catch (e) {
+        logWarn('⚠️ Assemblage par le PC impossible (' + escapeHtml(String(e && e.message || e)) + ') — tentative dans le navigateur');
+      }
+    }
+    logStep('🧵 Assemblage de <strong>' + urls.length + '</strong> segments (ffmpeg.wasm)');
     var ff = await chargerFFmpeg();
     var noms = [], ext = 'mp4';
     for (var i = 0; i < urls.length; i++) {
@@ -2982,7 +3043,17 @@ async function enrichWithMistral(btn, textareaId) {
         { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'OpenAI Videos : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' },
         { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' }
       ];
-      connus.forEach(function (m) { if (!l.some(function (x) { return x.id === m.id; })) l.push(m); });
+      /* v456 (qui étiquette et trie) se charge AVANT ce module : les modèles
+         ajoutés ici échapperaient à son passage. On les étiquette donc à la
+         source, avec SA fonction si elle existe (pas de duplication). */
+      connus.forEach(function (m) {
+        if (l.some(function (x) { return x.id === m.id; })) return;
+        var t = (window.__v456 && window.__v456.typeDe) ? window.__v456.typeDe(m.id) : 'video';
+        m.kind = t;
+        var icone = t === 'image' ? '🖼️ IMAGE' : (t === 'texte' ? '💬 TEXTE' : '🎬 VIDÉO');
+        if (!/^(🎬|🖼️|💬)/.test(m.desc || '')) m.desc = icone + (m.desc ? ' — ' + m.desc : '');
+        l.push(m);
+      });
       return l;
     };
   } catch (e) {}
