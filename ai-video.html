@@ -3072,5 +3072,143 @@ async function enrichWithMistral(btn, textareaId) {
   };
 })();
 </script>
+
+<script id="v459-modeles-avances">
+/* ═══════════════════════════════════════════════════════════════════
+   v459 — MODÈLES AGNES LES PLUS AVANCÉS (gratuits).
+   A) Scénario enrichi par `agnes-2.5-flash` d'abord (le plus avancé du
+      catalogue, 512K de contexte), repli sur Mistral comme avant.
+   B) Bouton de génération d'IMAGE (`agnes-image-2.1-flash`, repli
+      `agnes-image-2.0-flash`) : l'app ne savait pas en produire.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v459) return;
+  var TEXTE = 'agnes-2.5-flash';        /* le plus avancé, gratuit */
+  var IMAGE = 'agnes-image-2.1-flash';  /* haute densité, gratuit */
+  var IMAGE_REPLI = 'agnes-image-2.0-flash';
+  var CONSIGNE = 'Enrichis ce prompt en anglais avec des détails cinématographiques. Réponds uniquement avec le prompt enrichi.';
+
+  /* ── A) enrichissement : Agnes d'abord ── */
+  var _enrich = enrichWithMistral;
+  enrichWithMistral = async function (btn, textareaId) {
+    var ta = document.getElementById(textareaId);
+    if (!ta) return _enrich.apply(this, arguments);
+    var txt = (ta.value || '').trim();
+    if (!getApiKey() || !txt) return _enrich.apply(this, arguments);   /* pas de clé Agnes : chemin d'origine */
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Agnes 2.5…'; btn.classList.add('loading'); }
+    try {
+      var res = await apiFetch(API_BASE + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: TEXTE, messages: [{ role: 'system', content: CONSIGNE }, { role: 'user', content: txt }] })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      var out = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (!out) throw new Error('réponse vide');
+      ta.value = out.trim();
+      logSuccess('✨ Prompt enrichi par <code>' + TEXTE + '</code>');
+      showToast('Prompt enrichi (Agnes 2.5) ✓', 'success');
+      return;
+    } catch (e) {
+      logWarn('⚠️ <code>' + TEXTE + '</code> indisponible (' + escapeHtml(String(e && e.message || e)) + ') — repli sur Mistral');
+    } finally {
+      if (btn) { btn.textContent = orig; btn.classList.remove('loading'); }
+    }
+    return _enrich.apply(this, arguments);
+  };
+
+  /* ── B) génération d'image ── */
+  function dataUriDepuis(b64, url) {
+    if (b64) return 'data:image/png;base64,' + b64;
+    if (!url) return null;
+    if (/^data:/i.test(url)) return url;
+    return null;   /* URL distante : convertie par l'appelant (relais) */
+  }
+  /* le scénario peut être écrit dans le champ du mode courant : on prend le
+     premier champ non vide plutôt que de dépendre d'un seul identifiant. */
+  function promptCourant() {
+    var ids = ['main-prompt', 'main-prompt-video', 'main-prompt-combo', 'scene-base-text', 'text-base', 'main-prompt-it'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && String(el.value || '').trim()) return String(el.value).trim();
+    }
+    return '';
+  }
+  async function genererImage(btn) {
+    var prompt = promptCourant();
+    if (!prompt) { showToast('Décrivez d’abord la scène', 'warn'); return; }
+    if (!getApiKey()) { showToast('Clé Agnes requise', 'error'); return; }
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Image…'; btn.disabled = true; }
+    setStatus('Génération de l’image…');
+    var modeles = [IMAGE, IMAGE_REPLI];
+    for (var i = 0; i < modeles.length; i++) {
+      try {
+        logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
+        var res = await apiFetch(API_BASE + '/images/generations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: modeles[i], prompt: prompt, n: 1, size: '1024x1024' })
+        });
+        if (!res.ok) { var t = ''; try { t = (await res.text()).slice(0, 120); } catch (e) {} throw new Error('HTTP ' + res.status + ' ' + t); }
+        var d = await res.json();
+        var item = (d && d.data && d.data[0]) || {};
+        var uri = dataUriDepuis(item.b64_json, item.url);
+        if (!uri && item.url) {
+          /* URL distante : on la rapatrie par le relais (CORS) et on la convertit */
+          var blob = await fetchVideoBlob(item.url);
+          if (!blob) throw new Error('image distante illisible');
+          uri = await blobToDataUrl(blob);
+        }
+        if (!uri) throw new Error('aucune image renvoyée');
+        var entree = { type: 'image', dataUri: uri, thumbnail: uri, id: Date.now() + Math.random(), name: modeles[i] + '.png', size: uri.length };
+        state.images.push(entree);
+        if (typeof renderImages === 'function') renderImages();
+        if (typeof updateGenerateBtn === 'function') updateGenerateBtn();
+        logSuccess('✅ Image ajoutée (<code>' + modeles[i] + '</code>) — elle peut servir de source vidéo');
+        showToast('Image générée ✓', 'success');
+        setStatus(null);
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
+        return entree;
+      } catch (e) {
+        logWarn('⚠️ <code>' + modeles[i] + '</code> : ' + escapeHtml(String(e && e.message || e)));
+      }
+    }
+    logError('❌ Aucune image générée');
+    showToast('Génération d’image impossible', 'error');
+    setStatus(null);
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+    return null;
+  }
+
+  /* bouton, posé dans la section Scénario du mode image */
+  function poserBouton() {
+    if (document.getElementById('v459-img-btn')) return;
+    var zone = document.querySelector('#mode-image .prompt-main') || document.getElementById('main-prompt');
+    if (!zone || !zone.parentNode) return;
+    var b = document.createElement('button');
+    b.id = 'v459-img-btn';
+    b.type = 'button';
+    b.className = 'mistral-enrich-btn';
+    b.style.cssText = 'margin-top:0.5rem;';
+    b.title = 'Générer une image depuis le scénario (agnes-image-2.1-flash, gratuit)';
+    b.textContent = '🖼️ Générer une image (Agnes)';
+    b.addEventListener('click', function () { genererImage(b); });
+    zone.parentNode.insertBefore(b, zone.nextSibling);
+    logInfo('🖼️ Génération d’image disponible (Agnes 2.1, gratuite)');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poserBouton); else poserBouton();
+  var n = 0, iv = setInterval(function () { poserBouton(); if (++n > 20) clearInterval(iv); }, 500);
+
+  window.__v459 = {
+    texte: TEXTE, image: IMAGE, imageRepli: IMAGE_REPLI,
+    genererImage: genererImage, poserBouton: poserBouton, promptCourant: promptCourant,
+    enrichir: function (btn, id) { return enrichWithMistral(btn, id); }
+  };
+})();
+</script>
 </body>
 </html>
