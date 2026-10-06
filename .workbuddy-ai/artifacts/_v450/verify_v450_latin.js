@@ -55,12 +55,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   await page.waitForTimeout(500);
   const r3b = await page.evaluate(() => {
-    const slot = document.querySelector('#hb-slot');
-    const lts = slot.querySelectorAll('.lt[data-l]');
+    const pan = document.querySelector('#hb-slot').parentNode;
+    const lts = pan.querySelectorAll('.lt[data-l]');
     return {
       n: lts.length,
       premier: lts[0] ? lts[0].getAttribute('data-l') : '',
-      btn: !!slot.querySelector('.lt-verse-btn')
+      btn: !!pan.querySelector('.lt-verse-btn')
     };
   });
   ok('ligne « ⚓ Vulgate » : mots survolables injectés', r3b.n >= 10 && r3b.premier === 'Liber', JSON.stringify(r3b));
@@ -68,7 +68,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 4. fiche de mot au survol (dict + bouton prononcer)
   await page.evaluate(() => {
-    const el = document.querySelector('#hb-slot .lt[data-l="generationis"]') || document.querySelector('#hb-slot .lt');
+    const el = document.querySelector('.lt-slot .lt[data-l="generationis"]') || document.querySelector('.lt-slot .lt');
     el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
   });
   await page.waitForTimeout(700);

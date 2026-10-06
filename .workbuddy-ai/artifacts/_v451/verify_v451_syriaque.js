@@ -55,9 +55,9 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   await page.waitForTimeout(500);
   const r4 = await page.evaluate(() => {
-    const slot = document.querySelector('#hb-slot');
-    const mots = slot.querySelectorAll('.syr[data-syr]');
-    return { n: mots.length, premier: mots[0] ? mots[0].getAttribute('data-syr') : '', btn: !!slot.querySelector('.syr-verse-btn') };
+    const pan = document.querySelector('#hb-slot').parentNode;
+    const mots = pan.querySelectorAll('.syr-slot .syr[data-syr]');
+    return { n: mots.length, premier: mots[0] ? mots[0].getAttribute('data-syr') : '', btn: !!pan.querySelector('.syr-verse-btn') };
   });
   ok('ligne « ܀ Peshitta » : mots syriaques survolables injectés', r4.n >= 10 && /ܒܪܺܝܫܺܝܬ/.test(r4.premier), JSON.stringify(r4).slice(0, 80));
   ok('bouton 🔊 verset syriaque présent', r4.btn === true);
@@ -72,12 +72,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     return { slots: panneau.querySelectorAll('.syr-slot').length };
   });
   await page.waitForTimeout(500);
-  const r5b = await page.evaluate(() => document.querySelectorAll('#v451-nt .syr[data-syr]').length);
+  const r5b = await page.evaluate(() => document.querySelectorAll('#v451-nt .syr-slot .syr[data-syr]').length);
   ok('panneau NT (Jean) → ligne syriaque injectée avec ses mots', r5.slots === 1 && r5b >= 8, 'mots : ' + r5b);
 
   // 6. fiche de mot + clic 🔊 (translittération d'abord)
   await page.evaluate(() => {
-    const el = document.querySelector('#v451-nt .syr[data-syr]');
+    const el = document.querySelector('#v451-nt .syr-slot .syr[data-syr]');
     el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
   });
   await page.waitForTimeout(300);

@@ -89,7 +89,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     slot.innerHTML = '<span class="hb" data-h="בָּרָא">בָּרָא</span> <span class="hb" data-h="אֱלֹהִים">אֱלֹהִים</span>';
     document.body.appendChild(slot);
     window.__v449Phon.boutonVerset(slot);
-    const b = slot.querySelector('.v449-verse-btn');
+    const b = document.querySelector('.v449-verse-btn');
     if (!b) return { btn: false };
     window.__spy = [];
     b.click();
