@@ -50725,6 +50725,9 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
+
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -50752,7 +50755,7 @@ window.continueTradApart = async function (msgId) {
   /* ── état ─────────────────────────────────────────────────────────── */
   var S = {
     livre: null,          /* {nom, chapitres:[{titre, paragraphes:[]}]} */
-    trad: null,           /* [[["",""],…] par chapitre] : [original, traduction] */
+    trad: null,           /* [chapitre][paragraphe] = TEXTE traduit (chaîne) */
     cible: 'fr',
     moteur: 'lt',
     moteurOCR: 'agnes:agnes-2.5-flash',
@@ -50826,6 +50829,7 @@ window.continueTradApart = async function (msgId) {
       if (typeof JSZip === 'undefined') besoin.push('libs/jszip.min.js');
       if (typeof mammoth === 'undefined') besoin.push('libs/mammoth.browser.min.js');
       if (typeof pdfjsLib === 'undefined') besoin.push('libs/pdf.min.js');
+      if (!window.jspdf) besoin.push('libs/jspdf.umd.min.js');   /* export PDF */
       await Promise.all(besoin.map(function (src) {
         return new Promise(function (res) {
           var el = document.createElement('script');
@@ -51328,13 +51332,14 @@ window.continueTradApart = async function (msgId) {
         '<div id="v461-body">' +
           '<div id="v461-drop">' +
             '<b>Déposez un livre ici</b><br><br>EPUB · DOCX · PDF · TXT · MD<br>' +
-            '<span style="font-size:10.5px;color:#7f8ea3">MOBI : convertissez d’abord en EPUB (Calibre) — la lecture directe n’est pas encore supportée.</span>' +
+            '<span style="font-size:10.5px;color:#7f8ea3">PDF : le texte est lu directement ; s’il est <b>scanné</b> (des images, pas de texte), l’OCR par IA vous est proposé.<br>' +
+            'MOBI : convertissez d’abord en EPUB (Calibre) — la lecture directe n’est pas encore supportée.</span>' +
           '</div>' +
           '<div id="v461-liste"></div>' +
         '</div>' +
         '<div id="v461-foot">' +
           '<span style="color:#7fa6d8">Exporter</span>' +
-          '<button id="v461-txt">⬇ TXT</button><button id="v461-docx">⬇ DOCX</button><button id="v461-epub">⬇ EPUB</button>' +
+          '<button id="v461-txt">⬇ TXT</button><button id="v461-docx">⬇ DOCX</button><button id="v461-epub">⬇ EPUB</button><button id="v461-pdf">⬇ PDF</button>' +
           '<span class="sp" style="flex:1"></span><span id="v461-etat" style="color:#7fa6d8"></span>' +
         '</div>' +
         '<div id="v461-export-zone" style="display:none;padding:0 14px 10px"></div>' +
@@ -51417,6 +51422,7 @@ window.continueTradApart = async function (msgId) {
     ov.querySelector('#v461-txt').onclick = function () { exporter('txt'); };
     ov.querySelector('#v461-docx').onclick = function () { exporter('docx'); };
     ov.querySelector('#v461-epub').onclick = function () { exporter('epub'); };
+    ov.querySelector('#v461-pdf').onclick = function () { exporter('pdf'); };
 
     var zone = ov.querySelector('#v461-drop');
     ['dragenter', 'dragover'].forEach(function (ev) { zone.addEventListener(ev, function (e) { e.preventDefault(); zone.classList.add('hot'); }); });
@@ -51751,10 +51757,49 @@ window.continueTradApart = async function (msgId) {
   }
   /* ═══ TROIS MODES DE CONTENU ═══
      « traduction » (défaut) = le texte traduit seul, prêt à lire ;
-     « bilingue » = original puis traduction, pour vérifier ;
+     « bilingue » = original ET traduction EN REGARD (gauche / droite) ;
      « original » = le texte d'origine seul (extraction, réutilisation).
      Le mode se choisit AU MOMENT DE L'EXPORT, et son choix est mémorisé. */
   function modeExport() { return S.modeExport || 'traduction'; }
+
+  /* ═══ BILINGUE CÔTE À CÔTE ═══
+     Empiler l'original puis la traduction oblige à remonter sans cesse pour
+     comparer : on met les deux EN REGARD, comme dans l'interface — la colonne
+     de GAUCHE est le texte source, celle de DROITE la traduction.
+     Chaque format a sa façon de faire deux colonnes : le TXT les dessine en
+     caractères, le DOCX et l'EPUB en TABLEAU (portable partout, y compris sur
+     les liseuses), le PDF en positions. */
+  var COL_TXT = 46;                 /* largeur d'une colonne, en caractères */
+  var SEP_TXT = ' │ ';
+  function espaces(n) { return n > 0 ? new Array(n + 1).join(' ') : ''; }
+  function enrouler(texte, largeur) {
+    var mots = String(texte == null ? '' : texte).split(/\s+/).filter(function (m) { return m.length; });
+    if (!mots.length) return [''];
+    var lignes = [], cour = '';
+    mots.forEach(function (m) {
+      if (!cour.length) { cour = m; return; }
+      if (cour.length + 1 + m.length <= largeur) { cour += ' ' + m; return; }
+      lignes.push(cour); cour = m;
+    });
+    if (cour.length) lignes.push(cour);
+    var out = [];
+    lignes.forEach(function (l) {
+      /* un mot plus long que la colonne (URL, mot composé) : on le coupe */
+      while (l.length > largeur) { out.push(l.slice(0, largeur)); l = l.slice(largeur); }
+      out.push(l);
+    });
+    return out;
+  }
+  function deuxColonnesTxt(gauche, droite) {
+    var g = enrouler(gauche, COL_TXT), d = enrouler(droite, COL_TXT);
+    var n = Math.max(g.length, d.length), out = [];
+    for (var i = 0; i < n; i++) {
+      var lg = g[i] || '', ld = d[i] || '';
+      out.push(lg + espaces(COL_TXT - lg.length + 1) + SEP_TXT + ld);
+    }
+    return out.join('\n');
+  }
+
   function texteComplet(mode) {
     mode = mode || modeExport();
     var out = [];
@@ -51763,7 +51808,10 @@ window.continueTradApart = async function (msgId) {
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
         if (mode === 'original') { out.push(p); }
-        else if (mode === 'bilingue') { out.push(p); if (tr) out.push('→ ' + tr); }
+        else if (mode === 'bilingue') {
+          /* en regard : l'original tient la colonne de gauche */
+          out.push(tr ? deuxColonnesTxt(p, tr) : p);
+        }
         else if (tr) out.push(tr);
         out.push('');
       });
@@ -51785,8 +51833,13 @@ window.continueTradApart = async function (msgId) {
      partout (dossier de l'app via le serveur, presse-papiers). */
   async function construireExport(format, mode) {
     if (format === 'txt') return new Blob(['\ufeff' + texteComplet(mode)], { type: 'text/plain;charset=utf-8' });
+    /* DOCX/EPUB/PDF s'appuient sur des bibliothèques chargées À LA DEMANDE :
+       un livre REPRIS depuis IndexedDB n'est jamais passé par l'import, donc
+       elles pouvaient être absentes et l'export échouait. On les garantit ici. */
+    await libsPretes();
     if (format === 'docx') return await docxDe(mode);
     if (format === 'epub') return await epubDe(mode);
+    if (format === 'pdf') return await pdfDe(mode);
     throw new Error('format inconnu');
   }
 
@@ -51820,6 +51873,18 @@ window.continueTradApart = async function (msgId) {
     var peutCopier = !!(navigator.clipboard && navigator.clipboard.writeText);
     var mode = modeExport();
     var nom = baseNom(mode) + '.' + format;
+    /* Le PDF s'écrit avec une police LATINE : le dire AVANT, pas après.
+       Le contenu changeant (traduction seule / bilingue / original), la mise
+       en garde est recalculée à chaque bascule, pas figée à l'ouverture. */
+    function avertissement() {
+      if (format !== 'pdf') return '';
+      var ns = caracteresNonSupportes();
+      if (!ns.length) return '';
+      return '<div style="border:1px solid rgba(245,197,66,.5);border-radius:8px;padding:7px 9px;background:rgba(245,197,66,.07);font-size:10.5px;color:#ffd479;margin-bottom:8px">' +
+        '⚠️ Le PDF utilise une police <b>latine</b> : ' +
+        ns.map(function (c) { return '« ' + esc(c) + ' »'; }).join(', ') + (ns.length >= 8 ? '…' : '') +
+        ' ne s’affichera pas correctement. Pour le grec, l’arabe, l’hébreu ou le chinois, prenez <b>DOCX</b> ou <b>EPUB</b> (ils gardent l’Unicode).</div>';
+    }
     z.style.display = 'block';
     /* La boîte apparaît SOUS les boutons d'export, dans le pied du modal :
        sur un petit écran elle peut être hors du champ visible. On la fait
@@ -51834,6 +51899,7 @@ window.continueTradApart = async function (msgId) {
     z.innerHTML =
       '<div style="border:1px solid rgba(79,142,247,.45);border-radius:10px;padding:10px;background:rgba(79,142,247,.07)">' +
         '<div style="font-size:11px;color:#cfe3ff;margin-bottom:6px">Exporter <b id="v461-ex-nom">' + esc(nom) + '</b> <span id="v461-ex-taille">(' + formatBytes(blob.size) + ')</span></div>' +
+        '<div id="v461-ex-avert">' + avertissement() + '</div>' +
         '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:#9fb4d0;margin-bottom:9px">' +
           '<span style="color:#7fa6d8">Contenu :</span>' +
           '<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="v461-mode" value="traduction"' + (mode === 'traduction' ? ' checked' : '') + '> Traduction seule</label>' +
@@ -51863,6 +51929,8 @@ window.continueTradApart = async function (msgId) {
       var t = document.getElementById('v461-ex-taille');
       if (n) n.textContent = baseNom() + '.' + format;
       if (t) t.textContent = '(' + formatBytes(b.size) + ')';
+      var a = document.getElementById('v461-ex-avert');
+      if (a) a.innerHTML = avertissement();     /* dépend du contenu exporté */
       return b;
     };
     var nomId = 'v461-ex-nom';
@@ -51918,6 +51986,25 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* DOCX réel (OOXML minimal) — JSZip est embarqué. */
+  /* Cellule de tableau Word : la largeur est en vingtièmes de point (dxa). */
+  function docxCellule(txt, coteDroite) {
+    return '<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/>' +
+      (coteDroite ? '<w:tcBorders><w:left w:val="single" w:sz="4" w:color="D8E2F0"/></w:tcBorders>' : '') +
+      '</w:tcPr><w:p><w:r>' +
+      (coteDroite ? '<w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr>' : '') +
+      '<w:t xml:space="preserve">' + esc(txt) + '</w:t></w:r></w:p></w:tc>';
+  }
+  /* Tableau à DEUX colonnes : original à gauche, traduction à droite. */
+  function docxTableau(lignes) {
+    return '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>' +
+      '<w:tblBorders>' +
+        '<w:top w:val="single" w:sz="4" w:color="D8E2F0"/><w:left w:val="single" w:sz="4" w:color="D8E2F0"/>' +
+        '<w:bottom w:val="single" w:sz="4" w:color="D8E2F0"/><w:right w:val="single" w:sz="4" w:color="D8E2F0"/>' +
+        '<w:insideH w:val="single" w:sz="4" w:color="D8E2F0"/><w:insideV w:val="single" w:sz="4" w:color="D8E2F0"/>' +
+      '</w:tblBorders></w:tblPr>' +
+      '<w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>' + lignes + '</w:tbl>' +
+      '<w:p/>';   /* un tableau DOIT être suivi d'un paragraphe, sinon Word se plaint */
+  }
   async function docxDe(mode) {
     mode = mode || modeExport();
     if (typeof JSZip === 'undefined') throw new Error('JSZip indisponible (bibliothèques non chargées)');
@@ -51937,13 +52024,20 @@ window.continueTradApart = async function (msgId) {
     var par = '';
     S.livre.chapitres.forEach(function (ch, ci) {
       par += '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">' + esc(ch.titre) + '</w:t></w:r></w:p>';
+      if (mode === 'bilingue') {
+        /* une ligne de tableau par paragraphe : les deux textes EN REGARD */
+        var lignes = '';
+        ch.paragraphes.forEach(function (p, pi) {
+          var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
+          lignes += '<w:tr>' + docxCellule(p, false) + docxCellule(tr, true) + '</w:tr>';
+        });
+        if (lignes) par += docxTableau(lignes);
+        return;
+      }
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
         if (mode === 'original') par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
-        else if (mode === 'bilingue') {
-          par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
-          if (tr) par += '<w:p><w:r><w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
-        } else if (tr) par += '<w:p><w:r><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
+        else if (tr) par += '<w:p><w:r><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
       });
     });
     zip.folder('word').file('document.xml',
@@ -51953,6 +52047,15 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* EPUB 3 minimal — 'mimetype' DOIT être stocké sans compression. */
+  /* Le côte à côte passe par un TABLEAU : c'est la seule mise en page deux
+     colonnes que TOUTES les liseuses respectent (les grilles CSS sont
+     inégalement supportées, et une grille ignorée empile les textes). */
+  var EPUB_CSS =
+    'body{font-family:serif;line-height:1.5}' +
+    'table.duo{width:100%;border-collapse:collapse;margin:0 0 14px}' +
+    'table.duo td{width:50%;vertical-align:top;padding:0 8px 10px 0;font-size:0.95em}' +
+    'table.duo td.d{color:#2E7D32;font-style:italic;padding-left:8px;border-left:1px solid #D8E2F0}' +
+    'table.duo tr+tr td{border-top:1px solid #EDF2F8;padding-top:8px}';
   async function epubDe(mode) {
     mode = mode || modeExport();
     if (typeof JSZip === 'undefined') throw new Error('JSZip indisponible');
@@ -51962,17 +52065,26 @@ window.continueTradApart = async function (msgId) {
       '<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">' +
       '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
     var oebps = zip.folder('OEBPS');
+    oebps.file('style.css', EPUB_CSS);
     var items = '', spine = '', nav = '';
     S.livre.chapitres.forEach(function (ch, ci) {
       var corps = '';
-      ch.paragraphes.forEach(function (p, pi) {
-        var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        if (mode === 'original') corps += '<p>' + esc(p) + '</p>';
-        else if (mode === 'bilingue') { corps += '<p>' + esc(p) + '</p>'; if (tr) corps += '<p style="color:#2E7D32">' + esc(tr) + '</p>'; }
-        else if (tr) corps += '<p>' + esc(tr) + '</p>';
-      });
+      if (mode === 'bilingue') {
+        var rangs = '';
+        ch.paragraphes.forEach(function (p, pi) {
+          var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
+          rangs += '<tr><td class="g">' + esc(p) + '</td><td class="d">' + esc(tr) + '</td></tr>';
+        });
+        if (rangs) corps = '<table class="duo">' + rangs + '</table>';
+      } else {
+        ch.paragraphes.forEach(function (p, pi) {
+          var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
+          if (mode === 'original') corps += '<p>' + esc(p) + '</p>';
+          else if (tr) corps += '<p>' + esc(tr) + '</p>';
+        });
+      }
       var f = 'chap' + (ci + 1) + '.xhtml';
-      oebps.file(f, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><title>' + esc(ch.titre) + '</title></head><body><h1>' + esc(ch.titre) + '</h1>' + corps + '</body></html>');
+      oebps.file(f, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><title>' + esc(ch.titre) + '</title><link rel="stylesheet" type="text/css" href="style.css"/></head><body><h1>' + esc(ch.titre) + '</h1>' + corps + '</body></html>');
       items += '<item id="c' + (ci + 1) + '" href="' + f + '" media-type="application/xhtml+xml"/>';
       spine += '<itemref idref="c' + (ci + 1) + '"/>';
       nav += '<li><a href="' + f + '">' + esc(ch.titre) + '</a></li>';
@@ -51982,9 +52094,141 @@ window.continueTradApart = async function (msgId) {
       '<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">' +
       '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">theologicus-livrotrado-' + Date.now() + '</dc:identifier>' +
       '<dc:title>' + esc(baseNom()) + '</dc:title><dc:language>' + esc(S.cible) + '</dc:language></metadata>' +
-      '<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' + items + '</manifest>' +
+      '<manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' +
+      '<item id="css" href="style.css" media-type="text/css"/>' + items + '</manifest>' +
       '<spine>' + spine + '</spine></package>');
     return zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+  }
+
+  /* ═══ EXPORT PDF (jsPDF, déjà embarqué) ═══
+     Le PDF est le format qu'on imprime et qu'on envoie : il lui faut une mise
+     en page, pas un déversement de texte. Donc un bandeau de titre, la
+     pagination en pied, et — en mode bilingue — DEUX COLONNES : l'original à
+     gauche, la traduction à droite.
+
+     LIMITE ASSUMÉE ET DITE : la police standard du PDF couvre l'alphabet
+     latin (WinAnsi) mais ni le grec, ni l'arabe, ni l'hébreu, ni le chinois.
+     On ne fait pas semblant : ces caractères sont DÉTECTÉS et signalés avant
+     l'export (voir caracteresNonSupportes), avec la sortie qui convient
+     (DOCX/EPUB, qui eux embarquent l'Unicode). */
+  var PDF_LATIN1_EXTRA = '\u0152\u0153\u20AC\u2018\u2019\u201C\u201D\u2013\u2014\u2026\u2022\u2122\u0160\u0161\u0178\u017D\u017E\u2039\u203A\u02C6\u02DC\u2030\u2039\u203A';
+  function policeSupportee(ch) {
+    if (ch.charCodeAt(0) < 0x100) return true;        /* Latin-1 + WinAnsi bas */
+    return PDF_LATIN1_EXTRA.indexOf(ch) >= 0;         /* CP1252 : œ Œ € … – — « » */
+  }
+  function caracteresNonSupportes() {
+    var vus = {}, out = [], fin = false;
+    function scan(t) {
+      var s = String(t == null ? '' : t);
+      for (var i = 0; i < s.length; i++) {
+        var ch = s.charAt(i);
+        if (policeSupportee(ch) || vus[ch]) continue;
+        vus[ch] = 1; out.push(ch);
+        if (out.length >= 8) { fin = true; return; }
+      }
+    }
+    for (var ci = 0; ci < S.livre.chapitres.length && !fin; ci++) {
+      var ch2 = S.livre.chapitres[ci];
+      scan(ch2.titre);
+      for (var pi = 0; pi < ch2.paragraphes.length && !fin; pi++) {
+        scan(ch2.paragraphes[pi]);
+        scan((S.trad[ci] && S.trad[ci][pi]) || '');
+      }
+    }
+    return out;
+  }
+  async function pdfDe(mode) {
+    mode = mode || modeExport();
+    var J = window.jspdf && window.jspdf.jsPDF;
+    if (!J) throw new Error('jsPDF indisponible (bibliothèques non chargées)');
+    var doc = new J({ unit: 'pt', format: 'a4', compress: true });
+    var LARG = doc.internal.pageSize.getWidth();
+    var HAUT = doc.internal.pageSize.getHeight();
+    var M = 44, BAS = 50, GOUT = 22;
+    var dispo = LARG - 2 * M;
+    var colW = (dispo - GOUT) / 2;
+    var T = 9.8, INTER = 1.42, LH = T * INTER;
+    var y = M;
+    var GRIS = [120, 132, 148], ENCRE = [24, 32, 46], VERT = [46, 125, 50];
+
+    function lignes(txt, w, style, taille) {
+      doc.setFont('helvetica', style || 'normal');
+      doc.setFontSize(taille || T);
+      return doc.splitTextToSize(String(txt == null ? '' : txt), w);
+    }
+    function encre(c) { doc.setTextColor(c[0], c[1], c[2]); }
+    /* Dessine des lignes depuis y en gérant les sauts de page. */
+    function couler(ls, x, lh) {
+      var i = 0;
+      while (i < ls.length) {
+        var reste = Math.floor((HAUT - BAS - y) / lh);
+        if (reste < 1) { doc.addPage(); y = M; continue; }
+        var n = Math.min(reste, ls.length - i);
+        for (var k = 0; k < n; k++) doc.text(ls[i + k], x, y + k * lh, { baseline: 'top' });
+        y += n * lh; i += n;
+      }
+    }
+    /* Bandeau de titre (page 1). */
+    encre(ENCRE);
+    var t0 = lignes(S.livre.nom || 'livre', dispo, 'bold', 15);
+    t0.forEach(function (l, i) { doc.text(l, M, y + i * 19, { baseline: 'top' }); });
+    y += t0.length * 19 + 4;
+    encre(GRIS);
+    var sous = (mode === 'bilingue' ? 'Original (à gauche) · Traduction ' + S.cible + ' (à droite)'
+      : mode === 'original' ? 'Texte original'
+      : 'Traduction ' + S.cible) + ' — ' + S.livre.chapitres.length + ' chapitre(s)';
+    couler(lignes(sous, dispo, 'normal', 8.5), M, 11);
+    y += 6;
+    doc.setDrawColor(216, 226, 240); doc.setLineWidth(0.6);
+    doc.line(M, y, LARG - M, y);
+    y += 16;
+
+    S.livre.chapitres.forEach(function (ch, ci) {
+      if (y > HAUT - BAS - 60) { doc.addPage(); y = M; }
+      encre(ENCRE);
+      couler(lignes(ch.titre, dispo, 'bold', 12.5), M, 17);
+      y += 7;
+      ch.paragraphes.forEach(function (p, pi) {
+        var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
+        if (mode === 'bilingue') {
+          var lg = lignes(p, colW, 'normal', T);
+          var ld = lignes(tr, colW, 'italic', T);
+          var i = 0, max = Math.max(lg.length, ld.length);
+          while (i < max) {
+            var reste = Math.floor((HAUT - BAS - y) / LH);
+            if (reste < 1) { doc.addPage(); y = M; continue; }
+            var n = Math.max(1, Math.min(reste, max - i));
+            var y0 = y;
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(T); encre(ENCRE);
+            for (var k = 0; k < n; k++) if (lg[i + k]) doc.text(lg[i + k], M, y0 + k * LH, { baseline: 'top' });
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(T); encre(VERT);
+            for (k = 0; k < n; k++) if (ld[i + k]) doc.text(ld[i + k], M + colW + GOUT, y0 + k * LH, { baseline: 'top' });
+            /* filet de séparation entre les deux colonnes, sur la hauteur du bloc */
+            doc.setDrawColor(216, 226, 240); doc.setLineWidth(0.5);
+            doc.line(M + colW + GOUT / 2, y0, M + colW + GOUT / 2, y0 + n * LH - 2);
+            y = y0 + n * LH; i += n;
+          }
+          y += 6;
+        } else {
+          var seul = (mode === 'original') ? p : tr;
+          if (!seul) return;
+          encre(mode === 'original' ? ENCRE : ENCRE);
+          couler(lignes(seul, dispo, mode === 'original' ? 'normal' : 'normal', T), M, LH);
+          y += 6;
+        }
+      });
+      y += 6;
+    });
+
+    /* Pagination en pied de page. */
+    var total = doc.internal.getNumberOfPages();
+    for (var pg = 1; pg <= total; pg++) {
+      doc.setPage(pg);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); encre(GRIS);
+      doc.text(String(S.livre.nom || 'livre').slice(0, 70), M, HAUT - 26, { baseline: 'top' });
+      doc.text(pg + ' / ' + total, LARG - M, HAUT - 26, { baseline: 'top', align: 'right' });
+    }
+    return doc.output('blob');
   }
 
   /* ═══ 7. REPRISE AU CHARGEMENT ═══ */
@@ -52049,7 +52293,8 @@ window.continueTradApart = async function (msgId) {
     majStats: majStats, statsDebut: statsDebut,
     listeMoteurs: listeMoteurs, estVision: estVision, cfgDe: cfgDe,
     etat: function () { return S; },
-    docxDe: docxDe, epubDe: epubDe, texteComplet: texteComplet,
+    docxDe: docxDe, epubDe: epubDe, pdfDe: pdfDe, texteComplet: texteComplet,
+    deuxColonnesTxt: deuxColonnesTxt, caracteresNonSupportes: caracteresNonSupportes,
     poserEntree: poserEntree,
     /* pour les bancs : traduire un tableau de paragraphes sans interface */
     traduire: function (paras, cible, moteur) {

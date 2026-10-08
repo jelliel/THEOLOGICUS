@@ -270,19 +270,19 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     await window.__livro.lancer();          /* on traduit pour avoir du contenu à exporter */
   });
   const expo = await page.evaluate(() => {
-    const etat = window.__livro.etat();
     const t = m => window.__livro.texteComplet(m);
     const bil = t('bilingue'), seul = t('traduction'), orig = t('original');
+    /* le bilingue se reconnaît à son FILET de colonne (l'ancienne flèche « → »
+       a disparu avec la mise en regard : l'assertion a suivi le changement) */
     return {
-      bilFleche: /→/.test(bil), seulFleche: /→/.test(seul),
-      origFleche: /→/.test(orig),
+      bilColonnes: /│/.test(bil), seulColonnes: /│/.test(seul), origColonnes: /│/.test(orig),
       seulPlusCourt: seul.length < bil.length,
       origPlusCourt: orig.length < bil.length
     };
   });
-  ok('mode « original + traduction » : les deux textes (flèche)', expo.bilFleche === true);
-  ok('mode « traduction seule » : plus aucune ligne originale', expo.seulFleche === false && expo.seulPlusCourt === true, JSON.stringify(expo));
-  ok('mode « original seul » : ni flèche ni traduction', expo.origFleche === false && expo.origPlusCourt === true, JSON.stringify(expo));
+  ok('mode « original + traduction » : les deux textes EN REGARD (deux colonnes)', expo.bilColonnes === true, JSON.stringify(expo));
+  ok('mode « traduction seule » : une seule colonne, plus d’original', expo.seulColonnes === false && expo.seulPlusCourt === true, JSON.stringify(expo));
+  ok('mode « original seul » : une seule colonne, pas de traduction', expo.origColonnes === false && expo.origPlusCourt === true, JSON.stringify(expo));
 
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
@@ -591,10 +591,26 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     const r = z.querySelector('input[name="v461-mode"][value="traduction"]');
     r.checked = true; r.dispatchEvent(new Event('change'));
     await new Promise(x => setTimeout(x, 300));
-    const b = await window.__livro.dialogueExport ? null : null;
-    return window.__livro.texteComplet('traduction');
+    return { seul: window.__livro.texteComplet('traduction'), bil: window.__livro.texteComplet('bilingue') };
   });
-  ok('« traduction seule » : le texte exporté n’a plus l’original', /→/.test(String(contenuSeul)) === false, String(contenuSeul).slice(0, 60));
+  /* L'ancienne assertion cherchait la flèche « → » : elle serait devenue vraie
+     PAR ACCIDENT (le séparateur a changé), donc elle ne prouvait plus rien. On
+     vérifie le FOND, et par LIGNE ENTIÈRE : le moteur factice renvoie
+     « FR:<original> », donc un simple `indexOf` trouverait l'original À
+     L'INTÉRIEUR de la traduction et l'assertion serait fausse sans qu'il y ait
+     de défaut. C'est la ligne qui doit manquer, pas la sous-chaîne. */
+  const origTemoin = await page.evaluate(() => {
+    const L = window.__livro.etat();
+    return String(L.livre.chapitres[0].paragraphes[0]).trim();
+  });
+  const lignesSeul = String(contenuSeul.seul).split('\n').map(l => l.trim());
+  const lignesBil = String(contenuSeul.bil).split('\n').map(l => l.trim());
+  ok('« traduction seule » : l’original ne forme plus aucune ligne du texte exporté',
+    origTemoin.length > 0 && lignesSeul.indexOf(origTemoin) < 0,
+    'original=' + JSON.stringify(origTemoin.slice(0, 40)));
+  ok('« original + traduction » : l’original ouvre bien une ligne (colonne de gauche)',
+    lignesBil.some(l => l.indexOf(origTemoin.slice(0, 24)) === 0),
+    'original absent du bilingue');
 
   // 9a. « Enregistrer sous… » (File System Access)
   const sous = await page.evaluate(async () => {
@@ -646,6 +662,174 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     return { longueur: copie ? copie.length : 0, res: document.getElementById('v461-ex-res').textContent };
   });
   ok('« Copier le texte » copie bien le contenu', cp.longueur > 10 && /copié/i.test(String(cp.res)), JSON.stringify(cp).slice(0, 90));
+
+  // 10. BILINGUE CÔTE À CÔTE : original à GAUCHE, traduction à DROITE
+  const cotes = await page.evaluate(() => {
+    const t = window.__livro.deuxColonnesTxt('AAA BBB', 'XXX YYY');
+    const long = window.__livro.deuxColonnesTxt('un deux trois quatre cinq six sept huit neuf dix onze douze treize quatorze quinze seize dix-sept dix-huit dix-neuf vingt vingt-et-un vingt-deux', 'court');
+    const l = long.split('\n');
+    return {
+      simple: t,
+      gauche: t.slice(0, t.indexOf('│')).trim(),
+      droite: t.slice(t.indexOf('│') + 1).trim(),
+      nLignes: l.length,
+      toutesAvecFilet: l.every(x => x.indexOf('│') >= 0),
+      memeColonne: l.every(x => x.indexOf('│') === l[0].indexOf('│'))
+    };
+  });
+  ok('côte à côte : l’ORIGINAL est dans la colonne de gauche', cotes.gauche === 'AAA BBB', JSON.stringify(cotes.simple));
+  ok('côte à côte : la TRADUCTION est dans la colonne de droite', cotes.droite === 'XXX YYY', JSON.stringify(cotes.simple));
+  ok('côte à côte : un paragraphe long passe sur PLUSIEURS lignes', cotes.nLignes > 1, 'lignes=' + cotes.nLignes);
+  ok('côte à côte : le filet reste à la MÊME colonne sur toutes les lignes', cotes.toutesAvecFilet && cotes.memeColonne, JSON.stringify(cotes));
+
+  // et sur le VRAI livre exporté : original avant le filet, traduction après
+  const vraiBil = await page.evaluate(() => {
+    const L = window.__livro.etat();
+    const orig = String(L.livre.chapitres[0].paragraphes[0]).trim();
+    const trad = String((L.trad[0] || [])[0] || '').trim();
+    const txt = window.__livro.texteComplet('bilingue');
+    const ligne = txt.split('\n').find(l => l.indexOf('│') >= 0) || '';
+    const p = ligne.indexOf('│');
+    return { orig, trad, ligne, avant: ligne.slice(0, p).trim(), apres: ligne.slice(p + 1).trim() };
+  });
+  ok('sur le vrai livre : original à gauche, traduction à droite, SUR LA MÊME LIGNE',
+    vraiBil.avant.length > 0 && vraiBil.apres.length > 0 && vraiBil.avant === vraiBil.orig.slice(0, vraiBil.avant.length),
+    JSON.stringify(vraiBil).slice(0, 160));
+
+  // 11. DOCX et EPUB : DEUX COLONNES (tableau), original / traduction
+  const tab = await page.evaluate(async () => {
+    const lire = async (blob, nom) => { const z = await JSZip.loadAsync(blob); return await z.file(nom).async('string'); };
+    const d = await window.__livro.docxDe('bilingue');
+    const e = await window.__livro.epubDe('bilingue');
+    const dx = await lire(d, 'word/document.xml');
+    const ex = await lire(e, 'OEBPS/chap1.xhtml');
+    const css = await lire(e, 'OEBPS/style.css');
+    const rangs = (dx.match(/<w:tr>/g) || []).length;
+    const cellules = (dx.match(/<w:tc>/g) || []).length;
+    return {
+      docxTableau: /<w:tbl>/.test(dx) && /<w:tblGrid>/.test(dx),
+      docxDeuxColonnes: rangs > 0 && cellules === rangs * 2,
+      docxSuiteParagraphe: /<\/w:tbl><w:p\/>/.test(dx),
+      epubTableau: /<table class="duo">/.test(ex),
+      epubCellules: (ex.match(/<td class="g">/g) || []).length > 0 && (ex.match(/<td class="d">/g) || []).length > 0,
+      epubCss: /td\.d/.test(css) && /border-collapse/.test(css)
+    };
+  });
+  ok('DOCX bilingue : un TABLEAU à deux colonnes', tab.docxTableau, JSON.stringify(tab));
+  ok('DOCX bilingue : une ligne = 2 cellules (original | traduction)', tab.docxDeuxColonnes, JSON.stringify(tab));
+  ok('DOCX bilingue : le tableau est suivi d’un paragraphe (OOXML valide)', tab.docxSuiteParagraphe, JSON.stringify(tab));
+  ok('EPUB bilingue : tableau à deux colonnes + feuille de style', tab.epubTableau && tab.epubCellules && tab.epubCss, JSON.stringify(tab));
+
+  // 12. PDF : lecture ET écriture, avec la géométrie vérifiée (gauche < droite)
+  const pdf = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gLivre = L.livre, gTrad = L.trad, gCible = L.cible;
+    /* livre SYNTHÉTIQUE : les positions sont ainsi prévisibles et l'assertion
+       ne dépend pas du contenu de la fixture */
+    L.livre = { nom: 'Essai bilingue', chapitres: [{ titre: 'Chapitre 1', paragraphes: ['Au commencement etait le Verbe'] }] };
+    L.trad = [['In the beginning was the Word']];
+    L.cible = 'en';
+    let r = {};
+    try {
+      const b = await window.__livro.pdfDe('bilingue');
+      const u8 = new Uint8Array(await b.arrayBuffer());
+      r.head = String.fromCharCode.apply(null, Array.from(u8.slice(0, 5)));
+      r.taille = b.size;
+      r.type = b.type;
+      const doc = await pdfjsLib.getDocument({ data: u8.slice(0) }).promise;
+      r.pages = doc.numPages;
+      const page = await doc.getPage(1);
+      const tc = await page.getTextContent();
+      const items = tc.items.filter(i => i.str.trim().length > 1)
+        .map(i => ({ s: i.str.trim(), x: Math.round(i.transform[4]) }));
+      r.items = items.slice(0, 12);
+      const gauche = items.filter(i => i.x < 200);
+      const droite = items.filter(i => i.x > 250);
+      r.xGauche = gauche.length ? gauche[0].x : null;
+      r.xDroite = droite.length ? droite[0].x : null;
+      r.toutTexte = items.map(i => i.s).join(' ');
+      r.originalAGauche = gauche.some(i => /commencement/.test(i.s));
+      r.traductionADroite = droite.some(i => /beginning/.test(i.s));
+      /* non latin : doit être SIGNALÉ, pas silencieusement mutilé */
+      L.trad = [['Ἐν ἀρχῇ ἦν ὁ λόγος']];
+      r.nonSupp = window.__livro.caracteresNonSupportes();
+      L.trad = [['In the beginning was the Word']];
+      r.sansNonSupp = window.__livro.caracteresNonSupportes();
+    } catch (e) { r.err = String(e && e.message || e); }
+    L.livre = gLivre; L.trad = gTrad; L.cible = gCible;
+    return r;
+  });
+  ok('PDF exporté : c’est un vrai PDF (%PDF) de taille plausible', pdf.head === '%PDF-' && pdf.taille > 800, JSON.stringify({ h: pdf.head, t: pdf.taille }));
+  ok('PDF exporté : relu par pdf.js (le fichier n’est pas corrompu)', pdf.pages >= 1 && !pdf.err, JSON.stringify({ p: pdf.pages, err: pdf.err }));
+  ok('PDF bilingue : l’ORIGINAL est dans la colonne de GAUCHE', pdf.originalAGauche === true, JSON.stringify({ x: pdf.xGauche, items: pdf.items }));
+  ok('PDF bilingue : la TRADUCTION est dans la colonne de DROITE', pdf.traductionADroite === true, JSON.stringify({ x: pdf.xDroite, items: pdf.items }));
+  ok('PDF bilingue : la colonne de droite est bien À DROITE de la gauche', pdf.xDroite > pdf.xGauche, JSON.stringify({ g: pdf.xGauche, d: pdf.xDroite }));
+  ok('PDF : les caractères non latins (grec) sont DÉTECTÉS et signalés', Array.isArray(pdf.nonSupp) && pdf.nonSupp.length > 0, JSON.stringify(pdf.nonSupp));
+  ok('PDF : aucun avertissement inutile quand tout est latin', Array.isArray(pdf.sansNonSupp) && pdf.sansNonSupp.length === 0, JSON.stringify(pdf.sansNonSupp));
+
+  // 12-bis. l'avertissement s'AFFICHE dans la boîte d'export
+  const avert = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gTrad = L.trad;
+    L.trad = [['Ἐν ἀρχῇ ἦν ὁ λόγος']];
+    await window.__livro.exporter('pdf');
+    await new Promise(r => setTimeout(r, 500));
+    const t = document.getElementById('v461-ex-avert');
+    const res = { texte: t ? t.textContent : '', nom: (document.getElementById('v461-ex-nom') || {}).textContent };
+    L.trad = gTrad;
+    return res;
+  });
+  ok('PDF non latin : la boîte d’export AVERTIT avant de générer', /police/.test(avert.texte) && /DOCX|EPUB/.test(avert.texte), avert.texte.slice(0, 130));
+  ok('le fichier PDF est bien proposé (nom en .pdf)', /\.pdf$/.test(String(avert.nom)), String(avert.nom));
+
+  // 12-ter. le bouton PDF existe et route vers l'export PDF
+  const boutonPdf = await page.evaluate(async () => {
+    const b = document.getElementById('v461-pdf');
+    if (!b) return { present: false };
+    await new Promise(r => setTimeout(r, 50));
+    b.click();
+    await new Promise(r => setTimeout(r, 700));
+    const z = document.getElementById('v461-export-zone');
+    return { present: true, nom: (document.getElementById('v461-ex-nom') || {}).textContent, zone: z.style.display !== 'none' };
+  });
+  ok('le bouton ⬇ PDF existe et ouvre l’export PDF', boutonPdf.present && /\.pdf$/.test(String(boutonPdf.nom)) && boutonPdf.zone === true, JSON.stringify(boutonPdf));
+
+  // 12-quater. ALLER-RETOUR : un PDF importé peut être réexporté en PDF
+  const allerRetour = await page.evaluate(async (FIX) => {
+    const b = await fetch(FIX + 'texte.pdf').then(r => r.blob());
+    await window.__livro.charger(new File([b], 'texte.pdf'));
+    await new Promise(r => setTimeout(r, 400));
+    const L = window.__livro.etat();
+    if (!L.livre) return { charge: false };
+    const np = L.livre.chapitres.reduce((n, c) => n + c.paragraphes.length, 0);
+    const out = await window.__livro.pdfDe('original');
+    const u8 = new Uint8Array(await out.arrayBuffer());
+    return { charge: true, np, head: String.fromCharCode.apply(null, Array.from(u8.slice(0, 5))), taille: out.size };
+  }, FIX);
+  ok('aller-retour : un PDF importé se réexporte en PDF', allerRetour.charge && allerRetour.head === '%PDF-' && allerRetour.taille > 800, JSON.stringify(allerRetour));
+
+  // 12-quinquies. PDF et ACCENTS : la police latine doit rendre le français
+  const accents = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gLivre = L.livre, gTrad = L.trad;
+    L.livre = { nom: 'Accents', chapitres: [{ titre: 'T', paragraphes: ['Élève à côté — cœur, français, « guillemets » …'] }] };
+    L.trad = [['']];
+    let r = {};
+    try {
+      r.nonSupp = window.__livro.caracteresNonSupportes();
+      const b = await window.__livro.pdfDe('original');
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await b.arrayBuffer()) }).promise;
+      const tc = await (await doc.getPage(1)).getTextContent();
+      r.texte = tc.items.map(i => i.str).join('');
+    } catch (e) { r.err = String(e && e.message || e); }
+    L.livre = gLivre; L.trad = gTrad;
+    return r;
+  });
+  ok('PDF : les ACCENTS français sont rendus (é è à ç œ — « »)',
+    /Élève/.test(accents.texte) && /cœur/.test(accents.texte) && /français/.test(accents.texte) && /—/.test(accents.texte),
+    JSON.stringify(accents).slice(0, 170));
+  ok('PDF : le français accentué ne déclenche AUCUNE alerte inutile',
+    Array.isArray(accents.nonSupp) && accents.nonSupp.length === 0, JSON.stringify(accents.nonSupp));
 
   ok('aucune erreur JavaScript' , errors.length === 0, errors.join(' | '));
   console.log(`RESULTAT : ${pass}/${total}`);
