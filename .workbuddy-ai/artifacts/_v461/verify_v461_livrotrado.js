@@ -74,14 +74,18 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     try { const p = await charger('texte.pdf'); r.pdf = { ch: p.chapitres.length, txt: p.chapitres[0].paragraphes[0] }; } catch (e) { r.pdf = 'ERR ' + e.message; }
     try { const t = await charger('simple.txt'); r.txt = { ch: t.chapitres.length, p1: t.chapitres[0].paragraphes.length }; } catch (e) { r.txt = 'ERR ' + e.message; }
     try { await charger('faux.mobi'); r.mobi = 'PAS D’ERREUR'; } catch (e) { r.mobi = e.message; }
+    try { await charger('scanne.pdf'); r.scanne = 'PAS D’ERREUR (problème)'; } catch (e) { r.scanne = e.message; }
     return r;
   }, FIX);
   ok('EPUB lu : 2 chapitres, texte extrait', ex.epub && ex.epub.ch === 2 && /Verbe/.test(String(ex.epub.txt)), JSON.stringify(ex.epub));
   ok('EPUB : titre de chapitre détecté', ex.epub && /commencement/i.test(String(ex.epub.t1)), String(ex.epub && ex.epub.t1));
   ok('DOCX lu (mammoth) : paragraphes extraits', ex.docx && ex.docx.p1 >= 2 && /premier paragraphe/.test(String(ex.docx.txt)), JSON.stringify(ex.docx));
-  ok('PDF lu (pdf.js) : texte extrait', ex.pdf && /Verbe/.test(String(ex.pdf.txt)), JSON.stringify(ex.pdf));
+  ok('PDF texte lu (pdf.js) : texte extrait', ex.pdf && /Verbe/.test(String(ex.pdf.txt)), JSON.stringify(ex.pdf));
+  ok('PDF texte : reconstruit en LIGNES (pas un bloc unique illisible)', ex.pdf && ex.pdf.ch >= 1 && String(ex.pdf.txt).length < 400, JSON.stringify(ex.pdf).slice(0, 90));
   ok('TXT lu : paragraphes séparés', ex.txt && ex.txt.p1 >= 2, JSON.stringify(ex.txt));
   ok('MOBI : refus explicite renvoyant vers EPUB', /MOBI non supporté/.test(String(ex.mobi)) && /EPUB/.test(String(ex.mobi)), String(ex.mobi).slice(0, 90));
+  ok('PDF SCANNÉ : diagnostic spécifique (pas le message générique)', /SCANNÉ/.test(String(ex.scanne)) && /OCR/.test(String(ex.scanne)), String(ex.scanne).slice(0, 110));
+  ok('PDF scanné : le nombre de pages est annoncé', /\d+ page\(s\)/.test(String(ex.scanne)), String(ex.scanne).slice(0, 70));
 
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
@@ -221,7 +225,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/34`);
-  process.exitCode = pass === 34 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/37`);
+  process.exitCode = pass === 37 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
