@@ -49,7 +49,61 @@ permissions:
   contents: write
 
 jobs:
+  # ── GARDE-FOUS (v462) ────────────────────────────────────────────────
+  # Deux défauts RÉELS ont échappé aux builds parce que rien ne contrôlait :
+  #  · la copie base64 d'ai-video.html embarquée dans THEOLOGICUS.html était
+  #    périmée → l'APK servait une vieille page en repli (panne silencieuse) ;
+  #  · les corpus biblelt (Vulgate) et syriaque (Peshitta) manquaient dans la
+  #    liste des dossiers copiés → présents à l'écran, absents des binaires.
+  # Ce job bloque désormais la publication si l'un des deux revient.
+  controles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cohérence (assets, copie embarquée, modules)
+        run: python tools/verifier_assets.py
+
+  # ── BANCS (v462) ─────────────────────────────────────────────────────
+  # Les vérifications vivaient uniquement sur la machine de développement :
+  # une régression ne se voyait qu'à la main. Elles tournent maintenant ici.
+  bancs:
+    needs: controles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: ffmpeg (banc d'assemblage)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Playwright + Chromium
+        run: |
+          npm install playwright@1.55.0 --no-save
+          npx playwright install --with-deps chromium
+      - name: Bancs (hors _v457 — voie ffmpeg.wasm abandonnée)
+        env:
+          THEO_ROOT: ${{ github.workspace }}
+          PY_BIN: python3
+        run: |
+          # Exclus volontairement (et pourquoi) :
+          #   _v457 : voie ffmpeg.wasm abandonnée (Worker cross-origin, cœur 32 Mo)
+          #   _v441 : exige un serveur Ollama local, absent en CI
+          echecs=0
+          for b in $(ls .workbuddy-ai/artifacts/_v4*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
+            echo "───── $b"
+            if ! node "$b"; then echo "ÉCHEC : $b"; echecs=$((echecs+1)); fi
+          done
+          if [ "$echecs" -ne 0 ]; then echo "$echecs banc(s) en échec"; exit 1; fi
+          echo "Tous les bancs sont passés."
+
   build:
+    needs: [controles, bancs]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -150,7 +204,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
-    needs: build
+    needs: [controles, bancs]
     runs-on: windows-latest
     steps:
       - name: Checkout

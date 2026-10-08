@@ -4,8 +4,8 @@
    le repli quand l'assemblage échoue. Aucun appel réel à l'API Agnes. */
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
-const PORT = 8880; const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const PORT = 8880; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 let pass = 0;
 const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 95)}`); if (cond) pass++; };
 (async () => {
@@ -19,7 +19,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     res.writeHead(404); res.end('nf');
   });
   await new Promise(r => server.listen(PORT, '127.0.0.1', r));
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).slice(0, 120)));
@@ -90,6 +90,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   // 2. plan de 25 s : UN SEUL appel, cadence abaissée, aucun assemblage
   await page.evaluate(() => {
     saveGallery([]);
+    localStorage.removeItem('theologicus_video_quota');
     window.__rec = { frames: [], cadence: [], ffWrite: [] };
     state.durationFrames = 601;
     state.stopRequested = false;
@@ -124,7 +125,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     await window.__v455Long.executer('P50', null, null, 'm', null, 'Scene 1/1');
     return { frames: window.__rec.frames, ffExec: window.__rec.ffExec, galerie: loadGallery().map(v => v.label) };
   });
-  ok('50 s -> 3 segments conformes (441+441+321)', JSON.stringify(r2.frames) === '[441,441,321]', JSON.stringify(r2.frames));
+  ok('50 s -> 2 segments seulement (441@12i/s + 321@24i/s)', JSON.stringify(r2.frames) === '[441,321]', JSON.stringify(r2.frames));
   ok('50 s -> assemblage concat', r2.ffExec.length >= 1 && /-f concat/.test(r2.ffExec[0]), String(r2.ffExec[0]).slice(0, 50));
   ok('50 s -> une seule video assemblee dans la galerie', r2.galerie.length === 1 && /assembl/.test(r2.galerie[0]), JSON.stringify(r2.galerie));
 
@@ -139,7 +140,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     try { await window.__v455Long.executer('P2', null, null, 'm', null, 'Scène 1/1'); } catch (e) {}
     return { galerie: loadGallery().map(v => v.label) };
   });
-  ok('assemblage impossible → les 3 SEGMENTS sont conservés (rien perdu)', repli.galerie.length === 3, JSON.stringify(repli.galerie));
+  ok('assemblage impossible → les 2 SEGMENTS sont conservés (rien perdu)', repli.galerie.length === 2, JSON.stringify(repli.galerie));
 
   // 4. note d'interface
   const note = await page.evaluate(() => { const d = document.getElementById('v455-note'); return d ? d.textContent : null; });
@@ -165,10 +166,58 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
      d25.modeles.indexOf('agnes-video-v2.0') >= 0 && d25.modeles.indexOf('agnes-video-2.5') >= 0 && d25.modeles.indexOf('agnes-video-2.5-flash') >= 0,
      JSON.stringify(d25.modeles));
 
+  // 2c. DÉCOUPAGE OPTIMAL : chaque segment = le plus long plan légal
+  const opt = await page.evaluate(() => {
+    const p50 = window.__v455Long.planSegments(1201);   /* 50 s */
+    const p90 = window.__v455Long.planSegments(2161);   /* 1 min 30 */
+    const p12 = window.__v455Long.planSegments(289);    /* 12 s */
+    return {
+      n50: p50.length, d50: p50.reduce((a, x) => a + x.sec, 0).toFixed(1), f50: p50.map(x => x.frames + '@' + x.fps),
+      n90: p90.length, d90: p90.reduce((a, x) => a + x.sec, 0).toFixed(1),
+      n12: p12.length,
+      legaux: p50.concat(p90, p12).every(x => x.frames >= 81 && x.frames <= 441 && (x.frames % 8) === 1 && x.fps >= 1 && x.fps <= 60)
+    };
+  });
+  ok('50 s en 2 générations au lieu de 3 (plans maximaux)', opt.n50 === 2 && Math.abs(opt.d50 - 50) < 1.5, JSON.stringify(opt).slice(0, 90));
+  ok('1 min 30 en 3 générations au lieu de 5', opt.n90 === 3 && Math.abs(opt.d90 - 90) < 1.5, JSON.stringify({ n: opt.n90, d: opt.d90 }));
+  ok('12 s : un seul plan (pas de découpage inutile)', opt.n12 === 1, String(opt.n12));
+  ok('tous les plans restent légaux (8n+1, ≤441, cadence 1-60)', opt.legaux === true);
+
+  // 2d. QUOTA : compteur du jour + avertissement
+  const q = await page.evaluate(() => {
+    localStorage.removeItem('theologicus_video_quota');
+    const avant = window.__v455Long.quotaJour().secondes;
+    window.__v455Long.quotaAjouter(180);
+    const apres = window.__v455Long.quotaJour().secondes;
+    window.__v455Long.majQuota();
+    const ligne = document.getElementById('v455-quota');
+    return { avant: avant, apres: apres, texte: ligne ? ligne.textContent : null };
+  });
+  ok('compteur de quota : part de 0 et cumule les secondes', q.avant === 0 && q.apres === 180, JSON.stringify(q).slice(0, 80));
+  ok('ligne de quota visible sous le sélecteur de durée', /180 s/.test(String(q.texte)) && /500 s/.test(String(q.texte)), String(q.texte).slice(0, 90));
+
+  // 2e. au-delà de 80 % du quota, confirmation demandée (et refus = pas de génération)
+  const garde = await page.evaluate(async () => {
+    localStorage.setItem('theologicus_video_quota', JSON.stringify({ jour: new Date().toISOString().slice(0, 10), secondes: 480 }));
+    let demande = false;
+    const vrai = window.confirm;
+    window.confirm = function () { demande = true; return false; };   /* l'utilisateur refuse */
+    saveGallery([]);
+    state.durationFrames = 601; state.stopRequested = false;
+    let appels = 0;
+    window.createVideoTask = async function () { appels++; return 'x'; };
+    await window.__v455Long.executer('P', null, null, 'agnes-video-v2.0', null, 'S');
+    window.confirm = vrai;
+    return { demande: demande, appels: appels };
+  });
+  ok('au-delà de 80 % du quota : confirmation demandée', garde.demande === true, JSON.stringify(garde));
+  ok('si l’utilisateur refuse : aucune génération lancée', garde.appels === 0, JSON.stringify(garde));
+
   // 3b. LE CAS SIGNALÉ : modèle 2.5 + image jointe (base64) + 50 s
   //     → bascule automatique sur v2.0, sinon « aucune vidéo ».
   const bascule = await page.evaluate(async () => {
     saveGallery([]);
+    localStorage.removeItem('theologicus_video_quota');
     window.fetchVideoBlob = async function () { return new Blob([new Uint8Array([0, 0, 0, 24])], { type: 'video/mp4' }); };
     state.durationFrames = 1201;      /* 50 s */
     state.stopRequested = false;
@@ -181,8 +230,8 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     await window.__v455Long.executer('PROMPT SCENARIO', 'data:image/png;base64,AAAA', null, 'agnes-video-2.5-flash', null, 'Scene 1/1');
     return { rec: rec, avert: logState.entries.filter(e => e.level === 'warn').map(e => e.message), galerie: loadGallery().length };
   });
-  ok('2.5 + image jointe + 50 s → bascule sur v2.0, 3 segments conformes (441+441+321)',
-     bascule.rec.modeles.length === 3 && bascule.rec.modeles.every(m => m === 'agnes-video-v2.0') && JSON.stringify(bascule.rec.frames) === '[441,441,321]',
+  ok('2.5 + image jointe + 50 s → bascule sur v2.0, 2 segments (441 + 321)',
+     bascule.rec.modeles.length === 2 && bascule.rec.modeles.every(m => m === 'agnes-video-v2.0') && JSON.stringify(bascule.rec.frames) === '[441,321]',
      JSON.stringify(bascule.rec).slice(0, 120));
   ok('la bascule est ANNONCÉE dans le journal (pas silencieuse)', bascule.avert.some(m => /bascule/.test(m)), JSON.stringify(bascule.avert).slice(0, 90));
   ok('résultat : une seule vidéo assemblée (plus de « aucune vidéo »)', bascule.galerie === 1, String(bascule.galerie));
@@ -218,7 +267,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('v2.0 : corps inchangé (num_frames + frame_rate + image)', !!c2 && c2.num_frames !== undefined && c2.frame_rate !== undefined && !!c2.image, JSON.stringify(c2).slice(0, 100));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/30`);
-  process.exitCode = pass === 30 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/38`);
+  process.exitCode = pass === 38 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

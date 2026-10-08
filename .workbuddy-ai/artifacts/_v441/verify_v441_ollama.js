@@ -10,8 +10,8 @@ const fs = require('fs');
 
 const PORT = 8765;
 const MOCK = 8783;
-const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 
 (async () => {
   // relais frais multi-threads — journal en fichier (le stdout redirigé est tamponné)
@@ -40,7 +40,7 @@ const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
   });
   await new Promise(r => server.listen(MOCK, '127.0.0.1', r));
 
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const page = await browser.newPage();
   await page.addInitScript(() => { localStorage.setItem('theologicus_wizard_skipped', '1'); });
   const errors = []; page.on('pageerror', e => errors.push(String(e)));

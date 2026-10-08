@@ -8,8 +8,8 @@
    module, comme un vrai QuotaExceededError. */
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
-const PORT = 8866; const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const PORT = 8866; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 const TOK = '6c0d0ff968f4ed4a7dcf82313d563d051a391eef7d56e99f7ac5aa7aa56e7c75';
 const REC = JSON.stringify({ v: 1, mode: 'admin', exp: Date.now() + 7 * 86400000, tok: TOK });
 let pass = 0;
@@ -25,7 +25,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     res.writeHead(404); res.end('nf');
   });
   await new Promise(r => server.listen(PORT, '127.0.0.1', r));
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const errors = [];
 
   /* ── contexte 1 : fonctionnement normal ── */

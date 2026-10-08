@@ -8,9 +8,9 @@
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
 const { spawn, execFileSync, execSync } = require('child_process');
-const ROOT = 'C:/tmp/theoverify';
+const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
 const PORT = 8899;
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 let pass = 0;
 const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 110)}`); if (cond) pass++; };
 const attendre = ms => new Promise(r => setTimeout(r, ms));
@@ -21,7 +21,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
   const copie = path.join(ROOT, '_montage_test_serveur.py');   /* à la RACINE : le serveur sert le dossier de son script */
   fs.mkdirSync(path.dirname(copie), { recursive: true });
   fs.writeFileSync(copie, src.replace(/^PORT = \d+/m, 'PORT = ' + PORT));
-  const PY = 'C:/Users/toshr/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe';
+  const PY = process.env.PY_BIN || 'C:/Users/toshr/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe';
   const srv = spawn(PY, [copie], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
   let srvLog = '';
   srv.stdout.on('data', d => { srvLog += d.toString(); });
@@ -65,8 +65,29 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     ok('durée du montage ≈ 2 s (lue dans le fichier : mvhd)', sec > 1.7 && sec < 2.4, 'durée=' + sec + 's');
   }
 
+  // ── 2b. DURCISSEMENT : hôte non autorisé et origine étrangère refusés ──
+  const hostile = await fetch(`http://127.0.0.1:${PORT}/montage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ urls: ['https://exemple-malveillant.test/x.mp4'] })
+  });
+  const hj = await hostile.json().catch(() => ({}));
+  ok('hôte non autorisé refusé par /montage', /hôte non autorisé/.test(String(hj.erreur)), JSON.stringify(hj).slice(0, 90));
+
+  const etranger = await fetch(`http://127.0.0.1:${PORT}/montage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Origin': 'https://site-etranger.example' },
+    body: JSON.stringify({ urls: [f + '0.mp4', f + '1.mp4'] })
+  });
+  const ej = await etranger.json().catch(() => ({}));
+  ok('origine étrangère refusée par /montage', /origine non locale/.test(String(ej.erreur)), JSON.stringify(ej).slice(0, 90));
+
+  const proxyEtranger = await fetch(`http://127.0.0.1:${PORT}/proxy/https://apihub.agnes-ai.com/v1/models`, {
+    headers: { 'Origin': 'https://site-etranger.example' }
+  });
+  const pj = await proxyEtranger.json().catch(() => ({}));
+  ok('origine étrangère refusée par /proxy/', /origine non locale/.test(String(pj.erreur)), JSON.stringify(pj).slice(0, 90));
+
   // ── 3. dans le navigateur, servi PAR le serveur : assembler() passe par /montage ──
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).slice(0, 110)));
@@ -89,7 +110,7 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
 
   try { srv.kill(); } catch (e) {}
-  console.log(`RESULTAT : ${pass}/9`);
-  process.exitCode = pass === 9 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/12`);
+  process.exitCode = pass === 12 ? 0 : 1;
   await browser.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

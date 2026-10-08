@@ -5,8 +5,8 @@
    l'affichage côte à côte, la persistance et la validité des exports. */
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
-const PORT = 8905; const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const PORT = 8905; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 const FIX = '.workbuddy-ai/artifacts/_v461/fixtures/';
 let pass = 0;
 const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 100)}`); if (cond) pass++; };
@@ -23,7 +23,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     res.writeHead(404); res.end('nf');
   });
   await new Promise(r => server.listen(PORT, '127.0.0.1', r));
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).slice(0, 110)));
@@ -136,6 +136,65 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('gros chapitre : lots de 12 puis 3 (15 paragraphes en 2 requêtes)', JSON.stringify(appels.lt) === '[12,3]', JSON.stringify(appels.lt));
   ok('les 15 paragraphes sont tous traduits', gros.length === 15 && gros.every(t => /^FR:/.test(t)), 'n=' + gros.length);
 
+  // 6c. ESTIMATION de coût affichée + confirmation pour le moteur IA
+  const est = await page.evaluate(() => {
+    document.getElementById('v461-moteur').value = 'agnes';
+    document.getElementById('v461-moteur').dispatchEvent(new Event('change'));
+    const el = document.getElementById('v461-estim');
+    return { texte: el ? el.textContent : null, e: window.__livro.estimation() };
+  });
+  ok('estimation affichée (paragraphes restants, moteur, requêtes)', /paragraphe\(s\)/.test(String(est.texte)) && /requête\(s\)/.test(String(est.texte)), String(est.texte).slice(0, 95));
+  ok('l’estimation annonce le moteur IA et son coût en requêtes', /IA Agnes/.test(String(est.texte)), String(est.texte).slice(0, 80));
+
+  const refusIA = await page.evaluate(async () => {
+    /* on change de langue cible : la mémoire de traduction n'a rien pour
+       l'anglais, il y a donc du travail → la confirmation doit être demandée */
+    const sel = document.getElementById('v461-lang');
+    sel.value = 'en'; sel.dispatchEvent(new Event('change'));
+    let demande = false;
+    const vrai = window.confirm;
+    window.confirm = function () { demande = true; return false; };   /* refus */
+    localStorage.removeItem('agnes_api_key');
+    const avant = JSON.stringify(window.__livro.etat().trad);
+    document.getElementById('v461-go').click();
+    await new Promise(r => setTimeout(r, 600));
+    window.confirm = vrai;
+    return { demande: demande, inchange: JSON.stringify(window.__livro.etat().trad) === avant };
+  });
+  ok('moteur IA : confirmation demandée avant de consommer', refusIA.demande === true, JSON.stringify(refusIA));
+  ok('moteur IA : refus → rien n’est lancé', refusIA.inchange === true, JSON.stringify(refusIA));
+
+  const sansConfirm = await page.evaluate(async () => {
+    document.getElementById('v461-moteur').value = 'lt';
+    document.getElementById('v461-moteur').dispatchEvent(new Event('change'));
+    let demande = false;
+    const vrai = window.confirm;
+    window.confirm = function () { demande = true; return true; };
+    await window.__livro.lancer();
+    window.confirm = vrai;
+    return { demande: demande };
+  });
+  ok('LibreTranslate : aucune confirmation (gratuit, hors-ligne)', sansConfirm.demande === false, JSON.stringify(sansConfirm));
+
+  // 6d. AFFICHAGE MOBILE : colonnes empilées
+  const mobile = await page.evaluate(() => {
+    const feuille = document.getElementById('v461-css');
+    return { media: /@media \(max-width:760px\)/.test(feuille ? feuille.textContent : ''), colonnes: /grid-template-columns:1fr/.test(feuille ? feuille.textContent : '') };
+  });
+  ok('feuille de style : règle mobile (colonnes empilées sous 760 px)', mobile.media === true && mobile.colonnes === true, JSON.stringify(mobile));
+  await page.setViewportSize({ width: 420, height: 800 });
+  await page.waitForTimeout(300);
+  const empile = await page.evaluate(() => {
+    const d = document.querySelector('.v461-duo');
+    return d ? getComputedStyle(d).gridTemplateColumns.split(' ').length : -1;
+  });
+  ok('sur écran étroit : une seule colonne (empilé)', empile === 1, 'colonnes=' + empile);
+  await page.setViewportSize({ width: 1400, height: 950 });
+
+  // 6e. VERSION fiable : version.txt prioritaire sur le littéral figé
+  const ver = await page.evaluate(() => ({ apk: typeof window.__APK_VERSION__, theo: window.THEO_VERSION || null }));
+  ok('version : THEO_VERSION renseignée par detect()', !!ver.theo, JSON.stringify(ver));
+
   // 7. PERSISTANCE IndexedDB
   const pers = await page.evaluate(() => new Promise(res => {
     const rq = indexedDB.open('theologicus_livro', 1);
@@ -162,7 +221,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/26`);
-  process.exitCode = pass === 26 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/34`);
+  process.exitCode = pass === 34 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

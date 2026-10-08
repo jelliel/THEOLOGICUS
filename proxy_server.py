@@ -1749,6 +1749,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # tâches en GET ; sans ce branchement, la vérification de clé
         # échouait et affichait « clé invalide » pour une clé parfaite.
         if self.path.startswith('/proxy/'):
+            # v462 — une page d'un autre site ne doit pas se servir du relais.
+            if not self._origine_locale():
+                self._json_response({'ok': False, 'erreur': 'origine non locale refusée'})
+                return
             self._proxy_request()
             return
         # LibreTranslate local : état (interrogé par PARAMÈTRES)
@@ -2152,6 +2156,29 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_error(404)
 
+    def _origine_locale(self):
+        """L'appel vient-il de l'app (origine locale) ?
+
+        Le relais écoute sur 127.0.0.1 : n'importe quelle PAGE WEB ouverte
+        dans le navigateur de l'utilisateur peut lui envoyer des requêtes.
+        Une page d'un autre site envoie un en-tête `Origin` : on le refuse.
+        Sans en-tête (curl, script, WebView file://) on accepte — c'est le cas
+        de l'app elle-même et des outils locaux."""
+        o = (self.headers.get('Origin') or '').strip()
+        if not o or o == 'null':
+            return True
+        try:
+            h = urlparse(o).hostname or ''
+        except Exception:
+            return False
+        return h in ('127.0.0.1', 'localhost', '::1') or h.endswith('.localhost')
+
+    # Hôtes que /montage accepte de TÉLÉCHARGER : le fournisseur et la boucle
+    # locale (fichiers de l'app). Sans cette liste, ce point d'entrée serait un
+    # relais de téléchargement ouvert sur la machine.
+    HOTES_MONTAGE = ('agnes-ai.space', 'agnes-ai.com', 'apihub.agnes-ai.com',
+                     '127.0.0.1', 'localhost')
+
     def _montage(self):
         """Assemble des segments vidéo avec le ffmpeg INSTALLÉ SUR LE PC.
 
@@ -2176,6 +2203,14 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         if not urls:
             self._json_response({'ok': False, 'erreur': 'aucune URL de segment'})
             return
+        if not self._origine_locale():
+            self._json_response({'ok': False, 'erreur': 'origine non locale refusée'})
+            return
+        for u in urls:
+            h = (urlparse(u).hostname or '').lower()
+            if not any(h == a or h.endswith('.' + a) for a in self.HOTES_MONTAGE):
+                self._json_response({'ok': False, 'erreur': 'hôte non autorisé : %s (seuls le fournisseur et la boucle locale le sont)' % h})
+                return
         ff = _sh.which('ffmpeg')
         if not ff:
             self._json_response({'ok': False, 'erreur': "ffmpeg introuvable sur ce PC (PATH)"})

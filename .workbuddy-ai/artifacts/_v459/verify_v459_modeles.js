@@ -3,8 +3,8 @@
    que l'image produite entre bien dans la liste prête pour la vidéo. */
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
-const PORT = 8901; const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const PORT = 8901; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 let pass = 0;
 const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 100)}`); if (cond) pass++; };
@@ -19,7 +19,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     res.writeHead(404); res.end('nf');
   });
   await new Promise(r => server.listen(PORT, '127.0.0.1', r));
-  const browser = await chromium.launch({ executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'), args: ['--no-sandbox'] });
+  const browser = await chromium.launch(Object.assign({ args: ['--no-sandbox'] }, process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}));
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).slice(0, 110)));

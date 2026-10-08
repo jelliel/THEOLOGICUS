@@ -1,0 +1,10 @@
+début
+kill port: Error: spawnSync C:\WINDOWS\system32\cmd.exe EBUSY
+relais lancé
+  [OK]  le registre contient « Ollama (local) »
+  [OK]  resolveModelConfig fournit endpoint local et clé fictive
+  [OK]  appel réel Ollama → réponse non vide en 0s
+  [OK]  relais multi-threads : la page est servie en 5ms PENDANT une génération
+  [OK]  échec primaire → commentaire obtenu via Ollama local
+  [OK]  aucune erreur JavaScript
+RESULTAT : 6/6

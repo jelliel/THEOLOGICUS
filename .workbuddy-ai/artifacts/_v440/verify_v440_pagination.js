@@ -7,8 +7,8 @@ const http = require('http');
 const fs = require('fs');
 
 const PORT = 8780;
-const ROOT = 'C:/tmp/theoverify';
-const PW = 'C:/Users/toshr/AppData/Local/ms-playwright';
+const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
+const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 
 (async () => {
   const server = http.createServer((req, res) => {

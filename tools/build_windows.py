@@ -32,15 +32,12 @@ PFX = "THEOLOGICUS_signing.pfx"
 PFP = "theologicus2026"
 
 # Les memes corpus que l'APK : sans eux les onglets de bibliotheque renvoient 404.
-CORPUS = ["bible", "quran", "tafsir", "summa", "summafr", "fathers", "reformed",
-          "orthodox", "islamic", "denzinger", "quranwbw", "quranroots",
-          "biblehb", "biblegr", "latin",
-          # oublies jusqu'ici : la Vulgate (biblelt) et la Peshitta (syriaque)
-          # etaient chargees par le HTML mais absentes des binaires -> 404.
-          "biblelt", "syriaque",
-          # script worker de ffmpeg.wasm (2,6 Ko) : doit etre servi par l'app,
-          # un Worker ne peut pas etre construit depuis une autre origine.
-          "ffmpeg"]
+# Liste UNIQUE (tools/corpus_list.py) : elle etait recopiee ici et dans
+# prepare_mobile.py, et un corpus ajoute a un seul endroit etait absent des
+# binaires (cas vecu : biblelt, syriaque). verifier_assets.py controle
+# desormais la coherence avant publication.
+import corpus_list
+CORPUS = list(corpus_list.CORPUS)
 
 
 def log(msg):

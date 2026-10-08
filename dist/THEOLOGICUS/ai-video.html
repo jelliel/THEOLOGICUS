@@ -2678,6 +2678,145 @@ async function enrichWithMistral(btn, textareaId) {
 
 
 
+
+
+<script id="v459-modeles-avances">
+/* ═══════════════════════════════════════════════════════════════════
+   v459 — MODÈLES AGNES LES PLUS AVANCÉS (gratuits).
+   A) Scénario enrichi par `agnes-2.5-flash` d'abord (le plus avancé du
+      catalogue, 512K de contexte), repli sur Mistral comme avant.
+   B) Bouton de génération d'IMAGE (`agnes-image-2.1-flash`, repli
+      `agnes-image-2.0-flash`) : l'app ne savait pas en produire.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v459) return;
+  var TEXTE = 'agnes-2.5-flash';        /* le plus avancé, gratuit */
+  var IMAGE = 'agnes-image-2.1-flash';  /* haute densité, gratuit */
+  var IMAGE_REPLI = 'agnes-image-2.0-flash';
+  var CONSIGNE = 'Enrichis ce prompt en anglais avec des détails cinématographiques. Réponds uniquement avec le prompt enrichi.';
+
+  /* ── A) enrichissement : Agnes d'abord ── */
+  var _enrich = enrichWithMistral;
+  enrichWithMistral = async function (btn, textareaId) {
+    var ta = document.getElementById(textareaId);
+    if (!ta) return _enrich.apply(this, arguments);
+    var txt = (ta.value || '').trim();
+    if (!getApiKey() || !txt) return _enrich.apply(this, arguments);   /* pas de clé Agnes : chemin d'origine */
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Agnes 2.5…'; btn.classList.add('loading'); }
+    try {
+      var res = await apiFetch(API_BASE + '/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: TEXTE, messages: [{ role: 'system', content: CONSIGNE }, { role: 'user', content: txt }] })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var d = await res.json();
+      var out = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+      if (!out) throw new Error('réponse vide');
+      ta.value = out.trim();
+      logSuccess('✨ Prompt enrichi par <code>' + TEXTE + '</code>');
+      showToast('Prompt enrichi (Agnes 2.5) ✓', 'success');
+      return;
+    } catch (e) {
+      logWarn('⚠️ <code>' + TEXTE + '</code> indisponible (' + escapeHtml(String(e && e.message || e)) + ') — repli sur Mistral');
+    } finally {
+      if (btn) { btn.textContent = orig; btn.classList.remove('loading'); }
+    }
+    return _enrich.apply(this, arguments);
+  };
+
+  /* ── B) génération d'image ── */
+  function dataUriDepuis(b64, url) {
+    if (b64) return 'data:image/png;base64,' + b64;
+    if (!url) return null;
+    if (/^data:/i.test(url)) return url;
+    return null;   /* URL distante : convertie par l'appelant (relais) */
+  }
+  /* le scénario peut être écrit dans le champ du mode courant : on prend le
+     premier champ non vide plutôt que de dépendre d'un seul identifiant. */
+  function promptCourant() {
+    var ids = ['main-prompt', 'main-prompt-video', 'main-prompt-combo', 'scene-base-text', 'text-base', 'main-prompt-it'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && String(el.value || '').trim()) return String(el.value).trim();
+    }
+    return '';
+  }
+  async function genererImage(btn) {
+    var prompt = promptCourant();
+    if (!prompt) { showToast('Décrivez d’abord la scène', 'warn'); return; }
+    if (!getApiKey()) { showToast('Clé Agnes requise', 'error'); return; }
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = '⏳ Image…'; btn.disabled = true; }
+    setStatus('Génération de l’image…');
+    var modeles = [IMAGE, IMAGE_REPLI];
+    for (var i = 0; i < modeles.length; i++) {
+      try {
+        logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
+        var res = await apiFetch(API_BASE + '/images/generations', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: modeles[i], prompt: prompt, n: 1, size: '1024x1024' })
+        });
+        if (!res.ok) { var t = ''; try { t = (await res.text()).slice(0, 120); } catch (e) {} throw new Error('HTTP ' + res.status + ' ' + t); }
+        var d = await res.json();
+        var item = (d && d.data && d.data[0]) || {};
+        var uri = dataUriDepuis(item.b64_json, item.url);
+        if (!uri && item.url) {
+          /* URL distante : on la rapatrie par le relais (CORS) et on la convertit */
+          var blob = await fetchVideoBlob(item.url);
+          if (!blob) throw new Error('image distante illisible');
+          uri = await blobToDataUrl(blob);
+        }
+        if (!uri) throw new Error('aucune image renvoyée');
+        var entree = { type: 'image', dataUri: uri, thumbnail: uri, id: Date.now() + Math.random(), name: modeles[i] + '.png', size: uri.length };
+        state.images.push(entree);
+        if (typeof renderImages === 'function') renderImages();
+        if (typeof updateGenerateBtn === 'function') updateGenerateBtn();
+        logSuccess('✅ Image ajoutée (<code>' + modeles[i] + '</code>) — elle peut servir de source vidéo');
+        showToast('Image générée ✓', 'success');
+        setStatus(null);
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
+        return entree;
+      } catch (e) {
+        logWarn('⚠️ <code>' + modeles[i] + '</code> : ' + escapeHtml(String(e && e.message || e)));
+      }
+    }
+    logError('❌ Aucune image générée');
+    showToast('Génération d’image impossible', 'error');
+    setStatus(null);
+    if (btn) { btn.textContent = orig; btn.disabled = false; }
+    return null;
+  }
+
+  /* bouton, posé dans la section Scénario du mode image */
+  function poserBouton() {
+    if (document.getElementById('v459-img-btn')) return;
+    var zone = document.querySelector('#mode-image .prompt-main') || document.getElementById('main-prompt');
+    if (!zone || !zone.parentNode) return;
+    var b = document.createElement('button');
+    b.id = 'v459-img-btn';
+    b.type = 'button';
+    b.className = 'mistral-enrich-btn';
+    b.style.cssText = 'margin-top:0.5rem;';
+    b.title = 'Générer une image depuis le scénario (agnes-image-2.1-flash, gratuit)';
+    b.textContent = '🖼️ Générer une image (Agnes)';
+    b.addEventListener('click', function () { genererImage(b); });
+    zone.parentNode.insertBefore(b, zone.nextSibling);
+    logInfo('🖼️ Génération d’image disponible (Agnes 2.1, gratuite)');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poserBouton); else poserBouton();
+  var n = 0, iv = setInterval(function () { poserBouton(); if (++n > 20) clearInterval(iv); }, 500);
+
+  window.__v459 = {
+    texte: TEXTE, image: IMAGE, imageRepli: IMAGE_REPLI,
+    genererImage: genererImage, poserBouton: poserBouton, promptCourant: promptCourant,
+    enrichir: function (btn, id) { return enrichWithMistral(btn, id); }
+  };
+})();
+</script>
 <script id="v455-long-video">
 /* ═══════════════════════════════════════════════════════════════════
    v455 — VIDÉOS PLUS LONGUES QUE 15 s (découpage + assemblage).
@@ -2790,6 +2929,75 @@ async function enrichWithMistral(btn, textareaId) {
     parts.push(reste);
     return parts;
   }
+  /* DÉCOUPAGE OPTIMAL : chaque segment est le plus LONG plan légal possible.
+     Un plan peut durer PLAFOND_FRAMES/CADENCE_MIN = 441/12 = 36,75 s à 12 i/s,
+     contre 18,4 s à 24 i/s : deux fois moins de générations pour une même
+     durée, donc deux fois moins de quota et de temps d'attente. On prend la
+     cadence la PLUS ÉLEVÉE qui rentre (mouvement plus fluide sur les segments
+     courts). */
+  function planSegments(total) {
+    var maxSec = PLAFOND_FRAMES / CADENCES[CADENCES.length - 1];
+    var reste = total / FRAME_RATE, out = [], garde = 0;
+    while (reste > 0.4 && garde++ < 60) {
+      var pris = Math.min(reste, maxSec);
+      var p = planOptimal(Math.round(pris * FRAME_RATE));
+      if (!p) {
+        var f = arrondir(Math.round(pris * CADENCES[CADENCES.length - 1]));
+        p = { fps: CADENCES[CADENCES.length - 1], frames: f, sec: f / CADENCES[CADENCES.length - 1] };
+      }
+      /* reliquat trop court pour un plan à lui seul : on le fond dans le précédent */
+      var apres = reste - p.sec;
+      if (out.length >= 0 && apres > 0 && apres < (MIN_FRAMES / FRAME_RATE) && out.length) {
+        var dernier = out.pop();
+        var fusion = planOptimal(Math.round((dernier.sec + p.sec + apres) * FRAME_RATE));
+        out.push(fusion || dernier);
+        break;
+      }
+      out.push(p);
+      reste = apres;
+    }
+    return out;
+  }
+
+  /* ── QUOTA : la doc Agnes annonce ~500 s de vidéo/jour sur les plans
+     payants, et le plan gratuit limite à 1 génération/minute. Sans compteur,
+     l'utilisateur découvre la limite en échouant. ── */
+  var CLE_QUOTA = 'theologicus_video_quota', QUOTA_JOUR = 500;
+  function quotaJour() {
+    var jour = new Date().toISOString().slice(0, 10);
+    try {
+      var o = JSON.parse(localStorage.getItem(CLE_QUOTA) || 'null');
+      if (o && o.jour === jour && typeof o.secondes === 'number') return o;
+    } catch (e) {}
+    return { jour: jour, secondes: 0 };
+  }
+  function quotaAjouter(sec) {
+    var o = quotaJour();
+    o.secondes = Math.round((o.secondes + (sec || 0)) * 10) / 10;
+    try { localStorage.setItem(CLE_QUOTA, JSON.stringify(o)); } catch (e) {}
+    majQuota();
+    return o;
+  }
+  function majQuota() {
+    var el = document.getElementById('v455-quota');
+    if (!el) return;
+    var o = quotaJour();
+    var pct = Math.round(100 * o.secondes / QUOTA_JOUR);
+    el.textContent = '🎞️ Vidéo générée aujourd’hui : ' + o.secondes.toFixed(0) + ' s / ~' + QUOTA_JOUR + ' s (' + pct + '%)' +
+      (pct >= 80 ? ' — ⚠️ proche de la limite quotidienne' : '');
+    el.style.color = pct >= 80 ? '#ffb347' : '#8fa3b8';
+  }
+  function poserQuota() {
+    if (document.getElementById('v455-quota')) return;
+    var sel = document.getElementById('duration-select');
+    if (!sel || !sel.parentNode) return;
+    var d = document.createElement('div');
+    d.id = 'v455-quota';
+    d.style.cssText = 'font-size:0.72rem;color:#8fa3b8;margin-top:0.35rem;line-height:1.35;';
+    sel.parentNode.appendChild(d);
+    majQuota();
+  }
+
   /* frame_rate n'est pas dans state : on réécrit le corps de la requête /videos */
   var _apiFetch = apiFetch;
   apiFetch = async function (url, options) {
@@ -2989,6 +3197,7 @@ async function enrichWithMistral(btn, textareaId) {
     /* 1) un seul plan, cadence réduite (doc officielle) — le plus propre */
     var unique = planOptimal(total);
     if (unique) {
+      if (!quotaVerifier(unique.sec)) return;
       logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → UN plan à <strong>' + unique.fps + ' i/s</strong>');
       logInfo('ℹ️ Durée obtenue en abaissant la cadence (' + unique.fps + ' i/s) : aucun assemblage nécessaire, ' + unique.sec.toFixed(1) + 's.');
       var avant = state.durationFrames;
@@ -2997,33 +3206,40 @@ async function enrichWithMistral(btn, textareaId) {
       try {
         var idU = await createVideoTask(prompt, img, aud, modelId, vid);
         await pollUntilDone(idU, modelId, sceneLabel + ' — ' + unique.sec.toFixed(1) + 's');
+        quotaAjouter(unique.sec);
       } finally {
         window.__v455Cadence = null;
         state.durationFrames = avant;
       }
       return;                              /* terminé : une seule vidéo */
     }
-    /* 2) repli : découpage en segments valides + assemblage */
-    var plan = decouper(total);
+    /* 2) repli : découpage en segments, chacun étant le plus LONG plan légal */
+    var plan = planSegments(total);
     var nb = plan.length;
+    var planifie = plan.reduce(function (a, x) { return a + x.sec; }, 0);
     logStep('🎬 <strong>Plan long : ' + secondes(total) + '</strong> → ' + nb + ' segments (' +
-      plan.map(function (f) { return secondes(f); }).join(' + ') + ')');
+      plan.map(function (x) { return secondes(x.frames) + (x.fps < 24 ? ' @' + x.fps + 'i/s' : ''); }).join(' + ') + ')');
+    logInfo('ℹ️ Chaque segment est le plus long plan possible (' + secondes(PLAFOND_FRAMES) + ' max, cadence réduite si besoin) : moins de générations, donc moins de quota.');
+    if (!quotaVerifier(planifie)) return;
     logInfo('ℹ️ Le fournisseur plafonne un plan à ' + secondes(PLAFOND_FRAMES) + ' : les segments seront assemblés en une seule vidéo.');
     var urls = [], ids = [];
     for (var k = 0; k < nb; k++) {
       if (state.stopRequested) throw new Error('Arrêt');
-      var frames = plan[k];
+      var frames = plan[k].frames, cadence = plan[k].fps;
       var lab = sceneLabel + ' · segment ' + (k + 1) + '/' + nb + ' (' + secondes(frames) + ')';
-      logStep('━━━ Segment ' + (k + 1) + '/' + nb + ' — ' + secondes(frames) + ' ━━━');
+      logStep('━━━ Segment ' + (k + 1) + '/' + nb + ' — ' + secondes(frames) + (cadence < 24 ? ' @ ' + cadence + ' i/s' : '') + ' ━━━');
       var p = prompt + '\n\n[CONTINUITY — segment ' + (k + 1) + ' of ' + nb + ': this is a direct continuation of the previous shot. Same subject, same framing, same lighting, same style; the action continues seamlessly.]';
       /* createVideoTask lit state.durationFrames pour num_frames : on lui donne
          la durée DU SEGMENT (sinon le fournisseur refuserait encore), puis on
          rend l'état intact — le reste de l'app n'est pas affecté. */
       state.durationFrames = frames;
+      window.__v455Cadence = (cadence !== 24) ? cadence : null;
       try {
         var id = await createVideoTask(p, img, aud, modelId, vid);
         await pollUntilDone(id, modelId, lab);
+        quotaAjouter(plan[k].sec);
       } finally {
+        window.__v455Cadence = null;
         state.durationFrames = total;
       }
       /* pollUntilDone dépose le segment dans la galerie : on le récupère */
@@ -3054,6 +3270,21 @@ async function enrichWithMistral(btn, textareaId) {
     }
   }
 
+  /* Avertit AVANT de consommer : le compteur évite de découvrir la limite
+     en échouant. Au-delà de 80 % du quota, on demande confirmation. */
+  function quotaVerifier(secPlanifiee) {
+    var o = quotaJour();
+    var apres = o.secondes + (secPlanifiee || 0);
+    logInfo('🎞️ Quota vidéo du jour : ' + o.secondes.toFixed(0) + ' s déjà générées, ce plan ~' + (secPlanifiee || 0).toFixed(0) + ' s → ~' + apres.toFixed(0) + ' s / ~' + QUOTA_JOUR + ' s');
+    if (apres > QUOTA_JOUR * 0.8) {
+      var msg = 'Ce plan consommera environ ' + Math.round(secPlanifiee) + ' s de vidéo.\n' +
+        'Total du jour : ' + Math.round(apres) + ' s sur une limite annoncée d’environ ' + QUOTA_JOUR + ' s.\n\n' +
+        'Au-delà, le fournisseur peut refuser les générations jusqu’au lendemain. Continuer ?';
+      try { if (!window.confirm(msg)) { logWarn('⏹ Annulé par l’utilisateur (quota)'); return false; } } catch (e) {}
+    }
+    return true;
+  }
+
   /* ── note d'interface sous le sélecteur de durée ── */
   function note() {
     var sel = document.getElementById('duration-select');
@@ -3065,7 +3296,7 @@ async function enrichWithMistral(btn, textareaId) {
     sel.parentNode.appendChild(d);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', note); else note();
-  var n = 0, iv = setInterval(function () { note(); if (++n > 20) clearInterval(iv); }, 500);
+  var n = 0, iv = setInterval(function () { note(); poserQuota(); if (++n > 20) clearInterval(iv); }, 500);
 
   /* les modèles 2.5 n'apparaissent pas toujours dans la détection : on les
      ajoute à la liste pour qu'ils soient sélectionnables. */
@@ -3099,149 +3330,13 @@ async function enrichWithMistral(btn, textareaId) {
     minimum: function () { return MIN_FRAMES; },
     valide: valide,
     planOptimal: planOptimal,
+    planSegments: planSegments,
+    quotaJour: quotaJour, quotaAjouter: quotaAjouter, majQuota: majQuota,
     decouper: decouper,
     est25: est25,
     secondes25: secondes25,
     decouperSecondes: decouperSecondes,
     segmentsPour: function (frames) { return decouper(frames).length; }
-  };
-})();
-</script>
-
-<script id="v459-modeles-avances">
-/* ═══════════════════════════════════════════════════════════════════
-   v459 — MODÈLES AGNES LES PLUS AVANCÉS (gratuits).
-   A) Scénario enrichi par `agnes-2.5-flash` d'abord (le plus avancé du
-      catalogue, 512K de contexte), repli sur Mistral comme avant.
-   B) Bouton de génération d'IMAGE (`agnes-image-2.1-flash`, repli
-      `agnes-image-2.0-flash`) : l'app ne savait pas en produire.
-   ═══════════════════════════════════════════════════════════════════ */
-(function () {
-  'use strict';
-  if (window.__v459) return;
-  var TEXTE = 'agnes-2.5-flash';        /* le plus avancé, gratuit */
-  var IMAGE = 'agnes-image-2.1-flash';  /* haute densité, gratuit */
-  var IMAGE_REPLI = 'agnes-image-2.0-flash';
-  var CONSIGNE = 'Enrichis ce prompt en anglais avec des détails cinématographiques. Réponds uniquement avec le prompt enrichi.';
-
-  /* ── A) enrichissement : Agnes d'abord ── */
-  var _enrich = enrichWithMistral;
-  enrichWithMistral = async function (btn, textareaId) {
-    var ta = document.getElementById(textareaId);
-    if (!ta) return _enrich.apply(this, arguments);
-    var txt = (ta.value || '').trim();
-    if (!getApiKey() || !txt) return _enrich.apply(this, arguments);   /* pas de clé Agnes : chemin d'origine */
-    var orig = btn ? btn.textContent : '';
-    if (btn) { btn.textContent = '⏳ Agnes 2.5…'; btn.classList.add('loading'); }
-    try {
-      var res = await apiFetch(API_BASE + '/chat/completions', {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: TEXTE, messages: [{ role: 'system', content: CONSIGNE }, { role: 'user', content: txt }] })
-      });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var d = await res.json();
-      var out = d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-      if (!out) throw new Error('réponse vide');
-      ta.value = out.trim();
-      logSuccess('✨ Prompt enrichi par <code>' + TEXTE + '</code>');
-      showToast('Prompt enrichi (Agnes 2.5) ✓', 'success');
-      return;
-    } catch (e) {
-      logWarn('⚠️ <code>' + TEXTE + '</code> indisponible (' + escapeHtml(String(e && e.message || e)) + ') — repli sur Mistral');
-    } finally {
-      if (btn) { btn.textContent = orig; btn.classList.remove('loading'); }
-    }
-    return _enrich.apply(this, arguments);
-  };
-
-  /* ── B) génération d'image ── */
-  function dataUriDepuis(b64, url) {
-    if (b64) return 'data:image/png;base64,' + b64;
-    if (!url) return null;
-    if (/^data:/i.test(url)) return url;
-    return null;   /* URL distante : convertie par l'appelant (relais) */
-  }
-  /* le scénario peut être écrit dans le champ du mode courant : on prend le
-     premier champ non vide plutôt que de dépendre d'un seul identifiant. */
-  function promptCourant() {
-    var ids = ['main-prompt', 'main-prompt-video', 'main-prompt-combo', 'scene-base-text', 'text-base', 'main-prompt-it'];
-    for (var i = 0; i < ids.length; i++) {
-      var el = document.getElementById(ids[i]);
-      if (el && String(el.value || '').trim()) return String(el.value).trim();
-    }
-    return '';
-  }
-  async function genererImage(btn) {
-    var prompt = promptCourant();
-    if (!prompt) { showToast('Décrivez d’abord la scène', 'warn'); return; }
-    if (!getApiKey()) { showToast('Clé Agnes requise', 'error'); return; }
-    var orig = btn ? btn.textContent : '';
-    if (btn) { btn.textContent = '⏳ Image…'; btn.disabled = true; }
-    setStatus('Génération de l’image…');
-    var modeles = [IMAGE, IMAGE_REPLI];
-    for (var i = 0; i < modeles.length; i++) {
-      try {
-        logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
-        var res = await apiFetch(API_BASE + '/images/generations', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: modeles[i], prompt: prompt, n: 1, size: '1024x1024' })
-        });
-        if (!res.ok) { var t = ''; try { t = (await res.text()).slice(0, 120); } catch (e) {} throw new Error('HTTP ' + res.status + ' ' + t); }
-        var d = await res.json();
-        var item = (d && d.data && d.data[0]) || {};
-        var uri = dataUriDepuis(item.b64_json, item.url);
-        if (!uri && item.url) {
-          /* URL distante : on la rapatrie par le relais (CORS) et on la convertit */
-          var blob = await fetchVideoBlob(item.url);
-          if (!blob) throw new Error('image distante illisible');
-          uri = await blobToDataUrl(blob);
-        }
-        if (!uri) throw new Error('aucune image renvoyée');
-        var entree = { type: 'image', dataUri: uri, thumbnail: uri, id: Date.now() + Math.random(), name: modeles[i] + '.png', size: uri.length };
-        state.images.push(entree);
-        if (typeof renderImages === 'function') renderImages();
-        if (typeof updateGenerateBtn === 'function') updateGenerateBtn();
-        logSuccess('✅ Image ajoutée (<code>' + modeles[i] + '</code>) — elle peut servir de source vidéo');
-        showToast('Image générée ✓', 'success');
-        setStatus(null);
-        if (btn) { btn.textContent = orig; btn.disabled = false; }
-        return entree;
-      } catch (e) {
-        logWarn('⚠️ <code>' + modeles[i] + '</code> : ' + escapeHtml(String(e && e.message || e)));
-      }
-    }
-    logError('❌ Aucune image générée');
-    showToast('Génération d’image impossible', 'error');
-    setStatus(null);
-    if (btn) { btn.textContent = orig; btn.disabled = false; }
-    return null;
-  }
-
-  /* bouton, posé dans la section Scénario du mode image */
-  function poserBouton() {
-    if (document.getElementById('v459-img-btn')) return;
-    var zone = document.querySelector('#mode-image .prompt-main') || document.getElementById('main-prompt');
-    if (!zone || !zone.parentNode) return;
-    var b = document.createElement('button');
-    b.id = 'v459-img-btn';
-    b.type = 'button';
-    b.className = 'mistral-enrich-btn';
-    b.style.cssText = 'margin-top:0.5rem;';
-    b.title = 'Générer une image depuis le scénario (agnes-image-2.1-flash, gratuit)';
-    b.textContent = '🖼️ Générer une image (Agnes)';
-    b.addEventListener('click', function () { genererImage(b); });
-    zone.parentNode.insertBefore(b, zone.nextSibling);
-    logInfo('🖼️ Génération d’image disponible (Agnes 2.1, gratuite)');
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', poserBouton); else poserBouton();
-  var n = 0, iv = setInterval(function () { poserBouton(); if (++n > 20) clearInterval(iv); }, 500);
-
-  window.__v459 = {
-    texte: TEXTE, image: IMAGE, imageRepli: IMAGE_REPLI,
-    genererImage: genererImage, poserBouton: poserBouton, promptCourant: promptCourant,
-    enrichir: function (btn, id) { return enrichWithMistral(btn, id); }
   };
 })();
 </script>
