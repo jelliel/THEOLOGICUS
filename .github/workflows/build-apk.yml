@@ -39,9 +39,14 @@ on:
       - 'package-lock.json'
       - 'capacitor.config.json'
       - '.github/workflows/build-apk.yml'
+      # v489 — les BANCS sont bloquants (voir job `bancs`) : un correctif de
+      # banc qui ne touche QUE le fichier de banc ne déclenchait AUCUN run
+      # (le dépôt et la release divergeaient en silence — exactement le piège
+      # décrit plus haut). On déclenche donc la CI sur les bancs eux-mêmes.
+      - '.workbuddy-ai/artifacts/_v4*/verify_*.js'
       # --- ajoutez ici tout nouveau fichier dont depend l'application ---
-      # La documentation, les journaux de memoire (.workbuddy-ai/**) et les
-      # bancs restent volontairement DEHORS : un commit de notes ne doit pas
+      # La documentation et les journaux de memoire (.workbuddy-ai/** hors
+      # bancs) restent volontairement DEHORS : un commit de notes ne doit pas
       # publier une version. Mais alors c'est le VERSION ci-dessus qui doit
       # bouger, sinon le depot et la release divergent en silence.
 

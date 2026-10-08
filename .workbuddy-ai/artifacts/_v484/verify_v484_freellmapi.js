@@ -152,10 +152,15 @@ const server = http.createServer((req, res) => {
   ok('les entrées VIRTUELLES SÛRES sont proposées (auto/fusion — les auto:<profil> sont conditionnelles)',
     reg && JSON.stringify(reg.models) === '["auto","fusion"]', JSON.stringify(reg && reg.models));
 
-  // 2. le chemin d'appel réel (apiEndpoint réécrit en /fla/ en conservant /v1)
+  // 2. le chemin d'appel réel : resolveModelConfig renvoie l'URL BRUTE du
+  //    routeur ; c'est apiEndpoint() (appliqué au moment de l'appel, ex. via
+  //    le wrapper ae() du module v484) qui réécrit en /fla/ en conservant /v1.
+  //    On teste DONC le résultat de apiEndpoint() sur l'endpoint résolu —
+  //    exactement ce que pratique la vraie chaîne d'appel (chat + import).
   const cfg = await page.evaluate(() => {
     const c = resolveModelConfig('freellmapi:auto');
-    return { model: c.model, endpoint: c.endpoint, format: c.format, providerId: c.providerId };
+    const ep = (typeof window.apiEndpoint === 'function') ? window.apiEndpoint(c.endpoint) : c.endpoint;
+    return { model: c.model, endpoint: ep, raw: c.endpoint, format: c.format, providerId: c.providerId };
   });
   ok('« freellmapi:auto » produit l’endpoint du relais /fla/ (avec /v1 conservé)',
     /\/fla\/127\.0\.0\.1:3001\/v1\/chat\/completions$/.test(cfg.endpoint) && cfg.model === 'auto', JSON.stringify(cfg));
