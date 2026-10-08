@@ -31,10 +31,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   // ── moteurs simulés ──
   const appels = { lt: [], ia: [] };
   await page.route('**/languages', route => route.fulfill({ status: 200, contentType: 'application/json', body: '[{"code":"fr"},{"code":"en"}]' }));
+  let latenceLT = 0;   /* réglable : le banc de vitesse la monte à 300 ms */
   await page.route('**/translate', async route => {
     let c = {}; try { c = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
     const lot = Array.isArray(c.q) ? c.q : [c.q];
     appels.lt.push(lot.length);
+    if (latenceLT) await new Promise(r => setTimeout(r, latenceLT));
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ translatedText: lot.map(t => 'FR:' + t) }) });
   });
   let appelsOCR = 0;
@@ -203,6 +205,78 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   ok('le moteur d’OCR choisi est mémorisé', typeof refusVision.choisi === 'string' && refusVision.choisi.length > 0, JSON.stringify(refusVision));
 
+  // 2j. VITESSE : parallélisme mesuré, endpoint mis en cache
+  let sondesLangues = 0;
+  latenceLT = 300;      /* la latence du moteur, pour mesurer le parallélisme */
+  await page.route('**/languages', async route => {
+    sondesLangues++;
+    await new Promise(r => setTimeout(r, 30));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: '[{"code":"fr"},{"code":"en"},{"code":"de"}]' });
+  });
+  const vitesse = await page.evaluate(async () => {
+    const paras = [];
+    for (let i = 0; i < 60; i++) paras.push('paragraphe numero ' + i + ' assez long pour un vrai envoi');
+    async function chrono(n) {
+      const t0 = performance.now();
+      await window.__livro.traduire(paras.slice(), 'it', 'lt');   /* langue vierge : rien en mémoire */
+      return Math.round(performance.now() - t0);
+    }
+    const etat = window.__livro.etat();
+    etat.parallele = 1; const t1 = await chrono(1);
+    etat.parallele = 0; const auto = window.__livro.parallele();
+    const t3 = await chrono(3);
+    return { sequentiel: t1, parallele3: t3, auto: auto, lot: 24 };
+  });
+  ok('le parallélisme est mesuré : 3× plus rapide qu’en séquentiel',
+     vitesse.parallele3 < vitesse.sequentiel * 0.6, JSON.stringify(vitesse));
+  ok('le mode automatique vaut 3 pour LibreTranslate local', vitesse.auto === 3, 'auto=' + vitesse.auto);
+  ok('l’endpoint n’est sondé QU’UNE fois (cache)', sondesLangues <= 2, 'sondes=' + sondesLangues);
+
+  // 2k. GLOSSAIRE : termes protégés (LibreTranslate) et consignés (IA)
+  const glos = await page.evaluate(async () => {
+    const gz = document.getElementById('v461-glos');
+    gz.value = 'Verbe\nSeigneur'; gz.dispatchEvent(new Event('input'));
+    const protege = window.__livro.protegerGlossaire('Au commencement était le Verbe, et le Seigneur parla.');
+    const rendu = window.__livro.restituerGlossaire(protege);
+    return { n: window.__livro.glossaire().length, protege, rendu };
+  });
+  ok('glossaire enregistré (2 termes)', glos.n === 2, 'n=' + glos.n);
+  ok('les termes du glossaire sont PROTÉGÉS pour LibreTranslate', /class="notranslate"/.test(glos.protege) && /notranslate">Verbe/.test(glos.protege), String(glos.protege).slice(0, 90));
+  ok('la restitution enlève les balises sans toucher au texte', glos.rendu.indexOf('<') < 0 && /Verbe/.test(glos.rendu), String(glos.rendu).slice(0, 70));
+
+  // 2l. SÉLECTION DES CHAPITRES : décocher un chapitre l'exclut vraiment
+  const sel = await page.evaluate(async () => {
+    window.__livro.charger ? null : null;
+    window.__livro.toutSelectionner(true);
+    const avant = window.__livro.chapitresChoisis().length;
+    window.__livro.toutSelectionner(false);
+    const aucun = window.__livro.chapitresChoisis().length;
+    const etat = window.__livro.etat();
+    if (etat.livre) etat.selection[0] = true;              /* on ne garde que le premier */
+    const un = window.__livro.chapitresChoisis();
+    return { avant, aucun, un };
+  });
+  ok('« tout » sélectionne tous les chapitres', sel.avant === 2, 'avant=' + sel.avant);
+  ok('« rien » n’en sélectionne aucun', sel.aucun === 0, 'aucun=' + sel.aucun);
+  ok('la sélection partielle est respectée (1 seul chapitre)', sel.un.length === 1 && sel.un[0] === 0, JSON.stringify(sel.un));
+
+  // 2m. EXPORT : bilingue ou traduction seule
+  await page.evaluate(async () => {
+    const etat = window.__livro.etat();
+    const sl = document.getElementById('v461-lang');
+    sl.value = 'es'; sl.dispatchEvent(new Event('change'));
+    await window.__livro.lancer();          /* on traduit pour avoir du contenu à exporter */
+  });
+  const expo = await page.evaluate(() => {
+    const etat = window.__livro.etat();
+    etat.bilingue = true; const bil = window.__livro.texteComplet();
+    etat.bilingue = false; const seul = window.__livro.texteComplet();
+    etat.bilingue = true;
+    return { bil: /→/.test(bil), seul: /→/.test(seul), plusCourt: seul.length < bil.length };
+  });
+  ok('export bilingue : original + traduction (flèche)', expo.bil === true);
+  ok('export « traduction seule » : plus de lignes originales', expo.seul === false && expo.plusCourt === true, JSON.stringify(expo));
+
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
     const b = await fetch(FIX + 'livre.epub').then(r => r.blob());
@@ -217,24 +291,31 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     etat: document.getElementById('v461-etat') ? document.getElementById('v461-etat').textContent : null
   }));
   ok('affichage côte à côte : une paire original/traduction par paragraphe', duo.duos === 3, JSON.stringify(duo));
-  ok('les deux colonnes sont étiquetées (Original | langue cible)', duo.orig === 'Original' && duo.trad === 'fr', JSON.stringify({ o: duo.orig, t: duo.trad }));
+  ok('les deux colonnes sont étiquetées (Original | langue cible)', duo.orig === 'Original' && duo.trad === await page.evaluate(() => window.__livro.etat().cible), JSON.stringify({ o: duo.orig, t: duo.trad }));
   ok('compteur de progression affiché', /\/\s*3 paragraphes/.test(String(duo.etat)), String(duo.etat));
 
   // 4. TRADUCTION LibreTranslate (lots) + mémoire
   appels.lt.length = 0;
   await page.evaluate(() => {
+    /* état REMIS À ZÉRO : les tests précédents ont laissé une sélection
+       partielle et d'autres langues traduites — un test ne doit pas dépendre
+       de l'ordre dans lequel il s'exécute. */
+    const e = window.__livro.etat();
+    e.enCours = false; e.arret = false; e.pause = false; e.parallele = 0;
+    window.__livro.toutSelectionner(true);
     const sel = document.getElementById('v461-moteur');
-    sel.value = 'lt'; sel.dispatchEvent(new Event('change'));   /* moteur local : aucune confirmation */
-    window.__livro.etat().cible = 'fr';
+    sel.value = 'lt'; sel.dispatchEvent(new Event('change'));
+    const sl = document.getElementById('v461-lang');
+    sl.value = 'nl'; sl.dispatchEvent(new Event('change'));   /* langue vierge */
     return window.__livro.lancer();
   });
   await page.waitForTimeout(1500);
   const apres = await page.evaluate(() => ({
     traduits: Array.from(document.querySelectorAll('.v461-col.tr p')).map(p => p.textContent),
-    tm: (function () { try { return !!(window.__theoTM && window.__theoTM.get('Au commencement etait le Verbe.', 'fr')); } catch (e) { return null; } })(),
+    tm: (function () { try { return !!(window.__theoTM && window.__theoTM.get('Au commencement etait le Verbe.', 'nl')); } catch (e) { return null; } })(),
     msg: document.getElementById('v461-msg').textContent
   }));
-  ok('LibreTranslate appelé par LOTS, chapitre par chapitre (2+1 = 3 paragraphes)', JSON.stringify(appels.lt) === '[2,1]', JSON.stringify(appels.lt));
+  ok('LibreTranslate appelé par LOTS (une requête par chapitre : 2 + 1 paragraphes)', JSON.stringify(appels.lt) === '[2,1]', JSON.stringify(appels.lt));
   ok('traduction affichée dans la colonne de droite', apres.traduits.every(t => /^FR:/.test(t)), JSON.stringify(apres.traduits).slice(0, 90));
   ok('mémoire de traduction alimentée (__theoTM)', apres.tm === true, String(apres.tm));
   ok('message de fin affiché', /terminée/i.test(String(apres.msg)), String(apres.msg).slice(0, 80));
@@ -255,10 +336,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   // 6b. limite de lot respectée sur un gros chapitre
   appels.lt.length = 0;
   const gros = await page.evaluate(() => {
+    const e0 = window.__livro.etat();
+    e0.enCours = false; e0.arret = false; e0.pause = false;
     const p = []; for (let i = 0; i < 15; i++) p.push('paragraphe numero ' + i + ' — assez long pour être traduit');
     return window.__livro.traduire(p, 'fr', 'lt');
   });
-  ok('gros chapitre : lots de 12 puis 3 (15 paragraphes en 2 requêtes)', JSON.stringify(appels.lt) === '[12,3]', JSON.stringify(appels.lt));
+  ok('gros chapitre : 15 paragraphes en UNE requête (lot de 24)', JSON.stringify(appels.lt) === '[15]', JSON.stringify(appels.lt));
   ok('les 15 paragraphes sont tous traduits', gros.length === 15 && gros.every(t => /^FR:/.test(t)), 'n=' + gros.length);
 
   // 6c. ESTIMATION de coût affichée + confirmation pour le moteur IA
@@ -309,6 +392,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('panneau de statistiques présent (6 cartes)', statAvant.existe === true && statAvant.cartes === 6, JSON.stringify(statAvant));
 
   // exécution LENTE simulée : on lit le panneau PENDANT le traitement
+  latenceLT = 1200;   /* > 2 s au total : le seuil d'affichage de la vitesse */
   await page.evaluate(async () => {
     const sel = document.getElementById('v461-moteur');
     sel.value = 'lt'; sel.dispatchEvent(new Event('change'));
@@ -317,9 +401,11 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
        statistiques à zéro seraient le comportement correct. */
     const sl = document.getElementById('v461-lang');
     sl.value = 'de'; sl.dispatchEvent(new Event('change'));
+    window.__livro.etat().parallele = 1;   /* séquentiel : au-delà du seuil de 2 s */
+    window.__latenceBanc = 1;
     const vrai = window.fetch;
     window.fetch = async function (u, o) {
-      if (String(u).indexOf('/translate') >= 0) await new Promise(r => setTimeout(r, 1200));   /* latence simulée : au-delà du seuil de mesure de la vitesse (2 s) */
+      /* latence fournie par la doublure unique (latenceLT) */
       return vrai.apply(this, arguments);
     };
     window.__fin = window.__livro.lancer();
@@ -349,6 +435,8 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('à la fin : 100 % et avancement complet', apresStats.pct === '100 %' && /\d+ \/ \d+/.test(apresStats.avance), JSON.stringify(apresStats).slice(0, 80));
   ok('le restant affiche « terminé »', /termin/.test(apresStats.restant), apresStats.restant);
   ok('la vitesse et les caractères sont mesurés', /\/min/.test(apresStats.vitesse) && apresStats.car !== '0', JSON.stringify({ v: apresStats.vitesse, c: apresStats.car }));
+  await page.evaluate(() => { window.__livro.etat().parallele = 0; });
+  latenceLT = 0;
 
   // 6d. AFFICHAGE MOBILE : colonnes empilées
   const mobile = await page.evaluate(() => {
@@ -395,7 +483,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/61`);
-  process.exitCode = pass === 61 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/72`);
+  process.exitCode = pass === 72 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

@@ -50716,6 +50716,9 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
+
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -50734,8 +50737,10 @@ window.continueTradApart = async function (msgId) {
   var DB_NOM = 'theologicus_livro', STORE = 'livres';
   var LS_LT = 'theologicus_lt_url';
   var LT_DEFAUT = 'http://localhost:5000';
-  var TAILLE_LOT_LT = 12;      /* paragraphes par requête LibreTranslate */
-  var TAILLE_LOT_IA = 8;       /* paragraphes par requête IA */
+  var TAILLE_LOT_LT = 24;      /* paragraphes par requête LibreTranslate (local : on charge) */
+  var TAILLE_LOT_IA = 8;       /* paragraphes par requête IA (au-delà, risque de troncature) */
+  var PARALLELE_LT = 3;        /* lots simultanés en local (ni quota ni limite) */
+  var PARALLELE_IA = 2;        /* lots simultanés côté IA (quota, 429) */
   var TEXTE_MAX = 50 * 1024 * 1024;
 
   /* ── état ─────────────────────────────────────────────────────────── */
@@ -50745,6 +50750,10 @@ window.continueTradApart = async function (msgId) {
     cible: 'fr',
     moteur: 'lt',
     moteurOCR: 'agnes:agnes-2.5-flash',
+    parallele: 0,          /* 0 = automatique selon le moteur */
+    glossaire: [],
+    selection: {},         /* chapitres cochés (index -> true) */
+    bilingue: true,        /* export : original + traduction, ou traduction seule */
     enCours: false, arret: false, pause: false,
     fait: 0, total: 0
   };
@@ -51009,13 +51018,21 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* ═══ 2. TRADUCTION ═══ */
+  function parallele() {
+    if (S.parallele > 0) return S.parallele;
+    return (S.moteur === 'lt') ? PARALLELE_LT : PARALLELE_IA;
+  }
   function tm() { return window.__theoTM || null; }
   function memoire(texte, lang) { var m = tm(); try { return m ? (m.get(texte, lang) || null) : null; } catch (e) { return null; } }
   function memoriser(texte, lang, trad) { var m = tm(); try { if (m && trad) m.put(texte, lang, trad); } catch (e) {} }
 
   /* LibreTranslate local : on réutilise l'URL configurée par l'app (v58),
      sinon le serveur local par défaut. */
-  async function ltEndpoint() {
+  /* L'endpoint était re-sondé À CHAQUE LOT (un aller-retour réseau inutile par
+     lot). On le mémorise ; un échec le réinitialise pour réessayer. */
+  var _ltEp = null;
+  async function ltEndpoint(forcer) {
+    if (_ltEp && !forcer) return _ltEp;
     var u = '';
     try { u = localStorage.getItem(LS_LT) || ''; } catch (e) {}
     var cands = [];
@@ -51024,32 +51041,93 @@ window.continueTradApart = async function (msgId) {
     for (var i = 0; i < cands.length; i++) {
       try {
         var r = await fetch(cands[i] + '/languages', { method: 'GET' });
-        if (r.ok) return cands[i];
+        if (r.ok) { _ltEp = cands[i]; return _ltEp; }
       } catch (e) {}
     }
     throw new Error('LibreTranslate local introuvable (PARAMÈTRES → 🌐 Traduction locale → ▶ DÉMARRER)');
   }
 
+  /* ═══ GLOSSAIRE : termes à NE PAS traduire ═══
+     Indispensable pour un texte théologique : un nom propre, un titre
+     (« Verbe », « Seigneur », « Tétragramme »), un terme technique doivent
+     traverser la traduction intacts. Pour LibreTranslate on les protège avec
+     `<span class="notranslate">` (format HTML) ; pour l'IA on les énumère dans
+     la consigne. */
+  function glossaire() { return (S.glossaire || []).filter(function (t) { return String(t).trim().length > 1; }); }
+  function protegerGlossaire(txt) {
+    var t = String(txt);
+    glossaire().forEach(function (mot) {
+      var m = String(mot).trim();
+      if (!m) return;
+      try {
+        var re = new RegExp('(?<![\\p{L}\\p{N}])' + m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\p{L}\\p{N}])', 'giu');
+        t = t.replace(re, function (x) { return '<span class="notranslate">' + x + '</span>'; });
+      } catch (e) { t = t.split(m).join('<span class="notranslate">' + m + '</span>'); }
+    });
+    return t;
+  }
+  function restituerGlossaire(txt) {
+    return String(txt).replace(/<\/?span[^>]*>/gi, '').replace(/<[^>]{1,40}>/g, '').trim();
+  }
+  function consigneGlossaire() {
+    var g = glossaire();
+    if (!g.length) return '';
+    return '\nGLOSSAIRE — ces termes doivent rester INCHANGÉS (ne les traduis pas) : ' + g.join(', ') + '.';
+  }
+
+  /* ═══ TRAITEMENT EN PARALLÈLE ═══
+     Tout était SÉQUENTIEL : un lot, on attend, le suivant… Sur un ouvrage de
+     300 pages, c'est des dizaines de minutes. On lance plusieurs lots à la
+     fois (nombre réglable) : le temps total est divisé d'autant.
+     En local (LibreTranslate) il n'y a ni quota ni limite : on peut paralléliser
+     franchement. Sur un fournisseur IA, on reste prudent (quota et 429). */
+  async function enParallele(taches, n, surFini) {
+    var i = 0, res = new Array(taches.length);
+    async function ouvrier() {
+      while (i < taches.length) {
+        if (S.arret) throw new Error('Arrêt');
+        while (S.pause) { await new Promise(function (r) { setTimeout(r, 400); }); if (S.arret) throw new Error('Arrêt'); }
+        var k = i++;
+        res[k] = await taches[k]();
+        if (surFini) surFini(k);
+      }
+    }
+    var n2 = Math.max(1, Math.min(n || 1, taches.length || 1));
+    await Promise.all(Array.from({ length: n2 }, ouvrier));
+    return res;
+  }
+
   async function traduireLT(paras, cible, surLot) {
     var ep = await ltEndpoint();
-    var out = [];
-    for (var i = 0; i < paras.length; i += TAILLE_LOT_LT) {
-      if (S.arret) throw new Error('Arrêt');
-      while (S.pause) { await new Promise(function (r) { setTimeout(r, 400); }); if (S.arret) throw new Error('Arrêt'); }
-      var lot = paras.slice(i, i + TAILLE_LOT_LT);
-      var r = await fetch(ep + '/translate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q: lot, source: 'auto', target: cible, format: 'text' })
-      });
-      if (!r.ok) throw new Error('LibreTranslate HTTP ' + r.status);
-      var d = await r.json();
-      var t = d && d.translatedText;
-      if (Array.isArray(t)) out = out.concat(t);
-      else out.push(t || '');
-      lot.forEach(function (src, k) { memoriser(src, cible, (Array.isArray(t) ? t[k] : '') || ''); });
-      statsAppel(lot.join('').length);
-      if (surLot) surLot(lot.length, out);
-    }
+    var lots = [];
+    for (var i = 0; i < paras.length; i += TAILLE_LOT_LT) lots.push({ debut: i, paras: paras.slice(i, i + TAILLE_LOT_LT) });
+    var out = new Array(paras.length);
+    var faits = 0;
+    await enParallele(lots.map(function (l) {
+      return async function () {
+        var aEnvoyer = l.paras.map(protegerGlossaire);
+        var html = aEnvoyer.some(function (x, k) { return x !== l.paras[k]; });
+        var r = await fetch(ep + '/translate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ q: aEnvoyer, source: 'auto', target: cible, format: html ? 'html' : 'text' })
+        });
+        if (!r.ok) { _ltEp = null; throw new Error('LibreTranslate HTTP ' + r.status); }
+        var d = await r.json();
+        var t = d && d.translatedText;
+        var tab = Array.isArray(t) ? t : [t];
+        l.paras.forEach(function (src, k) {
+          var tr = restituerGlossaire(String(tab[k] == null ? '' : tab[k]));
+          out[l.debut + k] = tr;
+          memoriser(src, cible, tr);
+        });
+        faits += l.paras.length;
+        statsAppel(l.paras.join('').length);
+        /* CONTRAT : (index du premier paragraphe du lot, ses traductions).
+           Avant, on passait un simple COMPTEUR : l'appelant recalculait les
+           index avec lui et l'affichage ne se mettait plus à jour. */
+        if (surLot) surLot(l.debut, out.slice(l.debut, l.debut + l.paras.length));
+      };
+    }), parallele());
     return out;
   }
 
@@ -51063,7 +51141,12 @@ window.continueTradApart = async function (msgId) {
       var numerote = lot.map(function (p, k) { return '[[' + (k + 1) + ']] ' + p; }).join('\n');
       var invite = 'Traduis en ' + cible + ' les ' + lot.length + ' paragraphes ci-dessous, numérotés [[1]]…[[' + lot.length + ']].\n' +
         'RÈGLES : garde EXACTEMENT les mêmes marqueurs [[n]] au début de chaque paragraphe traduit ; ne fusionne pas, n’omet aucun paragraphe ; ' +
-        'ne commente pas ; conserve le ton et le style de l’auteur. Réponds uniquement par les paragraphes traduits.';
+        'ne commente pas ; conserve le ton et le style de l’auteur. Réponds uniquement par les paragraphes traduits.' +
+        consigneGlossaire();   /* termes à ne pas traduire (glossaire) */
+      /* CONTEXTE : donner le paragraphe précédent améliore nettement la
+         cohérence (pronoms, temps, enchaînement) — le lot précédent est déjà
+         traduit, on l'envoie comme référence. */
+      if (i > 0 && out[i - 1]) invite += '\n\nContexte (paragraphe précédent, DÉJÀ traduit — ne pas le retraduire) : ' + String(out[i - 1]).slice(0, 400);
       var texte = await texteDeIA(S.moteur, [{ role: 'system', content: invite }, { role: 'user', content: numerote }], { max_tokens: 4096, temperature: 0.3 });
       /* on redécoupe sur les marqueurs ; un paragraphe manquant garde l'original */
       var morceaux = texte.split(/\[\[(\d+)\]\]/).slice(1);
@@ -51075,7 +51158,7 @@ window.continueTradApart = async function (msgId) {
         memoriser(src, cible, tr || '');
       });
       statsAppel(lot.join('').length);
-      if (surLot) surLot(lot.length, out);
+      if (surLot) surLot(i, out.slice(i, i + lot.length));
     }
     return out;
   }
@@ -51213,6 +51296,19 @@ window.continueTradApart = async function (msgId) {
           '</div>' +
         '</div>' +
         '<div id="v461-estim" style="padding:2px 14px 4px;font-size:10.5px;color:#7fa6d8"></div>' +
+        '<div id="v461-bar2" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 14px 8px;font-size:10.5px;color:#7fa6d8">' +
+          '<span>Chapitres</span><button id="v461-sel-tout">tout</button><button id="v461-sel-rien">rien</button>' +
+          '<span style="color:#3a4a60">|</span>' +
+          '<button id="v461-glos-btn">🔤 Glossaire</button><span id="v461-glos-n">0 terme(s)</span>' +
+          '<span style="color:#3a4a60">|</span>' +
+          '<span>Parallélisme</span><select id="v461-par" style="font-size:10.5px"><option value="0">auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option></select>' +
+          '<span style="color:#3a4a60">|</span>' +
+          '<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="checkbox" id="v461-bilingue" checked> export bilingue</label>' +
+        '</div>' +
+        '<div id="v461-glos-zone" style="display:none;padding:0 14px 8px">' +
+          '<textarea id="v461-glos" rows="3" placeholder="Un terme par ligne — noms propres, titres, termes techniques. Ils seront préservés tels quels." style="width:100%;font-family:inherit;font-size:11px;background:#0d1524;color:#dfe9ff;border:1px solid rgba(79,142,247,.3);border-radius:8px;padding:6px 8px"></textarea>' +
+          '<div style="font-size:10px;color:#7f8ea3;margin-top:4px">Pour LibreTranslate les termes sont protégés ; pour l’IA ils sont donnés en consigne.</div>' +
+        '</div>' +
         '<div id="v461-msg"></div>' +
         '<div id="v461-body">' +
           '<div id="v461-drop">' +
@@ -51270,6 +51366,36 @@ window.continueTradApart = async function (msgId) {
     ov.querySelector('#v461-go').onclick = lancer;
     ov.querySelector('#v461-pause').onclick = function () { S.pause = !S.pause; this.textContent = S.pause ? '▶ Reprendre' : '⏸ Pause'; };
     ov.querySelector('#v461-stop').onclick = function () { S.arret = true; S.pause = false; };
+    /* ── sélection des chapitres ── */
+    ov.querySelector('#v461-sel-tout').onclick = function () { toutSelectionner(true); };
+    ov.querySelector('#v461-sel-rien').onclick = function () { toutSelectionner(false); };
+    /* ── glossaire (persistant) ── */
+    var gz = ov.querySelector('#v461-glos');
+    try { S.glossaire = JSON.parse(localStorage.getItem('v461_glossaire') || '[]'); } catch (e) { S.glossaire = []; }
+    gz.value = S.glossaire.join('\n');
+    function majGlos() {
+      S.glossaire = gz.value.split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+      try { localStorage.setItem('v461_glossaire', JSON.stringify(S.glossaire)); } catch (e) {}
+      var n = document.getElementById('v461-glos-n');
+      if (n) n.textContent = S.glossaire.length + ' terme(s)';
+    }
+    gz.addEventListener('input', majGlos);
+    majGlos();
+    ov.querySelector('#v461-glos-btn').onclick = function () {
+      var z = document.getElementById('v461-glos-zone');
+      z.style.display = (z.style.display === 'none') ? 'block' : 'none';
+      if (z.style.display === 'block') gz.focus();
+    };
+    /* ── parallélisme ── */
+    var par = ov.querySelector('#v461-par');
+    try { S.parallele = parseInt(localStorage.getItem('v461_parallele') || '0', 10) || 0; } catch (e) {}
+    par.value = String(S.parallele);
+    par.onchange = function () { S.parallele = parseInt(par.value, 10) || 0; try { localStorage.setItem('v461_parallele', String(S.parallele)); } catch (e) {} };
+    /* ── export bilingue ou traduction seule ── */
+    var bil = ov.querySelector('#v461-bilingue');
+    try { S.bilingue = localStorage.getItem('v461_bilingue') !== '0'; } catch (e) {}
+    bil.checked = S.bilingue;
+    bil.onchange = function () { S.bilingue = bil.checked; try { localStorage.setItem('v461_bilingue', S.bilingue ? '1' : '0'); } catch (e) {} };
     ov.querySelector('#v461-txt').onclick = function () { exporter('txt'); };
     ov.querySelector('#v461-docx').onclick = function () { exporter('docx'); };
     ov.querySelector('#v461-epub').onclick = function () { exporter('epub'); };
@@ -51445,12 +51571,34 @@ window.continueTradApart = async function (msgId) {
     }
   }
 
+  function toutSelectionner(v) {
+    if (!S.livre) return;
+    S.livre.chapitres.forEach(function (c, ci) { S.selection[ci] = v; });
+    majSelection();
+    majEstimation();
+  }
+  function majSelection() {
+    document.querySelectorAll('#v461-body [data-sel]').forEach(function (cb) {
+      var ci = parseInt(cb.getAttribute('data-sel'), 10);
+      cb.checked = !!S.selection[ci];
+      var blk = cb.closest('.v461-chap');
+      if (blk) blk.style.opacity = cb.checked ? '1' : '.45';
+    });
+  }
+  function chapitresChoisis() {
+    if (!S.livre) return [];
+    return S.livre.chapitres.map(function (c, ci) { return ci; })
+      .filter(function (ci) { return S.selection[ci] !== false; });   /* coché par défaut */
+  }
+
   function peindre() {
     var corps = document.getElementById('v461-body');
     if (!S.livre) return;
     var html = '';
     S.livre.chapitres.forEach(function (ch, ci) {
-      html += '<div class="v461-chap" data-ci="' + ci + '"><h4>' + esc(ch.titre) + '</h4>';
+      html += '<div class="v461-chap" data-ci="' + ci + '"><h4>' +
+        '<input type="checkbox" data-sel="' + ci + '" ' + (S.selection[ci] !== false ? 'checked' : '') + ' style="margin-right:6px;cursor:pointer" title="Traduire ce chapitre">' +
+        esc(ch.titre) + '</h4>';
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad && S.trad[ci] && S.trad[ci][pi]) || '';
         html += '<div class="v461-duo">' +
@@ -51461,6 +51609,13 @@ window.continueTradApart = async function (msgId) {
       html += '</div>';
     });
     corps.innerHTML = html;
+    document.querySelectorAll('#v461-body [data-sel]').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        S.selection[parseInt(cb.getAttribute('data-sel'), 10)] = cb.checked;
+        majSelection(); majEstimation();
+      });
+    });
+    majSelection();
   }
 
   function majParagraphe(ci, pi, texte) {
@@ -51475,8 +51630,9 @@ window.continueTradApart = async function (msgId) {
   function estimation() {
     var np = 0, faits = 0;
     if (!S.livre) return { np: 0, faits: 0, restants: 0, appels: 0 };
-    S.livre.chapitres.forEach(function (ch, ci) {
-      ch.paragraphes.forEach(function (p, pi) {
+    var choisis = chapitresChoisis();
+    choisis.forEach(function (ci) {
+      S.livre.chapitres[ci].paragraphes.forEach(function (p, pi) {
         np++;
         if ((S.trad[ci] && S.trad[ci][pi]) || memoire(p, S.cible)) faits++;
       });
@@ -51510,12 +51666,15 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v461-pause').textContent = '⏸ Pause';
     var t0 = Date.now();
     var fait = 0, total = 0;
-    S.livre.chapitres.forEach(function (c) { total += c.paragraphes.length; });
+    chapitresChoisis().forEach(function (ci) { total += S.livre.chapitres[ci].paragraphes.length; });
     S.total = total;
     statsDebut('Traduction — ' + (S.moteur === 'lt' ? 'LibreTranslate (local)' : S.moteur));
     try {
-      for (var ci = 0; ci < S.livre.chapitres.length; ci++) {
+      var choisis = chapitresChoisis();
+      if (!choisis.length) throw new Error('Aucun chapitre sélectionné');
+      for (var idxC = 0; idxC < choisis.length; idxC++) {
         if (S.arret) throw new Error('Arrêt');
+        var ci = choisis[idxC];
         var paras = S.livre.chapitres[ci].paragraphes;
         /* ce qui est déjà traduit (mémoire ou session précédente) ne repart pas */
         var aFaire = [], index = [];
@@ -51526,17 +51685,24 @@ window.continueTradApart = async function (msgId) {
         }
         S.fait = fait; progression();
         if (!aFaire.length) continue;
-        statsEtape('Traduction — chapitre ' + (ci + 1) + '/' + S.livre.chapitres.length + ' · ' + aFaire.length + ' paragraphe(s)');
+        statsEtape('Traduction — chapitre ' + (idxC + 1) + '/' + choisis.length + ' · ' + aFaire.length + ' paragraphe(s)');
         msg('Chapitre ' + (ci + 1) + '/' + S.livre.chapitres.length + ' — ' + aFaire.length + ' paragraphe(s)…');
+        /* un lot traduit arrive → on l'écrit à SA place (les lots arrivent
+           dans le désordre en parallèle, l'index de départ est fourni) */
+        var surLot = function (debut, trs) {
+          (trs || []).forEach(function (t, k) {
+            var pi = index[debut + k];
+            if (pi === undefined) return;
+            S.trad[ci][pi] = t;
+            majParagraphe(ci, pi, t);
+          });
+          fait += (trs || []).length;
+          S.fait = fait;
+          progression();
+        };
         var traduits = (S.moteur === 'lt')
-          ? await traduireLT(aFaire, S.cible, function (n, out) {
-              for (var k = 0; k < n; k++) { S.trad[ci][index[out.length - n + k]] = out[out.length - n + k]; majParagraphe(ci, index[out.length - n + k], out[out.length - n + k]); }
-              fait += n; S.fait = fait; progression();
-            })
-          : await traduireIA(aFaire, S.cible, function (n, out) {
-              for (var k = 0; k < n; k++) { S.trad[ci][index[out.length - n + k]] = out[out.length - n + k]; majParagraphe(ci, index[out.length - n + k], out[out.length - n + k]); }
-              fait += n; S.fait = fait; progression();
-            });
+          ? await traduireLT(aFaire, S.cible, surLot)
+          : await traduireIA(aFaire, S.cible, surLot);
         traduits.forEach(function (t, k) { S.trad[ci][index[k]] = t; });
         await idbPut('courant', { livre: S.livre, trad: S.trad, cible: S.cible });
       }
@@ -51571,7 +51737,9 @@ window.continueTradApart = async function (msgId) {
       out.push(ch.titre);
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        out.push(p); out.push(tr ? '→ ' + tr : ''); out.push('');
+        if (S.bilingue) { out.push(p); out.push(tr ? '→ ' + tr : ''); }
+        else if (tr) out.push(tr);
+        out.push('');
       });
     });
     return out.join('\n');
@@ -51613,8 +51781,8 @@ window.continueTradApart = async function (msgId) {
       par += '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">' + esc(ch.titre) + '</w:t></w:r></w:p>';
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
-        if (tr) par += '<w:p><w:r><w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
+        if (S.bilingue) par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
+        if (tr) par += '<w:p><w:r>' + (S.bilingue ? '<w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr>' : '') + '<w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
       });
     });
     zip.folder('word').file('document.xml',
@@ -51637,8 +51805,8 @@ window.continueTradApart = async function (msgId) {
       var corps = '';
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        corps += '<p>' + esc(p) + '</p>';
-        if (tr) corps += '<p style="color:#2E7D32">' + esc(tr) + '</p>';
+        if (S.bilingue) corps += '<p>' + esc(p) + '</p>';
+        if (tr) corps += '<p' + (S.bilingue ? ' style="color:#2E7D32"' : '') + '>' + esc(tr) + '</p>';
       });
       var f = 'chap' + (ci + 1) + '.xhtml';
       oebps.file(f, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><title>' + esc(ch.titre) + '</title></head><body><h1>' + esc(ch.titre) + '</h1>' + corps + '</body></html>');
@@ -51709,6 +51877,8 @@ window.continueTradApart = async function (msgId) {
     libsPretes: libsPretes,
     estimation: estimation, majEstimation: majEstimation, changerLangue: changerLangue,
     ocrPdf: ocrPdf, lancerOCR: lancerOCR, proposerOCR: proposerOCR,
+    glossaire: glossaire, protegerGlossaire: protegerGlossaire, restituerGlossaire: restituerGlossaire,
+    toutSelectionner: toutSelectionner, chapitresChoisis: chapitresChoisis, parallele: parallele,
     majStats: majStats, statsDebut: statsDebut,
     listeMoteurs: listeMoteurs, estVision: estVision, cfgDe: cfgDe,
     etat: function () { return S; },
