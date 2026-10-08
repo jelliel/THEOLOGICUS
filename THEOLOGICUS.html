@@ -50719,6 +50719,10 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
+
+
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -50796,6 +50800,15 @@ window.continueTradApart = async function (msgId) {
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
   function toast(m, t) { try { if (window.showToast) return showToast(m, t || 'success'); } catch (e) {} try { if (window.toast) return toast(m); } catch (e) {} }
   function log(m) { try { if (window.__livroLog) window.__livroLog(m); } catch (e) {} }
+  /* formatBytes existe dans ai-video.html mais PAS ici : son usage levait une
+     ReferenceError qui laissait le dialogue d'export VIDE (le banc l'a montré).
+     On la définit localement. */
+  function formatBytes(b) {
+    b = Number(b) || 0;
+    if (b < 1024) return b + ' o';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko';
+    return (b / (1024 * 1024)).toFixed(1) + ' Mo';
+  }
   function litTexte(el) { return String(el && el.textContent || '').replace(/\s+/g, ' ').trim(); }
 
   /* L'app charge ses bibliothèques documentaires À LA DEMANDE (module v24 :
@@ -51322,6 +51335,7 @@ window.continueTradApart = async function (msgId) {
           '<button id="v461-txt">⬇ TXT</button><button id="v461-docx">⬇ DOCX</button><button id="v461-epub">⬇ EPUB</button>' +
           '<span class="sp" style="flex:1"></span><span id="v461-etat" style="color:#7fa6d8"></span>' +
         '</div>' +
+        '<div id="v461-export-zone" style="display:none;padding:0 14px 10px"></div>' +
       '</div>';
     document.body.appendChild(ov);
 
@@ -51746,18 +51760,85 @@ window.continueTradApart = async function (msgId) {
   }
   function baseNom() { return String(S.livre.nom || 'livre').replace(/\.[a-z0-9]+$/i, '') + '_' + S.cible; }
 
+  /* ═══ EXPORT : ON DEMANDE OÙ ═══
+     Un `<a download>` ne déclenche RIEN dans la coque Android (WebView) ni
+     parfois dans l'exe — sans erreur, sans message : l'utilisateur clique et
+     rien ne se passe. On propose donc quatre voies, dont deux qui marchent
+     partout (dossier de l'app via le serveur, presse-papiers). */
   async function exporter(format) {
     if (!S.livre) { toast('Chargez d’abord un livre', 'warn'); return; }
     try {
-      if (format === 'txt') {
-        telecharger(new Blob(['\ufeff' + texteComplet()], { type: 'text/plain;charset=utf-8' }), baseNom() + '.txt');
-      } else if (format === 'docx') {
-        telecharger(await docxDe(), baseNom() + '.docx');
-      } else if (format === 'epub') {
-        telecharger(await epubDe(), baseNom() + '.epub');
-      }
-      toast('Export ' + format.toUpperCase() + ' téléchargé', 'success');
+      var blob, nom = baseNom() + '.' + format;
+      if (format === 'txt') blob = new Blob(['\ufeff' + texteComplet()], { type: 'text/plain;charset=utf-8' });
+      else if (format === 'docx') blob = await docxDe();
+      else if (format === 'epub') blob = await epubDe();
+      else return;
+      dialogueExport(blob, nom, format);
     } catch (e) { toast('Export impossible : ' + (e && e.message || e), 'error'); }
+  }
+
+  function dialogueExport(blob, nom, format) {
+    var z = document.getElementById('v461-export-zone');
+    if (!z) return;
+    var peutEnregistrer = (typeof window.showSaveFilePicker === 'function');
+    var surPC = (typeof _VIA_RELAIS !== 'undefined' && _VIA_RELAIS) || /^https?:/.test(location.protocol);
+    var peutCopier = !!(navigator.clipboard && navigator.clipboard.writeText);
+    z.style.display = 'block';
+    z.innerHTML =
+      '<div style="border:1px solid rgba(79,142,247,.45);border-radius:10px;padding:10px;background:rgba(79,142,247,.07)">' +
+        '<div style="font-size:11px;color:#cfe3ff;margin-bottom:8px">Exporter <b>' + esc(nom) + '</b> (' + formatBytes(blob.size) + ') — où ?</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+          '<button id="v461-ex-sous"' + (peutEnregistrer ? '' : ' disabled') + '>💾 Enregistrer sous…</button>' +
+          '<button id="v461-ex-pc"' + (surPC ? '' : ' disabled') + '>📁 Dans le dossier de l’app</button>' +
+          '<button id="v461-ex-dl">📥 Télécharger</button>' +
+          '<button id="v461-ex-cp"' + (peutCopier ? '' : ' disabled') + '>📋 Copier le texte</button>' +
+          '<button id="v461-ex-annuler" style="opacity:.7">✕</button>' +
+        '</div>' +
+        '<div id="v461-ex-res" style="font-size:10.5px;color:#8fa3b8;margin-top:7px">' +
+          (peutEnregistrer ? '' : '« Enregistrer sous… » indisponible ici. ') +
+          (surPC ? '' : 'Le dossier de l’app nécessite le serveur local. ') +
+        '</div>' +
+      '</div>';
+    var res = function (t, ok) { var e = document.getElementById('v461-ex-res'); if (e) { e.innerHTML = t; e.style.color = ok ? '#8ef0b0' : '#ffb347'; } };
+    var g = function (id) { return document.getElementById(id); };
+    if (g('v461-ex-annuler')) g('v461-ex-annuler').onclick = function () { z.style.display = 'none'; };
+    if (g('v461-ex-sous') && peutEnregistrer) g('v461-ex-sous').onclick = async function () {
+      try {
+        var h = await window.showSaveFilePicker({ suggestedName: nom });
+        var w = await h.createWritable(); await w.write(blob); await w.close();
+        res('✅ Enregistré dans le fichier choisi.'); toast('Export enregistré ✓', 'success');
+      } catch (e) { res('Annulé ou refusé (' + esc(String(e && e.name || e)) + ')', false); }
+    };
+    if (g('v461-ex-pc') && surPC) g('v461-ex-pc').onclick = async function () {
+      try {
+        res('Enregistrement…');
+        var b64 = await blobVersBase64(blob);
+        var r = await fetch('/livro-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: nom, data64: b64 }) });
+        var d = await r.json();
+        if (!d || !d.ok) throw new Error((d && d.erreur) || ('HTTP ' + r.status));
+        res('✅ Enregistré : <b>' + esc(d.chemin) + '</b> (' + formatBytes(d.octets) + ') — ouvrez ce dossier depuis l’explorateur.');
+        toast('Enregistré dans le dossier de l’app ✓', 'success');
+      } catch (e) { res('❌ ' + esc(String(e && e.message || e)), false); }
+    };
+    if (g('v461-ex-dl')) g('v461-ex-dl').onclick = function () {
+      telecharger(blob, nom);
+      res('📥 Téléchargement lancé. Si rien n’apparaît (coque Android), utilisez « 📁 Dans le dossier de l’app » ou « 📋 Copier ».', true);
+    };
+    if (g('v461-ex-cp') && peutCopier) g('v461-ex-cp').onclick = async function () {
+      try {
+        await navigator.clipboard.writeText(format === 'txt' ? await blob.text() : texteComplet());
+        res('✅ Texte copié dans le presse-papiers.'); toast('Copié ✓', 'success');
+      } catch (e) { res('❌ Copie refusée (' + esc(String(e && e.message || e)) + ')', false); }
+    };
+  }
+
+  function blobVersBase64(blob) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(String(r.result).split(',')[1] || ''); };
+      r.onerror = function () { rej(new Error('lecture impossible')); };
+      r.readAsDataURL(blob);
+    });
   }
 
   /* DOCX réel (OOXML minimal) — JSZip est embarqué. */
@@ -51877,6 +51958,7 @@ window.continueTradApart = async function (msgId) {
     libsPretes: libsPretes,
     estimation: estimation, majEstimation: majEstimation, changerLangue: changerLangue,
     ocrPdf: ocrPdf, lancerOCR: lancerOCR, proposerOCR: proposerOCR,
+    dialogueExport: dialogueExport, blobVersBase64: blobVersBase64,
     glossaire: glossaire, protegerGlossaire: protegerGlossaire, restituerGlossaire: restituerGlossaire,
     toutSelectionner: toutSelectionner, chapitresChoisis: chapitresChoisis, parallele: parallele,
     majStats: majStats, statsDebut: statsDebut,

@@ -2036,6 +2036,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # Voir _montage() : remplace ffmpeg.wasm, inutilisable ici.
         if self.path.split('?')[0] == '/montage':
             self._montage()
+        elif self.path.split('?')[0] == '/livro-save':
+            self._livro_save()
         elif self.path.split('?')[0] == '/theologicus-keys':
             self._save_keys()
         elif self.path.split('?')[0] == '/config':
@@ -2361,6 +2363,38 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             return json.loads(self.rfile.read(length).decode('utf-8'))
         except Exception:
             return None
+
+    def _livro_save(self):
+        """Enregistre un export de LivroTrado dans un dossier VISIBLE.
+
+        Pourquoi cette route existe : dans la coque Android (WebView) et parfois
+        dans l'exe, un `<a download>` ne déclenche RIEN — sans erreur, sans
+        message. L'utilisateur clique sur « Exporter » et il ne se passe rien.
+        Ici le fichier est écrit par le serveur, à côté de l'application, dans
+        `traductions/`, et le chemin est renvoyé pour être AFFICHÉ.
+
+        Corps : {filename, data64} — extensions acceptées : txt, docx, epub.
+        """
+        try:
+            import base64
+            length = int(self.headers.get('Content-Length', 0))
+            if length <= 0 or length > 200 * 1024 * 1024:
+                raise ValueError('taille invalide')
+            req = json.loads(self.rfile.read(length).decode('utf-8'))
+            filename = os.path.basename(str(req.get('filename') or '')).replace('\\', '_').replace('/', '_')
+            if not filename.lower().endswith(('.txt', '.docx', '.epub')):
+                raise ValueError('extension non autorisée (txt, docx, epub)')
+            data = base64.b64decode(req.get('data64') or b'')
+            if not data:
+                raise ValueError('contenu vide')
+            dossier = os.path.join(SERVE_DIR, 'traductions')
+            os.makedirs(dossier, exist_ok=True)
+            chemin = os.path.join(dossier, filename)
+            with open(chemin, 'wb') as f:
+                f.write(data)
+            self._json_response({'ok': True, 'chemin': chemin, 'octets': len(data), 'dossier': dossier})
+        except Exception as e:
+            self._json_response({'ok': False, 'erreur': str(e)})
 
     def _save_data(self):
         """Enregistre un export de données dans le dossier de l'application.

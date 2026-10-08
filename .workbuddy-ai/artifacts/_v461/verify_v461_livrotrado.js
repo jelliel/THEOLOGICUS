@@ -482,8 +482,80 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export EPUB : mimetype + OPF + nav + chapitres', exp.epub === true && exp.mime === true, JSON.stringify(exp).slice(0, 80));
   ok('export TXT : contient la traduction', exp.texte === true);
 
-  ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/72`);
-  process.exitCode = pass === 72 ? 0 : 1;
+  // 9. EXPORT : le CHOIX des destinations (4 voies)
+  let envoiLivroSave = null;
+  await page.route('**/livro-save', async route => {
+    let c = {}; try { c = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+    envoiLivroSave = c;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, chemin: 'C:////Theologicus////traductions////' + c.filename, octets: (c.data64 || '').length, dossier: 'C:////Theologicus////traductions' }) });
+  });
+  const dlg = await page.evaluate(async () => {
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 400));
+    const z = document.getElementById('v461-export-zone');
+    return {
+      visible: z ? z.style.display !== 'none' : false,
+      boutons: ['v461-ex-sous', 'v461-ex-pc', 'v461-ex-dl', 'v461-ex-cp'].filter(i => !!document.getElementById(i)).length,
+      nom: z ? (z.textContent.match(/(\S+\.txt)/) || [])[1] : null
+    };
+  });
+  ok('cliquer sur Exporter ouvre un CHOIX de destination', dlg.visible === true, JSON.stringify(dlg));
+  ok('les quatre voies sont proposées', dlg.boutons === 4, 'boutons=' + dlg.boutons);
+  ok('le nom du fichier est annoncé', /\.txt$/.test(String(dlg.nom)), String(dlg.nom));
+
+  // 9a. « Enregistrer sous… » (File System Access)
+  const sous = await page.evaluate(async () => {
+    let nomPropose = null, ecrit = 0;
+    window.showSaveFilePicker = async function (o) {
+      nomPropose = o && o.suggestedName;
+      return { createWritable: async () => ({ write: async b => { ecrit = b.size; }, close: async () => {} }) };
+    };
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 200));
+    document.getElementById('v461-ex-sous').click();
+    await new Promise(r => setTimeout(r, 500));
+    return { nomPropose, ecrit, res: document.getElementById('v461-ex-res').textContent };
+  });
+  ok('« Enregistrer sous… » propose le bon nom de fichier', /\.txt$/.test(String(sous.nomPropose)), String(sous.nomPropose));
+  ok('« Enregistrer sous… » écrit réellement le contenu', sous.ecrit > 0 && /Enregistré/.test(sous.res), JSON.stringify(sous).slice(0, 90));
+
+  // 9b. « Dans le dossier de l'app » (via le serveur) — la voie qui marche en coque
+  const pc = await page.evaluate(async () => {
+    await window.__livro.exporter('docx');
+    await new Promise(r => setTimeout(r, 400));
+    document.getElementById('v461-ex-pc').click();
+    await new Promise(r => setTimeout(r, 700));
+    return { res: document.getElementById('v461-ex-res').textContent };
+  });
+  ok('« Dans le dossier de l’app » envoie le fichier au serveur', !!envoiLivroSave && /\.docx$/.test(String(envoiLivroSave.filename)), JSON.stringify(envoiLivroSave && envoiLivroSave.filename));
+  ok('le contenu transmis est bien encodé (base64 non vide)', !!(envoiLivroSave && envoiLivroSave.data64 && envoiLivroSave.data64.length > 100), 'base64=' + (envoiLivroSave && envoiLivroSave.data64 || '').length);
+  ok('le CHEMIN est affiché à l’utilisateur', /traductions/.test(String(pc.res)) && /Enregistré/.test(String(pc.res)), String(pc.res).slice(0, 110));
+
+  // 9c. « Télécharger » (voie classique) déclenche bien un téléchargement
+  const dl = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
+  await page.evaluate(async () => {
+    await window.__livro.exporter('epub');
+    await new Promise(r => setTimeout(r, 400));
+    document.getElementById('v461-ex-dl').click();
+  });
+  const fichier = await dl;
+  ok('« Télécharger » déclenche un vrai téléchargement', !!fichier && /\.epub$/.test(fichier.suggestedFilename()), fichier ? fichier.suggestedFilename() : 'aucun');
+
+  // 9d. « Copier le texte » (voie de secours, marche partout)
+  const cp = await page.evaluate(async () => {
+    let copie = null;
+    try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async t => { copie = t; } }, configurable: true }); } catch (e) {}
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 300));
+    const b = document.getElementById('v461-ex-cp');
+    if (b) b.click();
+    await new Promise(r => setTimeout(r, 400));
+    return { longueur: copie ? copie.length : 0, res: document.getElementById('v461-ex-res').textContent };
+  });
+  ok('« Copier le texte » copie bien le contenu', cp.longueur > 10 && /copié/i.test(String(cp.res)), JSON.stringify(cp).slice(0, 90));
+
+  ok('aucune erreur JavaScript' , errors.length === 0, errors.join(' | '));
+  console.log(`RESULTAT : ${pass}/82`);
+  process.exitCode = pass === 82 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
