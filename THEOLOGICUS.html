@@ -9439,7 +9439,49 @@ window.__ensureTafsirSurah = function(p){
         <div id="providers-list"></div>
 
         <div class="section-title">🧩 MODÈLES PERSONNALISÉS</div>
-        <div id="settings-tab-providers-custom"></div>
+        <div id="settings-tab-providers-custom">
+
+          <div id="custom-models-list"></div>
+
+          <div class="section-title">AJOUTER / MODIFIER UN MODÈLE</div>
+          <div class="field-group">
+            <label class="field-label">Nom affiché</label>
+            <input class="field-input" id="cm-name" placeholder="Ex. Mon GPT local">
+          </div>
+          <div class="field-group">
+            <label class="field-label">ID du modèle (envoyé à l'API)</label>
+            <input class="field-input" id="cm-model" placeholder="Ex. gpt-4o, mistral-small-latest">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Base URL</label>
+            <input class="field-input" id="cm-baseurl" placeholder="https://api.openai.com/v1">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Clé API</label>
+            <input class="field-input" id="cm-apikey" type="password" placeholder="sk-…">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Format API</label>
+            <select class="field-select" id="cm-format">
+              <option value="chat-completions">Chat completions (/chat/completions)</option>
+              <option value="anthropic">Anthropic messages (/v1/messages)</option>
+              <option value="responses">Responses (/responses)</option>
+            </select>
+          </div>
+          <div class="field-group" style="display:flex;gap:20px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer">
+              <input type="checkbox" id="cm-vision"> 👁 Vision (images)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer">
+              <input type="checkbox" id="cm-audio"> 🎵 Audio
+            </label>
+          </div>
+          <div class="btn-row" style="border-top:none;margin-top:0;padding-top:0">
+            <button class="btn-ghost danger" id="cm-delete" style="display:none;border-color:rgba(255,51,102,0.3);color:var(--danger)">🗑 SUPPRIMER</button>
+            <button class="btn-ghost" id="cm-cancel" style="display:none">Annuler</button>
+            <button class="btn-primary" id="cm-save">💾 ENREGISTRER</button>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ ONGLET 3 — LECTURE VOCALE ═══ -->
@@ -9533,48 +9575,6 @@ window.__ensureTafsirSurah = function(p){
           <option value="off">Désactivé — aucun marquage (comportement 1.0)</option>
         </select>
         <div class="field-hint">Chaque référence biblique ou coranique reçue de l'IA est confrontée au corpus embarqué (hors ligne). En mode strict, une coche ✅ confirme que le verset existe ; un ⚠️ signale une citation inventée. Les marques dépendent de la table de versification, donc instantanées et sans chargement de tranche.</div>
-      </div>
-
-      <div class="section-title">MODÈLES ENREGISTRÉS</div>
-      <div id="custom-models-list"></div>
-
-      <div class="section-title">AJOUTER / MODIFIER UN MODÈLE</div>
-      <div class="field-group">
-        <label class="field-label">Nom affiché</label>
-        <input class="field-input" id="cm-name" placeholder="Ex. Mon GPT local">
-      </div>
-      <div class="field-group">
-        <label class="field-label">ID du modèle (envoyé à l'API)</label>
-        <input class="field-input" id="cm-model" placeholder="Ex. gpt-4o, mistral-small-latest">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Base URL</label>
-        <input class="field-input" id="cm-baseurl" placeholder="https://api.openai.com/v1">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Clé API</label>
-        <input class="field-input" id="cm-apikey" type="password" placeholder="sk-…">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Format API</label>
-        <select class="field-select" id="cm-format">
-          <option value="chat-completions">Chat completions (/chat/completions)</option>
-          <option value="anthropic">Anthropic messages (/v1/messages)</option>
-          <option value="responses">Responses (/responses)</option>
-        </select>
-      </div>
-      <div class="field-group" style="display:flex;gap:20px;flex-wrap:wrap">
-        <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer">
-          <input type="checkbox" id="cm-vision"> 👁 Vision (images)
-        </label>
-        <label style="display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer">
-          <input type="checkbox" id="cm-audio"> 🎵 Audio
-        </label>
-      </div>
-      <div class="btn-row" style="border-top:none;margin-top:0;padding-top:0">
-        <button class="btn-ghost danger" id="cm-delete" style="display:none;border-color:rgba(255,51,102,0.3);color:var(--danger)">🗑 SUPPRIMER</button>
-        <button class="btn-ghost" id="cm-cancel" style="display:none">Annuler</button>
-        <button class="btn-primary" id="cm-save">💾 ENREGISTRER</button>
       </div>
 
       <!-- ═══ PARTAGE & RÉSEAUX SOCIAUX ═══ -->
@@ -12835,7 +12835,7 @@ function initSettingsModal() {
 
   function renderCustomModelsList() {
     const list = $("#custom-models-list"); if (!list) return;
-    if (!state.customModels.length) { list.innerHTML = '<div class="archive-empty">Aucun modèle personnalisé</div>'; return; }
+    if (!state.customModels.length) { list.innerHTML = '<div class="archive-empty">Aucun modèle personnalisé pour l’instant.<br>Remplissez le formulaire ci-dessous — <b>Nom affiché</b>, <b>ID du modèle</b>, <b>Base URL</b> — puis <b>💾 ENREGISTRER</b>.</div>'; return; }
     list.innerHTML = state.customModels.map(m => {
       const fmtLabel = m.format === 'anthropic' ? 'Anthropic' : m.format === 'responses' ? 'Responses' : 'Chat Completions';
       const showFmt = m.format && m.format !== 'chat-completions';
@@ -12892,6 +12892,22 @@ function initSettingsModal() {
     window.__settingsOnglet = nom;
   }
   window.__settingsOuvrirOnglet = settingsOuvrirOnglet;
+
+  /* Ouvre PARAMÈTRES sur les modèles personnalisés ET amène le formulaire à
+     l'écran. UNE SEULE voie, réutilisée par le raccourci du menu et par le lien
+     « configurer la clé API » : deux chemins qui divergent finissent toujours
+     par mener à deux endroits différents — c'est exactement ce qui avait
+     laissé le formulaire introuvable. */
+  window.__ouvrirModelesCustom = function () {
+    var btn = document.getElementById('open-settings-modal');
+    if (btn) btn.click();                       /* passe par open() : tout est rafraîchi */
+    settingsOuvrirOnglet('providers');
+    setTimeout(function () {
+      var z = document.getElementById('settings-tab-providers-custom');
+      if (!z) return;
+      try { z.scrollIntoView({ block: 'start', behavior: 'auto' }); } catch (e) { z.scrollIntoView(); }
+    }, 80);
+  };
   document.querySelectorAll('#settings-tabs .settings-tab').forEach(b => {
     b.onclick = () => settingsOuvrirOnglet(b.dataset.onglet);
   });
@@ -14820,6 +14836,10 @@ window.showTikTokPreview = (concept) => {
       if (cm && !cm.apiKey) {
         apiKeyHintEl.innerHTML = '<span style="color:#ff9800;cursor:pointer;text-decoration:underline" id="tt-open-settings-link">⚙️ Configurer la clé API dans les paramètres</span>';
         apiKeyHintEl.querySelector('#tt-open-settings-link')?.addEventListener('click', () => {
+          /* même voie que le raccourci « Modèles custom » : l'onglet des
+             fournisseurs ET le formulaire à l'écran (avant, ce lien ouvrait le
+             modal sur le dernier onglet consulté, souvent « Modèle IA ») */
+          if (window.__ouvrirModelesCustom) { window.__ouvrirModelesCustom(); return; }
           const settingsModal = document.querySelector('#settings-modal');
           if (settingsModal) { settingsModal.classList.add('active'); }
         });
@@ -25008,8 +25028,11 @@ if (document.readyState === 'loading') {
     // DIRECTEMENT l'onglet des fournisseurs — sinon le clic retombe sur
     // « Modèle IA » et l'utilisateur qui cherchait ses modèles personnalisés ne
     // les voit pas. On ouvre donc l'onglet APRÈS le clic (le modal doit être
-    // monté pour que l'onglet existe).
-    'param-models':  () => { clickIf('open-settings-modal'); setTimeout(() => { if (window.__settingsOuvrirOnglet) window.__settingsOuvrirOnglet('providers'); }, 0); },
+    // monté pour que l'onglet existe), PUIS on amène le formulaire à l'écran :
+    // l'onglet est long (la liste des fournisseurs passe en premier) et le
+    // champ restait sous la ligne de flottaison — d'où le « je ne vois pas où
+    // les insérer ». Un raccourci qui nomme une chose doit la MONTRER.
+    'param-models':  () => { if (window.__ouvrirModelesCustom) window.__ouvrirModelesCustom(); else clickIf('open-settings-modal'); },
     'data-stats':    () => clickIf('open-data-modal'),
     'data-clear':    () => { clickIf('open-data-modal'); setTimeout(() => focusIf('btn-clear-all'), 160); },
     'agent-edit':    () => clickIf('open-agent-modal'),
