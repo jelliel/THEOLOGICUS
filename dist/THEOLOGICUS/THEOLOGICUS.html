@@ -51324,11 +51324,19 @@ window.continueTradApart = async function (msgId) {
       (state.customModels || []).forEach(function (cm) {
         if (!cm || !cm.uid) return;
         var v = !!cm.vision || estVision(cm.model) || estVision(cm.uid);
-        if (visionSeulement && !v) return;
+        /* v492 — on montre TOUS les modèles personnalisés, y compris ceux
+           dont la vision n’est PAS confirmée. v491 les masquait : or un nom
+           comme « APiNex » ne ressemble à aucun motif connu, et la case 👁
+           est facile à oublier — on cachait donc un modèle que
+           l’utilisateur avait créé lui-même, et on l’empêchait d’utiliser
+           un modèle parfaitement capable. Il connaît ses modèles : on les
+           liste TOUS et on SIGNALE l’incertitude (⚠️) au lieu de censurer.
+           Le registre, lui, reste filtré : ses modèles sont connus. */
+        var nom = cm.name || cm.model || cm.uid;
+        var suffixe = v ? ' 👁️' : (visionSeulement ? ' ⚠️ (vision non confirmée)' : '');
         out.push({
-          id: cm.uid,
-          label: (cm.name || cm.model || cm.uid) + (v ? ' 👁️' : ''),
-          vision: v, groupe: 'custom', groupeLabel: 'Modèles personnalisés'
+          id: cm.uid, label: nom + suffixe, vision: v, incertain: !v,
+          groupe: 'custom', groupeLabel: 'Modèles personnalisés'
         });
       });
     } catch (e) {}

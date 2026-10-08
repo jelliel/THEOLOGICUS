@@ -197,23 +197,32 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
       { uid: 'c_vision_test', name: 'Mon Qwen VL maison', model: 'mon-qwen-vl-maison',
         baseUrl: base, apiKey: 'sk-test', format: 'chat-completions', vision: true, audio: false },
       { uid: 'c_texte_test', name: 'Modèle texte maison', model: 'mon-modele-texte',
+        baseUrl: base, apiKey: 'sk-test', format: 'chat-completions', vision: false, audio: false },
+      /* v492 : le cas réel signalé par l’utilisateur — un custom au nom
+         inconnu (« APiNex »), sans case 👁 cochée, doit quand même être
+         proposé (v491 le masquait). */
+      { uid: 'c_apinex_test', name: 'APiNex', model: 'apinex-v1',
         baseUrl: base, apiKey: 'sk-test', format: 'chat-completions', vision: false, audio: false }
     );
     const tous = window.__livro.listeMoteurs(false).map(m => m.id);
     const vision = window.__livro.listeMoteurs(true).map(m => m.id);
-    const lui = window.__livro.listeMoteurs(true).filter(m => m.id === 'c_vision_test')[0];
+    const un = id => window.__livro.listeMoteurs(true).filter(m => m.id === id)[0];
+    const lui = un('c_vision_test'), apinex = un('c_apinex_test');
     return {
-      dansTous: tous.indexOf('c_vision_test') >= 0 && tous.indexOf('c_texte_test') >= 0,
-      visionOui: vision.indexOf('c_vision_test') >= 0,
-      visionNon: vision.indexOf('c_texte_test') < 0,
-      libelle: lui ? lui.label : null,
+      uids: ['c_vision_test', 'c_texte_test', 'c_apinex_test'],
+      dansTous: ['c_vision_test', 'c_texte_test', 'c_apinex_test'].every(u => tous.indexOf(u) >= 0),
+      tousDansOCR: ['c_vision_test', 'c_texte_test', 'c_apinex_test'].every(u => vision.indexOf(u) >= 0),
+      libelleVision: lui ? lui.label : null,
+      libelleApinex: apinex ? apinex.label : null,
+      apinexIncertain: apinex ? apinex.incertain : null,
       groupe: lui ? lui.groupe : null
     };
   });
   ok('les modèles personnalisés apparaissent dans les sélecteurs', customs.dansTous === true, JSON.stringify(customs));
-  ok('un custom coché 👁 Vision est proposé pour l’OCR', customs.visionOui === true, JSON.stringify(customs));
-  ok('un custom NON vision reste exclu de l’OCR', customs.visionNon === true, JSON.stringify(customs));
-  ok('le libellé est le NOM du modèle, pas son uid', /Mon Qwen VL maison/.test(String(customs.libelle)) && !/c_vision_test/.test(String(customs.libelle)), String(customs.libelle));
+  ok('TOUS les customs sont proposés pour l’OCR (aucun masqué)', customs.tousDansOCR === true, JSON.stringify(customs));
+  ok('un custom coché 👁 Vision est marqué vision', /👁/.test(String(customs.libelleVision)) && !/non confirmée/.test(String(customs.libelleVision)), String(customs.libelleVision));
+  ok('un custom sans vision confirmée est listé MAIS signalé ⚠️', /vision non confirmée/.test(String(customs.libelleApinex)) && customs.apinexIncertain === true, String(customs.libelleApinex));
+  ok('le libellé est le NOM du modèle, pas son uid', /Mon Qwen VL maison/.test(String(customs.libelleVision)) && !/c_vision_test/.test(String(customs.libelleVision)), String(customs.libelleVision));
   ok('les customs sont regroupés (pas un optgroup par uid)', customs.groupe === 'custom', String(customs.groupe));
 
   // et l'appel VISION tourne RÉELLEMENT avec ce modèle personnalisé :
@@ -238,7 +247,7 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
      JSON.stringify(appelCustom));
   // on retire les customs pour ne rien fausser ensuite
   await page.evaluate(() => {
-    state.customModels = (state.customModels || []).filter(m => m.uid !== 'c_vision_test' && m.uid !== 'c_texte_test');
+    state.customModels = (state.customModels || []).filter(m => m.uid !== 'c_vision_test' && m.uid !== 'c_texte_test' && m.uid !== 'c_apinex_test');
   });
 
   // 2h. une TRADUCTION via un AUTRE fournisseur (Mistral) doit passer
