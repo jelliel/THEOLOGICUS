@@ -23,6 +23,10 @@ THEOLOGICUS_signing.pfx
 *.oldrun/
 *.oldrun.exe
 
+# Logs des serveurs locaux (proxy_server.py : FreeLLMAPI, LibreTranslate,
+# Supertonic…) — artifacts d'execution, jamais suivis.
+logs/
+
 # serveur de test temporaire du banc d'assemblage (v458)
 _montage_test_serveur.py
 

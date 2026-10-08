@@ -10028,13 +10028,15 @@ const PROVIDERS = [
      l'entrée `ollama` ci-dessus : base locale, format chat-completions, donc
      AUCUNE adaptation du code d'appel (resolveModelConfig ajoute
      « /chat/completions »).
-     Les quatre modèles listés sont les entrées VIRTUELLES du routeur — elles
-     n'existent chez aucun fournisseur, c'est le routeur qui choisit :
-       auto · auto:fast · auto:smart · fusion (synthèse multi-modèles).
-     ⚠️ CORS : contrairement à Ollama, FreeLLMAPI n'ouvre pas « * » — il tient
-     une ALLOWLIST (`DASHBOARD_ORIGINS`). L'origine de cette app doit y être
-     déclarée, sinon le navigateur bloque l'appel AVANT qu'il ne parte. */
-  { id:"freellmapi", label:"FreeLLMAPI (routeur local)", format:"chat-completions", base:"http://127.0.0.1:3001/v1", models:["auto","auto:fast","auto:smart","fusion"] }
+     Entrées VIRTUELLES du routeur (c'est lui qui choisit le modèle réel) :
+       auto · fusion  — toujours disponibles ;
+       auto:fast / auto:smart — seulement si l'utilisateur a créé ces profils
+       dans le routeur (sinon le chat 404) : proposés UNIQUEMENT s'ils figurent
+       dans /v1/models (voir module v484 « Importer les modèles »).
+     Cible = http://<adresse configurée>/v1 (port réglable dans l'onglet
+     FOURNISSEURS, défaut 127.0.0.1:3001). apiEndpoint() la route par le relais
+     local /fla/ (même origine) → aucune config CORS du routeur nécessaire. */
+  { id:"freellmapi", label:"FreeLLMAPI (routeur local)", format:"chat-completions", base:"http://127.0.0.1:3001/v1", models:["auto","fusion"] }
 ];
 const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map(p => [p.id, p]));
 
@@ -12497,16 +12499,25 @@ function apiEndpoint(endpoint) {
   try {
     if (!endpoint) return endpoint;
     if (location.protocol === 'file:') return endpoint;
-    /* v485 — FreeLLMAPI : le routeur n'émet PAS d'en-tête CORS ouvert
-       (allowlist DASHBOARD_ORIGINS exacte), donc un appel navigateur direct
-       depuis une autre origine est bloqué. On le passe par le relais intégré
-       du serveur local (/fla/…, MÊME origine) : aucun réglage DASHBOARD_ORIGINS
-       à toucher, aucun redémarrage du routeur. Cible unique en dur
-       (127.0.0.1:3001) → pas de SSRF. Hors serveur (file://) on garde l'appel
-       direct, qui échouera en CORS — cas documenté dans l'encadré. */
-    if (endpoint.indexOf('http://127.0.0.1:3001/') === 0) {
-      return location.origin + '/fla' + endpoint.slice('http://127.0.0.1:3001'.length);
-    }
+    /* v486 — FreeLLMAPI : relais DYNAMIQUE. Le routeur n'émet PAS d'en-tête
+       CORS ouvert (allowlist DASHBOARD_ORIGINS exacte) ; on passe donc par le
+       relais intégré /fla/<host>:<port>/… (MÊME origine) — aucun réglage
+       DASHBOARD_ORIGINS, aucun redémarrage. La cible est lue dans l'adresse
+       configurée du routeur (PROVIDERS.freellmapi.base, par défaut
+       127.0.0.1:3001) : un port personnalisé marche SANS toucher au code. Le
+       serveur revérifie que <host>:<port> est de bouclage (anti-SSRF). On ne
+       route QUE FreeLLMAPI — pas Ollama ni les fournisseurs en ligne. */
+    try {
+      var flaBaseV = (typeof PROVIDER_BY_ID !== 'undefined' && PROVIDER_BY_ID.freellmapi && PROVIDER_BY_ID.freellmapi.base) || '';
+      if (flaBaseV && endpoint.indexOf(flaBaseV) === 0) {
+        var mm = /^(https?:\/\/)([^\/:]+|\[[^\]]+\]):(\d+)/.exec(flaBaseV);
+        if (mm) {
+          var pathV = endpoint.slice(flaBaseV.length);
+          if (!pathV) pathV = '/';
+          return location.origin + '/fla/' + mm[2] + ':' + mm[3] + pathV;
+        }
+      }
+    } catch (e) {}
     if (endpoint.startsWith('http://127.0.0.1') || endpoint.startsWith('http://localhost')) return endpoint;
     /* v126l — IDEMPOTENT : callLLM préfixait déjà, puis fetchLLMResponse
        repassait l'URL dans apiEndpoint → « /proxy//proxy/https://… ». Le
@@ -12850,7 +12861,7 @@ function initSettingsModal() {
            choix impossible. On demande donc au routeur ce qui peut RÉELLEMENT
            servir (`?available=true`) et on PLAFONNE. */
         const fla = (pdef.id === 'freellmapi');
-        let ids = null;
+        let ids = null, raté = false, raison = '';
         try {
           const r = await fetch(apiEndpoint(pdef.base + '/models' + (fla ? '?available=true' : '')), { headers: { 'Authorization': 'Bearer ' + (state.keys[prov] || 'local') } });
           if (r.ok) {
@@ -12858,9 +12869,16 @@ function initSettingsModal() {
             const arr = (j && (j.data || j.models)) || [];
             ids = arr.map(x => x.id || x.name || x.model).filter(Boolean);
             if (fla && ids.length > 12) ids = ids.slice(0, 12);
-          }
-        } catch (e) { /* fournisseur injoignable : repli statique */ }
-        if (!ids || !ids.length) ids = (pdef.models || []).map(m => typeof m === 'string' ? m : m.model);
+          } else { raté = true; raison = 'HTTP ' + r.status; }
+        } catch (e) { raté = true; raison = String((e && e.message) || e); }
+        if (!ids || !ids.length) {
+          /* v486 — le routeur est injoignable (éteint, relais 502, ou adresse
+             erronée) : repli sur la liste statique SÛRE (auto/fusion) et on le
+             DIT, au lieu de planter en silence. */
+          ids = (pdef.models || []).map(m => typeof m === 'string' ? m : m.model);
+          if (raté) toast((fla ? 'Routeur FreeLLMAPI injoignable' : 'Fournisseur injoignable') +
+            (raison ? ' (' + raison + ')' : '') + ' — modèles de secours ajoutés.', 'error');
+        }
         let added = 0;
         const now = Date.now();
         ids.forEach((modelId, idx) => {
@@ -52633,8 +52651,24 @@ window.continueTradApart = async function (msgId) {
   if (window.__fla) return;
 
   var BASE_DEFAUT = 'http://127.0.0.1:3001/v1';
-  var VIRTUELS = ['auto', 'auto:fast', 'auto:smart', 'fusion'];
+  /* VIRTUELS_SURS : entrées virtuelles GARANTIES par le routeur (toujours
+     dans /v1/models). auto:fast / auto:smart NE le sont pas : elles n'apparaissent
+     que si l'utilisateur a créé des profils nommés « fast » / « smart » dans le
+     routeur — les proposer sans ça fait 404. On les ajoute UNIQUEMENT si le
+     routeur les liste réellement (voir importer()). */
+  var VIRTUELS_SURS = ['auto', 'fusion'];
   var PLAFOND_REELS = 8;          /* modèles réels importés, au maximum */
+
+  /* Adresse + commande de lancement, persistées (zéro config à re-taper). */
+  try {
+    if (typeof state !== 'undefined' && state) {
+      if (!state.flaAddr) state.flaAddr = (typeof getCookie === 'function') ? (getCookie('fla_addr') || '127.0.0.1:3001') : '127.0.0.1:3001';
+      if (state.flaCmd === undefined) state.flaCmd = (typeof getCookie === 'function') ? (getCookie('fla_cmd') || '') : '';
+    }
+  } catch (e) {}
+  /* Synchronise PROVIDERS.freellmapi.base avec l'adresse configurée (zéro
+     config : un port personnalisé persiste d'une session à l'autre). */
+  try { base(); } catch (e) {}
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -52649,7 +52683,28 @@ window.continueTradApart = async function (msgId) {
     try { return (typeof PROVIDERS !== 'undefined' && PROVIDERS.filter(function (p) { return p.id === 'freellmapi'; })[0]) || null; }
     catch (e) { return null; }
   }
-  function base() { var p = reg(); return (p && p.base) || BASE_DEFAUT; }
+  function addr() {
+    var a = '';
+    try { a = state.flaAddr; } catch (e) {}
+    return a || '127.0.0.1:3001';
+  }
+  function ecrireAddr(v) {
+    try { state.flaAddr = v; if (typeof setCookie === 'function') setCookie('fla_addr', v); } catch (e) {}
+  }
+  function lireCmd() {
+    try { return state.flaCmd || ''; } catch (e) { return ''; }
+  }
+  function ecrireCmd(v) {
+    try { state.flaCmd = v; if (typeof setCookie === 'function') setCookie('fla_cmd', v); } catch (e) {}
+  }
+  function base() {
+    /* base = http://<adresse configurée>/v1. On synchronise AUSSI
+       PROVIDERS.freellmapi.base pour que le chat et apiEndpoint (relais /fla/)
+       pointent la bonne cible — port personnalisé sans toucher au code. */
+    var b = 'http://' + addr() + '/v1';
+    try { var p = reg(); if (p) p.base = b; } catch (e) {}
+    return b;
+  }
   function cle() {
     try { return (state && state.keys && state.keys.freellmapi) || ''; } catch (e) { return ''; }
   }
@@ -52742,6 +52797,70 @@ window.continueTradApart = async function (msgId) {
     return { ok: false, erreur: msg, cors: cors };
   }
 
+  /* ── SANTÉ ───────────────────────────────────────────────────────── */
+  var _santeTimer = null;
+  async function sonderSante() {
+    var pt = document.getElementById('v484-health');
+    var txt = document.getElementById('v484-health-txt');
+    try {
+      var r = await fetch('/freellmapi/status?addr=' + encodeURIComponent(addr()));
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var s = await r.json();
+      if (pt) pt.style.color = s.up ? '#8ef0b0' : '#ff6b6b';
+      if (txt) txt.textContent = s.up
+        ? ('en ligne' + (s.ms != null ? ' · ' + s.ms + ' ms' : ''))
+        : (s.error ? ('hors ligne (' + s.error + ')') : 'hors ligne');
+    } catch (e) {
+      if (pt) pt.style.color = '#ff6b6b';
+      if (txt) txt.textContent = 'santé indisponible (relais hors service ?)';
+    }
+  }
+
+  /* ── DÉMARRAGE ───────────────────────────────────────────────────── */
+  async function demarrer() {
+    if (_santeTimer) { clearInterval(_santeTimer); _santeTimer = null; }
+    var btn = document.getElementById('v484-start');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+    dire('Démarrage du routeur…', true);
+    try {
+      var r = await fetch('/freellmapi/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addr: addr(), cmd: ((document.getElementById('v484-cmd') || {}).value || '') })
+      });
+      var s = await r.json();
+      if (!s.ok) {
+        dire('❌ Démarrage impossible : ' + esc(s.error || s.reason || 'erreur'), false);
+        toast2('Démarrage FreeLLMAPI impossible : ' + (s.error || s.reason || ''), 'error');
+      } else if (s.deja) {
+        dire('✅ Le routeur répond déjà (déjà démarré).', true);
+      } else {
+        dire('⏳ Processus lancé — attente de la disponibilité…', true);
+        toast2('Routeur FreeLLMAPI lancé, j’attends qu’il réponde…', 'info');
+      }
+      var tent = 0;
+      _santeTimer = setInterval(async function () {
+        tent++;
+        var ok = false;
+        try { var rr = await fetch('/freellmapi/status?addr=' + encodeURIComponent(addr())); ok = (rr.ok && (await rr.json()).up); } catch (e) {}
+        if (ok) {
+          clearInterval(_santeTimer); _santeTimer = null;
+          dire('✅ Routeur en ligne.', true);
+          toast2('Routeur FreeLLMAPI en ligne', 'success');
+          sonderSante();
+        } else if (tent >= 10) {
+          clearInterval(_santeTimer); _santeTimer = null;
+          dire('⚠️ Processus lancé mais aucune réponse après 20 s — voir le log freellmapi.log.', false);
+        }
+      }, 2000);
+    } catch (e) {
+      dire('❌ Démarrage impossible : ' + esc(String((e && e.message) || e)), false);
+      toast2('Démarrage FreeLLMAPI impossible', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Démarrer'; }
+    }
+  }
+
   /* ── IMPORT CURÉ ──────────────────────────────────────────────────── */
   async function importer() {
     dire('Import en cours…', true);
@@ -52751,14 +52870,21 @@ window.continueTradApart = async function (msgId) {
       var j = await r.json();
       var dispo = ((j && (j.data || j.models)) || [])
         .map(function (m) { return m && (m.id || m.name || m.model); }).filter(Boolean);
-      /* Les VIRTUELLES d'abord, toujours : « auto » n'existe chez aucun
-         fournisseur, c'est le routeur qui choisit — c'est là tout l'intérêt.
-         Puis quelques modèles réels, PLAFONNÉS : importer les ~635 entrées du
-         catalogue rendrait le sélecteur de modèles inutilisable. */
-      var garder = VIRTUELS.slice();
+      /* VIRTUELS_SURS d'abord (auto, fusion — toujours routables). Puis on
+         ajoute les auto:<profil> QUE SI le routeur les liste réellement :
+         auto:fast / auto:smart n'existent que si l'utilisateur a créé ces
+         profils, sinon le chat 404. Enfin quelques modèles réels, plafonnés.
+         Importer les ~635 entrées du catalogue rendrait le sélecteur
+         inutilisable. */
+      var virtuelsRouteur = dispo.filter(function (id) {
+        return id === 'auto' || id === 'fusion' || /^auto:/.test(id);
+      });
+      var plafond = VIRTUELS_SURS.length + PLAFOND_REELS;
+      var garder = VIRTUELS_SURS.slice();
+      virtuelsRouteur.forEach(function (id) { if (garder.indexOf(id) < 0) garder.push(id); });
       dispo.forEach(function (id) {
-        if (garder.length >= VIRTUELS.length + PLAFOND_REELS) return;
-        if (garder.indexOf(id) >= 0 || VIRTUELS.indexOf(id) >= 0) return;
+        if (garder.length >= plafond) return;
+        if (garder.indexOf(id) >= 0) return;
         garder.push(id);
       });
       var ajoutes = 0, now = Date.now();
@@ -52778,14 +52904,21 @@ window.continueTradApart = async function (msgId) {
          globale. Le module PARAMETRES l'expose via window.__settingsRefresh
          (v484) — sans quoi la liste ne se rafraîchirait pas après l'import. */
       try { if (window.__settingsRefresh && window.__settingsRefresh.custom) window.__settingsRefresh.custom(); } catch (e) {}
+      var nVirt = garder.filter(function (id) { return id === 'auto' || id === 'fusion' || /^auto:/.test(id); }).length;
       dire(ajoutes
-        ? '✅ ' + ajoutes + ' modèle(s) importé(s) — ' + VIRTUELS.length + ' entrées du routeur + ' +
-          Math.max(0, ajoutes - VIRTUELS.length) + ' modèle(s) réel(s). Choisissez-les dans la liste des modèles.'
+        ? '✅ ' + ajoutes + ' modèle(s) importé(s) — ' + nVirt + ' entrée(s) du routeur + ' +
+          Math.max(0, ajoutes - nVirt) + ' modèle(s) réel(s). Choisissez-les dans la liste des modèles.'
         : 'ℹ️ Rien à importer : ces modèles sont déjà là.', true);
       if (ajoutes) toast2(ajoutes + ' modèle(s) FreeLLMAPI importé(s)', 'success');
       return { ok: true, ajoutes: ajoutes, proposes: garder.length, dispo: dispo.length };
     } catch (e) {
-      return echec(e, 'lire le catalogue du routeur');
+      /* v486 — routeur injoignable : on le DIT et on n'ajoute RIEN plutôt que
+         de laisser l'utilisateur croire que l'import a réussi. */
+      var msg = String((e && e.message) || e);
+      window.__flaDernier = { ok: false, erreur: msg };
+      dire('❌ Import impossible : le routeur ne répond pas (' + esc(msg) + ').', false);
+      toast2('Routeur FreeLLMAPI injoignable — aucun modèle importé', 'error');
+      return { ok: false, erreur: msg };
     }
   }
 
@@ -52802,8 +52935,19 @@ window.continueTradApart = async function (msgId) {
         '<strong>▸ Routeur local — FreeLLMAPI</strong><br>' +
         'Un seul point d’entrée pour <b>34 fournisseurs gratuits</b> : le routeur choisit le modèle ' +
         'disponible et bascule tout seul quand l’un est saturé. Il tourne <b>sur votre machine</b> ' +
-        '(port 3001) et vos clés de fournisseurs ne sortent pas de chez vous — cette app ne connaît ' +
+        'et vos clés de fournisseurs ne sortent pas de chez vous — cette app ne connaît ' +
         'que le <b>jeton unifié</b> à saisir ci-dessus.' +
+      '</div>' +
+      '<div class="field-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+        '<label style="font-size:11px;opacity:.8">Routeur :</label>' +
+        '<input id="v484-addr" value="' + esc(addr()) + '" style="width:140px;font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit">' +
+        '<span id="v484-health" title="État du routeur" style="font-size:13px;color:#ff6b6b">●</span>' +
+        '<span id="v484-health-txt" style="font-size:10.5px;opacity:.75">—</span>' +
+        '<button class="btn-ghost" id="v484-start" style="min-height:30px;font-size:11px">▶ Démarrer</button>' +
+      '</div>' +
+      '<div class="field-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+        '<label style="font-size:11px;opacity:.8">Lancer avec :</label>' +
+        '<input id="v484-cmd" placeholder="ex : npx freellmapi  —  ou  C:\\freellmapi\\start.bat" value="' + esc(lireCmd()) + '" style="flex:1;min-width:200px;font-size:11px;padding:3px 6px;border-radius:5px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:inherit">' +
       '</div>' +
       '<div class="field-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
         '<button class="btn-ghost" id="v484-tester" style="min-height:32px;font-size:11px">🔌 Tester le routeur</button>' +
@@ -52816,19 +52960,33 @@ window.continueTradApart = async function (msgId) {
         '<b>⚠️ Aucune configuration du routeur n’est nécessaire.</b> L’app route ' +
         'ses appels FreeLLMAPI via son propre serveur local (relais <code>/fla/</code>, ' +
         'même origine) : le CORS du routeur ne s’applique pas. Il suffit que ' +
-        '<b>FreeLLMAPI tourne sur le port 3001</b>.<br>' +
-        'Cas particulier — si vous ouvrez <b>THEOLOGICUS.html directement</b> ' +
-        '(double-clic, <code>file://</code>, sans le serveur) : le relais est ' +
-        'indisponible et le CORS s’applique. Ajoutez alors l’origine de l’app ' +
-        '(<b id="v484-origine"></b>) à <b>DASHBOARD_ORIGINS</b> du routeur et ' +
-        'redémarrez-le. Le jeton unifié se lit dans <b>Keys</b> ' +
-        '(il commence par <code>freellmapi-</code>).' +
+        '<b>FreeLLMAPI tourne</b> (port réglable ci-dessus).' +
+        (location.protocol === 'file:' ?
+        '<br>Cas particulier — vous ouvrez <b>THEOLOGICUS.html directement</b> (file://) : le relais est ' +
+        'indisponible et le CORS s’applique. Ajoutez alors l’origine <b id="v484-origine"></b> ' +
+        'à <b>DASHBOARD_ORIGINS</b> du routeur et redémarrez-le. Le jeton unifié se lit dans <b>Keys</b> ' +
+        '(il commence par <code>freellmapi-</code>).' : '') +
       '</div>';
     ancre.parentNode.insertBefore(d, ancre.nextSibling);
     var o = document.getElementById('v484-origine');
     if (o) o.textContent = location.origin;
+    var addrIn = document.getElementById('v484-addr');
+    if (addrIn) addrIn.onchange = addrIn.oninput = function () {
+      var v = addrIn.value.trim() || '127.0.0.1:3001';
+      ecrireAddr(v); base();   /* resynchronise PROVIDERS + relais /fla/ */
+      sonderSante();
+    };
+    var cmdIn = document.getElementById('v484-cmd');
+    if (cmdIn) cmdIn.onchange = function () { ecrireCmd(cmdIn.value); };
     document.getElementById('v484-tester').onclick = function () { tester(); };
     document.getElementById('v484-importer').onclick = function () { importer(); };
+    document.getElementById('v484-start').onclick = function () { demarrer(); };
+    sonderSante();
+    if (!window.__flaPoll) {
+      window.__flaPoll = setInterval(function () {
+        try { if (document.getElementById('v484-health')) sonderSante(); } catch (e) {}
+      }, 5000);
+    }
     majDerniere();
     return true;
   }
@@ -52851,8 +53009,9 @@ window.continueTradApart = async function (msgId) {
 
   window.__fla = {
     construire: construire, brancher: brancher, tester: tester, importer: importer,
-    base: base, cle: cle, VIRTUELS: VIRTUELS,
-    etat: function () { return { base: base(), cleVide: !cle(), derniere: window.__theoRoutedVia || null, dernier: window.__flaDernier || null }; }
+    base: base, cle: cle, VIRTUELS: VIRTUELS_SURS, addr: addr,
+    sonderSante: sonderSante, demarrer: demarrer, setAddr: ecrireAddr,
+    etat: function () { return { base: base(), addr: addr(), cleVide: !cle(), derniere: window.__theoRoutedVia || null, dernier: window.__flaDernier || null }; }
   };
 
   if (document.readyState !== 'loading') brancher();

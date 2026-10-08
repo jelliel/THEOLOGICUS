@@ -11,6 +11,8 @@ import os
 import sys
 import subprocess
 import traceback
+import time
+import socket
 from urllib.parse import urlparse, parse_qs
 
 # Console non-UTF8 (cp1252, exe sans console...) : evite les UnicodeEncodeError sur les logs
@@ -21,10 +23,12 @@ except Exception:
     pass
 
 PORT = 8765
-# v485 — relais local FreeLLMAPI : cible UNIQUE et en dur (pas de SSRF).
-# L'app route ses appels FreeLLMAPI vers /fla/… sur CE serveur (même origine),
-# qui les retransmet ici. Aucune modification de DASHBOARD_ORIGINS côté routeur.
-FLA_TARGET = ('127.0.0.1', 3001)
+# v486 — relais FreeLLMAPI : la cible (hôte:port) est PORTÉE PAR L'URL
+# (/fla/<host>:<port>/…), plus en dur. Cela autorise un routeur sur un port
+# personnalisé (zéro config côté app) tout en GARDANT l'anti-SSRF : le
+# serveur revérifie que <host>:<port> est une adresse de bouclage avant de
+# transmettre. _fla porte l'état du sous-processus de lancement éventuel.
+_fla = {"proc": None, "external": False, "last_error": ""}
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -1748,9 +1752,15 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             return
         # v485 — relais local FreeLLMAPI : même origine que l'app, donc le
         # navigateur n'est pas soumis au CORS du routeur. Aucune modif
-        # DASHBOARD_ORIGINS. Cible unique 127.0.0.1:3001 (voir FLA_TARGET).
+        # DASHBOARD_ORIGINS. Cible dynamique portée par l'URL (/fla/<host>:<port>/…),
+        # validée bouclage côté serveur (anti-SSRF, voir _fla_proxy).
         if self.path.startswith('/fla/'):
             self._fla_proxy()
+            return
+        # v486 — santé du routeur : ping léger sur /api/ping (sans clé). L'adresse
+        # est validée bouclage avant toute connexion.
+        if self.path.split('?')[0] == '/freellmapi/status':
+            self._fla_status()
             return
         # v126 — le relais CORS sert aussi en GET. Il était câblé dans la
         # seule chaîne POST : un GET /proxy/… n'atteignait jamais la route et
@@ -2045,6 +2055,11 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         # v485 — relais local FreeLLMAPI (même origine que l'app).
         if self.path.startswith('/fla/'):
             self._fla_proxy()
+            return
+        # v486 — démarrage du routeur : lance la commande configurée par
+        # l'utilisateur (sur SA machine). L'adresse est validée bouclage.
+        if self.path.split('?')[0] == '/freellmapi/start':
+            self._fla_start()
             return
         # /montage — assemblage local des segments vidéo (ffmpeg du PC).
         # Voir _montage() : remplace ffmpeg.wasm, inutilisable ici.
@@ -2568,20 +2583,157 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 pass
 
-    def _fla_proxy(self):
-        """v485 — Relais local FreeLLMAPI.
+    # ── Helpers FreeLLMAPI (v486) ───────────────────────────────────────
+    def _fla_parse_target(self, hostport):
+        """Parse « host:port » depuis /fla/<host>:<port>/… et VALIDE que la
+        cible est une adresse de bouclage — anti-SSRF : une page servie par ce
+        proxy ne doit PAS pouvoir le transformer en relais vers l'extérieur."""
+        hp = (hostport or '').strip()
+        if not hp:
+            raise ValueError('hôte:port manquant')
+        if hp.startswith('['):
+            rb = hp.find(']')
+            if rb < 0:
+                raise ValueError('hôte IPv6 mal formé')
+            host = hp[1:rb]
+            reste = hp[rb + 1:]
+            if not reste.startswith(':') or len(reste) < 2:
+                raise ValueError('port IPv6 manquant')
+            port = int(reste[1:])
+        else:
+            if ':' not in hp:
+                raise ValueError('hôte:port attendu')
+            hs, _, ps = hp.rpartition(':')
+            host, port = hs, int(ps)
+        if not (1 <= port <= 65535):
+            raise ValueError('port hors bornes')
+        # Bouclage strict : 127.0.0.0/8, ::1, localhost (résolu). Ni 0.0.0.0 ni
+        # un nom qui résoudrait vers une IP publique.
+        if host == 'localhost' or host == '::1' or host.startswith('127.'):
+            return host, port
+        try:
+            ip = socket.gethostbyname(host)
+        except Exception:
+            raise ValueError('hôte injoignable')
+        if ip.startswith('127.') or ip == '::1':
+            return host, port
+        raise ValueError('cible non-bouclage refusée (anti-SSRF)')
 
-        La page est servie par CE serveur ; l'app pointe donc ses appels
-        FreeLLMAPI sur /fla/… (même origine) → pas de CORS navigateur, et
-        l'appel serveur→serveur vers 127.0.0.1:3001 n'est pas soumis au CORS
-        non plus. Résultat : le routeur fonctionne tel quel, sans toucher à
-        DASHBOARD_ORIGINS ni le redémarrer. Cible UNIQUEMENT FLA_TARGET
-        (en dur) → pas de SSRF.
+    def _fla_ping(self, addr):
+        """Ping léger du routeur sur /api/ping (sans clé). Rend {up, status?, ms?, error?}."""
+        try:
+            host, port = self._fla_parse_target(addr)
+        except Exception as e:
+            return {'up': False, 'error': str(e)}
+        try:
+            conn = http.client.HTTPConnection(host, port, timeout=3)
+            t0 = time.time()
+            conn.request('GET', '/api/ping')
+            resp = conn.getresponse()
+            dt = int((time.time() - t0) * 1000)
+            try:
+                body = resp.read(512).decode('utf-8', 'replace')
+            except Exception:
+                body = ''
+            conn.close()
+            return {'up': resp.status == 200, 'status': resp.status, 'ms': dt, 'body': body[:200]}
+        except Exception as e:
+            return {'up': False, 'error': str(e)}
+
+    def _fla_log_file(self):
+        d = os.path.join(SERVE_DIR, 'logs')
+        try:
+            os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        return open(os.path.join(d, 'freellmapi.log'), 'a', encoding='utf-8', buffering=1)
+
+    def _fla_status(self):
+        q = parse_qs(urlparse(self.path).query)
+        addr = (q.get('addr') or ['127.0.0.1:3001'])[0]
+        proc = _fla.get('proc')
+        running = bool(proc is not None and proc.poll() is None)
+        ping = self._fla_ping(addr)
+        if not ping.get('up') and running:
+            ping = self._fla_ping(addr)  # port pas encore ouvert : seconde chance
+        self._json_response({'addr': addr, 'running': running,
+                             'up': ping.get('up', False),
+                             'status': ping.get('status'), 'ms': ping.get('ms'),
+                             'error': ping.get('error', ''),
+                             'last_error': _fla.get('last_error', '')})
+
+    def _fla_start(self):
+        corps = self._lire_corps_json() or {}
+        addr = corps.get('addr') or '127.0.0.1:3001'
+        cmd = corps.get('cmd') or ''
+        try:
+            self._fla_parse_target(addr)
+        except Exception as e:
+            self._json_response({'ok': False, 'reason': 'addr-invalide', 'error': str(e)})
+            return
+        if not isinstance(cmd, str) or not cmd.strip():
+            self._json_response({'ok': False, 'reason': 'cmd-vide',
+                                 'error': 'commande de lancement vide'})
+            return
+        # déjà debout ?
+        if self._fla_ping(addr).get('up'):
+            self._json_response({'ok': True, 'deja': True, 'up': True})
+            return
+        # Lancement : la commande est CONFIGURÉE PAR L'UTILISATEUR sur SA machine.
+        # shell=True (Windows) exécute sa ligne telle quelle — même modèle de
+        # confiance que le « LANCER LE SERVICE » de MoneyPrinterTurbo.
+        try:
+            flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
+            logf = self._fla_log_file()
+            proc = subprocess.Popen(cmd, shell=True, stdout=logf, stderr=subprocess.STDOUT,
+                                    creationflags=flags)
+            # le sous-processus a hérité du descripteur : on ferme le nôtre.
+            try:
+                logf.close()
+            except Exception:
+                pass
+            _fla['proc'] = proc
+            _fla['external'] = False
+            import atexit
+            atexit.register(self._fla_kill)
+            self._json_response({'ok': True, 'pid': proc.pid, 'up': False,
+                                 'note': 'processus lancé ; sondez /freellmapi/status'})
+        except Exception as e:
+            _fla['last_error'] = str(e)
+            self._json_response({'ok': False, 'reason': 'spawn-failed', 'error': str(e)})
+
+    def _fla_kill(self):
+        proc = _fla.get('proc')
+        if proc is not None and proc.poll() is None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+            except Exception:
+                pass
+        _fla['proc'] = None
+
+    def _fla_proxy(self):
+        """v486 — Relais local FreeLLMAPI, CIBLE DYNAMIQUE.
+
+        La page est servie par CE serveur ; l'app pointe ses appels FreeLLMAPI
+        sur /fla/<host>:<port>/… (même origine) → pas de CORS navigateur, et
+        l'appel serveur→serveur n'est pas soumis au CORS du routeur non plus.
+        Résultat : le routeur fonctionne tel quel, sans toucher à
+        DASHBOARD_ORIGINS ni le redémarrer. La cible est lue dans l'URL et
+        VALIDÉE bouclage (_fla_parse_target) → pas de SSRF.
         """
         try:
             rest = self.path[5:]  # retire « /fla »
             if not rest.startswith('/'):
                 rest = '/' + rest
+            # rest = « /127.0.0.1:3001/v1/models?… » → segment[0] = host:port
+            seg = rest[1:].split('/', 1)
+            hostport = seg[0]
+            target_path = '/' + seg[1] if len(seg) > 1 else '/'
+            host, port = self._fla_parse_target(hostport)
             content_length = int(self.headers.get('Content-Length', 0) or 0)
             body = self.rfile.read(content_length) if content_length > 0 else b''
             headers = {}
@@ -2595,11 +2747,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             # On veut les octets bruts tels quels (JSON ou SSE) : pas de
             # compression side-channel.
             headers['Accept-Encoding'] = 'identity'
-            import http.client
-            conn = http.client.HTTPConnection(FLA_TARGET[0], FLA_TARGET[1], timeout=120)
+            conn = http.client.HTTPConnection(host, port, timeout=120)
             try:
                 methode = (self.command or 'GET').upper()
-                conn.request(methode, rest, body=body, headers=dict(headers))
+                conn.request(methode, target_path, body=body, headers=dict(headers))
                 resp = conn.getresponse()
             except Exception as e:
                 self.send_response(502)
