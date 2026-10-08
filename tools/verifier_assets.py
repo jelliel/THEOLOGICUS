@@ -93,9 +93,30 @@ def controle_modules():
     return erreurs, infos
 
 
+def controle_bancs():
+    """Les bancs doivent rester exécutables hors de cette machine.
+
+    Leçon vécue : un banc lançait Chromium par un chemin Windows EN DUR
+    (`executablePath: path.join(PW, ...)`) → il échouait en CI alors que tout
+    le reste passait. Le chemin ne doit apparaître que derrière une condition
+    sur PW_DIR."""
+    import glob
+    erreurs, infos = [], []
+    bancs = sorted(glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', '_v4*', 'verify_*.js')))
+    rigides = []
+    for f in bancs:
+        src = io.open(f, encoding='utf-8').read()
+        if 'chrome-win64' in src and 'process.env.PW_DIR' not in src:
+            rigides.append(os.path.basename(os.path.dirname(f)) + '/' + os.path.basename(f))
+    if rigides:
+        erreurs.append('banc(s) au chemin navigateur EN DUR (ajouter la condition PW_DIR) : ' + ', '.join(rigides))
+    infos.append('%d banc(s) contrôlé(s) pour la portabilité' % len(bancs))
+    return erreurs, infos
+
+
 def main():
     erreurs, infos = [], []
-    for controle in (controle_assets, controle_copie_embarquee, controle_modules):
+    for controle in (controle_assets, controle_copie_embarquee, controle_modules, controle_bancs):
         e, i = controle()
         erreurs += e
         infos += i

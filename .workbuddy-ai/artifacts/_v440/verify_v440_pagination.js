@@ -22,10 +22,12 @@ const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
     res.writeHead(404); res.end('not found');
   });
   await new Promise(resolve => server.listen(PORT, '127.0.0.1', resolve));
-  const browser = await chromium.launch({
-    executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe'),
-    args: ['--no-sandbox'],
-  });
+  /* Le chemin du navigateur n'est imposé QUE si PW_DIR est fourni : en CI,
+     Playwright utilise le Chromium qu'il a lui-même installé. */
+  const browser = await chromium.launch(Object.assign(
+    { args: ['--no-sandbox'] },
+    process.env.PW_DIR ? { executablePath: path.join(PW, 'chromium-1234', 'chrome-win64', 'chrome.exe') } : {}
+  ));
   const page = await browser.newPage();
   await page.addInitScript(() => { localStorage.setItem('theologicus_wizard_skipped', '1'); });
   const errors = [];

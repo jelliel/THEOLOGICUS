@@ -10,7 +10,20 @@ const PORT = 8788;
 const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
 const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 
+/* Prérequis : le banc provoque volontairement un « Rate limit » sur le
+   fournisseur primaire et vérifie le REPLI Ollama. Sans Ollama (comme en CI)
+   le repli ne peut pas être testé : le banc s'IGNORE (code 77) au lieu
+   d'échouer — un échec doit signaler une régression, pas un prérequis. */
 (async () => {
+  try {
+    if (process.env.IGNORE_OLLAMA === '1') throw new Error('désactivé par IGNORE_OLLAMA');
+    const r = await fetch('http://127.0.0.1:11434/api/tags');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch (e) {
+    console.log(' IGNORÉ — Ollama injoignable (' + (e && e.message) + ') : repli non testable ici');
+    process.exit(77);
+  }
+
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\//, '') || 'THEOLOGICUS.html';
     if (rel.startsWith('fail401')) {
