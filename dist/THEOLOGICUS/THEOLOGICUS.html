@@ -10021,7 +10021,20 @@ const PROVIDERS = [
      localhost (testé), et l'app est servie depuis localhost — l'appel direct
      passe, en navigateur comme dans l'exe. Aucune clé : resolveModelConfig
      met une valeur fictive 'local' que Ollama ignore. */
-  { id:"ollama",    label:"Ollama (local)", format:"chat-completions",   base:"http://127.0.0.1:11434/v1",  models:["qwen2.5:0.5b","llama3.2","qwen2.5","mistral"] }
+  { id:"ollama",    label:"Ollama (local)", format:"chat-completions",   base:"http://127.0.0.1:11434/v1",  models:["qwen2.5:0.5b","llama3.2","qwen2.5","mistral"] },
+  /* v484 — FreeLLMAPI (github.com/tashfeenahmed/freellmapi, MIT) : routeur
+     LOCAL auto-hébergé qui agrège les paliers gratuits de 34 fournisseurs
+     (635 endpoints) derrière UNE API compatible OpenAI. Même forme que
+     l'entrée `ollama` ci-dessus : base locale, format chat-completions, donc
+     AUCUNE adaptation du code d'appel (resolveModelConfig ajoute
+     « /chat/completions »).
+     Les quatre modèles listés sont les entrées VIRTUELLES du routeur — elles
+     n'existent chez aucun fournisseur, c'est le routeur qui choisit :
+       auto · auto:fast · auto:smart · fusion (synthèse multi-modèles).
+     ⚠️ CORS : contrairement à Ollama, FreeLLMAPI n'ouvre pas « * » — il tient
+     une ALLOWLIST (`DASHBOARD_ORIGINS`). L'origine de cette app doit y être
+     déclarée, sinon le navigateur bloque l'appel AVANT qu'il ne parte. */
+  { id:"freellmapi", label:"FreeLLMAPI (routeur local)", format:"chat-completions", base:"http://127.0.0.1:3001/v1", models:["auto","auto:fast","auto:smart","fusion"] }
 ];
 const PROVIDER_BY_ID = Object.fromEntries(PROVIDERS.map(p => [p.id, p]));
 
@@ -12519,6 +12532,16 @@ function llmRetryAfterSeconds(res, fallback) {
   const when = Date.parse(raw);
   return Number.isFinite(when) ? Math.max(1, Math.ceil((when - Date.now()) / 1000)) : fallback;
 }
+/* v484 — Un routeur qui bascule d'un fournisseur à l'autre est une boîte noire
+   tant qu'il ne dit pas qui a servi la réponse. FreeLLMAPI l'annonce dans
+   l'en-tête `X-Routed-Via` (« groq/llama-3.3-70b »). On le retient ici, au
+   point de passage UNIQUE des réponses, plutôt que dans chaque appelant. */
+function _theoNoteRouted(res) {
+  try {
+    const v = res && res.headers && res.headers.get && res.headers.get('x-routed-via');
+    if (v) window.__theoRoutedVia = { via: v, modele: window.__theoActiveModel || '', quand: Date.now() };
+  } catch (e) {}
+}
 async function fetchLLMResponse(url, init, model) {
   for (let attempt = 0; attempt < 4; attempt++) {
     let res;
@@ -12538,6 +12561,7 @@ async function fetchLLMResponse(url, init, model) {
       continue;
     }
     if (!res.ok) await throwApiError(res, model);
+    _theoNoteRouted(res);
     return res;
   }
   throw new Error('Le serveur API n’a pas répondu');
@@ -12667,6 +12691,7 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
     body: JSON.stringify({ model: cfg.model, messages: messages, temperature: temp, max_tokens: maxTok, top_p: 0.95, stream: true })
   });
   if (!res.ok) throw new Error(await res.text());
+  _theoNoteRouted(res);
   const reader = res.body.getReader();
   let full = '';
   let usage = null;
@@ -12809,13 +12834,20 @@ function initSettingsModal() {
            les modèles effectivement installés sur la machine ; pour les
            fournisseurs en ligne, leur liste officielle. Échec → repli sur la
            liste statique du registre. */
+        /* v484 — FreeLLMAPI publie TOUT son catalogue sur /models, y compris
+           les modèles pour lesquels aucune clé n'est configurée (~635 entrées).
+           Les importer toutes noierait le sélecteur de modèles et rendrait le
+           choix impossible. On demande donc au routeur ce qui peut RÉELLEMENT
+           servir (`?available=true`) et on PLAFONNE. */
+        const fla = (pdef.id === 'freellmapi');
         let ids = null;
         try {
-          const r = await fetch(apiEndpoint(pdef.base + '/models'), { headers: { 'Authorization': 'Bearer ' + (state.keys[prov] || 'local') } });
+          const r = await fetch(apiEndpoint(pdef.base + '/models' + (fla ? '?available=true' : '')), { headers: { 'Authorization': 'Bearer ' + (state.keys[prov] || 'local') } });
           if (r.ok) {
             const j = await r.json();
             const arr = (j && (j.data || j.models)) || [];
             ids = arr.map(x => x.id || x.name || x.model).filter(Boolean);
+            if (fla && ids.length > 12) ids = ids.slice(0, 12);
           }
         } catch (e) { /* fournisseur injoignable : repli statique */ }
         if (!ids || !ids.length) ids = (pdef.models || []).map(m => typeof m === 'string' ? m : m.model);
@@ -12853,6 +12885,14 @@ function initSettingsModal() {
       </div>`;
     }).join('');
   }
+
+  /* v484 — `renderProvidersList` et `renderCustomModelsList` vivent DANS
+     `initSettingsModal` : ce ne sont PAS des fonctions globales, donc un
+     module injecté ne peut ni les appeler ni les envelopper. On les expose
+     ici pour que le bloc « routeur local » puisse rafraîchir la liste des
+     modèles juste après un import — sans quoi l'utilisateur ne verrait rien
+     changer avant de rouvrir le panneau. */
+  window.__settingsRefresh = { providers: renderProvidersList, custom: renderCustomModelsList };
 
   /* ═══════════════════════════════════════════════════════════════════════
      ONGLETS DU MODAL PARAMÈTRES
@@ -52566,6 +52606,245 @@ window.continueTradApart = async function (msgId) {
       return (S.moteur === 'lt') ? traduireLT(paras, S.cible) : traduireIA(paras, S.cible);
     }
   };
+})();
+</script>
+<script id="v484-freellmapi">
+/* ═══════════════════════════════════════════════════════════════════
+   v484 — ROUTEUR LOCAL (FreeLLMAPI)
+
+   FreeLLMAPI (github.com/tashfeenahmed/freellmapi, MIT) agrège les paliers
+   gratuits de 34 fournisseurs derrière UNE API compatible OpenAI. L'entrée
+   `freellmapi` du registre PROVIDERS suffit à router ; ce module ajoute ce
+   qu'un simple appel ne peut pas donner : DIRE pourquoi ça ne marche pas
+   quand ça ne marche pas, importer un catalogue UTILISABLE, et montrer quel
+   fournisseur a réellement répondu.
+   ═══════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window.__fla) return;
+
+  var BASE_DEFAUT = 'http://127.0.0.1:3001/v1';
+  var VIRTUELS = ['auto', 'auto:fast', 'auto:smart', 'fusion'];
+  var PLAFOND_REELS = 8;          /* modèles réels importés, au maximum */
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+  function toast2(m, t) { try { if (window.showToast) return showToast(m, t || 'success'); } catch (e) {} }
+  /* `state` et `PROVIDERS` sont déclarés avec `let`/`const` au niveau d'un
+     script : ce ne sont PAS des propriétés de `window` (piège documenté). On y
+     accède par leur NOM, sous garde. */
+  function reg() {
+    try { return (typeof PROVIDERS !== 'undefined' && PROVIDERS.filter(function (p) { return p.id === 'freellmapi'; })[0]) || null; }
+    catch (e) { return null; }
+  }
+  function base() { var p = reg(); return (p && p.base) || BASE_DEFAUT; }
+  function cle() {
+    try { return (state && state.keys && state.keys.freellmapi) || ''; } catch (e) { return ''; }
+  }
+  function ae(u) { return (typeof window.apiEndpoint === 'function') ? window.apiEndpoint(u) : u; }
+  function entetes() {
+    var h = { 'Content-Type': 'application/json' };
+    var k = cle();
+    /* le routeur accepte n'importe quel porteur non vide tant qu'il n'exige
+       pas de jeton ; 'local' évite un 401 opaque quand la clé est vide. */
+    h.Authorization = 'Bearer ' + (k || 'local');
+    return h;
+  }
+
+  /* ── état affiché ─────────────────────────────────────────────────── */
+  function dire(t, ok) {
+    var e = document.getElementById('v484-etat');
+    if (e) { e.innerHTML = t; e.style.color = ok ? '#8ef0b0' : '#ffb347'; }
+  }
+  function majDerniere() {
+    var e = document.getElementById('v484-derniere');
+    if (!e) return;
+    var d = window.__theoRoutedVia;
+    if (!d || !d.via) {
+      e.textContent = 'Dernière requête servie par : — (aucune encore ; le routeur l’annonce dans X-Routed-Via)';
+      return;
+    }
+    var age = Math.round((Date.now() - d.quand) / 1000);
+    e.innerHTML = 'Dernière requête servie par : <b>' + esc(d.via) + '</b>' +
+      (d.modele ? ' <span style="opacity:.7">(demandé : ' + esc(d.modele) + ')</span>' : '') +
+      ' <span style="opacity:.6">il y a ' + age + ' s</span>';
+  }
+
+  /* ── TEST ─────────────────────────────────────────────────────────── */
+  /* Deux appels, parce qu'ils ne prouvent pas la même chose :
+       GET  /models?available=true  → le routeur répond, et combien de modèles
+                                      peuvent réellement servir ;
+       POST /chat/completions       → le JETON est valide, le routage
+                                      fonctionne, et l'en-tête X-Routed-Via
+                                      nomme le fournisseur qui a répondu.
+     Le second coûte une requête minuscule (max_tokens 5) et c'est le seul qui
+     prouve la chaîne complète. */
+  async function tester() {
+    var t0 = Date.now();
+    dire('Test en cours…', true);
+    var res = { ok: false };
+    try {
+      var r = await fetch(ae(base() + '/models?available=true'), { headers: entetes() });
+      if (!r.ok) throw new Error('HTTP ' + r.status + ' sur /models');
+      var j = await r.json();
+      res.n = ((j && (j.data || j.models)) || []).length;
+      res.msModels = Date.now() - t0;
+    } catch (e) {
+      return echec(e, 'joindre le routeur');
+    }
+    try {
+      var ctl = new AbortController();
+      var minuterie = setTimeout(function () { ctl.abort(); }, 20000);
+      var r2 = await fetch(ae(base() + '/chat/completions'), {
+        method: 'POST', headers: entetes(), signal: ctl.signal,
+        body: JSON.stringify({ model: 'auto', messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 })
+      });
+      clearTimeout(minuterie);
+      if (!r2.ok) throw new Error('HTTP ' + r2.status + ' sur /chat/completions');
+      var via = r2.headers.get('x-routed-via');
+      if (via) window.__theoRoutedVia = { via: via, modele: 'auto (test)', quand: Date.now() };
+      res.ok = true; res.via = via; res.msChat = Date.now() - t0;
+      dire('✅ Routeur opérationnel — <b>' + res.n + '</b> modèle(s) disponible(s), réponse servie par <b>' +
+        esc(via || '?') + '</b> en ' + res.msChat + ' ms', true);
+      majDerniere();
+      toast2('Routeur FreeLLMAPI opérationnel', 'success');
+      return res;
+    } catch (e) {
+      return echec(e, 'obtenir une réponse');
+    }
+  }
+
+  /* Un échec de `fetch` sur un serveur local qui TOURNE est presque toujours
+     un blocage CORS : le navigateur refuse d'exposer la réponse, et son
+     message ne dit jamais pourquoi. On traduit. */
+  function echec(e, quoi) {
+    var msg = String((e && e.message) || e);
+    var cors = /Failed to fetch|NetworkError|Load failed|Network request failed|AbortError/i.test(msg);
+    var bloc = document.getElementById('v484-cors');
+    if (bloc) bloc.style.display = 'block';
+    window.__flaDernier = { ok: false, erreur: msg, cors: cors };
+    dire(cors
+      ? '❌ Impossible de ' + quoi + ' : le navigateur a bloqué l’appel AVANT qu’il ne parte.<br>' +
+        '<span style="font-size:10.5px">Cause la plus probable : <b>CORS</b> — voir l’encadré ci-dessous.</span>'
+      : '❌ Impossible de ' + quoi + ' : ' + esc(msg), false);
+    return { ok: false, erreur: msg, cors: cors };
+  }
+
+  /* ── IMPORT CURÉ ──────────────────────────────────────────────────── */
+  async function importer() {
+    dire('Import en cours…', true);
+    try {
+      var r = await fetch(ae(base() + '/models?available=true'), { headers: entetes() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var j = await r.json();
+      var dispo = ((j && (j.data || j.models)) || [])
+        .map(function (m) { return m && (m.id || m.name || m.model); }).filter(Boolean);
+      /* Les VIRTUELLES d'abord, toujours : « auto » n'existe chez aucun
+         fournisseur, c'est le routeur qui choisit — c'est là tout l'intérêt.
+         Puis quelques modèles réels, PLAFONNÉS : importer les ~635 entrées du
+         catalogue rendrait le sélecteur de modèles inutilisable. */
+      var garder = VIRTUELS.slice();
+      dispo.forEach(function (id) {
+        if (garder.length >= VIRTUELS.length + PLAFOND_REELS) return;
+        if (garder.indexOf(id) >= 0 || VIRTUELS.indexOf(id) >= 0) return;
+        garder.push(id);
+      });
+      var ajoutes = 0, now = Date.now();
+      garder.forEach(function (id, i) {
+        var deja = state.customModels.some(function (x) { return x.model === id && x.baseUrl === base(); });
+        if (deja) return;
+        state.customModels.push({
+          uid: 'c_' + now + '_' + i + '_' + Math.random().toString(36).slice(2, 7),
+          name: 'FreeLLMAPI · ' + id, model: id, baseUrl: base(), apiKey: cle(),
+          format: 'chat-completions', vision: false, audio: false
+        });
+        ajoutes++;
+      });
+      saveCustomModels();
+      if (typeof window.refreshModelSelect === 'function') window.refreshModelSelect();
+      /* `renderCustomModelsList` vit DANS initSettingsModal : elle n'est pas
+         globale. Le module PARAMETRES l'expose via window.__settingsRefresh
+         (v484) — sans quoi la liste ne se rafraîchirait pas après l'import. */
+      try { if (window.__settingsRefresh && window.__settingsRefresh.custom) window.__settingsRefresh.custom(); } catch (e) {}
+      dire(ajoutes
+        ? '✅ ' + ajoutes + ' modèle(s) importé(s) — ' + VIRTUELS.length + ' entrées du routeur + ' +
+          Math.max(0, ajoutes - VIRTUELS.length) + ' modèle(s) réel(s). Choisissez-les dans la liste des modèles.'
+        : 'ℹ️ Rien à importer : ces modèles sont déjà là.', true);
+      if (ajoutes) toast2(ajoutes + ' modèle(s) FreeLLMAPI importé(s)', 'success');
+      return { ok: true, ajoutes: ajoutes, proposes: garder.length, dispo: dispo.length };
+    } catch (e) {
+      return echec(e, 'lire le catalogue du routeur');
+    }
+  }
+
+  /* ── le bloc, dans l'onglet FOURNISSEURS ──────────────────────────── */
+  function construire() {
+    var ancre = document.getElementById('providers-list');
+    if (!ancre) return false;
+    if (document.getElementById('v484-fla')) return true;
+    var d = document.createElement('div');
+    d.id = 'v484-fla';
+    d.style.cssText = 'margin:12px 0 6px';
+    d.innerHTML =
+      '<div class="info-block" style="border-left:3px solid rgba(79,142,247,.65)">' +
+        '<strong>▸ Routeur local — FreeLLMAPI</strong><br>' +
+        'Un seul point d’entrée pour <b>34 fournisseurs gratuits</b> : le routeur choisit le modèle ' +
+        'disponible et bascule tout seul quand l’un est saturé. Il tourne <b>sur votre machine</b> ' +
+        '(port 3001) et vos clés de fournisseurs ne sortent pas de chez vous — cette app ne connaît ' +
+        'que le <b>jeton unifié</b> à saisir ci-dessus.' +
+      '</div>' +
+      '<div class="field-group" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+        '<button class="btn-ghost" id="v484-tester" style="min-height:32px;font-size:11px">🔌 Tester le routeur</button>' +
+        '<button class="btn-ghost" id="v484-importer" style="min-height:32px;font-size:11px">⬇ Importer les modèles</button>' +
+        '<span id="v484-etat" style="font-size:11px;color:#9fb4d0"></span>' +
+      '</div>' +
+      '<div class="field-hint" id="v484-derniere"></div>' +
+      '<div class="field-hint" id="v484-cors" style="display:none;border:1px solid rgba(245,197,66,.45);' +
+        'border-radius:8px;padding:8px 10px;background:rgba(245,197,66,.06);color:#ffd479;margin-top:6px">' +
+        '<b>⚠️ Si le test échoue alors que le routeur tourne, c’est CORS.</b><br>' +
+        'FreeLLMAPI n’accepte que les origines listées dans sa variable <b>DASHBOARD_ORIGINS</b> ' +
+        '(fichier <b>.env</b>). Ajoutez-y l’origine de cette app — <b id="v484-origine"></b> — ' +
+        'puis <b>redémarrez le routeur</b>.<br>' +
+        'Le port de cette app va de <b>8765 à 8780</b> selon la disponibilité : soit vous le fixez ' +
+        '(<code>python app.py --port 8765</code>), soit vous déclarez toute la plage dans DASHBOARD_ORIGINS.<br>' +
+        'Le jeton unifié se lit dans l’en-tête de la page <b>Keys</b> du tableau de bord du routeur ' +
+        '(il commence par <code>freellmapi-</code>).' +
+      '</div>';
+    ancre.parentNode.insertBefore(d, ancre.nextSibling);
+    var o = document.getElementById('v484-origine');
+    if (o) o.textContent = location.origin;
+    document.getElementById('v484-tester').onclick = function () { tester(); };
+    document.getElementById('v484-importer').onclick = function () { importer(); };
+    majDerniere();
+    return true;
+  }
+
+  /* Le bloc existe dès le chargement (le panneau est dans le DOM même caché).
+     On rafraîchit l'affichage de X-Routed-Via à l'OUVERTURE de l'onglet —
+     c'est le moment exact où l'utilisateur regarde — plutôt qu'avec un
+     minuteur qui tournerait pour rien. `addEventListener` cohabite avec le
+     `onclick` posé par le module PARAMETRES : on n'écrase rien. */
+  function brancher() {
+    if (!construire()) return false;
+    ['settings-tab-providers'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b && !b.__v484) { b.__v484 = true; b.addEventListener('click', function () { construire(); majDerniere(); }); }
+    });
+    var racc = document.querySelector('[data-act="param-models"]');
+    if (racc && !racc.__v484) { racc.__v484 = true; racc.addEventListener('click', function () { setTimeout(majDerniere, 250); }); }
+    return true;
+  }
+
+  window.__fla = {
+    construire: construire, brancher: brancher, tester: tester, importer: importer,
+    base: base, cle: cle, VIRTUELS: VIRTUELS,
+    etat: function () { return { base: base(), cleVide: !cle(), derniere: window.__theoRoutedVia || null, dernier: window.__flaDernier || null }; }
+  };
+
+  if (document.readyState !== 'loading') brancher();
+  else document.addEventListener('DOMContentLoaded', brancher);
 })();
 </script>
 </body>
