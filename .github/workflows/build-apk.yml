@@ -100,21 +100,37 @@ jobs:
             sortie=$(mktemp)
             if node "$b" > "$sortie" 2>&1; then
               ok=$((ok+1)); tail -1 "$sortie"
+              echo "### OK — $b" >> rapport.md
             else
               code=$?
               if [ "$code" -eq 77 ]; then
                 ignores=$((ignores+1)); echo "  IGNORÉ (prérequis absent)"; tail -1 "$sortie"
+                echo "### IGNORÉ — $b" >> rapport.md
               else
                 echecs=$((echecs+1))
                 echo "  ÉCHEC (code $code) — 25 dernières lignes :"
                 tail -25 "$sortie"
+                { echo "### ÉCHEC (code $code) — $b"; echo '```'; tail -30 "$sortie"; echo '```'; } >> rapport.md
               fi
             fi
             rm -f "$sortie"
           done
+          { echo "**Bancs : $ok réussi(s), $ignores ignoré(s), $echecs en échec.**"; echo; cat rapport.md 2>/dev/null; } > rapport_final.md
           echo "───────── $ok réussi(s), $ignores ignoré(s), $echecs en échec"
           if [ "$echecs" -ne 0 ]; then exit 1; fi
           echo "Tous les bancs sont passés."
+
+      # Le journal d'un job n'est lisible qu'avec un jeton : en cas d'échec on
+      # publie donc le détail en COMMENTAIRE DE COMMIT, lisible par l'API.
+      - name: Publier le détail des échecs (commentaire de commit)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f rapport_final.md ]; then
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+              -f body="$(cat rapport_final.md)" > /dev/null && echo "détail publié"
+          fi
 
   build:
     needs: [controles, bancs]
