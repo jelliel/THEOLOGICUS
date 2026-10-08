@@ -19,7 +19,7 @@ let pass = 0, total = 0;
 const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 110)}`); if (cond) pass++; };
 
 /* Compteur d'appels, alimenté par le FAUX routeur (même processus Node).
-   Remplace l'ancien page.route('**/v1/**') qui était CONTOURNÉ par la
+   Remplace l'ancien page.route sur les chemins /v1/ (glob **) qui etait CONTOURNE par la
    réécriture /fla/ de apiEndpoint en v486. */
 const appels = { models: [], chat: 0, requeteModels: [] };
 const CATALOGUE = [];
