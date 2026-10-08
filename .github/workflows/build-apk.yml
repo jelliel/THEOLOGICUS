@@ -94,12 +94,26 @@ jobs:
           # Exclus volontairement (et pourquoi) :
           #   _v457 : voie ffmpeg.wasm abandonnée (Worker cross-origin, cœur 32 Mo)
           #   _v441 : exige un serveur Ollama local, absent en CI
-          echecs=0
+          echecs=0; ignores=0; ok=0
           for b in $(ls .workbuddy-ai/artifacts/_v4*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
             echo "───── $b"
-            if ! node "$b"; then echo "ÉCHEC : $b"; echecs=$((echecs+1)); fi
+            sortie=$(mktemp)
+            if node "$b" > "$sortie" 2>&1; then
+              ok=$((ok+1)); tail -1 "$sortie"
+            else
+              code=$?
+              if [ "$code" -eq 77 ]; then
+                ignores=$((ignores+1)); echo "  IGNORÉ (prérequis absent)"; tail -1 "$sortie"
+              else
+                echecs=$((echecs+1))
+                echo "  ÉCHEC (code $code) — 25 dernières lignes :"
+                tail -25 "$sortie"
+              fi
+            fi
+            rm -f "$sortie"
           done
-          if [ "$echecs" -ne 0 ]; then echo "$echecs banc(s) en échec"; exit 1; fi
+          echo "───────── $ok réussi(s), $ignores ignoré(s), $echecs en échec"
+          if [ "$echecs" -ne 0 ]; then exit 1; fi
           echo "Tous les bancs sont passés."
 
   build:

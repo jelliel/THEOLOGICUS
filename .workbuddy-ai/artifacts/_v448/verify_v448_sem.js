@@ -7,7 +7,20 @@ const PORT = 8804; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
 const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 let pass = 0;
 const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 90)}`); if (cond) pass++; };
+/* Prérequis : Ollama local (embeddings nomic-embed-text). Absent en CI →
+   le banc S'IGNORE proprement (code 77) au lieu d'échouer : un échec doit
+   signaler une régression, pas une dépendance manquante. */
+const IGNORE_OLLAMA = process.env.IGNORE_OLLAMA === '1';
 (async () => {
+  try {
+    if (IGNORE_OLLAMA) throw new Error('désactivé par IGNORE_OLLAMA');
+    const r = await fetch('http://127.0.0.1:11434/api/tags');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+  } catch (e) {
+    console.log(' IGNORÉ — Ollama injoignable (' + (e && e.message) + ') : banc sans objet ici');
+    process.exit(77);
+  }
+
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\//, '') || 'THEOLOGICUS.html';
     const f = path.join(ROOT, rel);
