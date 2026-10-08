@@ -269,13 +269,18 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   const expo = await page.evaluate(() => {
     const etat = window.__livro.etat();
-    etat.bilingue = true; const bil = window.__livro.texteComplet();
-    etat.bilingue = false; const seul = window.__livro.texteComplet();
-    etat.bilingue = true;
-    return { bil: /→/.test(bil), seul: /→/.test(seul), plusCourt: seul.length < bil.length };
+    const t = m => window.__livro.texteComplet(m);
+    const bil = t('bilingue'), seul = t('traduction'), orig = t('original');
+    return {
+      bilFleche: /→/.test(bil), seulFleche: /→/.test(seul),
+      origFleche: /→/.test(orig),
+      seulPlusCourt: seul.length < bil.length,
+      origPlusCourt: orig.length < bil.length
+    };
   });
-  ok('export bilingue : original + traduction (flèche)', expo.bil === true);
-  ok('export « traduction seule » : plus de lignes originales', expo.seul === false && expo.plusCourt === true, JSON.stringify(expo));
+  ok('mode « original + traduction » : les deux textes (flèche)', expo.bilFleche === true);
+  ok('mode « traduction seule » : plus aucune ligne originale', expo.seulFleche === false && expo.seulPlusCourt === true, JSON.stringify(expo));
+  ok('mode « original seul » : ni flèche ni traduction', expo.origFleche === false && expo.origPlusCourt === true, JSON.stringify(expo));
 
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
@@ -503,6 +508,50 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('les quatre voies sont proposées', dlg.boutons === 4, 'boutons=' + dlg.boutons);
   ok('le nom du fichier est annoncé', /\.txt$/.test(String(dlg.nom)), String(dlg.nom));
 
+  // 9-bis. CHOIX DU CONTENU dans la boîte d'export (traduction seule / les deux / original)
+  const modes = await page.evaluate(async () => {
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 400));
+    const z = document.getElementById('v461-export-zone');
+    const radios = z.querySelectorAll('input[name="v461-mode"]');
+    const valeurs = Array.from(radios).map(r => r.value);
+    const coche = (z.querySelector('input[name="v461-mode"]:checked') || {}).value;
+    return { nb: radios.length, valeurs, coche, nom: document.getElementById('v461-ex-nom').textContent, taille: document.getElementById('v461-ex-taille').textContent };
+  });
+  ok('la boîte d’export propose les TROIS contenus', modes.nb === 3 && JSON.stringify(modes.valeurs) === '["traduction","bilingue","original"]', JSON.stringify(modes.valeurs));
+  ok('le nom du fichier porte le mode (« _fr » pour la traduction seule)', /_fr\.txt$/.test(String(modes.nom)) || /_bilingue\.txt$/.test(String(modes.nom)), String(modes.nom));
+  ok('la taille du fichier est annoncée', /\(\d/.test(String(modes.taille)), String(modes.taille));
+
+  const bascule = await page.evaluate(async () => {
+    const z = document.getElementById('v461-export-zone');
+    const choisir = async v => {
+      const r = z.querySelector('input[name="v461-mode"][value="' + v + '"]');
+      r.checked = true; r.dispatchEvent(new Event('change'));
+      await new Promise(x => setTimeout(x, 350));
+      return { nom: document.getElementById('v461-ex-nom').textContent, taille: document.getElementById('v461-ex-taille').textContent };
+    };
+    const bil = await choisir('bilingue');
+    const orig = await choisir('original');
+    const trad = await choisir('traduction');
+    return { bil, orig, trad, memorise: localStorage.getItem('v461_mode_export') };
+  });
+  ok('changer le contenu change le NOM du fichier (bilingue / original)', /_bilingue\.txt$/.test(bascule.bil.nom) && /_original\.txt$/.test(bascule.orig.nom), JSON.stringify([bascule.bil.nom, bascule.orig.nom]));
+  ok('changer le contenu change la TAILLE annoncée', bascule.bil.taille !== bascule.orig.taille, JSON.stringify([bascule.bil.taille, bascule.orig.taille]));
+  ok('le dernier choix est mémorisé', bascule.memorise === 'traduction', String(bascule.memorise));
+
+  // le texte en mode « traduction seule » ne contient pas l'original
+  const contenuSeul = await page.evaluate(async () => {
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 300));
+    const z = document.getElementById('v461-export-zone');
+    const r = z.querySelector('input[name="v461-mode"][value="traduction"]');
+    r.checked = true; r.dispatchEvent(new Event('change'));
+    await new Promise(x => setTimeout(x, 300));
+    const b = await window.__livro.dialogueExport ? null : null;
+    return window.__livro.texteComplet('traduction');
+  });
+  ok('« traduction seule » : le texte exporté n’a plus l’original', /→/.test(String(contenuSeul)) === false, String(contenuSeul).slice(0, 60));
+
   // 9a. « Enregistrer sous… » (File System Access)
   const sous = await page.evaluate(async () => {
     let nomPropose = null, ecrit = 0;
@@ -555,7 +604,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('« Copier le texte » copie bien le contenu', cp.longueur > 10 && /copié/i.test(String(cp.res)), JSON.stringify(cp).slice(0, 90));
 
   ok('aucune erreur JavaScript' , errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/82`);
-  process.exitCode = pass === 82 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/90`);
+  process.exitCode = pass === 90 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

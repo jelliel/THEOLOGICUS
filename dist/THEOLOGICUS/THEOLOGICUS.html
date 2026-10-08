@@ -50723,6 +50723,7 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -51406,10 +51407,12 @@ window.continueTradApart = async function (msgId) {
     par.value = String(S.parallele);
     par.onchange = function () { S.parallele = parseInt(par.value, 10) || 0; try { localStorage.setItem('v461_parallele', String(S.parallele)); } catch (e) {} };
     /* ── export bilingue ou traduction seule ── */
+    /* la case de la barre donne le mode PAR DÉFAUT ; la boîte d'export permet
+       de le changer pour un export précis, et le dernier choix est mémorisé. */
+    try { S.modeExport = localStorage.getItem('v461_mode_export') || (localStorage.getItem('v461_bilingue') === '0' ? 'traduction' : 'bilingue'); } catch (e) { S.modeExport = 'bilingue'; }
     var bil = ov.querySelector('#v461-bilingue');
-    try { S.bilingue = localStorage.getItem('v461_bilingue') !== '0'; } catch (e) {}
-    bil.checked = S.bilingue;
-    bil.onchange = function () { S.bilingue = bil.checked; try { localStorage.setItem('v461_bilingue', S.bilingue ? '1' : '0'); } catch (e) {} };
+    bil.checked = (S.modeExport === 'bilingue');
+    bil.onchange = function () { S.modeExport = bil.checked ? 'bilingue' : 'traduction'; try { localStorage.setItem('v461_mode_export', S.modeExport); } catch (e) {} };
     ov.querySelector('#v461-txt').onclick = function () { exporter('txt'); };
     ov.querySelector('#v461-docx').onclick = function () { exporter('docx'); };
     ov.querySelector('#v461-epub').onclick = function () { exporter('epub'); };
@@ -51745,48 +51748,76 @@ window.continueTradApart = async function (msgId) {
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
-  function texteComplet() {
+  /* ═══ TROIS MODES DE CONTENU ═══
+     « traduction » (défaut) = le texte traduit seul, prêt à lire ;
+     « bilingue » = original puis traduction, pour vérifier ;
+     « original » = le texte d'origine seul (extraction, réutilisation).
+     Le mode se choisit AU MOMENT DE L'EXPORT, et son choix est mémorisé. */
+  function modeExport() { return S.modeExport || 'traduction'; }
+  function texteComplet(mode) {
+    mode = mode || modeExport();
     var out = [];
     S.livre.chapitres.forEach(function (ch, ci) {
       out.push(ch.titre);
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        if (S.bilingue) { out.push(p); out.push(tr ? '→ ' + tr : ''); }
+        if (mode === 'original') { out.push(p); }
+        else if (mode === 'bilingue') { out.push(p); if (tr) out.push('→ ' + tr); }
         else if (tr) out.push(tr);
         out.push('');
       });
     });
     return out.join('\n');
   }
-  function baseNom() { return String(S.livre.nom || 'livre').replace(/\.[a-z0-9]+$/i, '') + '_' + S.cible; }
+  function suffixeMode(mode) {
+    mode = mode || modeExport();
+    return mode === 'original' ? '_original' : (mode === 'bilingue' ? '_bilingue' : '_' + S.cible);
+  }
+  function baseNom(mode) {
+    return String(S.livre.nom || 'livre').replace(/\.[a-z0-9]+$/i, '') + suffixeMode(mode);
+  }
 
   /* ═══ EXPORT : ON DEMANDE OÙ ═══
      Un `<a download>` ne déclenche RIEN dans la coque Android (WebView) ni
      parfois dans l'exe — sans erreur, sans message : l'utilisateur clique et
      rien ne se passe. On propose donc quatre voies, dont deux qui marchent
      partout (dossier de l'app via le serveur, presse-papiers). */
+  async function construireExport(format, mode) {
+    if (format === 'txt') return new Blob(['\ufeff' + texteComplet(mode)], { type: 'text/plain;charset=utf-8' });
+    if (format === 'docx') return await docxDe(mode);
+    if (format === 'epub') return await epubDe(mode);
+    throw new Error('format inconnu');
+  }
+
   async function exporter(format) {
     if (!S.livre) { toast('Chargez d’abord un livre', 'warn'); return; }
     try {
-      var blob, nom = baseNom() + '.' + format;
-      if (format === 'txt') blob = new Blob(['\ufeff' + texteComplet()], { type: 'text/plain;charset=utf-8' });
-      else if (format === 'docx') blob = await docxDe();
-      else if (format === 'epub') blob = await epubDe();
-      else return;
-      dialogueExport(blob, nom, format);
+      /* le contenu se choisit DANS la boîte : on ne construit le fichier
+         qu'au moment où l'utilisateur valide une destination. */
+      var blob = await construireExport(format, modeExport());
+      dialogueExport(blob, format);
     } catch (e) { toast('Export impossible : ' + (e && e.message || e), 'error'); }
   }
 
-  function dialogueExport(blob, nom, format) {
+  function dialogueExport(blob, format) {
     var z = document.getElementById('v461-export-zone');
     if (!z) return;
     var peutEnregistrer = (typeof window.showSaveFilePicker === 'function');
     var surPC = (typeof _VIA_RELAIS !== 'undefined' && _VIA_RELAIS) || /^https?:/.test(location.protocol);
     var peutCopier = !!(navigator.clipboard && navigator.clipboard.writeText);
+    var mode = modeExport();
+    var nom = baseNom(mode) + '.' + format;
     z.style.display = 'block';
     z.innerHTML =
       '<div style="border:1px solid rgba(79,142,247,.45);border-radius:10px;padding:10px;background:rgba(79,142,247,.07)">' +
-        '<div style="font-size:11px;color:#cfe3ff;margin-bottom:8px">Exporter <b>' + esc(nom) + '</b> (' + formatBytes(blob.size) + ') — où ?</div>' +
+        '<div style="font-size:11px;color:#cfe3ff;margin-bottom:6px">Exporter <b id="v461-ex-nom">' + esc(nom) + '</b> <span id="v461-ex-taille">(' + formatBytes(blob.size) + ')</span></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:#9fb4d0;margin-bottom:9px">' +
+          '<span style="color:#7fa6d8">Contenu :</span>' +
+          '<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="v461-mode" value="traduction"' + (mode === 'traduction' ? ' checked' : '') + '> Traduction seule</label>' +
+          '<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="v461-mode" value="bilingue"' + (mode === 'bilingue' ? ' checked' : '') + '> Original + traduction</label>' +
+          '<label style="display:flex;gap:4px;align-items:center;cursor:pointer"><input type="radio" name="v461-mode" value="original"' + (mode === 'original' ? ' checked' : '') + '> Original seul</label>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#cfe3ff;margin-bottom:6px">Où ?</div>' +
         '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
           '<button id="v461-ex-sous"' + (peutEnregistrer ? '' : ' disabled') + '>💾 Enregistrer sous…</button>' +
           '<button id="v461-ex-pc"' + (surPC ? '' : ' disabled') + '>📁 Dans le dossier de l’app</button>' +
@@ -51801,10 +51832,30 @@ window.continueTradApart = async function (msgId) {
       '</div>';
     var res = function (t, ok) { var e = document.getElementById('v461-ex-res'); if (e) { e.innerHTML = t; e.style.color = ok ? '#8ef0b0' : '#ffb347'; } };
     var g = function (id) { return document.getElementById(id); };
+    /* le contenu change → le nom du fichier et la taille se mettent à jour
+       (on voit AVANT d'exporter ce qu'on va obtenir) */
+    var contenuCourant = async function () {
+      var b = await construireExport(format, modeExport());
+      var n = document.getElementById(nomId);
+      var t = document.getElementById('v461-ex-taille');
+      if (n) n.textContent = baseNom() + '.' + format;
+      if (t) t.textContent = '(' + formatBytes(b.size) + ')';
+      return b;
+    };
+    var nomId = 'v461-ex-nom';
+    z.querySelectorAll('input[name="v461-mode"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        S.modeExport = r.value;
+        try { localStorage.setItem('v461_mode_export', r.value); } catch (e) {}
+        contenuCourant();
+      });
+    });
     if (g('v461-ex-annuler')) g('v461-ex-annuler').onclick = function () { z.style.display = 'none'; };
     if (g('v461-ex-sous') && peutEnregistrer) g('v461-ex-sous').onclick = async function () {
       try {
-        var h = await window.showSaveFilePicker({ suggestedName: nom });
+        var b2 = await contenuCourant();
+        var h = await window.showSaveFilePicker({ suggestedName: baseNom() + '.' + format });
+        blob = b2;
         var w = await h.createWritable(); await w.write(blob); await w.close();
         res('✅ Enregistré dans le fichier choisi.'); toast('Export enregistré ✓', 'success');
       } catch (e) { res('Annulé ou refusé (' + esc(String(e && e.name || e)) + ')', false); }
@@ -51812,21 +51863,23 @@ window.continueTradApart = async function (msgId) {
     if (g('v461-ex-pc') && surPC) g('v461-ex-pc').onclick = async function () {
       try {
         res('Enregistrement…');
+        blob = await contenuCourant();
         var b64 = await blobVersBase64(blob);
-        var r = await fetch('/livro-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: nom, data64: b64 }) });
+        var r = await fetch('/livro-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: baseNom() + '.' + format, data64: b64 }) });
         var d = await r.json();
         if (!d || !d.ok) throw new Error((d && d.erreur) || ('HTTP ' + r.status));
         res('✅ Enregistré : <b>' + esc(d.chemin) + '</b> (' + formatBytes(d.octets) + ') — ouvrez ce dossier depuis l’explorateur.');
         toast('Enregistré dans le dossier de l’app ✓', 'success');
       } catch (e) { res('❌ ' + esc(String(e && e.message || e)), false); }
     };
-    if (g('v461-ex-dl')) g('v461-ex-dl').onclick = function () {
-      telecharger(blob, nom);
+    if (g('v461-ex-dl')) g('v461-ex-dl').onclick = async function () {
+      telecharger(await contenuCourant(), baseNom() + '.' + format);
       res('📥 Téléchargement lancé. Si rien n’apparaît (coque Android), utilisez « 📁 Dans le dossier de l’app » ou « 📋 Copier ».', true);
     };
     if (g('v461-ex-cp') && peutCopier) g('v461-ex-cp').onclick = async function () {
       try {
-        await navigator.clipboard.writeText(format === 'txt' ? await blob.text() : texteComplet());
+        var bc = await contenuCourant();
+        await navigator.clipboard.writeText(format === 'txt' ? await bc.text() : texteComplet());
         res('✅ Texte copié dans le presse-papiers.'); toast('Copié ✓', 'success');
       } catch (e) { res('❌ Copie refusée (' + esc(String(e && e.message || e)) + ')', false); }
     };
@@ -51842,7 +51895,8 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* DOCX réel (OOXML minimal) — JSZip est embarqué. */
-  async function docxDe() {
+  async function docxDe(mode) {
+    mode = mode || modeExport();
     if (typeof JSZip === 'undefined') throw new Error('JSZip indisponible (bibliothèques non chargées)');
     var zip = new JSZip();
     zip.file('[Content_Types].xml',
@@ -51862,8 +51916,11 @@ window.continueTradApart = async function (msgId) {
       par += '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">' + esc(ch.titre) + '</w:t></w:r></w:p>';
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        if (S.bilingue) par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
-        if (tr) par += '<w:p><w:r>' + (S.bilingue ? '<w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr>' : '') + '<w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
+        if (mode === 'original') par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
+        else if (mode === 'bilingue') {
+          par += '<w:p><w:r><w:t xml:space="preserve">' + esc(p) + '</w:t></w:r></w:p>';
+          if (tr) par += '<w:p><w:r><w:rPr><w:i/><w:color w:val="2E7D32"/></w:rPr><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
+        } else if (tr) par += '<w:p><w:r><w:t xml:space="preserve">' + esc(tr) + '</w:t></w:r></w:p>';
       });
     });
     zip.folder('word').file('document.xml',
@@ -51873,7 +51930,8 @@ window.continueTradApart = async function (msgId) {
   }
 
   /* EPUB 3 minimal — 'mimetype' DOIT être stocké sans compression. */
-  async function epubDe() {
+  async function epubDe(mode) {
+    mode = mode || modeExport();
     if (typeof JSZip === 'undefined') throw new Error('JSZip indisponible');
     var zip = new JSZip();
     zip.file('mimetype', 'application/epub+zip', { compression: 'STORE' });
@@ -51886,8 +51944,9 @@ window.continueTradApart = async function (msgId) {
       var corps = '';
       ch.paragraphes.forEach(function (p, pi) {
         var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
-        if (S.bilingue) corps += '<p>' + esc(p) + '</p>';
-        if (tr) corps += '<p' + (S.bilingue ? ' style="color:#2E7D32"' : '') + '>' + esc(tr) + '</p>';
+        if (mode === 'original') corps += '<p>' + esc(p) + '</p>';
+        else if (mode === 'bilingue') { corps += '<p>' + esc(p) + '</p>'; if (tr) corps += '<p style="color:#2E7D32">' + esc(tr) + '</p>'; }
+        else if (tr) corps += '<p>' + esc(tr) + '</p>';
       });
       var f = 'chap' + (ci + 1) + '.xhtml';
       oebps.file(f, '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><meta charset="utf-8"/><title>' + esc(ch.titre) + '</title></head><body><h1>' + esc(ch.titre) + '</h1>' + corps + '</body></html>');
