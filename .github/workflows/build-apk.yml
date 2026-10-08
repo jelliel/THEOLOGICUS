@@ -139,15 +139,13 @@ jobs:
               -f body="$(cat rapport_final.md)" > /dev/null && echo "détail publié"
           fi
 
-  # DÉCISION ASSUMÉE (2026-10-08) : les BANCS ne bloquent plus la publication.
-  # Un banc se bloque en CI pour une raison d'environnement (diagnostic en
-  # cours, voir le commentaire de commit publié par le job) ; bloquer la
-  # release pour cela priverait l'utilisateur de son application. Les
-  # CONTRÔLES, eux, restent bloquants : ce sont eux qui attrapent les défauts
-  # SILENCIEUX (copie embarquée périmée, corpus absent des binaires, module
-  # dupliqué). Quand les bancs seront stables en CI, remettre `bancs` ici.
+  # Les BANCS sont de nouveau bloquants (2026-10-08) : les deux échecs de la
+  # première exécution étaient des défauts d'OUTILLAGE (chemin de navigateur en
+  # dur dans v440, prérequis Ollama non déclaré dans v445), tous deux corrigés,
+  # et le contrôle de portabilité empêche leur retour. Une régression réelle
+  # doit désormais empêcher la publication.
   build:
-    needs: [controles]
+    needs: [controles, bancs]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -248,7 +246,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
-    needs: [controles]
+    needs: [controles, bancs]
     runs-on: windows-latest
     steps:
       - name: Checkout
