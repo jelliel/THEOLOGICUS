@@ -21,6 +21,10 @@ except Exception:
     pass
 
 PORT = 8765
+# v485 — relais local FreeLLMAPI : cible UNIQUE et en dur (pas de SSRF).
+# L'app route ses appels FreeLLMAPI vers /fla/… sur CE serveur (même origine),
+# qui les retransmet ici. Aucune modification de DASHBOARD_ORIGINS côté routeur.
+FLA_TARGET = ('127.0.0.1', 3001)
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -1742,6 +1746,12 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(PING_TOKEN)
             return
+        # v485 — relais local FreeLLMAPI : même origine que l'app, donc le
+        # navigateur n'est pas soumis au CORS du routeur. Aucune modif
+        # DASHBOARD_ORIGINS. Cible unique 127.0.0.1:3001 (voir FLA_TARGET).
+        if self.path.startswith('/fla/'):
+            self._fla_proxy()
+            return
         # v126 — le relais CORS sert aussi en GET. Il était câblé dans la
         # seule chaîne POST : un GET /proxy/… n'atteignait jamais la route et
         # le serveur répondait 404 par la distribution de fichiers, AVANT tout
@@ -2032,6 +2042,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404)
 
     def do_POST(self):
+        # v485 — relais local FreeLLMAPI (même origine que l'app).
+        if self.path.startswith('/fla/'):
+            self._fla_proxy()
+            return
         # /montage — assemblage local des segments vidéo (ffmpeg du PC).
         # Voir _montage() : remplace ffmpeg.wasm, inutilisable ici.
         if self.path.split('?')[0] == '/montage':
@@ -2551,6 +2565,81 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'text/plain')
                 self.end_headers()
                 self.wfile.write(f'erreur: {e}'.encode())
+            except Exception:
+                pass
+
+    def _fla_proxy(self):
+        """v485 — Relais local FreeLLMAPI.
+
+        La page est servie par CE serveur ; l'app pointe donc ses appels
+        FreeLLMAPI sur /fla/… (même origine) → pas de CORS navigateur, et
+        l'appel serveur→serveur vers 127.0.0.1:3001 n'est pas soumis au CORS
+        non plus. Résultat : le routeur fonctionne tel quel, sans toucher à
+        DASHBOARD_ORIGINS ni le redémarrer. Cible UNIQUEMENT FLA_TARGET
+        (en dur) → pas de SSRF.
+        """
+        try:
+            rest = self.path[5:]  # retire « /fla »
+            if not rest.startswith('/'):
+                rest = '/' + rest
+            content_length = int(self.headers.get('Content-Length', 0) or 0)
+            body = self.rfile.read(content_length) if content_length > 0 else b''
+            headers = {}
+            _EXCL = {'host', 'content-length', 'connection', 'keep-alive',
+                     'proxy-connection', 'transfer-encoding', 'upgrade',
+                     'proxy-authenticate', 'proxy-authorization', 'te', 'trailer'}
+            for h, val in self.headers.items():
+                if h.lower() in _EXCL:
+                    continue
+                headers[h] = val
+            # On veut les octets bruts tels quels (JSON ou SSE) : pas de
+            # compression side-channel.
+            headers['Accept-Encoding'] = 'identity'
+            import http.client
+            conn = http.client.HTTPConnection(FLA_TARGET[0], FLA_TARGET[1], timeout=120)
+            try:
+                methode = (self.command or 'GET').upper()
+                conn.request(methode, rest, body=body, headers=dict(headers))
+                resp = conn.getresponse()
+            except Exception as e:
+                self.send_response(502)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(('FreeLLMAPI relay error: %s' % e).encode('utf-8'))
+                return
+            self.send_response(resp.status)
+            _HOP = {'connection', 'transfer-encoding', 'content-length',
+                    'keep-alive', 'upgrade', 'proxy-authenticate', 'proxy-authorization',
+                    'te', 'trailer'}
+            for h, val in resp.getheaders():
+                if h.lower() in _HOP:
+                    continue
+                try:
+                    self.send_header(h, val)
+                except Exception:
+                    pass
+            # Marqueur : l'HTML sait que X-Routed-Via (et les autres en-têtes
+            # du routeur) sont bien retransmis — sinon le panneau « routeur »
+            # resterait muet sur le fournisseur ayant réellement répondu.
+            self.send_header('X-Theo-Fla', '1')
+            self.end_headers()
+            while True:
+                chunk = resp.read(8192)
+                if not chunk:
+                    break
+                try:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                except Exception:
+                    break
+            conn.close()
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                self.send_response(500)
+                self.send_header('Content-Type', 'text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(('FreeLLMAPI relay error: %s' % e).encode('utf-8'))
             except Exception:
                 pass
 

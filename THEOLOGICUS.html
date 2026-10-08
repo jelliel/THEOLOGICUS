@@ -12497,6 +12497,16 @@ function apiEndpoint(endpoint) {
   try {
     if (!endpoint) return endpoint;
     if (location.protocol === 'file:') return endpoint;
+    /* v485 — FreeLLMAPI : le routeur n'émet PAS d'en-tête CORS ouvert
+       (allowlist DASHBOARD_ORIGINS exacte), donc un appel navigateur direct
+       depuis une autre origine est bloqué. On le passe par le relais intégré
+       du serveur local (/fla/…, MÊME origine) : aucun réglage DASHBOARD_ORIGINS
+       à toucher, aucun redémarrage du routeur. Cible unique en dur
+       (127.0.0.1:3001) → pas de SSRF. Hors serveur (file://) on garde l'appel
+       direct, qui échouera en CORS — cas documenté dans l'encadré. */
+    if (endpoint.indexOf('http://127.0.0.1:3001/') === 0) {
+      return location.origin + '/fla' + endpoint.slice('http://127.0.0.1:3001'.length);
+    }
     if (endpoint.startsWith('http://127.0.0.1') || endpoint.startsWith('http://localhost')) return endpoint;
     /* v126l — IDEMPOTENT : callLLM préfixait déjà, puis fetchLLMResponse
        repassait l'URL dans apiEndpoint → « /proxy//proxy/https://… ». Le
@@ -52803,13 +52813,15 @@ window.continueTradApart = async function (msgId) {
       '<div class="field-hint" id="v484-derniere"></div>' +
       '<div class="field-hint" id="v484-cors" style="display:none;border:1px solid rgba(245,197,66,.45);' +
         'border-radius:8px;padding:8px 10px;background:rgba(245,197,66,.06);color:#ffd479;margin-top:6px">' +
-        '<b>⚠️ Si le test échoue alors que le routeur tourne, c’est CORS.</b><br>' +
-        'FreeLLMAPI n’accepte que les origines listées dans sa variable <b>DASHBOARD_ORIGINS</b> ' +
-        '(fichier <b>.env</b>). Ajoutez-y l’origine de cette app — <b id="v484-origine"></b> — ' +
-        'puis <b>redémarrez le routeur</b>.<br>' +
-        'Le port de cette app va de <b>8765 à 8780</b> selon la disponibilité : soit vous le fixez ' +
-        '(<code>python app.py --port 8765</code>), soit vous déclarez toute la plage dans DASHBOARD_ORIGINS.<br>' +
-        'Le jeton unifié se lit dans l’en-tête de la page <b>Keys</b> du tableau de bord du routeur ' +
+        '<b>⚠️ Aucune configuration du routeur n’est nécessaire.</b> L’app route ' +
+        'ses appels FreeLLMAPI via son propre serveur local (relais <code>/fla/</code>, ' +
+        'même origine) : le CORS du routeur ne s’applique pas. Il suffit que ' +
+        '<b>FreeLLMAPI tourne sur le port 3001</b>.<br>' +
+        'Cas particulier — si vous ouvrez <b>THEOLOGICUS.html directement</b> ' +
+        '(double-clic, <code>file://</code>, sans le serveur) : le relais est ' +
+        'indisponible et le CORS s’applique. Ajoutez alors l’origine de l’app ' +
+        '(<b id="v484-origine"></b>) à <b>DASHBOARD_ORIGINS</b> du routeur et ' +
+        'redémarrez-le. Le jeton unifié se lit dans <b>Keys</b> ' +
         '(il commence par <code>freellmapi-</code>).' +
       '</div>';
     ancre.parentNode.insertBefore(d, ancre.nextSibling);
