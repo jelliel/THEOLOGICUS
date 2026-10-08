@@ -12512,7 +12512,12 @@ function apiEndpoint(endpoint) {
       if (flaBaseV && endpoint.indexOf(flaBaseV) === 0) {
         var mm = /^(https?:\/\/)([^\/:]+|\[[^\]]+\]):(\d+)/.exec(flaBaseV);
         if (mm) {
-          var pathV = endpoint.slice(flaBaseV.length);
+          /* v486 — conserve TOUT le chemin APRÈS hôte:port (y compris /v1) :
+             sinon le relais recevrait « /models » au lieu de « /v1/models »
+             et le routeur répondrait 404 (bug qui cassait le chat ET l'import
+             en mode servi — attrapé par le banc v484 en CI). */
+          var originEnd = mm[1].length + mm[2].length + 1 + mm[3].length;
+          var pathV = endpoint.slice(originEnd);
           if (!pathV) pathV = '/';
           return location.origin + '/fla/' + mm[2] + ':' + mm[3] + pathV;
         }
