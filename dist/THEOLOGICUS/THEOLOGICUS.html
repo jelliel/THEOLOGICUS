@@ -51307,10 +51307,39 @@ window.continueTradApart = async function (msgId) {
       (p.models || []).forEach(function (m) {
         var id = p.id + ':' + m;
         if (visionSeulement && !estVision(id)) return;
-        out.push({ id: id, label: p.label + ' — ' + m + (estVision(id) ? ' 👁️' : ''), vision: estVision(id) });
+        out.push({ id: id, label: p.label + ' — ' + m + (estVision(id) ? ' 👁️' : ''), vision: estVision(id),
+                   groupe: p.id, groupeLabel: p.label });
       });
     });
+    /* v491 — les MODÈLES PERSONNALISÉS (PARAMÈTRES → Fournisseurs →
+       « Modèles personnalisés ») étaient absents des DEUX sélecteurs : on ne
+       listait que le registre PROVIDERS. Conséquence : un modèle vision
+       ajouté à la main (LLaVA, Qwen-VL, un serveur local…) ne pouvait PAS
+       faire l’OCR, alors que c’est souvent le seul moyen d’utiliser un
+       modèle vision absent du registre. Est « vision » un custom coché 👁
+       dans sa fiche, ou dont le nom est un modèle vision connu (filet de
+       sécurité si la case a été oubliée). L’id est l’UID : c’est lui que
+       `resolveModelConfig` attend pour retrouver baseUrl + clé. */
+    try {
+      (state.customModels || []).forEach(function (cm) {
+        if (!cm || !cm.uid) return;
+        var v = !!cm.vision || estVision(cm.model) || estVision(cm.uid);
+        if (visionSeulement && !v) return;
+        out.push({
+          id: cm.uid,
+          label: (cm.name || cm.model || cm.uid) + (v ? ' 👁️' : ''),
+          vision: v, groupe: 'custom', groupeLabel: 'Modèles personnalisés'
+        });
+      });
+    } catch (e) {}
     return out;
+  }
+  /* v491 — l’id d’un modèle personnalisé est un uid (« c_1728… ») : l’afficher
+     tel quel dans la confirmation d’OCR ne voulait rien dire. On montre le
+     libellé du sélecteur. */
+  function libelleDe(id) {
+    var l = listeMoteurs(false).filter(function (m) { return m.id === id; })[0];
+    return l ? l.label : id;
   }
   function cfgDe(id) {
     if (typeof resolveModelConfig !== 'function') throw new Error('Résolution de modèle indisponible dans cette version');
@@ -51468,8 +51497,11 @@ window.continueTradApart = async function (msgId) {
     selM.appendChild(o0);
     var grp = {};
     listeMoteurs(false).forEach(function (m) {
-      var prov = m.id.split(':')[0];
-      if (!grp[prov]) { grp[prov] = document.createElement('optgroup'); grp[prov].label = prov; selM.appendChild(grp[prov]); }
+      /* v491 : un modèle personnalisé n’a pas la forme « fournisseur:id » —
+         sans `groupe` il créerait un optgroup rien que pour lui, étiqueté
+         par son uid (« c_1728… »). On les regroupe sous une seule étiquette. */
+      var prov = m.groupe || m.id.split(':')[0];
+      if (!grp[prov]) { grp[prov] = document.createElement('optgroup'); grp[prov].label = m.groupeLabel || prov; selM.appendChild(grp[prov]); }
       var o = document.createElement('option'); o.value = m.id; o.textContent = m.label; grp[prov].appendChild(o);
     });
     selM.value = S.moteur;
@@ -51647,7 +51679,7 @@ window.continueTradApart = async function (msgId) {
     if (!zone) return;
     zone.innerHTML = '<div style="margin-top:10px;padding:10px;border:1px solid rgba(245,197,66,.5);border-radius:9px;background:rgba(245,197,66,.07)">' +
       '<b>🔍 PDF scanné — ' + pages + ' page(s) sans texte.</b><br>' +
-      '<span style="font-size:10.5px;color:#c9d6e8">L’OCR lit chaque page avec <b>' + esc(S.moteurOCR) + '</b> (modifiable dans la liste « OCR » ci-dessus) : <b>' + pages + ' appel(s)</b>, soit environ ' +
+      '<span style="font-size:10.5px;color:#c9d6e8">L’OCR lit chaque page avec <b>' + esc(libelleDe(S.moteurOCR)) + '</b> (modifiable dans la liste « OCR » ci-dessus) : <b>' + pages + ' appel(s)</b>, soit environ ' +
       Math.max(1, Math.round(pages * 6 / 60)) + ' min. Les pages déjà transcrites sont conservées en cas d’interruption.</span><br>' +
       '<button id="v461-ocr-go" style="margin-top:8px;background:#2b6fd4;border:none;color:#fff;font-weight:700;border-radius:7px;padding:6px 12px;cursor:pointer">🔍 Lancer l’OCR par l’IA (' + pages + ' page' + (pages > 1 ? 's' : '') + ')</button></div>';
     var b = document.getElementById('v461-ocr-go');
@@ -51655,7 +51687,7 @@ window.continueTradApart = async function (msgId) {
   }
 
   async function lancerOCR(fichier, pages) {
-    var question = 'OCR : ' + pages + ' appel(s) à ' + S.moteurOCR + ' (vision), un par page.\n' +
+    var question = 'OCR : ' + pages + ' appel(s) à ' + libelleDe(S.moteurOCR) + ' (vision), un par page.\n' +
       'Cela consomme votre quota du fournisseur. Continuer ?';
     try { if (!window.confirm(question)) return; } catch (e) {}
     S.enCours = true; S.arret = false; S.pause = false;
