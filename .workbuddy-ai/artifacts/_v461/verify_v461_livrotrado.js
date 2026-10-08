@@ -38,7 +38,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ translatedText: lot.map(t => 'FR:' + t) }) });
   });
   let appelsOCR = 0;
-  await page.route('**/apihub.agnes-ai.com/**', async route => {
+  await page.route('**/proxy/**', async route => {
     let c = {}; try { c = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
     const contenu = (c.messages && c.messages[0] && c.messages[0].content) || [];
     const vision = Array.isArray(contenu) && contenu.some(x => x.type === 'image_url');
@@ -57,7 +57,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     out = out.replace(/\[\[2\]\][^\n]*\n/, '');
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: out } }] }) });
   });
-  await page.addInitScript(() => { localStorage.setItem('agnes_api_key', 'sk-test'); });
+  await page.addInitScript(() => {
+    localStorage.setItem('agnes_api_key', 'sk-test');          /* clé Agnes (registre) */
+    localStorage.setItem('mistral_api_key_v1', 'sk-test');     /* clé Mistral (repli) */
+    document.cookie = 'key_agnes=sk-test; path=/';
+    document.cookie = 'key_mistral=sk-test; path=/';
+  });
 
   await page.goto(`http://127.0.0.1:${PORT}/THEOLOGICUS.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3500);
@@ -154,6 +159,50 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   ok('OCR : reprise sans refaire les pages déjà transcrites (0 appel)', appelsOCR === 0, 'appels=' + appelsOCR);
 
+  // 2g. MOTEURS ISSUS DU REGISTRE DE THEOLOGICUS (la demande de l'utilisateur)
+  const moteurs = await page.evaluate(() => {
+    const tous = window.__livro.listeMoteurs(false).map(m => m.id);
+    const vision = window.__livro.listeMoteurs(true).map(m => m.id);
+    const selT = document.getElementById('v461-moteur');
+    const selO = document.getElementById('v461-ocr-moteur');
+    const provs = Array.from(new Set(tous.map(i => i.split(':')[0])));
+    return {
+      tous: tous, vision: vision, provs: provs,
+      nbTrad: selT ? selT.options.length : 0,
+      nbOCR: selO ? selO.options.length : 0,
+      optgroups: selT ? selT.querySelectorAll('optgroup').length : 0,
+      exemple: tous.slice(0, 3)
+    };
+  });
+  ok('le sélecteur de traduction propose TOUS les fournisseurs du registre',
+     ['mistral', 'openai', 'anthropic', 'gemini', 'deepseek', 'minimax', 'openrouter', 'agnes', 'ollama'].every(p => moteurs.provs.indexOf(p) >= 0),
+     JSON.stringify(moteurs.provs));
+  ok('LibreTranslate reste en tête (+1 option)', moteurs.nbTrad === moteurs.tous.length + 1, JSON.stringify({ sel: moteurs.nbTrad, liste: moteurs.tous.length }));
+  ok('les modèles sont groupés par fournisseur (optgroups)', moteurs.optgroups >= 8, 'groupes=' + moteurs.optgroups);
+  ok('le sélecteur d’OCR ne propose QUE des modèles vision', moteurs.nbOCR === moteurs.vision.length && moteurs.vision.length >= 4, JSON.stringify(moteurs.vision));
+  ok('l’OCR inclut Agnes, GPT-4o, Claude, Gemini, Pixtral', ['agnes', 'openai', 'anthropic', 'gemini', 'mistral'].every(p => moteurs.vision.some(v => v.startsWith(p + ':'))), JSON.stringify(moteurs.vision.slice(0, 6)));
+
+  // 2h. une TRADUCTION via un AUTRE fournisseur (Mistral) doit passer
+  appels.ia.length = 0;
+  const viaMistral = await page.evaluate(async () => {
+    const vrai = window.confirm; window.confirm = function () { return true; };
+    const r = await window.__livro.traduire(['un', 'deux'], 'fr', 'mistral:mistral-small-latest');
+    window.confirm = vrai;
+    return r;
+  });
+  ok('traduction via MISTRAL (autre fournisseur) fonctionne', Array.isArray(viaMistral) && viaMistral.length === 2 && /^TR-/.test(String(viaMistral[0])), JSON.stringify(viaMistral));
+
+  // 2i. un modèle non-vision est REFUSÉ pour l'OCR, avec un message clair
+  const refusVision = await page.evaluate(async () => {
+    try {
+      const el = document.getElementById('v461-ocr-moteur');
+      const opt = document.createElement('option'); opt.value = 'ollama:qwen2.5'; opt.textContent = 'test';
+      el.appendChild(opt); el.value = 'ollama:qwen2.5'; el.dispatchEvent(new Event('change'));
+      return { choisi: window.__livro.etat().moteurOCR };
+    } catch (e) { return { erreur: String(e.message) }; }
+  });
+  ok('le moteur d’OCR choisi est mémorisé', typeof refusVision.choisi === 'string' && refusVision.choisi.length > 0, JSON.stringify(refusVision));
+
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
     const b = await fetch(FIX + 'livre.epub').then(r => r.blob());
@@ -173,7 +222,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 4. TRADUCTION LibreTranslate (lots) + mémoire
   appels.lt.length = 0;
-  await page.evaluate(() => { window.__livro.etat().cible = 'fr'; return window.__livro.lancer(); });
+  await page.evaluate(() => {
+    const sel = document.getElementById('v461-moteur');
+    sel.value = 'lt'; sel.dispatchEvent(new Event('change'));   /* moteur local : aucune confirmation */
+    window.__livro.etat().cible = 'fr';
+    return window.__livro.lancer();
+  });
   await page.waitForTimeout(1500);
   const apres = await page.evaluate(() => ({
     traduits: Array.from(document.querySelectorAll('.v461-col.tr p')).map(p => p.textContent),
@@ -193,7 +247,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 6. MOTEUR IA : marqueurs respectés, paragraphe manquant → original conservé
   appels.ia.length = 0;
-  const ia = await page.evaluate(() => window.__livro.traduire(['aaa', 'bbb', 'ccc'], 'fr', 'agnes'));
+  const ia = await page.evaluate(() => window.__livro.traduire(['aaa', 'bbb', 'ccc'], 'fr', 'agnes:agnes-2.5-flash'));
   ok('moteur IA : appel par lot avec marqueurs [[n]]', appels.ia.length === 1 && appels.ia[0] === 3, JSON.stringify(appels.ia));
   ok('moteur IA : marqueurs réassemblés dans l’ordre', ia[0] === 'TR-1' && ia[2] === 'TR-3', JSON.stringify(ia));
   ok('moteur IA : paragraphe manquant → original conservé', ia[1] === 'bbb', JSON.stringify(ia));
@@ -209,13 +263,13 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 
   // 6c. ESTIMATION de coût affichée + confirmation pour le moteur IA
   const est = await page.evaluate(() => {
-    document.getElementById('v461-moteur').value = 'agnes';
+    document.getElementById('v461-moteur').value = 'agnes:agnes-2.5-flash';
     document.getElementById('v461-moteur').dispatchEvent(new Event('change'));
     const el = document.getElementById('v461-estim');
     return { texte: el ? el.textContent : null, e: window.__livro.estimation() };
   });
   ok('estimation affichée (paragraphes restants, moteur, requêtes)', /paragraphe\(s\)/.test(String(est.texte)) && /requête\(s\)/.test(String(est.texte)), String(est.texte).slice(0, 95));
-  ok('l’estimation annonce le moteur IA et son coût en requêtes', /IA Agnes/.test(String(est.texte)), String(est.texte).slice(0, 80));
+  ok('l’estimation annonce le moteur IA choisi et son coût en requêtes', /IA agnes:agnes-2\.5-flash/.test(String(est.texte)), String(est.texte).slice(0, 90));
 
   const refusIA = await page.evaluate(async () => {
     /* on change de langue cible : la mémoire de traduction n'a rien pour
@@ -292,7 +346,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/46`);
-  process.exitCode = pass === 46 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/53`);
+  process.exitCode = pass === 53 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
