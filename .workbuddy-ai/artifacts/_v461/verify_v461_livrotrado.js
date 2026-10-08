@@ -37,13 +37,23 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     appels.lt.push(lot.length);
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ translatedText: lot.map(t => 'FR:' + t) }) });
   });
+  let appelsOCR = 0;
   await page.route('**/apihub.agnes-ai.com/**', async route => {
     let c = {}; try { c = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
+    const contenu = (c.messages && c.messages[0] && c.messages[0].content) || [];
+    const vision = Array.isArray(contenu) && contenu.some(x => x.type === 'image_url');
+    if (vision) {
+      /* OCR : une page rendue en image */
+      appelsOCR++;
+      const image = contenu.filter(x => x.type === 'image_url').length;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'Page transcrite numero ' + appelsOCR + ' (image=' + image + ').\n\nDeuxieme paragraphe de la page ' + appelsOCR + '.' } }] }) });
+    }
+    /* traduction : marqueurs [[n]] */
     const texte = (c.messages && c.messages[1] && c.messages[1].content) || '';
     const n = (texte.match(/\[\[\d+\]\]/g) || []).length;
     appels.ia.push(n);
     let out = '';
-    for (let i = 1; i <= n; i++) out += '[[' + i + ']] TR-' + i + '\n';   /* le n° 2 est volontairement absent */
+    for (let i = 1; i <= n; i++) out += '[[' + i + ']] TR-' + i + '\n';
     out = out.replace(/\[\[2\]\][^\n]*\n/, '');
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: out } }] }) });
   });
@@ -86,6 +96,63 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('MOBI : refus explicite renvoyant vers EPUB', /MOBI non supporté/.test(String(ex.mobi)) && /EPUB/.test(String(ex.mobi)), String(ex.mobi).slice(0, 90));
   ok('PDF SCANNÉ : diagnostic spécifique (pas le message générique)', /SCANNÉ/.test(String(ex.scanne)) && /OCR/.test(String(ex.scanne)), String(ex.scanne).slice(0, 110));
   ok('PDF scanné : le nombre de pages est annoncé', /\d+ page\(s\)/.test(String(ex.scanne)), String(ex.scanne).slice(0, 70));
+
+  // 2f. OCR PAR L'IA (vision) sur le PDF scanné (doublure posée plus haut)
+  await page.evaluate(() => localStorage.setItem('agnes_api_key', 'sk-test'));
+  const scan = await page.evaluate(async (FIX) => {
+    await window.__livro.libsPretes();
+    const b = await fetch(FIX + 'scanne.pdf').then(r => r.blob());
+    const f = new File([b], 'scanne.pdf');
+    window.__fichierScan = f;
+    document.getElementById('v461-ouvrir') || window.__livro.ouvrir();
+    await window.__livro.charger(f);
+    await new Promise(r => setTimeout(r, 400));
+    const zone = document.getElementById('v461-liste');
+    return { texte: zone ? zone.textContent : null, bouton: !!document.getElementById('v461-ocr-go') };
+  }, FIX);
+  ok('PDF scanné : l’OCR est PROPOSÉ (bouton présent)', scan.bouton === true, String(scan.texte).slice(0, 90));
+  ok('le coût est annoncé (nombre d’appels = nombre de pages)', /2 appel\(s\)/.test(String(scan.texte)), String(scan.texte).slice(0, 120));
+
+  // refus de la confirmation → aucun appel
+  const refus = await page.evaluate(async () => {
+    const vrai = window.confirm; let demande = false;
+    window.confirm = function () { demande = true; return false; };
+    await window.__livro.lancerOCR(window.__fichierScan, 2);
+    window.confirm = vrai;
+    return { demande };
+  });
+  const appelsRefus = appelsOCR;
+  ok('OCR : confirmation demandée avant de consommer', refus.demande === true, JSON.stringify(refus));
+  ok('OCR : refus → aucun appel d’IA', appelsRefus === 0, 'appels=' + appelsRefus);
+
+  // acceptation → 1 appel par page, texte assemblé, livre chargé
+  appelsOCR = 0;
+  const ocr = await page.evaluate(async () => {
+    const vrai = window.confirm; window.confirm = function () { return true; };
+    await window.__livro.lancerOCR(window.__fichierScan, 2);
+    window.confirm = vrai;
+    const etat = window.__livro.etat();
+    return {
+      chapitres: etat.livre ? etat.livre.chapitres.length : 0,
+      paras: etat.livre ? etat.livre.chapitres.reduce((a, c) => a + c.paragraphes.length, 0) : 0,
+      premier: etat.livre ? etat.livre.chapitres[0].paragraphes[0] : null,
+      duos: document.querySelectorAll('.v461-duo').length
+    };
+  });
+  ok('OCR : un appel d’IA PAR PAGE (2 pages → 2 appels)', appelsOCR === 2, 'appels=' + appelsOCR + ' ' + JSON.stringify(ocr).slice(0, 60));
+  ok('OCR : texte assemblé en chapitres/paragraphes', ocr.chapitres === 2 && ocr.paras >= 4, JSON.stringify(ocr).slice(0, 90));
+  ok('OCR : le texte transcrit est celui affiché', /Page transcrite numero 1/.test(String(ocr.premier)), String(ocr.premier).slice(0, 60));
+  ok('OCR : l’affichage côte à côte est prêt (colonnes)', ocr.duos >= 4, 'paires=' + ocr.duos);
+
+  // REPRISE : relancer ne refait pas les pages déjà transcrites
+  appelsOCR = 0;
+  const reprise = await page.evaluate(async () => {
+    const vrai = window.confirm; window.confirm = function () { return true; };
+    await window.__livro.lancerOCR(window.__fichierScan, 2);
+    window.confirm = vrai;
+    return {};
+  });
+  ok('OCR : reprise sans refaire les pages déjà transcrites (0 appel)', appelsOCR === 0, 'appels=' + appelsOCR);
 
   // 3. chargement dans l'interface → affichage CÔTE À CÔTE
   await page.evaluate(async (FIX) => {
@@ -225,7 +292,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/37`);
-  process.exitCode = pass === 37 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/46`);
+  process.exitCode = pass === 46 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
