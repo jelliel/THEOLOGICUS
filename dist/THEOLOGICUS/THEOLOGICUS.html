@@ -50724,6 +50724,7 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -51790,7 +51791,19 @@ window.continueTradApart = async function (msgId) {
   }
 
   async function exporter(format) {
-    if (!S.livre) { toast('Chargez d’abord un livre', 'warn'); return; }
+    if (!S.livre) {
+      /* le message doit s'afficher LÀ OÙ L'UTILISATEUR REGARDE : dans la zone
+         d'export, pas seulement en notification fugace. */
+      var z0 = document.getElementById('v461-export-zone');
+      if (z0) {
+        z0.style.display = 'block';
+        z0.innerHTML = '<div style="border:1px solid rgba(245,197,66,.5);border-radius:10px;padding:10px;background:rgba(245,197,66,.07);font-size:11px;color:#ffd479">' +
+          'Chargez d’abord un livre (bouton 📂 Choisir un fichier) : l’export sert à enregistrer le texte lu ou traduit.</div>';
+        try { z0.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+      }
+      toast('Chargez d’abord un livre', 'warn');
+      return;
+    }
     try {
       /* le contenu se choisit DANS la boîte : on ne construit le fichier
          qu'au moment où l'utilisateur valide une destination. */
@@ -51808,6 +51821,16 @@ window.continueTradApart = async function (msgId) {
     var mode = modeExport();
     var nom = baseNom(mode) + '.' + format;
     z.style.display = 'block';
+    /* La boîte apparaît SOUS les boutons d'export, dans le pied du modal :
+       sur un petit écran elle peut être hors du champ visible. On la fait
+       défiler jusqu'à l'écran et on la souligne brièvement — un panneau qu'on
+       ne voit pas est un panneau qui « ne marche pas ». */
+    try {
+      z.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      z.style.transition = 'box-shadow .25s';
+      z.style.boxShadow = '0 0 0 2px rgba(79,142,247,.75)';
+      setTimeout(function () { z.style.boxShadow = 'none'; }, 1400);
+    } catch (e) {}
     z.innerHTML =
       '<div style="border:1px solid rgba(79,142,247,.45);border-radius:10px;padding:10px;background:rgba(79,142,247,.07)">' +
         '<div style="font-size:11px;color:#cfe3ff;margin-bottom:6px">Exporter <b id="v461-ex-nom">' + esc(nom) + '</b> <span id="v461-ex-taille">(' + formatBytes(blob.size) + ')</span></div>' +
@@ -51989,6 +52012,9 @@ window.continueTradApart = async function (msgId) {
   function ouvrir() {
     construire();
     document.getElementById('v461-overlay').classList.add('on');
+    var v = window.THEO_VERSION || '';
+    var sous = document.getElementById('v461-sous');
+    if (sous && v && !sous.textContent) sous.textContent = 'v' + v;
     listeLivres();
   }
 

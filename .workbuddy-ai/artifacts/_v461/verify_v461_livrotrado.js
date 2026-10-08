@@ -8,8 +8,10 @@ const path = require('path'); const http = require('http'); const fs = require('
 const PORT = 8905; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
 const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
 const FIX = '.workbuddy-ai/artifacts/_v461/fixtures/';
-let pass = 0;
-const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 100)}`); if (cond) pass++; };
+let pass = 0, total = 0;
+/* Le dénominateur est COMPTÉ, pas écrit en dur : un total figé dérive à chaque
+   assertion ajoutée et finit par annoncer « 94/90 », ce qui ne veut rien dire. */
+const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 100)}`); if (cond) pass++; };
 (async () => {
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\//, '') || 'THEOLOGICUS.html';
@@ -508,6 +510,48 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('les quatre voies sont proposées', dlg.boutons === 4, 'boutons=' + dlg.boutons);
   ok('le nom du fichier est annoncé', /\.txt$/.test(String(dlg.nom)), String(dlg.nom));
 
+  // 9-ter. La boîte est AMENÉE À L'ÉCRAN, et SANS LIVRE le message s'écrit
+  // DANS la zone d'export (l'utilisateur regarde là, pas la notification
+  // fugace en haut de l'écran). C'est la correction du « je ne vois rien ».
+  const visibilite = await page.evaluate(async () => {
+    let appels = 0;
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function () { appels++; return orig.apply(this, arguments); };
+    const z = document.getElementById('v461-export-zone');
+    z.style.display = 'none';
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 200));
+    Element.prototype.scrollIntoView = orig;
+    return { appels, visible: z.style.display !== 'none' };
+  });
+  ok('la boîte d’export est amenée à l’écran (scrollIntoView appelé)', visibilite.appels > 0 && visibilite.visible === true, JSON.stringify(visibilite));
+
+  const sansLivre = await page.evaluate(async () => {
+    const S = window.__livro.etat();
+    const garde = S.livre;
+    S.livre = null;                       /* on simule « aucun livre chargé » */
+    const z = document.getElementById('v461-export-zone');
+    z.style.display = 'none'; z.innerHTML = '';
+    await window.__livro.exporter('txt');
+    await new Promise(r => setTimeout(r, 200));
+    const res = { visible: z.style.display !== 'none', texte: z.textContent || '' };
+    S.livre = garde;                      /* on remet le livre pour la suite */
+    return res;
+  });
+  ok('sans livre : le message s’affiche DANS la zone d’export', sansLivre.visible === true && /Chargez d’abord un livre/.test(sansLivre.texte), sansLivre.texte.slice(0, 90));
+  ok('sans livre : le message dit QUOI faire (bouton Choisir un fichier)', /Choisir un fichier/.test(sansLivre.texte), sansLivre.texte.slice(0, 120));
+
+  // 9-quater. La version SERVIE est rappelée dans le sous-titre : on sait
+  // enfin si l'app exécutée est bien celle qu'on vient de livrer.
+  const verSous = await page.evaluate(async () => {
+    const sous = document.getElementById('v461-sous');
+    sous.textContent = '';
+    window.__livro.ouvrir();
+    await new Promise(r => setTimeout(r, 100));
+    return { sous: sous.textContent, theo: window.THEO_VERSION || '' };
+  });
+  ok('la version servie est affichée dans le sous-titre de LivroTrado', /^v[0-9]/.test(verSous.sous) && verSous.sous === 'v' + verSous.theo, JSON.stringify(verSous));
+
   // 9-bis. CHOIX DU CONTENU dans la boîte d'export (traduction seule / les deux / original)
   const modes = await page.evaluate(async () => {
     await window.__livro.exporter('txt');
@@ -604,7 +648,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('« Copier le texte » copie bien le contenu', cp.longueur > 10 && /copié/i.test(String(cp.res)), JSON.stringify(cp).slice(0, 90));
 
   ok('aucune erreur JavaScript' , errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/90`);
-  process.exitCode = pass === 90 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/${total}`);
+  process.exitCode = pass === total ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

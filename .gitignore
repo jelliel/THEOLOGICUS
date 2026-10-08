@@ -25,3 +25,12 @@ THEOLOGICUS_signing.pfx
 
 # serveur de test temporaire du banc d'assemblage (v458)
 _montage_test_serveur.py
+
+# Scripts de diagnostic jetables (dbg_*.js) : ils servent a MESURER une panne
+# dans un navigateur, puis n'ont plus aucune valeur. Les laisser non suivis
+# encombrait `git status` a chaque fois et masquait les vrais fichiers modifies.
+dbg_*.js
+
+# Dependances du banc Playwright (installees par tools/run_benches.py)
+node_modules/
+package-lock.json
