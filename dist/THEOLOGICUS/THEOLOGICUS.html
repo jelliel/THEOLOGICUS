@@ -52742,6 +52742,18 @@ window.continueTradApart = async function (msgId) {
       ' <span style="opacity:.6">il y a ' + age + ' s</span>';
   }
 
+  /* v490 — Ne pas réduire un échec à son code HTTP. Le relais /fla/ met la
+     VRAIE cause dans le CORPS de son 502 (ex. « impossible de joindre
+     127.0.0.1:3001 — [WinError 10061] … »). Afficher seulement
+     « HTTP 502 sur /models » laissait croire que le routeur AVAIT répondu,
+     alors qu’il n’a jamais été joint : on cherchait une panne interne à
+     FreeLLMAPI là où il n’y avait qu’un service à démarrer. */
+  async function causeHttp(r, ou) {
+    var corps = '';
+    try { corps = String((await r.text()) || '').trim().slice(0, 300); } catch (e) {}
+    return new Error('HTTP ' + r.status + ' sur ' + ou + (corps ? ' — ' + corps : ''));
+  }
+
   /* ── TEST ─────────────────────────────────────────────────────────── */
   /* Deux appels, parce qu'ils ne prouvent pas la même chose :
        GET  /models?available=true  → le routeur répond, et combien de modèles
@@ -52757,7 +52769,7 @@ window.continueTradApart = async function (msgId) {
     var res = { ok: false };
     try {
       var r = await fetch(ae(base() + '/models?available=true'), { headers: entetes() });
-      if (!r.ok) throw new Error('HTTP ' + r.status + ' sur /models');
+      if (!r.ok) throw await causeHttp(r, '/models');
       var j = await r.json();
       res.n = ((j && (j.data || j.models)) || []).length;
       res.msModels = Date.now() - t0;
@@ -52772,7 +52784,7 @@ window.continueTradApart = async function (msgId) {
         body: JSON.stringify({ model: 'auto', messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 })
       });
       clearTimeout(minuterie);
-      if (!r2.ok) throw new Error('HTTP ' + r2.status + ' sur /chat/completions');
+      if (!r2.ok) throw await causeHttp(r2, '/chat/completions');
       var via = r2.headers.get('x-routed-via');
       if (via) window.__theoRoutedVia = { via: via, modele: 'auto (test)', quand: Date.now() };
       res.ok = true; res.via = via; res.msChat = Date.now() - t0;

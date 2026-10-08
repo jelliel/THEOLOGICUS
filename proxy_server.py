@@ -2756,7 +2756,13 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(502)
                 self.send_header('Content-Type', 'text/plain; charset=utf-8')
                 self.end_headers()
-                self.wfile.write(('FreeLLMAPI relay error: %s' % e).encode('utf-8'))
+                # v490 — NOMMER la cible. « 502 » seul laissait croire que le
+                # routeur AVAIT répondu 502, alors qu'il n'a jamais été joint
+                # (WinError 10061 / ECONNREFUSED) : on cherchait une panne
+                # interne à FreeLLMAPI là où il n'y avait qu'un service à
+                # démarrer. Le corps porte la vraie cause ; l'app l'affiche.
+                self.wfile.write(('FreeLLMAPI relay : impossible de joindre %s:%s — %s'
+                                  % (host, port, e)).encode('utf-8'))
                 return
             self.send_response(resp.status)
             _HOP = {'connection', 'transfer-encoding', 'content-length',

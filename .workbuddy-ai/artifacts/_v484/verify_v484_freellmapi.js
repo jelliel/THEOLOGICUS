@@ -284,6 +284,31 @@ const server = http.createServer((req, res) => {
   ok('un appel de chat normal remonte X-Routed-Via jusqu’à l’interface',
     via && /groq\/llama-3\.3-70b/.test(via.via), JSON.stringify(via));
 
+  // 10. v490 — un 502 du RELAIS doit NOMMER la vraie cause, pas seulement
+  //     « HTTP 502 ». On pointe l’adresse vers un port FERMÉ : le relais ne
+  //     peut pas joindre l’amont et répond 502 en mettant la cause dans le
+  //     CORPS (ici « relais: connect ECONNREFUSED … » ; le vrai proxy_server
+  //     écrit « FreeLLMAPI relay : impossible de joindre hôte:port — … »).
+  //     Sans la recopie du corps, l’écran laissait croire que le routeur
+  //     AVAIT répondu 502, alors qu’il n’a jamais été joint : on cherchait
+  //     une panne interne là où il n’y avait qu’un service à démarrer.
+  const p502 = await page.evaluate(async () => {
+    const inp = document.getElementById('v484-addr');
+    inp.value = '127.0.0.1:3002';                 // rien n’écoute ici
+    inp.dispatchEvent(new Event('input'));        // resynchronise base() + relais
+    await new Promise(r => setTimeout(r, 300));
+    document.getElementById('v484-tester').click();
+    await new Promise(r => setTimeout(r, 1200));
+    const etat = document.getElementById('v484-etat').textContent;
+    inp.value = '127.0.0.1:3001';                 // on remet pour la suite
+    inp.dispatchEvent(new Event('input'));
+    return { etat: etat, dernier: window.__fla.etat().dernier };
+  });
+  ok('un 502 du relais NOMME la vraie cause (pas seulement « HTTP 502 »)',
+    /502/.test(p502.etat) &&
+    /relais|relay|ECONNREFUSED|impossible de joindre|refus/i.test(p502.etat),
+    p502.etat.slice(0, 200));
+
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
   console.log(`RESULTAT : ${pass}/${total}`);
   process.exitCode = pass === total ? 0 : 1;
