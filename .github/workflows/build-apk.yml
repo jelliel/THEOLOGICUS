@@ -72,6 +72,7 @@ jobs:
   bancs:
     needs: controles
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -98,12 +99,18 @@ jobs:
           for b in $(ls .workbuddy-ai/artifacts/_v4*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
             echo "───── $b"
             sortie=$(mktemp)
-            if node "$b" > "$sortie" 2>&1; then
+            # 300 s max par banc : un banc qui se bloque (attente réseau,
+            # serveur absent) ne doit pas figer la CI pendant des heures.
+            if timeout 300 node "$b" > "$sortie" 2>&1; then
               ok=$((ok+1)); tail -1 "$sortie"
               echo "### OK — $b" >> rapport.md
             else
               code=$?
-              if [ "$code" -eq 77 ]; then
+              if [ "$code" -eq 124 ]; then
+                echecs=$((echecs+1))
+                echo "  DÉPASSEMENT DE DÉLAI (300 s) — banc bloqué"
+                { echo "### DÉPASSEMENT DE DÉLAI (300 s) — $b"; echo '```'; tail -15 "$sortie"; echo '```'; } >> rapport.md
+              elif [ "$code" -eq 77 ]; then
                 ignores=$((ignores+1)); echo "  IGNORÉ (prérequis absent)"; tail -1 "$sortie"
                 echo "### IGNORÉ — $b" >> rapport.md
               else
