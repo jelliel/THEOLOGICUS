@@ -50728,6 +50728,10 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
+
+
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -50764,7 +50768,8 @@ window.continueTradApart = async function (msgId) {
     selection: {},         /* chapitres cochés (index -> true) */
     bilingue: true,        /* export : original + traduction, ou traduction seule */
     enCours: false, arret: false, pause: false,
-    fait: 0, total: 0
+    fait: 0, total: 0,
+    pdfFidele: false       /* le dernier PDF a-t-il été composé par le navigateur ? */
   };
 
   /* ═══ IndexedDB ═══ */
@@ -51875,15 +51880,29 @@ window.continueTradApart = async function (msgId) {
     var nom = baseNom(mode) + '.' + format;
     /* Le PDF s'écrit avec une police LATINE : le dire AVANT, pas après.
        Le contenu changeant (traduction seule / bilingue / original), la mise
-       en garde est recalculée à chaque bascule, pas figée à l'ouverture. */
+       en garde est recalculée à chaque bascule, pas figée à l'ouverture.
+       Elle ne s'affiche QUE si le rendu fidèle n'a pas pris le relais — sinon
+       on avertirait d'un problème qui n'existe plus. */
     function avertissement() {
       if (format !== 'pdf') return '';
-      var ns = caracteresNonSupportes();
-      if (!ns.length) return '';
+      var tous = analyseEcritures();
+      if (!tous.length) return '';
+      var reelles = ecrituresReelles();
+      if (S.pdfFidele) {
+        return '<div style="border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:7px 9px;background:rgba(79,142,247,.07);font-size:10.5px;color:#cfe3ff;margin-bottom:8px">' +
+          'ℹ️ Écriture non latine détectée : le PDF est <b>composé par le navigateur</b> pour que le texte soit <b>correct</b> (arabe assemblé, sens de lecture respecté). ' +
+          'Conséquence : le texte n’est pas sélectionnable et le fichier est plus lourd. Pour un texte cherchable, prenez <b>DOCX</b> ou <b>EPUB</b>.</div>';
+      }
+      if (!reelles.length) {
+        /* Quelques signes isolés (filet, puce exotique, flèche) : cela ne
+           justifie pas de basculer tout le PDF en images, ni d'alarmer. */
+        return '<div style="border:1px solid rgba(79,142,247,.3);border-radius:8px;padding:6px 9px;background:rgba(79,142,247,.05);font-size:10.5px;color:#9fb4d0;margin-bottom:8px">' +
+          'ℹ️ ' + milliers(tous[0].n) + ' caractère(s) spécial(aux) ne figurent pas dans la police latine du PDF et n’apparaîtront pas. ' +
+          'S’il s’agit de filets ou de puces décoratives, c’est sans conséquence ; sinon <b>DOCX</b> ou <b>EPUB</b> les conservent.</div>';
+      }
       return '<div style="border:1px solid rgba(245,197,66,.5);border-radius:8px;padding:7px 9px;background:rgba(245,197,66,.07);font-size:10.5px;color:#ffd479;margin-bottom:8px">' +
-        '⚠️ Le PDF utilise une police <b>latine</b> : ' +
-        ns.map(function (c) { return '« ' + esc(c) + ' »'; }).join(', ') + (ns.length >= 8 ? '…' : '') +
-        ' ne s’affichera pas correctement. Pour le grec, l’arabe, l’hébreu ou le chinois, prenez <b>DOCX</b> ou <b>EPUB</b> (ils gardent l’Unicode).</div>';
+        '⚠️ Le PDF utilise une police <b>latine</b>. Ce texte contient ' + phraseEcritures() +
+        ' : ces caractères ne seront pas rendus. Prenez <b>DOCX</b> ou <b>EPUB</b> — eux conservent l’Unicode.</div>';
     }
     z.style.display = 'block';
     /* La boîte apparaît SOUS les boutons d'export, dans le pied du modal :
@@ -52106,38 +52125,257 @@ window.continueTradApart = async function (msgId) {
      pagination en pied, et — en mode bilingue — DEUX COLONNES : l'original à
      gauche, la traduction à droite.
 
-     LIMITE ASSUMÉE ET DITE : la police standard du PDF couvre l'alphabet
-     latin (WinAnsi) mais ni le grec, ni l'arabe, ni l'hébreu, ni le chinois.
-     On ne fait pas semblant : ces caractères sont DÉTECTÉS et signalés avant
-     l'export (voir caracteresNonSupportes), avec la sortie qui convient
-     (DOCX/EPUB, qui eux embarquent l'Unicode). */
-  var PDF_LATIN1_EXTRA = '\u0152\u0153\u20AC\u2018\u2019\u201C\u201D\u2013\u2014\u2026\u2022\u2122\u0160\u0161\u0178\u017D\u017E\u2039\u203A\u02C6\u02DC\u2030\u2039\u203A';
+     DEUX CHEMINS, selon l'écriture du texte :
+       · LATIN → PDF VECTORIEL (jsPDF) : texte sélectionnable et cherchable,
+         fichier léger. C'est le cas courant (français, anglais, espagnol…).
+       · NON LATIN → PDF COMPOSÉ PAR LE NAVIGATEUR : jsPDF n'écrit qu'avec des
+         polices latines, et surtout il ne sait ni ASSEMBLER les lettres arabes
+         (formes initiale / médiane / finale) ni inverser le sens de lecture.
+         Un PDF vectoriel d'arabe n'est pas « incomplet », il est FAUX. Le seul
+         moteur de la machine qui sache le faire est le navigateur : on lui fait
+         composer la page, et on l'insère en image. Contrepartie assumée et
+         annoncée : le texte n'est plus sélectionnable. */
+
+  /* ── Reconnaître l'ÉCRITURE, pas énumérer les caractères ──────────────
+     Afficher « « ت », « َ », « ◌ » » n'apprend rien : personne ne peut rien
+     faire d'une liste de signes, et les plus nombreux (les voyelles
+     combinantes, le cercle pointillé des polices incomplètes) sont INVISIBLES
+     à l'écran. On nomme donc les écritures concernées, avec leur volume. */
+  var ECRITURES = [
+    { nom: 'arabe', art: 'de l’', re: /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/ },
+    { nom: 'syriaque', art: 'du ', re: /[\u0700-\u074F]/ },
+    { nom: 'hébreu', art: 'de l’', re: /[\u0590-\u05FF\uFB1D-\uFB4F]/ },
+    { nom: 'grec', art: 'du ', re: /[\u0370-\u03FF\u1F00-\u1FFF]/ },
+    { nom: 'cyrillique', art: 'du ', re: /[\u0400-\u052F]/ },
+    { nom: 'copte', art: 'du ', re: /[\u2C80-\u2CFF]/ },
+    { nom: 'arménien', art: 'de l’', re: /[\u0530-\u058F]/ },
+    { nom: 'géorgien', art: 'du ', re: /[\u10A0-\u10FF]/ },
+    { nom: 'devanagari', art: 'du ', re: /[\u0900-\u097F]/ },
+    { nom: 'thaï', art: 'du ', re: /[\u0E00-\u0E7F]/ },
+    { nom: 'chinois / japonais / coréen', art: 'du ', re: /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uAC00-\uD7AF]/ }
+  ];
+  /* Signes qui ACCOMPAGNENT une écriture sans la constituer : voyellation,
+     diacritiques combinants, marques de sens de lecture, espaces invisibles.
+     Ils ne doivent JAMAIS servir d'exemple — on ne montre pas ce qui ne se
+     voit pas. */
+  function signeInvisible(ch) {
+    var c = ch.charCodeAt(0);
+    return (c >= 0x0300 && c <= 0x036F) || (c >= 0x0483 && c <= 0x0489) ||
+      (c >= 0x0591 && c <= 0x05BD) || (c >= 0x0610 && c <= 0x061A) ||
+      (c >= 0x064B && c <= 0x065F) || c === 0x0670 || (c >= 0x06D6 && c <= 0x06ED) ||
+      c === 0x0711 || (c >= 0x0730 && c <= 0x074A) ||
+      (c >= 0x200B && c <= 0x200F) || (c >= 0x202A && c <= 0x202E) ||
+      (c >= 0x2066 && c <= 0x2069) || c === 0x25CC || c === 0xFEFF;
+  }
+  var PDF_LATIN1_EXTRA = '\u0152\u0153\u20AC\u2018\u2019\u201C\u201D\u2013\u2014\u2026\u2022\u2122\u0160\u0161\u0178\u017D\u017E\u2039\u203A\u02C6\u02DC\u2030';
   function policeSupportee(ch) {
     if (ch.charCodeAt(0) < 0x100) return true;        /* Latin-1 + WinAnsi bas */
     return PDF_LATIN1_EXTRA.indexOf(ch) >= 0;         /* CP1252 : œ Œ € … – — « » */
   }
-  function caracteresNonSupportes() {
-    var vus = {}, out = [], fin = false;
-    function scan(t) {
+  function milliers(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u202F'); }
+  /* Renvoie [{nom, n, exemple}] — les écritures trouvées, de la plus fournie
+     à la moins fournie. « symboles » = le reste (ponctuation exotique,
+     filets, puces) : ça n'est pas une écriture, on le dit autrement. */
+  function analyseEcritures() {
+    var compte = {}, exemples = {};
+    function classer(t) {
       var s = String(t == null ? '' : t);
       for (var i = 0; i < s.length; i++) {
         var ch = s.charAt(i);
-        if (policeSupportee(ch) || vus[ch]) continue;
-        vus[ch] = 1; out.push(ch);
-        if (out.length >= 8) { fin = true; return; }
+        if (policeSupportee(ch)) continue;
+        var nom = 'symboles';
+        for (var k = 0; k < ECRITURES.length; k++) {
+          if (ECRITURES[k].re.test(ch)) { nom = ECRITURES[k].nom; break; }
+        }
+        compte[nom] = (compte[nom] || 0) + 1;
+        if (!exemples[nom] && !signeInvisible(ch)) exemples[nom] = ch;
       }
     }
-    for (var ci = 0; ci < S.livre.chapitres.length && !fin; ci++) {
+    for (var ci = 0; ci < S.livre.chapitres.length; ci++) {
       var ch2 = S.livre.chapitres[ci];
-      scan(ch2.titre);
-      for (var pi = 0; pi < ch2.paragraphes.length && !fin; pi++) {
-        scan(ch2.paragraphes[pi]);
-        scan((S.trad[ci] && S.trad[ci][pi]) || '');
+      classer(ch2.titre);
+      for (var pi = 0; pi < ch2.paragraphes.length; pi++) {
+        classer(ch2.paragraphes[pi]);
+        classer((S.trad[ci] && S.trad[ci][pi]) || '');
       }
     }
+    var out = [];
+    for (var nom2 in compte) if (Object.prototype.hasOwnProperty.call(compte, nom2)) {
+      out.push({ nom: nom2, n: compte[nom2], exemple: exemples[nom2] || '' });
+    }
+    out.sort(function (a, b) { return b.n - a.n; });
     return out;
   }
+  /* Conservé pour les bancs : la liste des caractères représentatifs. */
+  function caracteresNonSupportes() {
+    var out = [];
+    analyseEcritures().forEach(function (e) { if (e.exemple) out.push(e.exemple); });
+    return out;
+  }
+  function ecrituresReelles() {
+    return analyseEcritures().filter(function (e) { return e.nom !== 'symboles'; });
+  }
+  /* La phrase d'avertissement — pour le SEUL cas où le rendu fidèle n'a pas pu
+     prendre le relais. Nomme les écritures, dit le volume, accorde le verbe. */
+  function phraseEcritures() {
+    var l = analyseEcritures();
+    if (!l.length) return '';
+    var arts = {};
+    ECRITURES.forEach(function (e) { arts[e.nom] = e.art; });
+    var parties = [], sym = null;
+    l.forEach(function (e) {
+      if (e.nom === 'symboles') { sym = e; return; }
+      parties.push((arts[e.nom] || 'du ') + '<b>' + e.nom + '</b> (' + milliers(e.n) + ' caractère' + (e.n > 1 ? 's' : '') + ')');
+    });
+    if (sym) parties.push('quelques <b>caractères spéciaux</b> (' + milliers(sym.n) + ')');
+    if (parties.length === 1) return parties[0];
+    return parties.slice(0, -1).join(', ') + ' et ' + parties[parties.length - 1];
+  }
+
+  /* ── Dispatcher : quel chemin pour ce texte ? ─────────────────────── */
   async function pdfDe(mode) {
+    mode = mode || modeExport();
+    var J = window.jspdf && window.jspdf.jsPDF;
+    if (!J) throw new Error('jsPDF indisponible (bibliothèques non chargées)');
+    S.pdfFidele = false;
+    if (ecrituresReelles().length && typeof html2canvas === 'function') {
+      try {
+        var b = await pdfRendu(mode);
+        S.pdfFidele = true;
+        return b;
+      } catch (e) {
+        /* Le rendu fidèle a échoué : on retombe sur le vectoriel, et
+           l'avertissement sur les écritures reparaîtra — mieux vaut un PDF
+           imparfait qu'aucun PDF. */
+        log('PDF : rendu fidèle indisponible (' + (e && e.message || e) + ') — repli vectoriel');
+        S.pdfFidele = false;
+      }
+    }
+    return await pdfVectoriel(mode);
+  }
+
+  /* ── PDF COMPOSÉ PAR LE NAVIGATEUR (écritures non latines) ────────────
+     Le navigateur sait assembler l'arabe, inverser le sens de lecture et
+     rendre le chinois : on lui fait donc composer chaque page, puis on insère
+     l'image. La pagination se fait PAR MESURE — on remplit une page, on
+     regarde si ça déborde, sinon on ajoute le bloc suivant — parce qu'une
+     découpe d'image au hasard couperait les lignes en deux. */
+  var CSS_PDF =
+    '.p461-page{box-sizing:border-box;background:#ffffff;color:#18202e;' +
+    /* pile large : arabe, hébreu, chinois, cyrillique — le navigateur prend
+       la première police qui possède le glyphe */
+    'font-family:"Segoe UI","Noto Sans","Noto Naskh Arabic","Noto Sans Hebrew",' +
+    '"Microsoft YaHei","Malgun Gothic",Tahoma,Arial,sans-serif;font-size:10.5pt;line-height:1.45}' +
+    '.p461-page h2{font-size:15pt;margin:0 0 6px;color:#121a28;font-weight:700}' +
+    '.p461-page h3{font-size:12.5pt;margin:14px 0 7px;color:#121a28;font-weight:700}' +
+    '.p461-page p{margin:0 0 7px;text-align:justify}' +
+    '.p461-page table.p461-duo{width:100%;border-collapse:collapse;margin:0 0 9px;table-layout:fixed}' +
+    '.p461-page table.p461-duo td{width:50%;vertical-align:top;padding:0 9px 9px 0;font-size:10pt;line-height:1.4}' +
+    '.p461-page table.p461-duo td.p461-d{color:#2E7D32;font-style:italic;padding-left:9px;border-left:1px solid #D8E2F0}' +
+    '.p461-page table.p461-duo tr+tr td{border-top:1px solid #EDF2F8;padding-top:9px}';
+  async function pdfRendu(mode) {
+    mode = mode || modeExport();
+    var J = window.jspdf && window.jspdf.jsPDF;
+    var doc = new J({ unit: 'pt', format: 'a4', compress: true });
+    var LARG = doc.internal.pageSize.getWidth();
+    var HAUT = doc.internal.pageSize.getHeight();
+    var M = 44, BAS = 50;
+    var contenuL = LARG - 2 * M;                 /* largeur utile, en points */
+    var contenuH = HAUT - M - BAS;               /* hauteur utile, en points */
+    var LARGEUR_CSS = 700;                       /* composition en pixels CSS */
+    var HAUTEUR_CSS = Math.round(LARGEUR_CSS * contenuH / contenuL);
+
+    var host = document.createElement('div');
+    host.setAttribute('data-p461', '1');
+    host.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + LARGEUR_CSS + 'px;height:' + HAUTEUR_CSS +
+      'px;overflow:hidden;background:#ffffff;box-sizing:border-box;padding:0;margin:0;z-index:-1';
+    var st = document.createElement('style'); st.textContent = CSS_PDF;
+    host.appendChild(st);
+    var cur = document.createElement('div');
+    cur.className = 'p461-page';
+    host.appendChild(cur);
+    document.body.appendChild(host);
+
+    var pages = 0;
+    async function rendre() {
+      var h = Math.max(HAUTEUR_CSS, Math.ceil(cur.scrollHeight));
+      host.style.height = h + 'px';
+      var canvas = await html2canvas(host, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+      host.style.height = HAUTEUR_CSS + 'px';
+      var ratio = h / HAUTEUR_CSS;               /* 1 en temps normal */
+      var imgL = contenuL / ratio, imgH = contenuH / ratio;
+      /* JPEG 0,85 : mesuré, le PNG est PLUS LOURD que le JPEG sur du texte
+         anti-crénelé (la voyellation arabe multiplie les gris) — et 0,85 ne se
+         distingue pas de 0,9 à l'impression, pour ~30 % de poids en moins. */
+      var img = canvas.toDataURL('image/jpeg', 0.85);
+      if (pages > 0) doc.addPage();
+      /* un bloc plus haut qu'une page fait RÉTRÉCIR la page entière plutôt
+         que d'être coupé : rien n'est perdu, c'est juste plus petit */
+      doc.addImage(img, 'JPEG', M + (contenuL - imgL) / 2, M, imgL, imgH);
+      pages++;
+    }
+    function el(tag, cls, txt) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (txt != null) e.textContent = txt;
+      /* dir=auto : le navigateur choisit le sens de lecture d'après le texte
+         — un titre arabe se pose de droite à gauche, un titre français non */
+      e.setAttribute('dir', 'auto');
+      return e;
+    }
+    try {
+      /* bandeau de titre */
+      cur.appendChild(el('h2', null, S.livre.nom || 'livre'));
+      cur.appendChild(el('p', null, (mode === 'bilingue' ? 'Original (à gauche) · Traduction ' + S.cible + ' (à droite)'
+        : mode === 'original' ? 'Texte original' : 'Traduction ' + S.cible) +
+        ' — ' + S.livre.chapitres.length + ' chapitre(s)'));
+      var blocs = [];
+      S.livre.chapitres.forEach(function (ch, ci) {
+        blocs.push({ t: 'titre', texte: ch.titre });
+        ch.paragraphes.forEach(function (p, pi) {
+          var tr = (S.trad[ci] && S.trad[ci][pi]) || '';
+          if (mode === 'bilingue') blocs.push({ t: 'duo', g: p, d: tr });
+          else if (mode === 'original') blocs.push({ t: 'p', texte: p });
+          else if (tr) blocs.push({ t: 'p', texte: tr });
+        });
+      });
+      for (var i = 0; i < blocs.length; i++) {
+        var b = blocs[i], e;
+        if (b.t === 'titre') e = el('h3', null, b.texte);
+        else if (b.t === 'duo') {
+          e = document.createElement('table'); e.className = 'p461-duo';
+          var tr1 = document.createElement('tr');
+          var td1 = el('td', null, b.g); td1.setAttribute('dir', 'auto');
+          var td2 = el('td', 'p461-d', b.d); td2.setAttribute('dir', 'auto');
+          tr1.appendChild(td1); tr1.appendChild(td2); e.appendChild(tr1);
+        } else { e = el('p', null, b.texte); e.setAttribute('dir', 'auto'); }
+        cur.appendChild(e);
+        /* la page déborde, et ce n'est PAS ce bloc seul qui la remplit :
+           on le reporte sur la page suivante */
+        if (cur.scrollHeight > HAUTEUR_CSS && cur.childNodes.length > 2) {
+          cur.removeChild(e);
+          await rendre();
+          cur.innerHTML = '';
+          cur.appendChild(e);
+        }
+      }
+      if (cur.textContent.replace(/\s/g, '').length) await rendre();
+    } finally {
+      try { document.body.removeChild(host); } catch (e) {}
+    }
+    /* pied de page : écrit en VRAI texte par-dessus l'image, donc net */
+    for (var pg = 1; pg <= pages; pg++) {
+      doc.setPage(pg);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
+      doc.setTextColor(120, 132, 148);
+      doc.text(String(S.livre.nom || 'livre').slice(0, 70), M, HAUT - 26, { baseline: 'top' });
+      doc.text(pg + ' / ' + pages, LARG - M, HAUT - 26, { baseline: 'top', align: 'right' });
+    }
+    return doc.output('blob');
+  }
+
+  /* ── PDF VECTORIEL (écritures latines) ─────────────────────────────── */
+  async function pdfVectoriel(mode) {
     mode = mode || modeExport();
     var J = window.jspdf && window.jspdf.jsPDF;
     if (!J) throw new Error('jsPDF indisponible (bibliothèques non chargées)');
@@ -52293,8 +52531,10 @@ window.continueTradApart = async function (msgId) {
     majStats: majStats, statsDebut: statsDebut,
     listeMoteurs: listeMoteurs, estVision: estVision, cfgDe: cfgDe,
     etat: function () { return S; },
-    docxDe: docxDe, epubDe: epubDe, pdfDe: pdfDe, texteComplet: texteComplet,
+    docxDe: docxDe, epubDe: epubDe, pdfDe: pdfDe, pdfRendu: pdfRendu, pdfVectoriel: pdfVectoriel,
+    texteComplet: texteComplet,
     deuxColonnesTxt: deuxColonnesTxt, caracteresNonSupportes: caracteresNonSupportes,
+    analyseEcritures: analyseEcritures, phraseEcritures: phraseEcritures, ecrituresReelles: ecrituresReelles,
     poserEntree: poserEntree,
     /* pour les bancs : traduire un tableau de paragraphes sans interface */
     traduire: function (paras, cible, moteur) {

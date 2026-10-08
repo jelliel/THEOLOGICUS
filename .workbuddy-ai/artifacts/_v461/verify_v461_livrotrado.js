@@ -753,8 +753,10 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
       /* non latin : doit être SIGNALÉ, pas silencieusement mutilé */
       L.trad = [['Ἐν ἀρχῇ ἦν ὁ λόγος']];
       r.nonSupp = window.__livro.caracteresNonSupportes();
+      r.ecritures = window.__livro.analyseEcritures();
       L.trad = [['In the beginning was the Word']];
       r.sansNonSupp = window.__livro.caracteresNonSupportes();
+      r.sansEcritures = window.__livro.analyseEcritures();
     } catch (e) { r.err = String(e && e.message || e); }
     L.livre = gLivre; L.trad = gTrad; L.cible = gCible;
     return r;
@@ -765,22 +767,145 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
   ok('PDF bilingue : la TRADUCTION est dans la colonne de DROITE', pdf.traductionADroite === true, JSON.stringify({ x: pdf.xDroite, items: pdf.items }));
   ok('PDF bilingue : la colonne de droite est bien À DROITE de la gauche', pdf.xDroite > pdf.xGauche, JSON.stringify({ g: pdf.xGauche, d: pdf.xDroite }));
   ok('PDF : les caractères non latins (grec) sont DÉTECTÉS et signalés', Array.isArray(pdf.nonSupp) && pdf.nonSupp.length > 0, JSON.stringify(pdf.nonSupp));
+  ok('PDF : l’écriture est NOMMÉE (grec), pas listée en caractères',
+    pdf.ecritures.length === 1 && pdf.ecritures[0].nom === 'grec', JSON.stringify(pdf.ecritures));
   ok('PDF : aucun avertissement inutile quand tout est latin', Array.isArray(pdf.sansNonSupp) && pdf.sansNonSupp.length === 0, JSON.stringify(pdf.sansNonSupp));
+  ok('PDF : un texte latin ne déclenche aucune détection d’écriture',
+    Array.isArray(pdf.sansEcritures) && pdf.sansEcritures.length === 0, JSON.stringify(pdf.sansEcritures));
 
-  // 12-bis. l'avertissement s'AFFICHE dans la boîte d'export
+  // 12-bis. écriture non latine : le message doit NOMMER l'écriture, pas
+  // énumérer des signes (dont des voyelles combinantes invisibles).
   const avert = await page.evaluate(async () => {
     const L = window.__livro.etat();
-    const gTrad = L.trad;
-    L.trad = [['Ἐν ἀρχῇ ἦν ὁ λόγος']];
+    const gLivre = L.livre, gTrad = L.trad;
+    /* un texte arabe avec voyellation ET un cercle pointillé (artefact fréquent
+       des PDF mal extraits) : les deux ne doivent JAMAIS servir d'exemple */
+    L.livre = { nom: 'Essai arabe', chapitres: [{ titre: 'الفاتحة', paragraphes: ['بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ ◌'] }] };
+    L.trad = [['Au nom d’Allah, le Tout Miséricordieux.']];
+    L.cible = 'fr';
+    const analyse = window.__livro.analyseEcritures();
+    const phrase = window.__livro.phraseEcritures();
+    const reelles = window.__livro.ecrituresReelles();
     await window.__livro.exporter('pdf');
-    await new Promise(r => setTimeout(r, 500));
-    const t = document.getElementById('v461-ex-avert');
-    const res = { texte: t ? t.textContent : '', nom: (document.getElementById('v461-ex-nom') || {}).textContent };
-    L.trad = gTrad;
+    await new Promise(r => setTimeout(r, 1500));
+    const zone = document.getElementById('v461-ex-avert');
+    const res = {
+      analyse, phrase, reelles,
+      fidele: L.pdfFidele,
+      texte: zone ? zone.textContent : '',
+      nom: (document.getElementById('v461-ex-nom') || {}).textContent,
+      /* les exemples ne doivent contenir NI voyelle combinante NI cercle */
+      exemples: analyse.map(e => e.exemple),
+      /* ...et le message ne doit plus les AFFICHER entre guillemets */
+      guillemetsDeSignes: /« [\u0600-\u06FF\u25CC\u2500]/ .test(zone ? zone.textContent : '')
+    };
+    L.livre = gLivre; L.trad = gTrad;
     return res;
   });
-  ok('PDF non latin : la boîte d’export AVERTIT avant de générer', /police/.test(avert.texte) && /DOCX|EPUB/.test(avert.texte), avert.texte.slice(0, 130));
+  ok('écriture non latine : l’ARABE est reconnu comme écriture (pas comme signes)',
+    avert.reelles.length === 1 && avert.reelles[0].nom === 'arabe' && avert.reelles[0].n > 20,
+    JSON.stringify(avert.analyse));
+  ok('le cercle pointillé (artefact) est classé à part, et sans exemple visible',
+    avert.analyse.some(e => e.nom === 'symboles') && avert.analyse.filter(e => e.nom === 'symboles')[0].exemple === '',
+    JSON.stringify(avert.analyse));
+  ok('les signes INVISIBLES (voyellation, cercle pointillé) ne servent pas d’exemple',
+    avert.exemples.indexOf('\u25CC') < 0 && avert.exemples.indexOf('\u064E') < 0 && avert.exemples.indexOf('\u0652') < 0,
+    JSON.stringify(avert.exemples));
+  ok('le message NOMME l’écriture avec son volume (« de l’arabe (N caractères) »)',
+    /de l’<b>arabe<\/b> \(\d/.test(avert.phrase), avert.phrase);
+  ok('le message ne dresse plus de liste de caractères entre guillemets',
+    avert.guillemetsDeSignes === false, avert.texte.slice(0, 120));
+  ok('PDF arabe : le rendu FIDÈLE prend le relais (le navigateur assemble les lettres)',
+    avert.fidele === true, 'fidele=' + avert.fidele);
+  ok('PDF arabe : l’avertissement d’impossibilité DISPARAÎT (il n’y a plus de problème)',
+    /composé par le navigateur/.test(avert.texte) && !/ne seront pas rendus/.test(avert.texte), avert.texte.slice(0, 140));
   ok('le fichier PDF est bien proposé (nom en .pdf)', /\.pdf$/.test(String(avert.nom)), String(avert.nom));
+
+  // 12-bis-1. quelques signes ISOLÉS (filet, puce exotique) : note discrète,
+  // pas l'alerte « prenez DOCX » — proportionner la réponse au problème
+  const signes = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gLivre = L.livre, gTrad = L.trad;
+    L.livre = { nom: 'Essai', chapitres: [{ titre: 'T', paragraphes: ['Un texte latin ordinaire ─ avec un filet ◌ et rien d’autre.'] }] };
+    L.trad = [['']];
+    await window.__livro.exporter('pdf');
+    await new Promise(r => setTimeout(r, 700));
+    const t = (document.getElementById('v461-ex-avert') || {}).textContent || '';
+    const r = { texte: t, reelles: window.__livro.ecrituresReelles().length, fidele: L.pdfFidele };
+    L.livre = gLivre; L.trad = gTrad;
+    return r;
+  });
+  ok('signes isolés : aucune écriture réelle → pas de bascule en images',
+    signes.reelles === 0 && signes.fidele === false, JSON.stringify(signes));
+  ok('signes isolés : note DISCRÈTE (pas l’alerte « prenez DOCX »)',
+    /caractère\(s\) spécial/.test(signes.texte) && !/⚠️/.test(signes.texte) && !/ne seront pas rendus/.test(signes.texte),
+    signes.texte.slice(0, 130));
+
+  // 12-bis-2. le PDF fidèle est un vrai PDF, RELISIBLE, et PAGINÉ
+  const fidele = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gLivre = L.livre, gTrad = L.trad;
+    /* assez de contenu pour dépasser UNE page : la pagination par mesure doit
+       produire plusieurs pages, sans couper les lignes en deux */
+    const paras = [], trad = [];
+    for (let i = 1; i <= 60; i++) {
+      paras.push('الْفَقْرَةُ رَقْمُ ' + i + ' — بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ وَالْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ');
+      trad.push('Paragraphe numero ' + i + ' — au nom d’Allah, le Tout Misericordieux.');
+    }
+    L.livre = { nom: 'Essai long', chapitres: [{ titre: 'الفاتحة', paragraphes: paras }] };
+    L.trad = [trad];
+    L.cible = 'fr';
+    let r = {};
+    try {
+      const b = await window.__livro.pdfDe('bilingue');
+      const u8 = new Uint8Array(await b.arrayBuffer());
+      r.head = String.fromCharCode.apply(null, Array.from(u8.slice(0, 5)));
+      r.taille = b.size;
+      r.pages = (await pdfjsLib.getDocument({ data: u8.slice(0) }).promise).numPages;
+      r.fidele = L.pdfFidele;
+    } catch (e) { r.err = String(e && e.message || e); }
+    L.livre = gLivre; L.trad = gTrad;
+    return r;
+  });
+  ok('PDF fidèle : c’est un vrai PDF relisible par pdf.js', fidele.head === '%PDF-' && !fidele.err, JSON.stringify({ h: fidele.head, err: fidele.err }));
+  ok('PDF fidèle : un texte long est PAGINÉ (plusieurs pages, pas une seule tranche)',
+    fidele.pages >= 2, 'pages=' + fidele.pages);
+  ok('PDF fidèle : les pages sont insérées en image (fichier cohérent en taille)',
+    fidele.taille > 20000 && fidele.fidele === true, JSON.stringify({ t: fidele.taille, f: fidele.fidele }));
+  /* Le PDF-image coûte cher : on BORNE le poids par page pour qu'une
+     régression (qualité montée, PNG au lieu de JPEG) se voie tout de suite.
+     60 paragraphes bilingues ≈ 1 page pleine. */
+  const parPage = fidele.taille / fidele.pages;
+  ok('PDF fidèle : poids par page maîtrisé (< 700 Ko/page)',
+    parPage < 700 * 1024, Math.round(parPage / 1024) + ' Ko/page sur ' + fidele.pages + ' page(s)');
+
+  // 12-bis-3. REPLI : sans html2canvas, on retombe sur le vectoriel ET
+  // l'avertissement doit revenir (c'est le seul cas où il a lieu d'être)
+  const repli = await page.evaluate(async () => {
+    const L = window.__livro.etat();
+    const gLivre = L.livre, gTrad = L.trad;
+    const vraiH2C = window.html2canvas;
+    try { window.html2canvas = undefined; } catch (e) {}
+    L.livre = { nom: 'Essai arabe', chapitres: [{ titre: 'T', paragraphes: ['بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'] }] };
+    L.trad = [['Au nom d’Allah.']];
+    let r = {};
+    try {
+      await window.__livro.exporter('pdf');
+      await new Promise(x => setTimeout(x, 700));
+      r.fidele = L.pdfFidele;
+      r.texte = (document.getElementById('v461-ex-avert') || {}).textContent || '';
+      const b = await window.__livro.pdfVectoriel('bilingue');
+      r.head = String.fromCharCode.apply(null, Array.from(new Uint8Array(await b.arrayBuffer()).slice(0, 5)));
+    } catch (e) { r.err = String(e && e.message || e); }
+    try { window.html2canvas = vraiH2C; } catch (e) {}
+    L.livre = gLivre; L.trad = gTrad;
+    return r;
+  });
+  ok('repli sans navigateur-composeur : le PDF vectoriel est produit quand même',
+    repli.head === '%PDF-' && repli.fidele === false, JSON.stringify({ h: repli.head, f: repli.fidele, e: repli.err }));
+  ok('repli : l’avertissement REVIENT, avec la bonne conjugaison et sans liste de signes',
+    /Ce texte contient de l’arabe \(\d/.test(repli.texte) && /ne seront pas rendus/.test(repli.texte) && !/« /.test(repli.texte),
+    repli.texte.slice(0, 150));
 
   // 12-ter. le bouton PDF existe et route vers l'export PDF
   const boutonPdf = await page.evaluate(async () => {
