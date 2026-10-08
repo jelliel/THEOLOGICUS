@@ -301,6 +301,55 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
   ok('LibreTranslate : aucune confirmation (gratuit, hors-ligne)', sansConfirm.demande === false, JSON.stringify(sansConfirm));
 
+  // 6c-bis. PANNEAU DE STATISTIQUES (barre modernisée)
+  const statAvant = await page.evaluate(() => {
+    const pan = document.getElementById('v461-stats');
+    return { existe: !!pan, visible: pan ? pan.classList.contains('on') : false, cartes: document.querySelectorAll('.v461-carte').length };
+  });
+  ok('panneau de statistiques présent (6 cartes)', statAvant.existe === true && statAvant.cartes === 6, JSON.stringify(statAvant));
+
+  // exécution LENTE simulée : on lit le panneau PENDANT le traitement
+  await page.evaluate(async () => {
+    const sel = document.getElementById('v461-moteur');
+    sel.value = 'lt'; sel.dispatchEvent(new Event('change'));
+    /* on change de langue cible pour une langue JAMAIS traduite (l'anglais a
+       déjà été rempli par les tests précédents) : sinon rien à faire, et des
+       statistiques à zéro seraient le comportement correct. */
+    const sl = document.getElementById('v461-lang');
+    sl.value = 'de'; sl.dispatchEvent(new Event('change'));
+    const vrai = window.fetch;
+    window.fetch = async function (u, o) {
+      if (String(u).indexOf('/translate') >= 0) await new Promise(r => setTimeout(r, 1200));   /* latence simulée : au-delà du seuil de mesure de la vitesse (2 s) */
+      return vrai.apply(this, arguments);
+    };
+    window.__fin = window.__livro.lancer();
+  });
+  await page.waitForTimeout(1500);
+  const pendant = await page.evaluate(() => ({
+    visible: document.getElementById('v461-stats').classList.contains('on'),
+    pct: document.getElementById('v461-pct').textContent,
+    jauge: document.getElementById('v461-jauge').style.width,
+    ecoule: document.getElementById('v461-c-ecoule').textContent,
+    etape: document.getElementById('v461-etape').textContent
+  }));
+  ok('le panneau s’affiche PENDANT le traitement', pendant.visible === true, JSON.stringify(pendant));
+  ok('le pourcentage et la jauge avancent', /\d+ %/.test(pendant.pct) && /\d+%/.test(pendant.jauge), JSON.stringify({ p: pendant.pct, j: pendant.jauge }));
+  ok('l’étape en cours est décrite', /Traduction/.test(pendant.etape), String(pendant.etape).slice(0, 70));
+  ok('l’horloge tourne pendant le traitement (temps écoulé > 0)', pendant.ecoule !== '0:00', pendant.ecoule);
+  await page.evaluate(() => window.__fin);
+  await page.waitForTimeout(600);
+  const apresStats = await page.evaluate(() => ({
+    pct: document.getElementById('v461-pct').textContent,
+    avance: document.getElementById('v461-c-avance').textContent,
+    restant: document.getElementById('v461-c-restant').textContent,
+    vitesse: document.getElementById('v461-c-vitesse').textContent,
+    appels: document.getElementById('v461-c-appels').textContent,
+    car: document.getElementById('v461-c-car').textContent
+  }));
+  ok('à la fin : 100 % et avancement complet', apresStats.pct === '100 %' && /\d+ \/ \d+/.test(apresStats.avance), JSON.stringify(apresStats).slice(0, 80));
+  ok('le restant affiche « terminé »', /termin/.test(apresStats.restant), apresStats.restant);
+  ok('la vitesse et les caractères sont mesurés', /\/min/.test(apresStats.vitesse) && apresStats.car !== '0', JSON.stringify({ v: apresStats.vitesse, c: apresStats.car }));
+
   // 6d. AFFICHAGE MOBILE : colonnes empilées
   const mobile = await page.evaluate(() => {
     const feuille = document.getElementById('v461-css');
@@ -346,7 +395,7 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('export TXT : contient la traduction', exp.texte === true);
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/53`);
-  process.exitCode = pass === 53 ? 0 : 1;
+  console.log(`RESULTAT : ${pass}/61`);
+  process.exitCode = pass === 61 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });

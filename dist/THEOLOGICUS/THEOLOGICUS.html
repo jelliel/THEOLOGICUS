@@ -50715,6 +50715,7 @@ window.continueTradApart = async function (msgId) {
 
 
 
+
 <script id="v461-livrotrado">
 /* ═══════════════════════════════════════════════════════════════════
    v461 — LIVROTRADO : traduire des livres.
@@ -50952,7 +50953,9 @@ window.continueTradApart = async function (msgId) {
         { type: 'image_url', image_url: { url: dataUri } }
       ]
     }];
-    return await texteDeIA(S.moteurOCR, messages, { max_tokens: 4096, temperature: 0 });
+    var t = await texteDeIA(S.moteurOCR, messages, { max_tokens: 4096, temperature: 0 });
+    statsAppel(t.length);
+    return t;
   }
 
   async function ocrPdf(fichier, surPage) {
@@ -51044,6 +51047,7 @@ window.continueTradApart = async function (msgId) {
       if (Array.isArray(t)) out = out.concat(t);
       else out.push(t || '');
       lot.forEach(function (src, k) { memoriser(src, cible, (Array.isArray(t) ? t[k] : '') || ''); });
+      statsAppel(lot.join('').length);
       if (surLot) surLot(lot.length, out);
     }
     return out;
@@ -51070,6 +51074,7 @@ window.continueTradApart = async function (msgId) {
         out.push(tr || src);
         memoriser(src, cible, tr || '');
       });
+      statsAppel(lot.join('').length);
       if (surLot) surLot(lot.length, out);
     }
     return out;
@@ -51131,7 +51136,26 @@ window.continueTradApart = async function (msgId) {
     '#v461-bar select,#v461-bar button{font-family:inherit;font-size:11px;background:#16203a;color:#dfe9ff;border:1px solid rgba(79,142,247,.35);border-radius:7px;padding:5px 9px;cursor:pointer}' +
     '#v461-bar button.primary{background:#2b6fd4;border-color:#2b6fd4;color:#fff;font-weight:700}' +
     '#v461-bar button:disabled{opacity:.45;cursor:not-allowed}' +
-    '#v461-prog{height:4px;background:rgba(79,142,247,.15)}#v461-prog i{display:block;height:100%;width:0;background:#4f8ef7;transition:width .25s}' +
+    /* ═══ PANNEAU DE STATISTIQUES (v462) — la barre de 4 px ne disait rien :
+       on affiche le pourcentage, l'avancement, le temps écoulé, le RESTANT
+       estimé, la vitesse, les appels consommés et le moteur actif. ═══ */
+    '#v461-stats{display:none;padding:10px 14px;border-bottom:1px solid rgba(79,142,247,.18);background:linear-gradient(180deg,rgba(79,142,247,.07),transparent)}' +
+    '#v461-stats.on{display:block}' +
+    '.v461-jauge{position:relative;height:10px;border-radius:6px;background:rgba(79,142,247,.14);overflow:hidden}' +
+    '.v461-jauge i{position:absolute;inset:0 auto 0 0;width:0;border-radius:6px;background:linear-gradient(90deg,#2b6fd4,#4f8ef7 55%,#7fdfff);transition:width .35s ease}' +
+    '.v461-jauge i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:translateX(-100%);animation:v461-sheen 1.6s linear infinite}' +
+    '@keyframes v461-sheen{to{transform:translateX(100%)}}' +
+    '.v461-jauge b{position:absolute;right:6px;top:-2px;font-size:8px;color:#0b1220;font-weight:900}' +
+    '.v461-tete{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}' +
+    '.v461-pct{font-size:22px;font-weight:900;letter-spacing:1px;color:#8fc0ff;font-variant-numeric:tabular-nums}' +
+    '.v461-etape{flex:1;font-size:10.5px;color:#9fb4d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.v461-cartes{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;margin-top:8px}' +
+    '.v461-carte{border:1px solid rgba(79,142,247,.2);border-radius:8px;padding:6px 8px;background:rgba(10,16,28,.55)}' +
+    '.v461-carte .k{font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#7fa6d8}' +
+    '.v461-carte .v{font-size:14px;font-weight:700;color:#e6f6ff;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.v461-carte .v small{font-size:9px;color:#8fa3b8;font-weight:400}' +
+    '.v461-carte.fin .v{color:#8ef0b0}' +
+    '#v461-prog{display:none}' +
     '#v461-body{flex:1;overflow:auto;padding:12px 14px}' +
     '#v461-drop{border:2px dashed rgba(79,142,247,.4);border-radius:12px;padding:34px 18px;text-align:center;color:#9fb4d0;font-size:12px}' +
     '#v461-drop.hot{border-color:#4f8ef7;background:rgba(79,142,247,.08)}' +
@@ -51176,7 +51200,18 @@ window.continueTradApart = async function (msgId) {
           '<button id="v461-stop" disabled>⏹ Arrêter</button>' +
           '<input type="file" id="v461-file" accept=".epub,.docx,.pdf,.txt,.md,.markdown,.doc,.mobi" style="display:none">' +
         '</div>' +
-        '<div id="v461-prog"><i></i></div>' +
+        '<div id="v461-stats">' +
+          '<div class="v461-tete"><span class="v461-pct" id="v461-pct">0 %</span><span class="v461-etape" id="v461-etape">en attente</span></div>' +
+          '<div class="v461-jauge"><i id="v461-jauge"></i></div>' +
+          '<div class="v461-cartes">' +
+            '<div class="v461-carte"><div class="k">Avancement</div><div class="v" id="v461-c-avance">0 / 0</div></div>' +
+            '<div class="v461-carte"><div class="k">Écoulé</div><div class="v" id="v461-c-ecoule">0:00</div></div>' +
+            '<div class="v461-carte"><div class="k">Restant estimé</div><div class="v" id="v461-c-restant">—</div></div>' +
+            '<div class="v461-carte"><div class="k">Vitesse</div><div class="v" id="v461-c-vitesse">—</div></div>' +
+            '<div class="v461-carte"><div class="k">Appels IA</div><div class="v" id="v461-c-appels">0</div></div>' +
+            '<div class="v461-carte"><div class="k">Caractères</div><div class="v" id="v461-c-car">0</div></div>' +
+          '</div>' +
+        '</div>' +
         '<div id="v461-estim" style="padding:2px 14px 4px;font-size:10.5px;color:#7fa6d8"></div>' +
         '<div id="v461-msg"></div>' +
         '<div id="v461-body">' +
@@ -51273,11 +51308,57 @@ window.continueTradApart = async function (msgId) {
     var el = document.getElementById('v461-msg');
     if (el) { el.textContent = t || ''; el.style.color = couleur || '#9fb4d0'; }
   }
+  /* ═══ STATISTIQUES EN DIRECT ═══
+     Tout est MESURÉ, pas décoratif : le restant est extrapolé de la vitesse
+     réelle observée, et l'horloge tourne entre deux paragraphes (un ouvrage de
+     300 pages dure des dizaines de minutes : sans cela, l'écran semble figé). */
+  var S_STAT = { debut: 0, appels: 0, caracteres: 0, minuteur: null };
+  function duree(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + 'h ' : '') + m + ':' + String(s).padStart(2, '0');
+  }
+  function majStats() {
+    var pan = document.getElementById('v461-stats');
+    if (!pan) return;
+    if (!S.enCours && !S.fait && !S.total) { pan.classList.remove('on'); return; }
+    pan.classList.add('on');
+    var pct = S.total ? Math.min(100, Math.round(100 * S.fait / S.total)) : 0;
+    var jauge = document.getElementById('v461-jauge');
+    if (jauge) jauge.style.width = pct + '%';
+    var p = document.getElementById('v461-pct'); if (p) p.textContent = pct + ' %';
+    var av = document.getElementById('v461-c-avance'); if (av) av.textContent = S.fait + ' / ' + S.total;
+    var ecoule = S_STAT.debut ? (Date.now() - S_STAT.debut) / 1000 : 0;
+    var e = document.getElementById('v461-c-ecoule'); if (e) e.textContent = duree(ecoule);
+    var vitesse = (ecoule > 2 && S.fait) ? (S.fait / (ecoule / 60)) : 0;
+    var v = document.getElementById('v461-c-vitesse');
+    if (v) v.innerHTML = vitesse ? vitesse.toFixed(1) + ' <small>/min</small>' : '—';
+    var r = document.getElementById('v461-c-restant');
+    if (r) {
+      if (vitesse > 0 && S.total > S.fait) r.innerHTML = duree((S.total - S.fait) / vitesse * 60) + ' <small>~</small>';
+      else if (S.total && S.fait >= S.total) r.innerHTML = '<span style="color:#8ef0b0">terminé</span>';
+      else r.textContent = '—';
+    }
+    var a = document.getElementById('v461-c-appels'); if (a) a.textContent = String(S_STAT.appels);
+    var c = document.getElementById('v461-c-car');
+    if (c) c.innerHTML = S_STAT.caracteres > 999 ? (Math.round(S_STAT.caracteres / 1000) + ' <small>k</small>') : String(S_STAT.caracteres);
+  }
+  function statsDebut(etape) {
+    S_STAT.debut = Date.now(); S_STAT.appels = 0; S_STAT.caracteres = 0;
+    var e = document.getElementById('v461-etape'); if (e) e.textContent = etape || '';
+    var pan = document.getElementById('v461-stats'); if (pan) pan.classList.add('on');
+    if (S_STAT.minuteur) clearInterval(S_STAT.minuteur);
+    S_STAT.minuteur = setInterval(majStats, 500);   /* l'horloge avance même entre deux paragraphes */
+    majStats();
+  }
+  function statsEtape(txt) { var e = document.getElementById('v461-etape'); if (e) e.textContent = txt || ''; }
+  function statsAppel(nbCar) { S_STAT.appels++; S_STAT.caracteres += (nbCar || 0); }
+  function statsFin() { if (S_STAT.minuteur) { clearInterval(S_STAT.minuteur); S_STAT.minuteur = null; } majStats(); }
+
   function progression() {
-    var i = document.querySelector('#v461-prog i');
-    if (i) i.style.width = (S.total ? Math.round(100 * S.fait / S.total) : 0) + '%';
     var e = document.getElementById('v461-etat');
     if (e) e.textContent = S.total ? (S.fait + ' / ' + S.total + ' paragraphes') : '';
+    majStats();
   }
 
   /* ═══ 4. CHARGEMENT + AFFICHAGE ═══ */
@@ -51331,10 +51412,14 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('v461-pause').textContent = '⏸ Pause';
     var t0 = Date.now();
     try {
+      statsDebut('OCR — préparation');
       var chapitres = await ocrPdf(fichier, function (p, total, utiles) {
-        S.total = total; S.fait = p; progression();
+        S.total = total; S.fait = p;
+        statsEtape('OCR — page ' + p + ' / ' + total + ' (' + utiles + ' page(s) utile(s))');
+        progression();
         msg('🔍 OCR page ' + p + ' / ' + total + ' — ' + utiles + ' page(s) exploitable(s)…');
       });
+      statsFin();
       if (!chapitres.length) throw new Error('L’OCR n’a produit aucun texte exploitable');
       var livre = { id: 'livre_' + Date.now(), nom: fichier.name, chapitres: chapitres };
       S.livre = livre;
@@ -51427,6 +51512,7 @@ window.continueTradApart = async function (msgId) {
     var fait = 0, total = 0;
     S.livre.chapitres.forEach(function (c) { total += c.paragraphes.length; });
     S.total = total;
+    statsDebut('Traduction — ' + (S.moteur === 'lt' ? 'LibreTranslate (local)' : S.moteur));
     try {
       for (var ci = 0; ci < S.livre.chapitres.length; ci++) {
         if (S.arret) throw new Error('Arrêt');
@@ -51440,6 +51526,7 @@ window.continueTradApart = async function (msgId) {
         }
         S.fait = fait; progression();
         if (!aFaire.length) continue;
+        statsEtape('Traduction — chapitre ' + (ci + 1) + '/' + S.livre.chapitres.length + ' · ' + aFaire.length + ' paragraphe(s)');
         msg('Chapitre ' + (ci + 1) + '/' + S.livre.chapitres.length + ' — ' + aFaire.length + ' paragraphe(s)…');
         var traduits = (S.moteur === 'lt')
           ? await traduireLT(aFaire, S.cible, function (n, out) {
@@ -51453,6 +51540,8 @@ window.continueTradApart = async function (msgId) {
         traduits.forEach(function (t, k) { S.trad[ci][index[k]] = t; });
         await idbPut('courant', { livre: S.livre, trad: S.trad, cible: S.cible });
       }
+      statsFin();
+      statsFin();
       var sec = ((Date.now() - t0) / 1000).toFixed(0);
       msg('✅ Traduction terminée — ' + fait + ' paragraphes en ' + sec + 's. Vous pouvez exporter.', '#8ef0b0');
       toast('Traduction terminée ✓', 'success');
@@ -51620,6 +51709,7 @@ window.continueTradApart = async function (msgId) {
     libsPretes: libsPretes,
     estimation: estimation, majEstimation: majEstimation, changerLangue: changerLangue,
     ocrPdf: ocrPdf, lancerOCR: lancerOCR, proposerOCR: proposerOCR,
+    majStats: majStats, statsDebut: statsDebut,
     listeMoteurs: listeMoteurs, estVision: estVision, cfgDe: cfgDe,
     etat: function () { return S; },
     docxDe: docxDe, epubDe: epubDe, texteComplet: texteComplet,
