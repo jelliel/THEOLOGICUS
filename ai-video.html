@@ -257,6 +257,13 @@
     .cm-card-actions { display: flex; gap: 0.3rem; margin-top: 0.45rem; flex-wrap: wrap; }
     .cm-card-actions .model-action-btn { font-size: 0.6rem; padding: 0.18rem 0.4rem; }
     .cm-form { background: rgba(255,255,255,0.02); border: 1px solid var(--border, #2a2a3a); border-radius: 0.5rem; padding: 0.6rem; margin-top: 0.5rem; }
+    .cm-row-small { gap: 0.3rem; }
+    .cm-row-small .api-key-input { font-size: 0.7rem; padding: 0.25rem 0.4rem; }
+    .cm-check { display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; color: var(--text, #ddd); flex: 1; min-width: 0; }
+    .cm-check input { width: auto; }
+    .cm-error { display: none; margin-top: 0.35rem; padding: 0.3rem 0.45rem; border-radius: 0.35rem; font-size: 0.68rem; color: #ffb4b4; background: rgba(255,80,80,0.08); border: 1px solid rgba(255,80,80,0.25); }
+    .cm-use-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; font-size: 0.7rem; color: var(--text, #ccc); }
+    .cm-use-row select { flex: 1; min-width: 0; }
 </style>
 </head>
 <body>
@@ -422,14 +429,34 @@
             <input type="text" class="api-key-input" id="cm-model-input" placeholder="Model ID (ex : sdxl-1.0)">
             <select class="api-key-input" id="cm-model-select" style="display:none;"></select>
             <button type="button" class="api-btn extra" id="cm-fetch-btn" title="Lister les modèles de l'endpoint">🔄 Fetch</button>
+            <button type="button" class="api-btn extra" id="cm-refresh-btn" title="Re-interroger l'endpoint">↻</button>
+        </div>
+        <div class="cm-row cm-row-small">
+            <input type="text" class="api-key-input" id="cm-size" placeholder="Taille (ex : 1024x1024)">
+            <input type="text" class="api-key-input" id="cm-quality" placeholder="Qualité (opt.)">
+            <input type="text" class="api-key-input" id="cm-steps" placeholder="Steps (opt.)">
+        </div>
+        <div class="cm-row cm-row-small">
+            <label class="cm-check"><input type="checkbox" id="cm-video"> 🎥 Vidéo (endpoint compatible)</label>
+            <select class="api-key-input" id="cm-adapter">
+                <option value="agnes">Adaptateur : Agnes (même contrat API)</option>
+                <option value="openai">Adaptateur : OpenAI-video (expérimental)</option>
+            </select>
         </div>
         <div class="api-status-line" id="cm-status">
             <span class="status-dot"></span>
             <span id="cm-status-text">—</span>
         </div>
+        <div class="cm-error" id="cm-error"></div>
         <div class="cm-actions">
             <button type="button" class="add-model-btn" id="cm-save-btn">💾 Enregistrer</button>
+            <button type="button" class="model-action-btn" id="cm-test-btn" title="Tester la connexion (GET /models)">🔌 Tester</button>
             <button type="button" class="model-action-btn" id="cm-clear-btn">🗑️ Tout supprimer</button>
+        </div>
+        <div class="cm-actions">
+            <button type="button" class="model-action-btn" id="cm-export-btn">⬇️ Export</button>
+            <button type="button" class="model-action-btn" id="cm-import-btn">⬆️ Import</button>
+            <input type="file" id="cm-import-file" accept="application/json" style="display:none;">
         </div>
     </div>
     <div class="model-selector" style="margin-top:0.5rem; padding-top:0.5rem;">
@@ -437,6 +464,10 @@
             <span>⚙️ Modèles personnalisés enregistrés</span>
         </div>
         <div class="model-grid" id="cm-grid"><div class="model-empty">Aucun modèle personnalisé.</div></div>
+        <div class="cm-use-row">
+            <label>Image à utiliser :</label>
+            <select id="cm-image-choice" class="api-key-input"></select>
+        </div>
     </div>
 
     <div class="stat-line">
@@ -536,6 +567,10 @@
                     <div class="upload-hint">MP4 · MOV · AVI · MKV · WEBM · FLV · WMV · M4V · MPG · 3GP · TS</div>
                 </div>
                 <div class="videos-grid" id="videos-grid"></div>
+                <div class="cm-use-row">
+                    <label>Modèle vidéo :</label>
+                    <select id="cm-video-choice" class="api-key-input"></select>
+                </div>
             </div>
         </div>
     </div>
@@ -1189,7 +1224,9 @@ const SK = {
     EXTRA_MODELS: 'cinema_noir_extra_models_v1', ACTIVE_MODELS: 'cinema_noir_active_models_v1',
     GALLERY: 'cinema_noir_gallery_v1', AUTODL: 'cinema_noir_autodl_v1',
     PENDING_TASKS: 'agnes_pending_tasks_v1',
-    CUSTOM_MODELS: 'cinema_noir_custom_models_v2'
+    CUSTOM_MODELS: 'cinema_noir_custom_models_v2',
+    CM_FETCH_CACHE: 'cinema_noir_cm_cache_v1',
+    CM_CHOICE: 'cinema_noir_cm_choice_v1'
 };
 
 const state = {
@@ -1204,7 +1241,8 @@ const state = {
     pendingSelection: [],
     agnesKeyStatus: null, mistralKeyStatus: null,
     extraModels: [], activeModels: [],
-    customModels: []
+    customModels: [],
+    cmImageChoice: '', cmVideoChoice: ''
 };
 
 const LOG_MAX = 500;
@@ -1596,7 +1634,21 @@ function clearAllExtraModels() {
 function cmUid() { return 'cm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function loadCustomModels() { try { return JSON.parse(localStorage.getItem(SK.CUSTOM_MODELS) || '[]'); } catch (e) { return []; } }
 function saveCustomModels() { try { localStorage.setItem(SK.CUSTOM_MODELS, JSON.stringify(state.customModels)); } catch (e) {} }
-function customModelsImage() { return (state.customModels || []).find(function (c) { return c.image; }) || null; }
+function customModelsImage() {
+  const choix = state.cmImageChoice;
+  if (choix) { const c = (state.customModels || []).find(function (x) { return x.uid === choix; }); if (c) return c; }
+  return (state.customModels || []).find(function (c) { return c.image; }) || null;
+}
+function customModelsVideo() {
+  const choix = state.cmVideoChoice;
+  if (choix) { const c = (state.customModels || []).find(function (x) { return x.uid === choix; }); if (c && c.video) return c; }
+  return (state.customModels || []).find(function (c) { return c.video; }) || null;
+}
+
+/* ── Cache des listes de modèles par endpoint (#6) ── */
+function cmCacheKey(ep) { return SK.CM_FETCH_CACHE + ':' + ep; }
+function cmCacheSet(ep, ids) { try { localStorage.setItem(cmCacheKey(ep), JSON.stringify({ ts: Date.now(), ids: ids })); } catch (e) {} }
+function cmCacheGet(ep) { try { return JSON.parse(localStorage.getItem(cmCacheKey(ep)) || 'null'); } catch (e) { return null; } }
 
 async function cmFetchModels() {
     const ep = (document.getElementById('cm-endpoint').value || '').trim().replace(/\/+$/, '');
@@ -1612,6 +1664,7 @@ async function cmFetchModels() {
         if (!res.ok) { if (txt) txt.textContent = 'HTTP ' + res.status; if (dot) dot.className = 'status-dot invalid'; return; }
         const liste = _listeModeles(data);
         const ids = (liste || []).map(function (m) { return m.id || m.name; }).filter(Boolean);
+        cmCacheSet(ep, ids);
         const sel = document.getElementById('cm-model-select');
         const inp = document.getElementById('cm-model-input');
         if (ids.length) {
@@ -1639,14 +1692,21 @@ function cmSave() {
     const sel = document.getElementById('cm-model-select');
     const inp = document.getElementById('cm-model-input');
     const modelId = (sel.style.display !== 'none' && sel.value) ? sel.value : (inp.value || '').trim();
+    const size = (document.getElementById('cm-size').value || '').trim();
+    const quality = (document.getElementById('cm-quality').value || '').trim();
+    const steps = (document.getElementById('cm-steps').value || '').trim();
+    const video = !!document.getElementById('cm-video').checked;
+    const adapter = document.getElementById('cm-adapter').value || 'agnes';
     if (!ep) { showToast('Endpoint requis', 'warn'); return; }
     if (!modelId) { showToast('Model ID requis', 'warn'); return; }
     const exist = state.customModels.find(function (c) { return c.endpoint === ep && c.id === modelId; });
     if (exist) {
         exist.name = name || exist.name || modelId; exist.apiKey = key;
+        exist.size = size; exist.quality = quality; exist.steps = steps;
+        exist.video = video; exist.adapter = adapter;
         logInfo('⚙️ Modèle personnalisé mis à jour : <code>' + escapeHtml(modelId) + '</code>');
     } else {
-        state.customModels.push({ uid: cmUid(), name: name || modelId, endpoint: ep, apiKey: key, id: modelId, image: false });
+        state.customModels.push({ uid: cmUid(), name: name || modelId, endpoint: ep, apiKey: key, id: modelId, image: false, size: size, quality: quality, steps: steps, video: video, adapter: adapter });
         logSuccess('⚙️ Modèle personnalisé enregistré : <code>' + escapeHtml(modelId) + '</code>');
     }
     saveCustomModels(); cmRender(); showToast('Modèle enregistré ✓', 'success');
@@ -1676,6 +1736,25 @@ function cmRender() {
     grid.querySelectorAll('[data-cm-toggle]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmToggleImage(el.dataset.cmToggle); }); });
     grid.querySelectorAll('[data-cm-edit]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmEdit(el.dataset.cmEdit); }); });
     grid.querySelectorAll('[data-cm-del]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmDelete(el.dataset.cmDel); }); });
+    // Sélecteurs « utiliser pour… » (image / vidéo) — #4 & #7.
+    const selImg = document.getElementById('cm-image-choice');
+    if (selImg) {
+        const opts = ['<option value="">Agnes (défaut)</option>'].concat(
+            state.customModels.map(function (c) {
+                return '<option value="' + escapeHtml(c.uid) + '"' + (state.cmImageChoice === c.uid ? ' selected' : '') + '>' + escapeHtml(c.name || c.id) + '</option>';
+            })
+        );
+        selImg.innerHTML = opts.join('');
+    }
+    const selVid = document.getElementById('cm-video-choice');
+    if (selVid) {
+        const opts = ['<option value="">Agnes (défaut)</option>'].concat(
+            state.customModels.filter(function (c) { return c.video; }).map(function (c) {
+                return '<option value="' + escapeHtml(c.uid) + '"' + (state.cmVideoChoice === c.uid ? ' selected' : '') + '>' + escapeHtml(c.name || c.id) + ' (' + (c.adapter || 'agnes') + ')</option>';
+            })
+        );
+        selVid.innerHTML = opts.join('');
+    }
 }
 
 function cmToggleImage(uid) {
@@ -1693,9 +1772,15 @@ function cmEdit(uid) {
     document.getElementById('cm-endpoint').value = c.endpoint || '';
     document.getElementById('cm-key').value = c.apiKey || '';
     document.getElementById('cm-model-input').value = c.id || '';
+    document.getElementById('cm-size').value = c.size || '';
+    document.getElementById('cm-quality').value = c.quality || '';
+    document.getElementById('cm-steps').value = c.steps || '';
+    document.getElementById('cm-video').checked = !!c.video;
+    document.getElementById('cm-adapter').value = c.adapter || 'agnes';
     const sel = document.getElementById('cm-model-select'); sel.style.display = 'none'; sel.innerHTML = '';
     document.getElementById('cm-status-text').textContent = '—';
     const d = document.querySelector('#cm-status .status-dot'); if (d) d.className = 'status-dot';
+    cmChargeCache();   // propose la liste en cache pour cet endpoint
     logInfo('⚙️ Édition de <code>' + escapeHtml(c.id) + '</code>');
 }
 
@@ -1712,6 +1797,96 @@ function cmClearAll() {
     if (!confirm('Supprimer TOUS les modèles personnalisés ?')) return;
     state.customModels = []; saveCustomModels(); cmRender();
     logWarn('⚙️ Modèles personnalisés supprimés');
+}
+
+/* #1 — Test de connexion : GET /models avec la clé saisie. */
+async function cmTest() {
+    const ep = (document.getElementById('cm-endpoint').value || '').trim().replace(/\/+$/, '');
+    const key = (document.getElementById('cm-key').value || '').trim();
+    const txt = document.getElementById('cm-status-text');
+    const dot = document.querySelector('#cm-status .status-dot');
+    if (!ep) { if (txt) txt.textContent = 'Endpoint requis'; if (dot) dot.className = 'status-dot'; return; }
+    if (txt) txt.textContent = '🔌 Test…'; if (dot) dot.className = 'status-dot checking';
+    const url = _VIA_RELAIS ? ('/proxy/' + ep + '/models') : (ep + '/models');
+    try {
+        const res = await fetch(url, { method: 'GET', headers: key ? { 'Authorization': 'Bearer ' + key } : {} });
+        let data = null; try { data = await res.json(); } catch (e) {}
+        const ids = (_listeModeles(data) || []).map(function (m) { return m.id || m.name; }).filter(Boolean);
+        if (!res.ok) { if (txt) txt.textContent = '❌ HTTP ' + res.status + ' (clé/endpoint rejeté)'; if (dot) dot.className = 'status-dot invalid'; return; }
+        if (txt) txt.textContent = '✅ Connexion OK (' + ids.length + ' modèle(s))'; if (dot) dot.className = 'status-dot valid';
+        logSuccess('🔌 Endpoint <code>' + escapeHtml(ep) + '</code> répond (' + ids.length + ' modèle(s))');
+    } catch (e) {
+        if (txt) txt.textContent = '❌ Erreur réseau'; if (dot) dot.className = 'status-dot invalid';
+        logWarn('🔌 Test impossible : ' + escapeHtml(e.message));
+    }
+}
+
+/* #2 — Affiche l'erreur réelle d'un appel perso (image) dans le panneau. */
+function cmSignaleErreur(msg) {
+    const el = document.getElementById('cm-error'); if (!el) return;
+    el.textContent = '⚠️ ' + msg;
+    el.style.display = '';
+    clearTimeout(el._cmT);
+    el._cmT = setTimeout(function () { el.style.display = 'none'; }, 9000);
+}
+
+/* #3 — Export / Import JSON de la config des modèles perso. */
+function cmExport() {
+    const data = { version: 1, exportedAt: new Date().toISOString(), models: state.customModels };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'modeles_personnalises.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    logInfo('⚙️ Export de ' + state.customModels.length + ' modèle(s)');
+}
+function cmImport(file) {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = function () {
+        try {
+            const obj = JSON.parse(r.result);
+            const arr = Array.isArray(obj) ? obj : (obj.models || []);
+            let ajout = 0;
+            arr.forEach(function (m) {
+                if (!m || !m.endpoint || !m.id) return;
+                if (!m.uid) m.uid = cmUid();
+                if (m.video === undefined) m.video = false;
+                if (!m.adapter) m.adapter = 'agnes';
+                const ex = state.customModels.find(function (c) { return c.endpoint === m.endpoint && c.id === m.id; });
+                if (ex) Object.assign(ex, m); else state.customModels.push(m);
+                ajout++;
+            });
+            saveCustomModels(); cmRender();
+            logSuccess('⚙️ Import : ' + ajout + ' modèle(s)');
+            showToast('Import ✓ ' + ajout, 'success');
+        } catch (e) {
+            logError('⚙️ Import échoué : ' + escapeHtml(e.message));
+            showToast('Import échoué', 'error');
+        }
+    };
+    r.readAsText(file);
+}
+
+/* #6 — Pré-remplit la liste de modèles depuis le cache local (sans réseau). */
+function cmChargeCache() {
+    const ep = (document.getElementById('cm-endpoint').value || '').trim().replace(/\/+$/, '');
+    if (!ep) return;
+    const c = cmCacheGet(ep);
+    if (!c || !c.ids || !c.ids.length) return;
+    const sel = document.getElementById('cm-model-select');
+    const inp = document.getElementById('cm-model-input');
+    sel.innerHTML = c.ids.map(function (id) { return '<option value="' + escapeHtml(id) + '">' + escapeHtml(id) + '</option>'; }).join('');
+    sel.style.display = ''; inp.style.display = 'none';
+    const txt = document.getElementById('cm-status-text');
+    if (txt) txt.textContent = c.ids.length + ' modèle(s) en cache — Fetch pour rafraîchir';
+    const dot = document.querySelector('#cm-status .status-dot');
+    if (dot) dot.className = 'status-dot';
+}
+
+function saveCmChoice() {
+    try { localStorage.setItem(SK.CM_CHOICE, JSON.stringify({ image: state.cmImageChoice, video: state.cmVideoChoice })); } catch (e) {}
 }
 
 // v126h — Vérifie une clé en interrogeant GET /models, avec repli robuste.
@@ -2186,17 +2361,19 @@ async function apiFetch(url, options = {}) {
     }
     return lastResponse || fetch(url, options);
 }
-async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri) {
+async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri, cm) {
+    const base = cm ? _viaRelais(cm.endpoint) : API_BASE;
+    const key = cm ? (cm.apiKey || '') : getApiKey();
     const body = { model: modelId, prompt, num_frames: state.durationFrames, frame_rate: FRAME_RATE };
     if (imageDataUri) body.image = imageDataUri;
     if (audioDataUri) body.audio = audioDataUri;
     if (videoDataUri) body.video = videoDataUri;
-    logStep('🎬 Envoi à <code>' + escapeHtml(modelId) + '</code>');
+    logStep('🎬 Envoi à <code>' + escapeHtml(modelId) + '</code>' + (cm ? ' (' + escapeHtml(cm.endpoint) + ')' : ''));
     logInfo('📝 Prompt : <code>' + escapeHtml(prompt.slice(0, 160)) + (prompt.length > 160 ? '…' : '') + '</code>');
     if (videoDataUri) logInfo('🎥 Vidéo jointe');
     if (imageDataUri) logInfo('🖼️ Image jointe');
     if (audioDataUri) logInfo('🎵 Audio joint');
-    const res = await apiFetch(API_BASE + '/videos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await apiFetch(base + '/videos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { const err = await res.text(); logError('❌ HTTP ' + res.status + ' — ' + escapeHtml(err.slice(0, 150))); throw new Error('HTTP ' + res.status); }
     const data = await res.json();
     const videoId = data.video_id || data.id || data.task_id;
@@ -2206,7 +2383,11 @@ async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, vide
     return videoId;
 }
 
-async function pollUntilDone(videoId, modelId, sceneLabel) {
+async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
+    const base = cm ? _viaRelais(cm.endpoint) : API_BASE;
+    const key = cm ? (cm.apiKey || '') : getApiKey();
+    const openai = !!(cm && cm.adapter === 'openai');
+    const pollBase = cm ? (openai ? _viaRelais(cm.endpoint) + '/videos' : _viaRelais(cm.endpoint) + '/agnesapi') : POLL_BASE;
     const videoDurationSec = state.durationFrames / FRAME_RATE;
     const maxTimeoutSec = Math.min(MAX_POLL_TIMEOUT, Math.max(BASE_POLL_TIMEOUT, videoDurationSec * POLL_TIMEOUT_PER_SEC));
     const maxAttempts = Math.floor(maxTimeoutSec / POLL_INTERVAL);
@@ -2232,8 +2413,10 @@ async function pollUntilDone(videoId, modelId, sceneLabel) {
             await sleep(1000); waitSec--;
         }
         try {
-            const url = POLL_BASE + '?video_id=' + encodeURIComponent(videoId) + '&model_name=' + encodeURIComponent(modelId);
-            const r = await apiFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + getApiKey() } });
+            const url = openai
+                ? pollBase + '/' + encodeURIComponent(videoId)
+                : pollBase + '?video_id=' + encodeURIComponent(videoId) + '&model_name=' + encodeURIComponent(modelId);
+            const r = await apiFetch(url, { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } });
             const d = await r.json();
             const status = d.status || 'unknown'; const progress = d.progress || 0;
             if (progress !== lastProgress) { lastProgress = progress; logInfo('🔄 ' + sceneLabel + ' — <strong>' + progress + '%</strong> (' + status + ')'); }
@@ -2243,7 +2426,7 @@ async function pollUntilDone(videoId, modelId, sceneLabel) {
             if (status === 'completed' || status === 'succeeded' || status === 'done') {
                 const elapsed = ((Date.now() - start) / 1000).toFixed(1);
                 logSuccess('🎉 ' + sceneLabel + ' terminée en <strong>' + elapsed + 's</strong>');
-                const videoUrl = (d.metadata && d.metadata.url) || d.url || (d.output && d.output.url);
+                const videoUrl = (d.metadata && d.metadata.url) || d.url || (d.output && d.output.url) || (d.data && d.data[0] && (d.data[0].url || d.data[0].b64_json));
                 if (videoUrl) { try { await addVideoToGallery(videoUrl, sceneLabel, { model: modelId, scene: sceneLabel }); } catch (e) { logWarn('⚠️ Ajout galerie : ' + escapeHtml(e.message)); } }
                 else { logWarn('⚠️ Aucune URL retournée'); }
                 removePendingTask(videoId);
@@ -2395,7 +2578,12 @@ async function startGeneration() {
         for (let i = 0; i < n; i++) items.push({ mode: 'combo', index: i, image: state.comboImages[i] || null, video: state.comboVideos[i] || null, audio: state.comboAudios[i] || null });
     }
     if (!items.length) { showToast('Aucune scène', 'warn'); return; }
+    let cmVid = customModelsVideo();
     let modelsToUse = [...state.activeModels];
+    if (cmVid) {
+        modelsToUse = [cmVid.id];
+        logInfo('🎥 Modèle vidéo personnalisé actif : <code>' + escapeHtml(cmVid.id) + '</code> (' + escapeHtml(cmVid.endpoint) + ', adaptateur ' + (cmVid.adapter || 'agnes') + ')');
+    }
     if (!modelsToUse.length) { modelsToUse = [getSelectedModelId()]; logWarn('⚠️ Aucun modèle — fallback : <code>' + escapeHtml(modelsToUse[0]) + '</code>'); }
     state.isRunning = true; state.stopRequested = false; setLogStatusDot('active');
     logStep('🚀 <strong>Démarrage</strong>');
@@ -2433,8 +2621,8 @@ async function startGeneration() {
                 if (window.__v455Long && window.__v455Long.necessaire()) {
                     await window.__v455Long.executer(prompt, img, aud, modelId, vid, sceneLabel);
                 } else {
-                    const videoId = await createVideoTask(prompt, img, aud, modelId, vid);
-                    await pollUntilDone(videoId, modelId, sceneLabel);
+                    const videoId = await createVideoTask(prompt, img, aud, modelId, vid, cmVid);
+                    await pollUntilDone(videoId, modelId, sceneLabel, cmVid);
                 }
                 completed++;
             } catch (e) {
@@ -2613,8 +2801,16 @@ async function enrichWithMistral(btn, textareaId) {
     document.getElementById('extra-model-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addExtraModel(e.target.value); } });
     document.getElementById('extra-clear-btn')?.addEventListener('click', clearAllExtraModels);
     document.getElementById('cm-fetch-btn')?.addEventListener('click', cmFetchModels);
+    document.getElementById('cm-refresh-btn')?.addEventListener('click', cmFetchModels);
     document.getElementById('cm-save-btn')?.addEventListener('click', cmSave);
     document.getElementById('cm-clear-btn')?.addEventListener('click', cmClearAll);
+    document.getElementById('cm-test-btn')?.addEventListener('click', cmTest);
+    document.getElementById('cm-export-btn')?.addEventListener('click', () => cmExport());
+    document.getElementById('cm-import-btn')?.addEventListener('click', () => { const f = document.getElementById('cm-import-file'); if (f) f.click(); });
+    document.getElementById('cm-import-file')?.addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) cmImport(f); e.target.value = ''; });
+    document.getElementById('cm-endpoint')?.addEventListener('blur', cmChargeCache);
+    document.getElementById('cm-image-choice')?.addEventListener('change', e => { state.cmImageChoice = e.target.value; saveCmChoice(); cmRender(); });
+    document.getElementById('cm-video-choice')?.addEventListener('change', e => { state.cmVideoChoice = e.target.value; saveCmChoice(); cmRender(); });
     document.getElementById('cm-model-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); cmSave(); } });
     document.getElementById('check-status-btn')?.addEventListener('click', checkPendingTasks);
     document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
@@ -2641,6 +2837,11 @@ async function enrichWithMistral(btn, textareaId) {
     state.extraModels = loadExtraModels();
     state.activeModels = loadActiveModels();
     state.customModels = loadCustomModels();
+    try {
+        const ch = JSON.parse(localStorage.getItem(SK.CM_CHOICE) || '{}');
+        state.cmImageChoice = ch.image || '';
+        state.cmVideoChoice = ch.video || '';
+    } catch (e) {}
     renderExtraModelGrid(); renderActiveModelsBar(); cmRender();
     const prevAgnes = loadDetectedAgnes();
     if (prevAgnes.length) renderAgnesModelGrid(prevAgnes);
@@ -2934,10 +3135,13 @@ async function enrichWithMistral(btn, textareaId) {
         var cmKey = cm ? (cm.apiKey || '') : getApiKey();
         if (cm) logStep('🖼️ Image via modèle personnalisé <code>' + modeles[i] + '</code> (' + escapeHtml(cm.endpoint) + ')');
         else logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
+        var bodyImg = { model: modeles[i], prompt: prompt, n: 1, size: (cm && cm.size) ? cm.size : '1024x1024' };
+        if (cm && cm.quality) bodyImg.quality = cm.quality;
+        if (cm && cm.steps) { var s = parseInt(cm.steps, 10); if (!isNaN(s)) bodyImg.steps = s; }
         var res = await apiFetch(cmBase + '/images/generations', {
           method: 'POST',
           headers: { 'Authorization': 'Bearer ' + cmKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: modeles[i], prompt: prompt, n: 1, size: '1024x1024' })
+          body: JSON.stringify(bodyImg)
         });
         if (!res.ok) { var t = ''; try { t = (await res.text()).slice(0, 120); } catch (e) {} throw new Error('HTTP ' + res.status + ' ' + t); }
         var d = await res.json();
@@ -2960,7 +3164,9 @@ async function enrichWithMistral(btn, textareaId) {
         if (btn) { btn.textContent = orig; btn.disabled = false; }
         return entree;
       } catch (e) {
-        logWarn('⚠️ <code>' + modeles[i] + '</code> : ' + escapeHtml(String(e && e.message || e)));
+        var msgErr = String(e && e.message || e);
+        if (cm) cmSignaleErreur('Image (' + modeles[i] + ') : ' + msgErr);
+        logWarn('⚠️ <code>' + modeles[i] + '</code> : ' + escapeHtml(msgErr));
       }
     }
     logError('❌ Aucune image générée');

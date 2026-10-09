@@ -43,7 +43,11 @@ function tuerPort(port) {
     const out = execSync(`netstat -ano | findstr :${port}`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
     const pids = new Set();
     out.split("\n").forEach(l => {
-      const m = l.match(new RegExp(`:${port}\\s+[^\\s]+\\s+(\\d+)\\s+LISTENING`));
+      // netstat -ano : « TCP  0.0.0.0:8765  0.0.0.0:0  LISTENING  21008 »
+      // → le PID vient APRÈS « LISTENING » (et non avant). L'ancienne regex
+      // (PID avant LISTENING) ne capturait rien : les relais périmés
+      // survivaient et servaient une vieille copie d'ai-video.html.
+      const m = l.match(new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`));
       if (m) pids.add(m[1]);
     });
     pids.forEach(p => { try { execSync(`taskkill /PID ${p} /F`, { stdio: "ignore" }); } catch (e) {} });
@@ -69,6 +73,16 @@ function ok(nom, cond, detail) {
   return !!cond;
 }
 function section(t) { console.log("\n" + t); }
+// Le setup-wizard peut réapparaître (selon le timing d'authentification) et
+// intercepte alors tous les clics (overlay plein écran). On le masque
+// explicitement après chaque navigation, en plus du drapeau addInitScript.
+async function masquerWizard(page) {
+  await page.evaluate(() => {
+    const ov = document.getElementById('setup-wizard-overlay');
+    if (ov) ov.classList.remove('active');
+    try { localStorage.setItem('theologicus_wizard_skipped', '1'); } catch (e) {}
+  }).catch(() => {});
+}
 
 let relais = null;
 async function relaisVit() {
@@ -110,6 +124,17 @@ function armerRouteur(page, cpt) {
           body: JSON.stringify({ data: [{ b64_json: "AAAA" }] }) });
         return;
       }
+      if (u.endsWith("/videos")) {
+        cpt.video = (cpt.video || 0) + 1;
+        await route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ video_id: "fake-vid-998" }) });
+        return;
+      }
+      if (u.includes("/agnesapi")) {
+        await route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ status: "succeeded", progress: 100, metadata: { url: "https://custom.test/v1/fake.mp4" } }) });
+        return;
+      }
     }
     // Tout le reste (Agnes/Mistral) : laissé au relais réel.
     await route.continue();
@@ -129,7 +154,7 @@ const I = {
 
   if (!await assurerRelais()) { console.log("\nRelais injoignable."); process.exit(2); }
 
-  const cpt = { custom: 0, agn: 0 };
+  const cpt = { custom: 0, agn: 0, video: 0 };
   // Connexion DIRECTE : aucun mandataire système ne doit intercepter
   // 127.0.0.1 (sinon l'iframe /ai-video.html tombe sur un 502 et bascule
   // sur l'embarqué périmé). --no-proxy-server est la méthode fiable.
@@ -174,6 +199,7 @@ const I = {
     });
   }, AUTH_HASH);
   await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await masquerWizard(page);
   // v159 — le bouton AI VIDEO vit dans un panneau popup ouvert par « MEDIA ▾ ».
   const mediaBtn = await page.$("#v159-media-btn");
   if (mediaBtn) { await mediaBtn.click(); await page.waitForTimeout(300); }
@@ -237,6 +263,121 @@ const I = {
   ok("le nom est conservé", sauve.nom === "Mon SDXL", sauve.nom);
   ok("l'endpoint est conservé", /custom\.test\/v1/.test(sauve.ep || ""), sauve.ep);
 
+  section("3b. 🔌 Test de connexion (#1)");
+  await page.evaluate(() => document.getElementById("aivideo-frame").contentDocument.getElementById("cm-test-btn").click());
+  await page.waitForTimeout(700);
+  const testOk = await page.evaluate(() => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    return d.getElementById("cm-status-text").textContent;
+  });
+  ok("le test de connexion signale une connexion OK", /Connexion OK/i.test(testOk), testOk);
+
+  section("3c. Paramètres par modèle (#5)");
+  await page.evaluate(() => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    // On ré-édite le modèle existant : endpoint + ID doivent être présents
+    // (cmSave exige un Model ID).
+    d.getElementById("cm-endpoint").value = "https://custom.test/v1";
+    d.getElementById("cm-model-input").value = "sdxl-1.0";
+    d.getElementById("cm-size").value = "768x768";
+    d.getElementById("cm-quality").value = "hd";
+    d.getElementById("cm-steps").value = "30";
+  });
+  await page.evaluate(() => document.getElementById("aivideo-frame").contentDocument.getElementById("cm-save-btn").click());
+  await page.waitForTimeout(400);
+  const params = await page.evaluate(() => {
+    const ls = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]");
+    const m = ls[0] || {};
+    return { size: m.size, quality: m.quality, steps: m.steps };
+  });
+  ok("la taille est persistée", params.size === "768x768", "size=" + params.size);
+  ok("la qualité est persistée", params.quality === "hd", "quality=" + params.quality);
+  ok("les steps sont persistés", params.steps === "30", "steps=" + params.steps);
+
+  section("3d. Cache du Fetch (#6)");
+  const cache = await page.evaluate(() => {
+    const cles = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("cinema_noir_cm_cache_v1") === 0) cles.push(k);
+    }
+    if (!cles.length) return null;
+    return JSON.parse(localStorage.getItem(cles[0]));
+  });
+  ok("une entrée de cache existe pour l'endpoint", !!cache, JSON.stringify(cache));
+  ok("le cache contient les 2 modèles listés", cache && cache.ids && cache.ids.length === 2, cache && ("ids=" + cache.ids));
+
+  section("3e. Choix du modèle image à utiliser (#4)");
+  await page.evaluate(() => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    const uid = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2"))[0].uid;
+    const sel = d.getElementById("cm-image-choice");
+    sel.value = uid;
+    sel.dispatchEvent(new Event("change"));
+  });
+  await page.waitForTimeout(300);
+  const choix = await page.evaluate(() => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    const uid = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2"))[0].uid;
+    const cm = d.defaultView.customModelsImage ? d.defaultView.customModelsImage() : null;
+    const ch = JSON.parse(localStorage.getItem("cinema_noir_cm_choice_v1") || "{}");
+    return { id: cm && cm.id, choixImage: ch.image };
+  });
+  ok("customModelsImage() renvoie le modèle choisi", choix.id === "sdxl-1.0", "id=" + choix.id);
+  ok("le choix image est persisté", choix.choixImage && choix.choixImage.length > 0, JSON.stringify(choix.choixImage));
+
+  section("3f. Export / Import JSON (#3)");
+  // Import d'un second modèle via un fichier temporaire.
+  const tmpJson = require("path").join(require("os").tmpdir(), "cm_import_" + Date.now() + ".json");
+  require("fs").writeFileSync(tmpJson, JSON.stringify({ version: 1, models: [{ uid: "cm_imp_1", name: "Importé XL", endpoint: "https://custom.test/v1", apiKey: "", id: "imported-xl", image: false, video: false, adapter: "agnes" }] }));
+  await page.evaluate((p) => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    const inp = d.getElementById("cm-import-file");
+    inp.__setFileForTest = p;
+  }, tmpJson);
+  // Playwright : on pose le fichier via setInputFiles sur l'input réel.
+  const importInput = await page.$("#aivideo-frame").then(() => page.evaluateHandle(() => document.getElementById("aivideo-frame").contentDocument.getElementById("cm-import-file")));
+  await importInput.asElement().setInputFiles(tmpJson);
+  await page.waitForTimeout(500);
+  const importe = await page.evaluate(() => {
+    const ls = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]");
+    return { nb: ls.length, aImport: ls.some(m => m.id === "imported-xl") };
+  });
+  ok("l'import ajoute un modèle (total = 2)", importe.nb === 2, "nb=" + importe.nb);
+  ok("le modèle importé est présent", importe.aImport);
+  // Export : ne doit pas lever d'exception JS.
+  await page.evaluate(() => document.getElementById("aivideo-frame").contentDocument.getElementById("cm-export-btn").click());
+  await page.waitForTimeout(300);
+
+  section("3g. Routage vidéo vers endpoint personnalisé (#7)");
+  // On injecte un modèle VIDÉO perso et on vérifie que createVideoTask l'atteint.
+  await page.evaluate(() => {
+    const ls = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]");
+    ls.push({ uid: "cm_vid_1", name: "Mon Vidéo", endpoint: "https://custom.test/v1", apiKey: "", id: "vid-model-1", image: false, video: true, adapter: "agnes" });
+    localStorage.setItem("cinema_noir_custom_models_v2", JSON.stringify(ls));
+    localStorage.setItem("cinema_noir_cm_choice_v1", JSON.stringify({ image: "", video: "cm_vid_1" }));
+  });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await masquerWizard(page);
+  // rouvrir le modal après reload
+  const mediaBtn2 = await page.$("#v159-media-btn");
+  if (mediaBtn2) { await mediaBtn2.click(); await page.waitForTimeout(300); }
+  await page.waitForSelector("#open-aivideo-modal", { state: "visible", timeout: 30000 });
+  await page.waitForTimeout(500);
+  await page.click("#open-aivideo-modal");
+  await page.waitForFunction(() => { const f = document.getElementById("aivideo-frame"); const d = f && f.contentDocument; return !!d && !!d.body; }, { timeout: 30000 });
+  cpt.video = 0;
+  const vidRoute = await page.evaluate(async () => {
+    const d = document.getElementById("aivideo-frame").contentDocument;
+    const cm = d.defaultView.customModelsVideo ? d.defaultView.customModelsVideo() : null;
+    if (!cm) return { cm: false };
+    const vid = await d.defaultView.createVideoTask("une scène test", null, null, cm.id, null, cm);
+    return { cm: true, videoId: vid };
+  });
+  ok("customModelsVideo() renvoie le modèle vidéo", vidRoute.cm, JSON.stringify(vidRoute));
+  ok("createVideoTask a atteint l'endpoint personnalisé /videos", cpt.video >= 1, "appels video=" + cpt.video);
+  ok("createVideoTask renvoie un video_id", typeof vidRoute.videoId === "string" && vidRoute.videoId.length > 0, "videoId=" + vidRoute.videoId);
+
   section("4. « Image » (toggle) marque le modèle comme modèle d'image");
   await page.evaluate(() => {
     const d = document.getElementById("aivideo-frame").contentDocument;
@@ -273,18 +414,31 @@ const I = {
 
   section("6. Suppression du modèle personnalisé");
   page.on("dialog", d => d.accept());   // confirmer la suppression
+  const avantSuppr = await page.evaluate(() => JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]").length);
   await page.evaluate(() => {
     const d = document.getElementById("aivideo-frame").contentDocument;
     const del = d.querySelector('#cm-grid [data-cm-del]'); if (del) del.click();
   });
   await page.waitForTimeout(400);
+  const apresUn = await page.evaluate(() => JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]").length);
+  ok("un clic sur 🗑️ retire exactement un modèle", apresUn === avantSuppr - 1, avantSuppr + " -> " + apresUn);
+  // On supprime les modèles restants pour vérifier que la grille se vide.
+  for (let k = 0; k < 10; k++) {
+    const encore = await page.evaluate(() => !!document.getElementById("aivideo-frame").contentDocument.querySelector('#cm-grid [data-cm-del]'));
+    if (!encore) break;
+    await page.evaluate(() => {
+      const d = document.getElementById("aivideo-frame").contentDocument;
+      const del = d.querySelector('#cm-grid [data-cm-del]'); if (del) del.click();
+    });
+    await page.waitForTimeout(300);
+  }
   const suppr = await page.evaluate(() => {
     const d = document.getElementById("aivideo-frame").contentDocument;
     const ls = JSON.parse(localStorage.getItem("cinema_noir_custom_models_v2") || "[]");
     return { nb: ls.length, carte: d.querySelectorAll("#cm-grid .model-card").length };
   });
-  ok("le modèle est retiré (localStorage vide)", suppr.nb === 0, "nb=" + suppr.nb);
-  ok("la carte disparaît de la grille", suppr.carte === 0, "cartes=" + suppr.carte);
+  ok("tous les modèles sont retirés (localStorage vide)", suppr.nb === 0, "nb=" + suppr.nb);
+  ok("la grille est vide", suppr.carte === 0, "cartes=" + suppr.carte);
 
   section("7. Propreté");
   ok("aucune erreur JavaScript", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
