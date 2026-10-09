@@ -251,6 +251,12 @@
     .video-thumb .video-name { position: absolute; bottom: 0; left: 0; right: 0; padding: 0.3rem 0.4rem; background: linear-gradient(transparent, rgba(0,0,0,0.85)); font-size: 0.6rem; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
     .video-thumb .video-remove { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.75); color: #fff; border: 1px solid var(--accent); width: 22px; height: 22px; border-radius: 50%; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .video-thumb .video-duration { position: absolute; top: 4px; left: 4px; padding: 0.1rem 0.35rem; background: rgba(0,0,0,0.7); color: var(--accent); font-size: 0.55rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+    .cm-row { display: flex; gap: 0.4rem; margin-bottom: 0.4rem; }
+    .cm-row .api-key-input { flex: 1; min-width: 0; }
+    .cm-actions { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+    .cm-card-actions { display: flex; gap: 0.3rem; margin-top: 0.45rem; flex-wrap: wrap; }
+    .cm-card-actions .model-action-btn { font-size: 0.6rem; padding: 0.18rem 0.4rem; }
+    .cm-form { background: rgba(255,255,255,0.02); border: 1px solid var(--border, #2a2a3a); border-radius: 0.5rem; padding: 0.6rem; margin-top: 0.5rem; }
 </style>
 </head>
 <body>
@@ -400,6 +406,37 @@
             <input type="text" class="add-model-input" id="extra-model-input" placeholder="Ex: agnes-video-v3, pixtral-large-latest…">
             <button type="button" class="add-model-btn" id="extra-add-btn">＋ Ajouter</button>
         </div>
+    </div>
+
+    <div class="api-divider"></div>
+
+    <div class="api-provider-header extra"><span class="provider-dot"></span><span>⚙️ MODÈLES PERSONNALISÉS</span></div>
+    <div class="api-hint" style="margin-bottom:0.5rem;">Ajoutez votre propre modèle (endpoint, clé, ID). « 🔄 Fetch » liste les modèles de l'endpoint. « 💾 Enregistrer » le sauve.</div>
+    <div class="cm-form">
+        <input type="text" class="api-key-input" id="cm-name" placeholder="Nom (optionnel, ex : Mon SDXL)">
+        <div class="cm-row">
+            <input type="text" class="api-key-input" id="cm-endpoint" placeholder="Endpoint URL (ex : https://api.exemple.com/v1)">
+            <input type="password" class="api-key-input" id="cm-key" placeholder="Clé API (optionnelle)">
+        </div>
+        <div class="cm-row">
+            <input type="text" class="api-key-input" id="cm-model-input" placeholder="Model ID (ex : sdxl-1.0)">
+            <select class="api-key-input" id="cm-model-select" style="display:none;"></select>
+            <button type="button" class="api-btn extra" id="cm-fetch-btn" title="Lister les modèles de l'endpoint">🔄 Fetch</button>
+        </div>
+        <div class="api-status-line" id="cm-status">
+            <span class="status-dot"></span>
+            <span id="cm-status-text">—</span>
+        </div>
+        <div class="cm-actions">
+            <button type="button" class="add-model-btn" id="cm-save-btn">💾 Enregistrer</button>
+            <button type="button" class="model-action-btn" id="cm-clear-btn">🗑️ Tout supprimer</button>
+        </div>
+    </div>
+    <div class="model-selector" style="margin-top:0.5rem; padding-top:0.5rem;">
+        <div class="model-selector-label extra-label">
+            <span>⚙️ Modèles personnalisés enregistrés</span>
+        </div>
+        <div class="model-grid" id="cm-grid"><div class="model-empty">Aucun modèle personnalisé.</div></div>
     </div>
 
     <div class="stat-line">
@@ -1151,7 +1188,8 @@ const SK = {
     AGNES_STATUS: 'agnes_api_status_v1', MISTRAL_STATUS: 'mistral_api_status_v1',
     EXTRA_MODELS: 'cinema_noir_extra_models_v1', ACTIVE_MODELS: 'cinema_noir_active_models_v1',
     GALLERY: 'cinema_noir_gallery_v1', AUTODL: 'cinema_noir_autodl_v1',
-    PENDING_TASKS: 'agnes_pending_tasks_v1'
+    PENDING_TASKS: 'agnes_pending_tasks_v1',
+    CUSTOM_MODELS: 'cinema_noir_custom_models_v2'
 };
 
 const state = {
@@ -1165,7 +1203,8 @@ const state = {
     pickerCategory: 'all', pickerSearch: '', pickerTag: null,
     pendingSelection: [],
     agnesKeyStatus: null, mistralKeyStatus: null,
-    extraModels: [], activeModels: []
+    extraModels: [], activeModels: [],
+    customModels: []
 };
 
 const LOG_MAX = 500;
@@ -1543,6 +1582,136 @@ function clearAllExtraModels() {
     saveExtraModels([]); saveActiveModels(state.activeModels);
     renderExtraModelGrid(); renderActiveModelsBar();
     logWarn('⚡ Modèles extras supprimés');
+}
+
+/* ═══ v494 — MODÈLES PERSONNALISÉS (AI VIDEO) ═══
+   L'utilisateur veut AJOUTER ses propres modèles : endpoint URL, clé API,
+   model ID, avec un bouton « 🔄 Fetch models » qui liste les modèles
+   disponibles sur l'endpoint, et un bouton « 💾 Enregistrer » pour les sauver.
+   Ces modèles servent la GÉNÉRATION D'IMAGE (endpoint OpenAI-compatible
+   /images/generations) : un modèle peut être marqué « modèle d'image » et
+   genererImage l'utilise alors à la place d'Agnes. La génération VIDÉO reste
+   Agnes (API spécifique au fournisseur, non OpenAI-compatible) — voir
+   createVideoTask / POLL_BASE. */
+function cmUid() { return 'cm_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function loadCustomModels() { try { return JSON.parse(localStorage.getItem(SK.CUSTOM_MODELS) || '[]'); } catch (e) { return []; } }
+function saveCustomModels() { try { localStorage.setItem(SK.CUSTOM_MODELS, JSON.stringify(state.customModels)); } catch (e) {} }
+function customModelsImage() { return (state.customModels || []).find(function (c) { return c.image; }) || null; }
+
+async function cmFetchModels() {
+    const ep = (document.getElementById('cm-endpoint').value || '').trim().replace(/\/+$/, '');
+    const key = (document.getElementById('cm-key').value || '').trim();
+    const txt = document.getElementById('cm-status-text');
+    const dot = document.querySelector('#cm-status .status-dot');
+    if (!ep) { if (txt) txt.textContent = 'Endpoint requis'; if (dot) dot.className = 'status-dot'; return; }
+    if (txt) txt.textContent = '🔍 Fetch des modèles…'; if (dot) dot.className = 'status-dot checking';
+    const url = _VIA_RELAIS ? ('/proxy/' + ep + '/models') : (ep + '/models');
+    try {
+        const res = await fetch(url, { method: 'GET', headers: key ? { 'Authorization': 'Bearer ' + key } : {} });
+        let data = null; try { data = await res.json(); } catch (e) { data = null; }
+        if (!res.ok) { if (txt) txt.textContent = 'HTTP ' + res.status; if (dot) dot.className = 'status-dot invalid'; return; }
+        const liste = _listeModeles(data);
+        const ids = (liste || []).map(function (m) { return m.id || m.name; }).filter(Boolean);
+        const sel = document.getElementById('cm-model-select');
+        const inp = document.getElementById('cm-model-input');
+        if (ids.length) {
+            sel.innerHTML = ids.map(function (id) { return '<option value="' + escapeHtml(id) + '">' + escapeHtml(id) + '</option>'; }).join('');
+            sel.style.display = ''; inp.style.display = 'none';
+            if (txt) txt.textContent = ids.length + ' modèle(s) — choisissez-en un'; if (dot) dot.className = 'status-dot valid';
+            logSuccess('🔍 ' + ids.length + ' modèle(s) sur <code>' + escapeHtml(ep) + '</code>');
+        } else {
+            sel.style.display = 'none'; inp.style.display = '';
+            if (txt) txt.textContent = 'Aucun modèle listé — saisir l’ID à la main'; if (dot) dot.className = 'status-dot';
+            logWarn('⚠️ Aucun modèle renvoyé par <code>' + escapeHtml(ep) + '</code> — saisir l’ID à la main');
+        }
+    } catch (e) {
+        const sel = document.getElementById('cm-model-select'); const inp = document.getElementById('cm-model-input');
+        sel.style.display = 'none'; inp.style.display = '';
+        if (txt) txt.textContent = 'Erreur réseau — saisir l’ID à la main'; if (dot) dot.className = 'status-dot invalid';
+        logWarn('🌐 Fetch impossible : ' + escapeHtml(e.message) + ' — saisir l’ID à la main');
+    }
+}
+
+function cmSave() {
+    const name = (document.getElementById('cm-name').value || '').trim();
+    const ep = (document.getElementById('cm-endpoint').value || '').trim().replace(/\/+$/, '');
+    const key = (document.getElementById('cm-key').value || '').trim();
+    const sel = document.getElementById('cm-model-select');
+    const inp = document.getElementById('cm-model-input');
+    const modelId = (sel.style.display !== 'none' && sel.value) ? sel.value : (inp.value || '').trim();
+    if (!ep) { showToast('Endpoint requis', 'warn'); return; }
+    if (!modelId) { showToast('Model ID requis', 'warn'); return; }
+    const exist = state.customModels.find(function (c) { return c.endpoint === ep && c.id === modelId; });
+    if (exist) {
+        exist.name = name || exist.name || modelId; exist.apiKey = key;
+        logInfo('⚙️ Modèle personnalisé mis à jour : <code>' + escapeHtml(modelId) + '</code>');
+    } else {
+        state.customModels.push({ uid: cmUid(), name: name || modelId, endpoint: ep, apiKey: key, id: modelId, image: false });
+        logSuccess('⚙️ Modèle personnalisé enregistré : <code>' + escapeHtml(modelId) + '</code>');
+    }
+    saveCustomModels(); cmRender(); showToast('Modèle enregistré ✓', 'success');
+    document.getElementById('cm-model-input').value = '';
+    const s2 = document.getElementById('cm-model-select'); s2.style.display = 'none'; s2.innerHTML = '';
+    document.getElementById('cm-name').value = '';
+    const t2 = document.getElementById('cm-status-text'); if (t2) t2.textContent = '—';
+    const d2 = document.querySelector('#cm-status .status-dot'); if (d2) d2.className = 'status-dot';
+}
+
+function cmRender() {
+    const grid = document.getElementById('cm-grid'); if (!grid) return;
+    if (!state.customModels.length) { grid.innerHTML = '<div class="model-empty">Aucun modèle personnalisé.</div>'; return; }
+    grid.innerHTML = state.customModels.map(function (c) {
+        const active = c.image;
+        return '<div class="model-card extra-card ' + (active ? 'selected' : '') + '" data-cm-uid="' + escapeHtml(c.uid) + '">' +
+            (active ? '<div class="model-active-badge">✓</div>' : '') +
+            '<div class="model-name">' + escapeHtml(c.name || c.id) + '</div>' +
+            '<div class="model-desc">' + escapeHtml(c.id) + '<br>' + escapeHtml(c.endpoint) + '</div>' +
+            '<div class="model-provider">PERSO' + (active ? ' · image' : '') + '</div>' +
+            '<div class="cm-card-actions">' +
+                '<button type="button" class="model-action-btn extra" data-cm-toggle="' + escapeHtml(c.uid) + '">' + (active ? 'Désact. image' : 'Image') + '</button>' +
+                '<button type="button" class="model-action-btn" data-cm-edit="' + escapeHtml(c.uid) + '">✎</button>' +
+                '<button type="button" class="model-action-btn" data-cm-del="' + escapeHtml(c.uid) + '">🗑️</button>' +
+            '</div></div>';
+    }).join('');
+    grid.querySelectorAll('[data-cm-toggle]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmToggleImage(el.dataset.cmToggle); }); });
+    grid.querySelectorAll('[data-cm-edit]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmEdit(el.dataset.cmEdit); }); });
+    grid.querySelectorAll('[data-cm-del]').forEach(function (el) { el.addEventListener('click', function (ev) { ev.stopPropagation(); cmDelete(el.dataset.cmDel); }); });
+}
+
+function cmToggleImage(uid) {
+    const c = state.customModels.find(function (x) { return x.uid === uid; }); if (!c) return;
+    state.customModels.forEach(function (x) { if (x.uid !== uid) x.image = false; });
+    c.image = !c.image;
+    saveCustomModels(); cmRender();
+    logInfo(c.image ? ('🖼️ Modèle image actif : <code>' + escapeHtml(c.id) + '</code>') : '🖼️ Modèle image désactivé (Agnes)');
+    showToast(c.image ? 'Modèle image actif' : 'Image : Agnes', 'success');
+}
+
+function cmEdit(uid) {
+    const c = state.customModels.find(function (x) { return x.uid === uid; }); if (!c) return;
+    document.getElementById('cm-name').value = c.name || '';
+    document.getElementById('cm-endpoint').value = c.endpoint || '';
+    document.getElementById('cm-key').value = c.apiKey || '';
+    document.getElementById('cm-model-input').value = c.id || '';
+    const sel = document.getElementById('cm-model-select'); sel.style.display = 'none'; sel.innerHTML = '';
+    document.getElementById('cm-status-text').textContent = '—';
+    const d = document.querySelector('#cm-status .status-dot'); if (d) d.className = 'status-dot';
+    logInfo('⚙️ Édition de <code>' + escapeHtml(c.id) + '</code>');
+}
+
+function cmDelete(uid) {
+    const c = state.customModels.find(function (x) { return x.uid === uid; }); if (!c) return;
+    if (!confirm('Supprimer le modèle « ' + (c.name || c.id) + ' » ?')) return;
+    state.customModels = state.customModels.filter(function (x) { return x.uid !== uid; });
+    saveCustomModels(); cmRender();
+    logWarn('⚙️ Modèle personnalisé supprimé : <code>' + escapeHtml(c.id) + '</code>');
+}
+
+function cmClearAll() {
+    if (!state.customModels.length) return;
+    if (!confirm('Supprimer TOUS les modèles personnalisés ?')) return;
+    state.customModels = []; saveCustomModels(); cmRender();
+    logWarn('⚙️ Modèles personnalisés supprimés');
 }
 
 // v126h — Vérifie une clé en interrogeant GET /models, avec repli robuste.
@@ -2443,6 +2612,10 @@ async function enrichWithMistral(btn, textareaId) {
     document.getElementById('extra-add-btn')?.addEventListener('click', () => addExtraModel(document.getElementById('extra-model-input').value));
     document.getElementById('extra-model-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addExtraModel(e.target.value); } });
     document.getElementById('extra-clear-btn')?.addEventListener('click', clearAllExtraModels);
+    document.getElementById('cm-fetch-btn')?.addEventListener('click', cmFetchModels);
+    document.getElementById('cm-save-btn')?.addEventListener('click', cmSave);
+    document.getElementById('cm-clear-btn')?.addEventListener('click', cmClearAll);
+    document.getElementById('cm-model-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); cmSave(); } });
     document.getElementById('check-status-btn')?.addEventListener('click', checkPendingTasks);
     document.querySelectorAll('.mode-btn').forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
     [['upload-zone', 'images'], ['upload-zone-it', 'images'], ['upload-zone-audio', 'audios'], ['upload-zone-video', 'videos'], ['upload-zone-combo-img', 'combo-images'], ['upload-zone-combo-vid', 'combo-videos'], ['upload-zone-combo-audio', 'combo-audios']].forEach(([id, t]) => {
@@ -2467,7 +2640,8 @@ async function enrichWithMistral(btn, textareaId) {
     document.querySelectorAll('.section').forEach(s => { if (!s.classList.contains('mode-hidden')) s.classList.add('open'); });
     state.extraModels = loadExtraModels();
     state.activeModels = loadActiveModels();
-    renderExtraModelGrid(); renderActiveModelsBar();
+    state.customModels = loadCustomModels();
+    renderExtraModelGrid(); renderActiveModelsBar(); cmRender();
     const prevAgnes = loadDetectedAgnes();
     if (prevAgnes.length) renderAgnesModelGrid(prevAgnes);
     const prevMistral = loadDetectedMistral();
@@ -2751,13 +2925,18 @@ async function enrichWithMistral(btn, textareaId) {
     var orig = btn ? btn.textContent : '';
     if (btn) { btn.textContent = '⏳ Image…'; btn.disabled = true; }
     setStatus('Génération de l’image…');
-    var modeles = [IMAGE, IMAGE_REPLI];
+    var imgCustom = customModelsImage();
+    var modeles = imgCustom ? [imgCustom.id, IMAGE, IMAGE_REPLI] : [IMAGE, IMAGE_REPLI];
     for (var i = 0; i < modeles.length; i++) {
       try {
-        logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
-        var res = await apiFetch(API_BASE + '/images/generations', {
+        var cm = (imgCustom && modeles[i] === imgCustom.id) ? imgCustom : null;
+        var cmBase = cm ? _viaRelais(cm.endpoint) : API_BASE;
+        var cmKey = cm ? (cm.apiKey || '') : getApiKey();
+        if (cm) logStep('🖼️ Image via modèle personnalisé <code>' + modeles[i] + '</code> (' + escapeHtml(cm.endpoint) + ')');
+        else logStep('🖼️ Image via <code>' + modeles[i] + '</code>');
+        var res = await apiFetch(cmBase + '/images/generations', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + getApiKey(), 'Content-Type': 'application/json' },
+          headers: { 'Authorization': 'Bearer ' + cmKey, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: modeles[i], prompt: prompt, n: 1, size: '1024x1024' })
         });
         if (!res.ok) { var t = ''; try { t = (await res.text()).slice(0, 120); } catch (e) {} throw new Error('HTTP ' + res.status + ' ' + t); }
