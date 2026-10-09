@@ -272,6 +272,10 @@
     .newsreel-modal-head { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.5rem 0.9rem; background:#12121c; border-bottom:1px solid #2a2a3a; color:#e8e6e0; font-size:0.82rem; }
     .newsreel-modal-head button { background:none; border:none; color:#e8e6e0; font-size:1.1rem; cursor:pointer; }
     .newsreel-frame { flex:1; width:100%; border:0; background:#0a0a12; }
+    /* v499 — réglage du flux vidéo (parallélisme + cadence apprise). */
+    .flux-bar { display:flex; align-items:center; gap:0.4rem; justify-content:center; margin-top:0.7rem; font-size:0.72rem; color:var(--ink-dim); flex-wrap:wrap; }
+    .flux-bar select { background:var(--panel-2); color:var(--ink); border:1px solid var(--border); border-radius:0.3rem; padding:0.2rem 0.45rem; font-size:0.72rem; font-family:inherit; }
+    .flux-info { color:var(--ink-dim); font-family:var(--fm); font-size:0.68rem; }
 </style>
 </head>
 <body>
@@ -281,6 +285,16 @@
     <div class="film-strip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
     <p class="subtitle">« Studio IA complet — Timeout intelligent »</p>
     <button type="button" id="open-newsreel-btn" class="newsreel-open-btn" title="Ouvrir NewsReel Studio — le JT généré par IA (config partagée)">📰 NewsReel — le JT par IA</button>
+    <div class="flux-bar">
+        <label for="video-parallel">⚡ Parallélisme vidéo :</label>
+        <select id="video-parallel" title="Jobs simultanés. Agnes gratuit = 1 à la fois ; un endpoint perso peut encaisser davantage.">
+            <option value="1" selected>1 — séquentiel</option>
+            <option value="2">2 — parallèle</option>
+            <option value="3">3 — parallèle</option>
+            <option value="4">4 — parallèle</option>
+        </select>
+        <span class="flux-info" id="cadence-info"></span>
+    </div>
 </header>
 
 <div class="log-panel" id="log-panel">
@@ -1235,7 +1249,9 @@ const SK = {
     PENDING_TASKS: 'agnes_pending_tasks_v1',
     CUSTOM_MODELS: 'cinema_noir_custom_models_v2',
     CM_FETCH_CACHE: 'cinema_noir_cm_cache_v1',
-    CM_CHOICE: 'cinema_noir_cm_choice_v1'
+    CM_CHOICE: 'cinema_noir_cm_choice_v1',
+    TIMING: 'cinema_noir_timing_v1',
+    CADENCE: 'cinema_noir_cadence_v1'
 };
 
 const state = {
@@ -1308,6 +1324,83 @@ function setStatus(text) {
 }
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   v499 — BOOSTER LE FLUX VIDÉO : cadence adaptative, polling à backoff,
+   détection de saturation, cache de timing (ETA), file à concurrence.
+   Mesure de départ : pause FIXE de 62 s entre jobs, attente de préparation
+   fixe (30 s) puis polling toutes les 10 s, timeout figé 900 s, aucun
+   apprentissage des durées. Tout cela est remplacé ici.
+   ═══════════════════════════════════════════════════════════════════ */
+const CADENCE_MIN = 20, CADENCE_MAX = 90, CADENCE_DEF = 40;   /* secondes */
+const CADENCE_HAUT = 15000, CADENCE_BAS = 5000;               /* pas (ms) */
+const BACKOFF_POLL = [5, 8, 12, 18, 25];                      /* secondes entre sondages */
+const SEUIL_SATURATION = 2;                                   /* 429 consécutifs -> saturé */
+
+function loadCadence() {
+    try {
+        const v = parseInt(localStorage.getItem(SK.CADENCE), 10);
+        return (v >= CADENCE_MIN * 1000 && v <= CADENCE_MAX * 1000) ? v : CADENCE_DEF * 1000;
+    } catch (e) { return CADENCE_DEF * 1000; }
+}
+function saveCadence() { try { localStorage.setItem(SK.CADENCE, String(cadenceMs)); } catch (e) {} }
+let cadenceMs = loadCadence();
+let saturation = 0;   /* nb de 429 consécutifs (0 = file fluide) */
+
+function cadenceSucces() {
+    cadenceMs = Math.max(CADENCE_MIN * 1000, cadenceMs - CADENCE_BAS);
+    saturation = 0; saveCadence();
+}
+function cadenceSaturation() {
+    cadenceMs = Math.min(CADENCE_MAX * 1000, cadenceMs + CADENCE_HAUT);
+    saturation++; saveCadence();
+}
+
+function loadTiming() { try { return JSON.parse(localStorage.getItem(SK.TIMING) || '{}'); } catch (e) { return {}; } }
+function recordTiming(kind, ms) {
+    if (!ms || ms < 0) return;
+    const c = loadTiming();
+    if (!c[kind]) c[kind] = [];
+    c[kind].push(Math.round(ms));
+    if (c[kind].length > 10) c[kind] = c[kind].slice(-10);
+    try { localStorage.setItem(SK.TIMING, JSON.stringify(c)); } catch (e) {}
+}
+function estimateTiming(kind, repli) {
+    const c = loadTiming(); const s = c[kind];
+    if (s && s.length) { const t = s.slice().sort((a, b) => a - b); return t[Math.floor(t.length / 2)]; }
+    return repli;
+}
+
+/* #5 — File à débit limité (portée de NewsReel) : au plus `maxConcurrent`
+   tâches en vol, espacées d'au moins `minIntervalMs` entre deux démarrages. */
+function createQueue(maxConcurrent, minIntervalMs) {
+    let running = 0, lastStart = 0; const queue = [];
+    function tryNext() {
+        if (running >= maxConcurrent) return;
+        if (!queue.length) return;
+        const now = Date.now(); const wait = Math.max(0, lastStart + minIntervalMs - now);
+        if (wait > 0) { setTimeout(tryNext, wait); return; }
+        const task = queue.shift(); running++; lastStart = Date.now();
+        task().finally(() => { running--; setTimeout(tryNext, 0); });
+    }
+    return {
+        add(fn) { return new Promise((res, rej) => { queue.push(() => fn().then(res, rej)); setTimeout(tryNext, 0); }); }
+    };
+}
+
+/* Export de test (même convention que window.__v459 / __v455Long). */
+window.__v499 = {
+    cadence: function () { return cadenceMs; },
+    saturation: function () { return saturation; },
+    backoff: BACKOFF_POLL,
+    seuil: SEUIL_SATURATION,
+    succes: cadenceSucces,
+    saturer: cadenceSaturation,
+    timing: estimateTiming,
+    enregistrer: recordTiming,
+    file: createQueue,
+    etat: state
+};
 function maskKey(k) { return k ? k.slice(0, 6) + '…' + k.slice(-4) : '—'; }
 function formatBytes(b) { if (!b) return '0 o'; if (b < 1024) return b + ' o'; if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko'; return (b / (1024 * 1024)).toFixed(1) + ' Mo'; }
 function formatDuration(sec) { if (!sec) return '—'; const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
@@ -2346,6 +2439,8 @@ async function apiFetch(url, options = {}) {
             lastResponse = res;
             if (res.status === 429) {
                 const w = retryAfterSeconds(res, APIFETCH_429_WAITS[attempt]);
+                cadenceSaturation();   /* v499 — #3 : la file est saturée -> cadence +15 s */
+                if (saturation === SEUIL_SATURATION) logWarn('🛑 <strong>File fournisseur saturée</strong> (' + saturation + ' × 429) — la cadence passe à ' + Math.round(cadenceMs / 1000) + 's pour laisser respirer l’API');
                 logWarn('⏳ Limite API Agnes (gratuit : une génération à la fois) — reprise automatique dans ' + w + 's');
                 setStatus('Limite API… reprise dans ' + w + 's');
                 await _journaliseErreurFournisseur(res);
@@ -2398,29 +2493,25 @@ async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
     const openai = !!(cm && cm.adapter === 'openai');
     const pollBase = cm ? (openai ? _viaRelais(cm.endpoint) + '/videos' : _viaRelais(cm.endpoint) + '/agnesapi') : POLL_BASE;
     const videoDurationSec = state.durationFrames / FRAME_RATE;
-    const maxTimeoutSec = Math.min(MAX_POLL_TIMEOUT, Math.max(BASE_POLL_TIMEOUT, videoDurationSec * POLL_TIMEOUT_PER_SEC));
-    const maxAttempts = Math.floor(maxTimeoutSec / POLL_INTERVAL);
+    /* v499 — #4 : timeout dimensionné sur l'HISTORIQUE (cache de timing) plutôt
+       qu'un 900 s figé ; #2 : attente de préparation COURTE puis backoff. */
+    const mesures = loadTiming().video;
+    const estime = estimateTiming('video', 120000 + videoDurationSec * 8000);
+    const maxTimeoutSec = Math.min(MAX_POLL_TIMEOUT, Math.max(BASE_POLL_TIMEOUT, Math.round(estime / 1000) * 2.5, videoDurationSec * POLL_TIMEOUT_PER_SEC));
     const start = Date.now();
     let lastProgress = -1, attempts = 0;
     logStep('⏳ Suivi <code>' + videoId.slice(0, 16) + '…</code> (' + sceneLabel + ')');
-    logInfo('⏱️ Durée : <strong>' + videoDurationSec.toFixed(1) + 's</strong> — timeout : <strong>' + Math.round(maxTimeoutSec / 60) + ' min</strong>');
-    const initialWait = Math.max(30, Math.floor(videoDurationSec * 3));
-    logInfo('⏸️ Préparation : <strong>' + initialWait + 's</strong>');
+    logInfo('⏱️ Durée : <strong>' + videoDurationSec.toFixed(1) + 's</strong> — timeout : <strong>' + Math.round(maxTimeoutSec / 60) + ' min</strong>' + (mesures && mesures.length ? ' (estimé sur ' + mesures.length + ' mesure(s))' : ''));
+    const initialWait = Math.max(4, Math.min(8, Math.round(videoDurationSec)));
+    logInfo('⏸️ Premier sondage dans <strong>' + initialWait + 's</strong>');
     for (let s = initialWait; s > 0; s--) {
         if (state.stopRequested) throw new Error('Arrêt');
         setStatus(sceneLabel + ' — préparation ' + formatTimeStr(s));
         await sleep(1000);
     }
-    while (attempts < maxAttempts) {
+    while ((Date.now() - start) / 1000 < maxTimeoutSec) {
         if (state.stopRequested) throw new Error('Arrêt');
         attempts++;
-        let waitSec = POLL_INTERVAL;
-        while (waitSec > 0) {
-            if (state.stopRequested) throw new Error('Arrêt');
-            const elapsedTotal = Math.floor((Date.now() - start) / 1000);
-            setStatus(sceneLabel + ' — ' + formatTimeStr(elapsedTotal) + ' (essai ' + attempts + '/' + maxAttempts + ')');
-            await sleep(1000); waitSec--;
-        }
         try {
             const url = openai
                 ? pollBase + '/' + encodeURIComponent(videoId)
@@ -2429,12 +2520,12 @@ async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
             const d = await r.json();
             const status = d.status || 'unknown'; const progress = d.progress || 0;
             if (progress !== lastProgress) { lastProgress = progress; logInfo('🔄 ' + sceneLabel + ' — <strong>' + progress + '%</strong> (' + status + ')'); }
-            else if (attempts % 5 === 0) { logInfo('🔄 ' + sceneLabel + ' — ' + progress + '% (essai ' + attempts + '/' + maxAttempts + ')'); }
             const elapsedSec = Math.floor((Date.now() - start) / 1000);
             setStatus(sceneLabel + ' — ' + progress + '% · ' + formatTimeStr(elapsedSec));
             if (status === 'completed' || status === 'succeeded' || status === 'done') {
                 const elapsed = ((Date.now() - start) / 1000).toFixed(1);
                 logSuccess('🎉 ' + sceneLabel + ' terminée en <strong>' + elapsed + 's</strong>');
+                recordTiming('video', Date.now() - start);   /* v499 — #4 : apprentissage de la durée */
                 const videoUrl = (d.metadata && d.metadata.url) || d.url || (d.output && d.output.url) || (d.data && d.data[0] && (d.data[0].url || d.data[0].b64_json));
                 if (videoUrl) { try { await addVideoToGallery(videoUrl, sceneLabel, { model: modelId, scene: sceneLabel }); } catch (e) { logWarn('⚠️ Ajout galerie : ' + escapeHtml(e.message)); } }
                 else { logWarn('⚠️ Aucune URL retournée'); }
@@ -2452,7 +2543,14 @@ async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
             if (e.message === 'Arrêt') throw e;
             if (e.message.startsWith('Échec')) throw e;
             logWarn('🔄 Erreur polling (essai ' + attempts + ') : ' + escapeHtml(e.message));
-            await sleep(3000);
+        }
+        /* v499 — #2 : backoff 5, 8, 12, 18, 25 s (au lieu de 10 s fixes). */
+        const waitSec = BACKOFF_POLL[Math.min(attempts - 1, BACKOFF_POLL.length - 1)];
+        for (let w = waitSec; w > 0; w--) {
+            if (state.stopRequested) throw new Error('Arrêt');
+            const elapsedTotal = Math.floor((Date.now() - start) / 1000);
+            setStatus(sceneLabel + ' — ' + formatTimeStr(elapsedTotal) + ' (essai ' + attempts + ')');
+            await sleep(1000);
         }
     }
     const totalSec = Math.floor((Date.now() - start) / 1000);
@@ -2605,46 +2703,81 @@ async function startGeneration() {
     const totalStart = Date.now();
     const totalJobs = items.length * modelsToUse.length;
     let jobIndex = 0;
-    for (let i = 0; i < items.length; i++) {
-        if (state.stopRequested) { logWarn('⏹ Arrêt'); break; }
-        const item = items[i];
-        for (let mi = 0; mi < modelsToUse.length; mi++) {
-            if (state.stopRequested) break;
-            const modelId = modelsToUse[mi];
-            jobIndex++;
-            const sceneLabel = 'Scène ' + (i + 1) + '/' + items.length + ' · ' + modelId;
-            logStep('━━━ <strong>Job ' + jobIndex + '/' + totalJobs + '</strong> ━━━');
-            try {
-                let prompt;
-                if (item.mode === 'text') prompt = buildTextPrompt(item.text);
-                else if (item.mode === 'audio') prompt = buildAudioPrompt();
-                else if (item.mode === 'image_text') prompt = buildImageTextPrompt();
-                else if (item.mode === 'video') prompt = buildVideoPrompt();
-                else if (item.mode === 'combo') prompt = buildComboPrompt();
-                else prompt = buildImagePrompt();
-                const img = item.image ? item.image.dataUri : null;
-                const aud = item.audio ? item.audio.dataUri : null;
-                const vid = item.video ? item.video.dataUri : null;
-                /* v455 — au-delà du plafond du fournisseur (15 s), découpage
-                   en segments + assemblage ; sinon chemin d'origine, intact. */
-                if (window.__v455Long && window.__v455Long.necessaire()) {
-                    await window.__v455Long.executer(prompt, img, aud, modelId, vid, sceneLabel);
-                } else {
-                    const videoId = await createVideoTask(prompt, img, aud, modelId, vid, cmVid);
-                    await pollUntilDone(videoId, modelId, sceneLabel, cmVid);
-                }
-                completed++;
-            } catch (e) {
-                if (e.message === 'Arrêt') break;
-                failed++;
-                echecs.push(String(e.message || e));
-                logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
+    /* v499 — #5 : parallélisme (1 par défaut). Agnes gratuit = 1 à la fois ;
+       un endpoint perso peut encaisser plusieurs jobs simultanés. */
+    let parallele = 1;
+    try { parallele = parseInt((document.getElementById('video-parallel') || {}).value, 10) || 1; } catch (e) {}
+    if (!cmVid && parallele > 1) { parallele = 1; logInfo('ℹ️ Parallélisme ramené à 1 (Agnes gratuit : une génération à la fois).'); }
+    if (parallele > 1) logInfo('⚡ Parallélisme : <strong>' + parallele + '</strong> jobs simultanés');
+
+    const executerJob = async (i, mi, idx) => {
+        if (state.stopRequested) return;
+        const item = items[i]; const modelId = modelsToUse[mi];
+        const sceneLabel = 'Scène ' + (i + 1) + '/' + items.length + ' · ' + modelId;
+        logStep('━━━ <strong>Job ' + idx + '/' + totalJobs + '</strong> ━━━');
+        const t0 = Date.now();
+        try {
+            let prompt;
+            if (item.mode === 'text') prompt = buildTextPrompt(item.text);
+            else if (item.mode === 'audio') prompt = buildAudioPrompt();
+            else if (item.mode === 'image_text') prompt = buildImageTextPrompt();
+            else if (item.mode === 'video') prompt = buildVideoPrompt();
+            else if (item.mode === 'combo') prompt = buildComboPrompt();
+            else prompt = buildImagePrompt();
+            const img = item.image ? item.image.dataUri : null;
+            const aud = item.audio ? item.audio.dataUri : null;
+            const vid = item.video ? item.video.dataUri : null;
+            /* v455 — au-delà du plafond du fournisseur (15 s), découpage
+               en segments + assemblage ; sinon chemin d'origine, intact. */
+            if (window.__v455Long && window.__v455Long.necessaire()) {
+                await window.__v455Long.executer(prompt, img, aud, modelId, vid, sceneLabel);
+            } else {
+                const videoId = await createVideoTask(prompt, img, aud, modelId, vid, cmVid);
+                await pollUntilDone(videoId, modelId, sceneLabel, cmVid);
             }
-            if (jobIndex < totalJobs && !state.stopRequested) {
-                logInfo('⏸️ Pause 62s');
-                for (let s = 62; s > 0; s--) { if (state.stopRequested) break; setStatus('Pause… ' + s + 's'); await sleep(1000); }
+            completed++;
+            cadenceSucces();                          /* #1/#3 : succès -> cadence baisse, saturation levée */
+            recordTiming('job', Date.now() - t0);     /* #4 */
+            const restant = totalJobs - idx;
+            if (restant > 0) {
+                const etaMs = restant * estimateTiming('job', 120000);
+                logInfo('📈 ETA : ~' + formatTimeStr(Math.round(etaMs / 1000)) + ' pour ' + restant + ' job(s) restant(s)');
+            }
+        } catch (e) {
+            if (e.message === 'Arrêt') { logWarn('⏹ Arrêt'); return; }
+            failed++;
+            echecs.push(String(e.message || e));
+            logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
+        }
+    };
+
+    if (parallele <= 1) {
+        for (let i = 0; i < items.length; i++) {
+            if (state.stopRequested) { logWarn('⏹ Arrêt'); break; }
+            for (let mi = 0; mi < modelsToUse.length; mi++) {
+                if (state.stopRequested) break;
+                jobIndex++;
+                await executerJob(i, mi, jobIndex);
+                if (jobIndex < totalJobs && !state.stopRequested) {
+                    /* v499 — #1 : cadence ADAPTATIVE (20-90 s) au lieu de 62 s fixes. */
+                    const pauseSec = Math.round(cadenceMs / 1000);
+                    if (saturation >= SEUIL_SATURATION) logWarn('🛑 File saturée (' + saturation + ' × 429) — pause allongée à ' + pauseSec + 's');
+                    logInfo('⏸️ Cadence adaptative : pause ' + pauseSec + 's');
+                    for (let s = pauseSec; s > 0; s--) { if (state.stopRequested) break; setStatus('Pause… ' + s + 's'); await sleep(1000); }
+                }
             }
         }
+    } else {
+        /* #5 — file à débit limité : jobs simultanés, espacés d'au moins la cadence. */
+        const file = createQueue(parallele, Math.max(2000, cadenceMs));
+        const taches = [];
+        for (let i = 0; i < items.length; i++) {
+            for (let mi = 0; mi < modelsToUse.length; mi++) {
+                const idx = ++jobIndex;
+                taches.push(file.add(() => executerJob(i, mi, idx)));
+            }
+        }
+        await Promise.all(taches);
     }
     const totalElapsed = ((Date.now() - totalStart) / 1000).toFixed(1);
     state.isRunning = false; state.stopRequested = false;
@@ -2870,6 +3003,19 @@ async function enrichWithMistral(btn, textareaId) {
     } else updateMistralKeyStatusUI(null);
     renderImages(); renderAudios(); renderVideos(); renderComboLists(); updateGenerateBtn();
     renderGallery(); updateAutoDownloadBtn(); updateCheckBtn();
+    /* v499 — #4 : afficher la cadence apprise ; #7 : reprise automatique des
+       tâches vidéo restées en attente (avant, la reprise était MANUELLE). */
+    (function () {
+        const ci = document.getElementById('cadence-info');
+        if (ci) ci.textContent = '· cadence ' + Math.round(cadenceMs / 1000) + 's (apprise)';
+        try {
+            const enAttente = loadPendingTasks();
+            if (enAttente.length) {
+                logInfo('♻️ Reprise automatique : ' + enAttente.length + ' tâche(s) vidéo en attente…');
+                setTimeout(function () { try { checkPendingTasks(); } catch (e) {} }, 2500);
+            }
+        } catch (e) {}
+    })();
     chargerDossier(); /* v126m — restaure le dossier choisi lors d'une session précédente */
     logInfo('🎬 <strong>Cinéma Noir — Studio complet</strong>');
     logInfo('📚 <strong>' + ALL_STYLES.length + '</strong> styles dans <strong>' + STYLE_CATEGORIES.length + '</strong> catégories');
