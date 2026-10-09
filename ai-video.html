@@ -288,6 +288,17 @@
     .phase-info { text-align:center; font-size:0.68rem; color:var(--ink-dim); margin-top:0.3rem; font-family:var(--fm); }
     .phase-progress { height:5px; background:var(--panel-2); border-radius:999px; overflow:hidden; margin-top:0.35rem; }
     .phase-fill { height:100%; width:0; background:linear-gradient(90deg,var(--accent),#e87b35); transition:width 0.4s ease; }
+    /* v501 — C4 : démarrage rapide + presets. */
+    .quickstart { max-width:640px; margin:0.7rem auto 0; border:1px solid var(--border); border-radius:0.5rem; background:var(--panel-2); overflow:hidden; }
+    .qs-head { display:flex; justify-content:space-between; align-items:center; padding:0.45rem 0.8rem; cursor:pointer; font-size:0.76rem; color:var(--ink); }
+    .qs-body { display:none; padding:0.2rem 0.9rem 0.8rem; font-size:0.72rem; color:var(--ink-dim); line-height:1.5; }
+    .quickstart.open .qs-body { display:block; }
+    .qs-body ol { margin:0.3rem 0 0.5rem 1.1rem; }
+    .qs-body a { color:var(--accent); }
+    .qs-note { margin-top:0.4rem; font-size:0.68rem; }
+    .preset-row { display:flex; gap:0.35rem; flex-wrap:wrap; margin-bottom:0.5rem; }
+    .preset-btn { background:var(--panel-2); color:var(--ink); border:1px solid var(--border); border-radius:999px; padding:0.22rem 0.6rem; font-size:0.68rem; cursor:pointer; font-family:inherit; }
+    .preset-btn:hover { border-color:var(--accent); color:var(--accent); }
 </style>
 </head>
 <body>
@@ -321,6 +332,17 @@
         </div>
         <div class="phase-info" id="phase-detail"></div>
         <div class="phase-progress"><div class="phase-fill" id="phase-fill"></div></div>
+    </div>
+    <div class="quickstart" id="quickstart">
+        <div class="qs-head" id="qs-head"><span>🚀 Démarrage rapide</span><span>▾</span></div>
+        <div class="qs-body">
+            <ol>
+                <li><strong>Clé Agnes gratuite</strong> : créez-en une sur <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">platform.agnes-ai.com</a>, puis collez-la dans la section API.</li>
+                <li><strong>Décrivez la scène</strong> (ou cliquez un preset dans « ✍️ Scénario »).</li>
+                <li><strong>Lancez</strong> : le studio enchaîne images puis vidéos, avec repli de modèle, reprise et cadence adaptative automatiques.</li>
+            </ol>
+            <div class="qs-note">🆓 <strong>Gratuit d'abord</strong> : quota, file et cadence s'affichent ci-dessus. Le plan gratuit Agnes ne demande pas de carte bancaire.</div>
+        </div>
     </div>
 </header>
 
@@ -546,7 +568,16 @@
     <div class="section open">
         <div class="section-header" data-toggle="section-prompt"><span class="section-title">✍️ Scénario</span><span class="chevron">▼</span></div>
         <div class="section-body">
-            <div class="section-content"><textarea class="prompt-main" id="main-prompt" placeholder="Décrivez votre scène..."></textarea></div>
+            <div class="section-content">
+                <div class="preset-row" id="preset-row">
+                    <button type="button" class="preset-btn" data-preset="Un paysage au coucher du soleil, rétrofuturiste, couleurs vives, plan large">🌅 Paysage</button>
+                    <button type="button" class="preset-btn" data-preset="Une rue urbaine néon sous la pluie, reflets, ambiance cyberpunk">🏙️ Urbain néon</button>
+                    <button type="button" class="preset-btn" data-preset="Un animal majestueux dans son habitat naturel, documentaire couleur">🐾 Animal</button>
+                    <button type="button" class="preset-btn" data-preset="Une scène de science-fiction pulp, fusée rétro, espace coloré">🚀 SF pulp</button>
+                    <button type="button" class="preset-btn" data-preset="Un personnage de bande dessinée franco-belge, trait net, couleurs pop">🎨 BD pop</button>
+                </div>
+                <textarea class="prompt-main" id="main-prompt" placeholder="Décrivez votre scène..."></textarea>
+            </div>
         </div>
     </div>
 </div>
@@ -1655,7 +1686,7 @@ function renderGallery() {
         const dateStr = new Date(v.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         const sizeStr = v.size ? formatBytes(v.size) : '—';
         return '<div class="video-card"><video src="' + src + '" preload="metadata" muted playsinline data-video-click="' + v.id + '"></video>' +
-            '<div class="vc-info"><span class="vc-label">' + escapeHtml(v.label) + '</span><span class="vc-meta">' + (v.model ? escapeHtml(v.model) + ' · ' : '') + sizeStr + ' · ' + dateStr + '</span></div>' +
+            '<div class="vc-info"><span class="vc-label">' + escapeHtml(v.label) + '</span><span class="vc-meta">' + (v.model ? escapeHtml(v.model) + ' · ' : '') + (v.durationSec ? v.durationSec + 's · ' : '') + sizeStr + ' · ' + dateStr + '</span></div>' +
             '<div class="vc-actions">' +
                 '<button class="vc-btn" data-vc-preview="' + v.id + '">🔍 Voir</button>' +
                 '<button class="vc-btn" data-vc-download="' + v.id + '">⬇️ DL</button>' +
@@ -1821,7 +1852,13 @@ function openVideoModal(id) {
     const info = document.getElementById('vm-info'); const dlBtn = document.getElementById('vm-download');
     video.src = v.blob || v.url;
     const dateStr = new Date(v.timestamp).toLocaleString('fr-FR');
-    info.innerHTML = '<strong>' + escapeHtml(v.label) + '</strong><br>' + '<span style="font-size:0.7rem;opacity:0.7;">' + (v.size ? formatBytes(v.size) : '—') + ' · ' + dateStr + '</span>' + (v.model ? '<br><span style="font-size:0.65rem;color:var(--accent);">🧠 ' + escapeHtml(v.model) + '</span>' : '');
+    /* v501 — C3 : fiche de scène complète (modèle, durée, quota, prompt). */
+    let extra = '';
+    if (v.model) extra += '<br><span style="font-size:0.65rem;color:var(--accent);">🧠 ' + escapeHtml(v.model) + '</span>';
+    if (v.durationSec) extra += ' <span style="font-size:0.65rem;opacity:0.7;">· ' + v.durationSec + 's</span>';
+    if (v.quotaSec) extra += ' <span style="font-size:0.65rem;opacity:0.7;">· ~' + Math.round(v.quotaSec) + 's de quota</span>';
+    info.innerHTML = '<strong>' + escapeHtml(v.label) + '</strong><br>' + '<span style="font-size:0.7rem;opacity:0.7;">' + (v.size ? formatBytes(v.size) : '—') + ' · ' + dateStr + '</span>' + extra +
+        (v.prompt ? '<div style="font-size:0.68rem;opacity:0.75;margin-top:0.45rem;max-width:520px;text-align:left;max-height:120px;overflow:auto;border-top:1px solid var(--border);padding-top:0.4rem;">📝 ' + escapeHtml(v.prompt) + '</div>' : '');
     dlBtn.onclick = () => downloadVideoEntry(v.id);
     modal.classList.add('open'); document.body.style.overflow = 'hidden';
     video.play().catch(() => {});
@@ -2906,7 +2943,15 @@ async function startGeneration() {
             completed++;
             cadenceSucces();                          /* #1/#3 : succès -> cadence baisse, saturation levée */
             recordTiming('job', Date.now() - t0);     /* #4 */
-            const g = loadGallery(); if (g[0]) cacheVideoSet(cleCache, g[0].id);   /* B3 */
+            const g = loadGallery();
+            if (g[0]) {
+                /* v501 — C3 : fiche de scène (prompt, durée, quota consommé). */
+                g[0].prompt = prompt;
+                g[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10;
+                g[0].quotaSec = g[0].durationSec;
+                saveGallery(g);
+                cacheVideoSet(cleCache, g[0].id);   /* B3 */
+            }
             const restant = totalJobs - idx;
             if (restant > 0) {
                 const etaMs = restant * estimateTiming('job', 120000);
@@ -2928,7 +2973,8 @@ async function startGeneration() {
                     const vidRepli = await createVideoTask(prompt, img, aud, VIDEO_REPLI, vid, null);
                     await pollUntilDone(vidRepli, VIDEO_REPLI, sceneLabel + ' (repli)', null);
                     completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
-                    const g2 = loadGallery(); if (g2[0]) cacheVideoSet(cleCache, g2[0].id);
+                    const g2 = loadGallery();
+                    if (g2[0]) { g2[0].prompt = prompt; g2[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10; g2[0].quotaSec = g2[0].durationSec; saveGallery(g2); cacheVideoSet(cleCache, g2[0].id); }
                     logSuccess('✅ Repli réussi avec <code>' + VIDEO_REPLI + '</code>');
                     return;
                 } catch (e2) {
@@ -3205,6 +3251,21 @@ async function enrichWithMistral(btn, textareaId) {
         setInterval(majQuotaGlobal, 30000);
         const fcb = document.getElementById('file-check-btn');
         if (fcb) fcb.addEventListener('click', verifierFile);   /* v500 — A2 */
+        /* v501 — C4 : démarrage rapide (ouvert si aucune clé) + presets. */
+        const qs = document.getElementById('quickstart');
+        const qsHead = document.getElementById('qs-head');
+        if (qs && qsHead) {
+            if (!getApiKey()) qs.classList.add('open');
+            qsHead.addEventListener('click', function () { qs.classList.toggle('open'); });
+        }
+        const pr = document.getElementById('preset-row');
+        if (pr) pr.querySelectorAll('[data-preset]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                const t = document.getElementById('main-prompt'); if (!t) return;
+                t.value = b.dataset.preset; t.dispatchEvent(new Event('input'));
+                showToast('Preset appliqué', 'success', 1200);
+            });
+        });
         try {
             const enAttente = loadPendingTasks();
             if (enAttente.length) {
