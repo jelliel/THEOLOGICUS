@@ -138,6 +138,30 @@ def controle_copie_embarquee():
     return erreurs, infos
 
 
+def controle_fins_de_ligne():
+    """Les fichiers principaux doivent rester en CRLF (convention Windows).
+
+    v505 — une édition d'outil a réécrit THEOLOGICUS.html en LF : le diff Git
+    montrait alors 53 000 lignes changées (au lieu de ~100) et le fichier
+    perdait ~48 Ko (chaque CRLF devenait LF). On mesure donc : le fichier doit
+    être en MAJORITÉ CRLF (les rares lignes LF introduites par l'embarquement
+    base64 sont tolérées)."""
+    erreurs, infos = [], []
+    for nom in ('THEOLOGICUS.html', 'ai-video.html'):
+        p = os.path.join(ROOT, nom)
+        if not os.path.isfile(p):
+            continue
+        data = open(p, 'rb').read()
+        lf = data.count(b'\n')
+        crlf = data.count(b'\r\n')
+        if lf and (crlf / lf) < 0.9:
+            erreurs.append('%s : fins de ligne NON-CRLF (CRLF %d / LF %d) — restaurer '
+                           'les CRLF, sinon le diff Git couvre tout le fichier' % (nom, crlf, lf))
+        else:
+            infos.append('%s : fins de ligne CRLF (%d/%d)' % (nom, crlf, lf))
+    return erreurs, infos
+
+
 def controle_modules():
     """Identifiants de modules uniques dans THEOLOGICUS.html et ai-video.html."""
     erreurs, infos = [], []
@@ -174,7 +198,8 @@ def controle_bancs():
 
 def main():
     erreurs, infos = [], []
-    for controle in (controle_assets, controle_corpus, controle_copie_embarquee, controle_modules, controle_bancs):
+    for controle in (controle_assets, controle_corpus, controle_copie_embarquee,
+                     controle_fins_de_ligne, controle_modules, controle_bancs):
         e, i = controle()
         erreurs += e
         infos += i
