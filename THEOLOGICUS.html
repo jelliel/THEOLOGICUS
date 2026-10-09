@@ -41799,7 +41799,16 @@ window.continueTradApart = async function (msgId) {
     if (!wrap.contains(e.target) && !panel.contains(e.target)) closeP();
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeP(); });
-  window.addEventListener('scroll', closeP, true);
+  /* v511 — un scroll ne doit PAS fermer le panneau tant que le bouton reste
+     visible : on le REPOSITIONNE (sinon un simple defilement, ou le
+     scroll-into-view d'un outil de test, faisait disparaitre le menu). On
+     ne ferme que si le bouton sort de l'ecran. */
+  window.addEventListener('scroll', function () {
+    if (!panel.classList.contains('open')) return;
+    var r = btn.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) { closeP(); return; }
+    place();
+  }, true);
   window.addEventListener('resize', closeP);
 
   /* ── un seul menu ouvert à la fois (capture : avant les toggles) ── */

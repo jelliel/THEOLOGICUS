@@ -79,7 +79,7 @@ function section(t) { console.log("\n" + t); }
 async function masquerWizard(page) {
   await page.evaluate(() => {
     const ov = document.getElementById('setup-wizard-overlay');
-    if (ov) ov.classList.remove('active');
+    if (ov) { ov.classList.remove('active'); ov.style.display = 'none'; }
     try { localStorage.setItem('theologicus_wizard_skipped', '1'); } catch (e) {}
   }).catch(() => {});
 }
@@ -202,7 +202,7 @@ const I = {
   await masquerWizard(page);
   // v159 — le bouton AI VIDEO vit dans un panneau popup ouvert par « MEDIA ▾ ».
   const mediaBtn = await page.$("#v159-media-btn");
-  if (mediaBtn) { await mediaBtn.click(); await page.waitForTimeout(300); }
+  if (mediaBtn) { await masquerWizard(page); await mediaBtn.click({ force: true }).catch(() => {}); await page.waitForTimeout(300); }
   await page.waitForSelector("#open-aivideo-modal", { state: "visible", timeout: 30000 });
   await page.waitForTimeout(800);
   await page.click("#open-aivideo-modal");
@@ -361,7 +361,7 @@ const I = {
   await masquerWizard(page);
   // rouvrir le modal après reload
   const mediaBtn2 = await page.$("#v159-media-btn");
-  if (mediaBtn2) { await mediaBtn2.click(); await page.waitForTimeout(300); }
+  if (mediaBtn2) { await masquerWizard(page); await mediaBtn2.click({ force: true }).catch(() => {}); await page.waitForTimeout(300); }
   await page.waitForSelector("#open-aivideo-modal", { state: "visible", timeout: 30000 });
   await page.waitForTimeout(500);
   await page.click("#open-aivideo-modal");
