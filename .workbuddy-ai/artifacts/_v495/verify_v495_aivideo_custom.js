@@ -142,7 +142,13 @@ const I = {
   const browser = await chromium.launch(optionsNav);
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const erreurs = [];
-  const BRUIT = /version\.txt/;
+  // On ignore les erreurs RÉSEAU vers les fournisseurs externes (Agnes/Mistral…) :
+  // en CI (sans clé réelle ni mandataire), la sonde de clé (_verifCle → GET
+  // /models) renvoie un 401/403, et le navigateur journalise un
+  // « Failed to load resource ». Ce n'est PAS une erreur du code testé (le
+  // endpoint personnalisé, lui, est intercepté et renvoie 200). On ne tolère
+  // QUE les vraies exceptions JS (pageerror) comme échecs.
+  const BRUIT = /version\.txt|Failed to load resource|net::ERR|Failed to fetch|401|403|404|Unauthorized/i;
   page.on("pageerror", e => erreurs.push(String(e)));
   page.on("console", m => { if (m.type() === "error" && !BRUIT.test(m.text())) erreurs.push("console: " + m.text()); });
   await armerRouteur(page, cpt);
