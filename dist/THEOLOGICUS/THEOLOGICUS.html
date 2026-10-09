@@ -7765,6 +7765,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
+    <button class="hud-btn" id="open-diag" title="Diagnostic — état des corpus, du stockage, des clés IA et d'Ollama (Ctrl+Alt+D)">🩺 DIAGNOSTIC</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -53330,6 +53331,165 @@ window.continueTradApart = async function (msgId) {
   }
 
   window.__v506Synopse = { ouvrir: ouvrir, fermer: fermer, versions: VERSIONS, nettoieStrong: nettoieStrong };
+})();
+</script>
+<script id="v507-diagnostic">
+/* v507 — PANNEAU DE DIAGNOSTIC (Niveau 3, expérience).
+   Un seul endroit pour répondre à « pourquoi ça ne marche pas ? » :
+   version, présence des CORPUS, stockage, clés IA, Ollama, quota vidéo.
+   Chaque ligne est vérifiée en direct ; « Re-tester » relance les sondes. */
+(function () {
+  'use strict';
+  if (window.__v507Diag) return;
+
+  var CORPUS = [
+    { nom: 'Bible (français)',   url: 'bible/b1.js' },
+    { nom: 'Vulgate (latin)',    url: 'biblelt/b1.js' },
+    { nom: 'Hébreu (AT)',        url: 'biblehb/b1.js' },
+    { nom: 'Grec (NT)',          url: 'biblegr/b40.js' },
+    { nom: 'Syriaque (Peshitta)', url: 'syriaque/b1.js' },
+    { nom: 'Coran',              url: 'quran/q1.js' },
+    { nom: 'Tafsir',             url: 'tafsir/s1.js' },
+    { nom: 'Pères (sujets)',     url: 'tradition/ta_sujets.json' },
+    { nom: 'Doctrines',          url: 'tradition/doctrines.json' },
+    { nom: 'Valtorta',           url: 'tradition/valtorta.json' },
+    { nom: 'Thèmes',             url: 'tradition/themes.json' },
+    { nom: 'Sefaria (index)',    url: 'tradition/sefaria_idx.json' }
+  ];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function ligne(etat, nom, detail) {
+    var ic = etat === true ? '✅' : etat === false ? '❌' : '…';
+    var cl = etat === true ? 'ok' : etat === false ? 'ko' : 'q';
+    return '<div class="d-l ' + cl + '"><span class="d-ic">' + ic + '</span><span class="d-n">' + esc(nom) + '</span>'
+      + '<span class="d-d">' + esc(detail || '') + '</span></div>';
+  }
+
+  function panneau() {
+    var p = document.getElementById('v507-diag');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v507-diag';
+    p.innerHTML = '<style>'
+      + '#v507-diag{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:9850;display:none;align-items:center;justify-content:center;padding:1rem}'
+      + '#v507-diag.open{display:flex}'
+      + '#v507-diag .b{position:relative;width:100%;max-width:640px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,#15151f,#0f0f16);border:1px solid rgba(201,169,97,.35);border-radius:16px;padding:1.1rem 1.2rem}'
+      + '#v507-diag h3{margin:0 0 .1rem;font-size:1.05rem;color:#e5c15a}'
+      + '#v507-diag .st{font-size:.68rem;color:#8a8896;margin-bottom:.7rem}'
+      + '#v507-diag h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#8fa3b8;margin:.9rem 0 .35rem}'
+      + '#v507-diag .d-l{display:flex;gap:.5rem;align-items:baseline;font-size:.78rem;padding:.28rem .4rem;border-radius:6px}'
+      + '#v507-diag .d-l.ko{background:rgba(200,90,74,.1)}'
+      + '#v507-diag .d-ic{width:1.1em}'
+      + '#v507-diag .d-n{color:#e8e6e0;flex:0 0 44%}'
+      + '#v507-diag .d-d{color:#8a8896;font-size:.72rem}'
+      + '#v507-diag .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid #2a2a3a;color:#8a8896;border-radius:50%;width:30px;height:30px;cursor:pointer}'
+      + '#v507-diag .btns{margin-top:1rem;display:flex;gap:.5rem}'
+      + '#v507-diag .btns button{background:#1a1a28;color:#e8e6e0;border:1px solid #2a2a3a;border-radius:8px;padding:.45rem .9rem;font-size:.78rem;cursor:pointer}'
+      + '#v507-diag .btns button:hover{border-color:#e5c15a;color:#e5c15a}'
+      + '</style>'
+      + '<div class="b"><button class="x" id="v507-x">✕</button><h3>🩺 Diagnostic</h3>'
+      + '<div class="st" id="v507-st">Sondes en cours…</div><div id="v507-c"></div>'
+      + '<div class="btns"><button id="v507-retest">↻ Re-tester</button><button id="v507-copy">📋 Copier le rapport</button></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
+    p.querySelector('#v507-x').addEventListener('click', fermer);
+    p.querySelector('#v507-retest').addEventListener('click', sonder);
+    p.querySelector('#v507-copy').addEventListener('click', copier);
+    return p;
+  }
+  function fermer() { var p = document.getElementById('v507-diag'); if (p) p.classList.remove('open'); }
+
+  var dernierRapport = '';
+
+  function sonder() {
+    var c = document.getElementById('v507-c');
+    var st = document.getElementById('v507-st');
+    if (!c) return;
+    if (st) st.textContent = 'Sondes en cours…';
+    var lignes = { version: ligne(null, 'Version', ''), corpus: '', stockage: '', ia: '', quota: '' };
+
+    // Version
+    fetch('version.txt?_=' + Date.now()).then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (t) { lignes.version = ligne(true, 'Version', (t && t.trim()) || window.STAMPED || 'dev'); rend(); })
+      .catch(function () { lignes.version = ligne(true, 'Version', window.STAMPED || 'dev'); rend(); });
+
+    // Corpus (HEAD sur un fichier représentatif)
+    var restants = CORPUS.length, htmlCorpus = '';
+    CORPUS.forEach(function (x, i) {
+      fetch(x.url, { method: 'HEAD' }).then(function (r) {
+        htmlCorpus += ligne(r.ok, x.nom, r.ok ? 'présent' : 'HTTP ' + r.status);
+      }).catch(function () {
+        htmlCorpus += ligne(false, x.nom, 'absent');
+      }).then(function () {
+        if (--restants === 0) { lignes.corpus = htmlCorpus; rend(); }
+      });
+    });
+
+    // Stockage
+    var n = 0, oct = 0;
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); n++; oct += (k.length + (localStorage.getItem(k) || '').length); } } catch (e) {}
+    lignes.stockage = ligne(true, 'localStorage', n + ' clés · ~' + Math.round(oct / 1024) + ' Ko')
+      + ligne(!!window.indexedDB, 'IndexedDB', window.indexedDB ? 'disponible' : 'indisponible')
+      + ligne(navigator.onLine, 'Réseau', navigator.onLine ? 'en ligne' : 'hors ligne');
+
+    // IA (clés masquées)
+    function cle(k) { try { var v = (localStorage.getItem(k) || '').trim(); return v ? '••••' + v.slice(-4) : 'absente'; } catch (e) { return 'absente'; } }
+    lignes.ia = ligne(!!(localStorage.getItem('agnes_api_key') || '').trim(), 'Clé Agnes', cle('agnes_api_key'))
+      + ligne(!!(localStorage.getItem('mistral_api_key_v1') || '').trim(), 'Clé Mistral', cle('mistral_api_key_v1'))
+      + ligne(null, 'Ollama (127.0.0.1:11434)', 'test…');
+    fetch('http://127.0.0.1:11434/api/tags', { signal: AbortSignal.timeout(2500) })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var ok = !!j;
+        var l = ligne(!!(localStorage.getItem('agnes_api_key') || '').trim(), 'Clé Agnes', cle('agnes_api_key'))
+              + ligne(!!(localStorage.getItem('mistral_api_key_v1') || '').trim(), 'Clé Mistral', cle('mistral_api_key_v1'))
+              + ligne(ok, 'Ollama (127.0.0.1:11434)', ok ? ((j.models || []).length + ' modèle(s)') : 'injoignable');
+        lignes.ia = l; rend();
+      })
+      .catch(function () {
+        lignes.ia = ligne(!!(localStorage.getItem('agnes_api_key') || '').trim(), 'Clé Agnes', cle('agnes_api_key'))
+          + ligne(!!(localStorage.getItem('mistral_api_key_v1') || '').trim(), 'Clé Mistral', cle('mistral_api_key_v1'))
+          + ligne(false, 'Ollama (127.0.0.1:11434)', 'injoignable');
+        rend();
+      });
+
+    // Quota vidéo
+    try {
+      var q = JSON.parse(localStorage.getItem('theologicus_video_quota') || 'null');
+      var sec = q && typeof q.secondes === 'number' ? q.secondes : 0;
+      lignes.quota = ligne(sec < 500, 'Quota vidéo du jour', Math.round(sec) + ' s / ~500 s');
+    } catch (e) { lignes.quota = ligne(true, 'Quota vidéo du jour', '0 s / ~500 s'); }
+
+    function rend() {
+      c.innerHTML = '<h4>Application</h4>' + lignes.version
+        + '<h4>Corpus</h4>' + (lignes.corpus || ligne(null, 'chargement…', ''))
+        + '<h4>Stockage</h4>' + lignes.stockage
+        + '<h4>Intelligence artificielle</h4>' + lignes.ia
+        + '<h4>Quota</h4>' + lignes.quota;
+      dernierRapport = c.textContent;
+      if (st) st.textContent = 'Dernière sonde : ' + new Date().toLocaleTimeString('fr-FR');
+    }
+    rend();
+  }
+
+  function copier() {
+    try {
+      navigator.clipboard.writeText('THEOLOGICUS — diagnostic\n' + dernierRapport);
+      var b = document.getElementById('v507-copy');
+      if (b) { b.textContent = '✓ Copié'; setTimeout(function () { b.textContent = '📋 Copier le rapport'; }, 1500); }
+    } catch (e) {}
+  }
+
+  function ouvrir() { var p = panneau(); p.classList.add('open'); sonder(); }
+
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); ouvrir(); }
+  });
+
+  var btn = document.getElementById('open-diag');
+  if (btn) btn.addEventListener('click', ouvrir);
+
+  window.__v507Diag = { ouvrir: ouvrir, fermer: fermer, sonder: sonder, corpus: CORPUS };
 })();
 </script>
 </body>
