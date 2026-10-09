@@ -42,6 +42,7 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ translatedText: lot.map(t => 'FR:' + t) }) });
   });
   let appelsOCR = 0;
+  let latenceOCR = 0;   /* réglable : le banc de parallélisme la monte à 400 */
   await page.route('**/proxy/**', async route => {
     let c = {}; try { c = JSON.parse(route.request().postData() || '{}'); } catch (e) {}
     const contenu = (c.messages && c.messages[0] && c.messages[0].content) || [];
@@ -49,6 +50,7 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     if (vision) {
       /* OCR : une page rendue en image */
       appelsOCR++;
+      if (latenceOCR) await new Promise(r => setTimeout(r, latenceOCR));
       const image = contenu.filter(x => x.type === 'image_url').length;
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ choices: [{ message: { content: 'Page transcrite numero ' + appelsOCR + ' (image=' + image + ').\n\nDeuxieme paragraphe de la page ' + appelsOCR + '.' } }] }) });
     }
@@ -122,6 +124,12 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
   ok('PDF scanné : l’OCR est PROPOSÉ (bouton présent)', scan.bouton === true, String(scan.texte).slice(0, 90));
   ok('le coût est annoncé (nombre d’appels = nombre de pages)', /2 appel\(s\)/.test(String(scan.texte)), String(scan.texte).slice(0, 120));
 
+  /* v493 : l'OCR est désormais parallèle ; l'ordre d'arrivée des réponses
+     n'est plus garanti, et l'assertion « numero 1 » plus bas exige que la
+     page 1 soit servie en premier. On force 1 pour garder ces tests
+     déterministes — le parallélisme est MESURÉ à part, juste après. */
+  await page.evaluate(() => { window.__livro.etat().parallele = 1; });
+
   // refus de la confirmation → aucun appel
   const refus = await page.evaluate(async () => {
     const vrai = window.confirm; let demande = false;
@@ -162,6 +170,34 @@ const ok = (name, cond, detail) => { total++; console.log(` ${cond ? '[OK] ' : '
     return {};
   });
   ok('OCR : reprise sans refaire les pages déjà transcrites (0 appel)', appelsOCR === 0, 'appels=' + appelsOCR);
+
+  // 2f-bis. v493 — PARALLÉLISME DE L'OCR, MESURÉ (même principe que le banc
+  //         de vitesse de la traduction). Latence simulée 400 ms par page :
+  //         2 pages en séquentiel ≈ 800 ms, en parallèle (3) ≈ 400 ms.
+  //         Un nom de fichier DIFFÉRENT par chrono : la reprise est indexée
+  //         par nom de fichier, sinon le second chrono ne ferait aucun appel.
+  latenceOCR = 400;
+  appelsOCR = 0;
+  const vitesseOCR = await page.evaluate(async () => {
+    async function chrono(tag) {
+      const bytes = await window.__fichierScan.arrayBuffer();
+      const f = new File([bytes], 'chrono_' + tag + '.pdf', { type: 'application/pdf' });
+      const t = Date.now();
+      await window.__livro.ocrPdf(f, function () {});
+      return Date.now() - t;
+    }
+    const etat = window.__livro.etat();
+    etat.parallele = 1; const t1 = await chrono('seq');
+    etat.parallele = 3; const t3 = await chrono('par');
+    etat.parallele = 0;
+    return { t1: t1, t3: t3 };
+  });
+  latenceOCR = 0;
+  ok('OCR : plusieurs pages en vol sont PLUS RAPIDES qu’une seule (mesuré)',
+     vitesseOCR.t3 < vitesseOCR.t1 * 0.75,
+     'sequentiel=' + vitesseOCR.t1 + 'ms parallele=' + vitesseOCR.t3 + 'ms');
+  ok('OCR en parallèle : toujours 1 appel par page (ni doublon ni oubli)',
+     appelsOCR === 4, 'appels=' + appelsOCR);
 
   // 2g. MOTEURS ISSUS DU REGISTRE DE THEOLOGICUS (la demande de l'utilisateur)
   const moteurs = await page.evaluate(() => {

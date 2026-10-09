@@ -51087,27 +51087,56 @@ window.continueTradApart = async function (msgId) {
     return t;
   }
 
+  function parasDe(texte) {
+    return String(texte || '').split(/\n\s*\n/)
+      .map(function (x) { return x.replace(/\s+/g, ' ').trim(); })
+      .filter(function (x) { return x.length > 1 && x !== '-'; });
+  }
+  function pagesUtiles(d) {
+    var n = 0;
+    for (var p in d) { if (parasDe(d[p]).length) n++; }
+    return n;
+  }
   async function ocrPdf(fichier, surPage) {
     await libsPretes();
     var buf = await fichier.arrayBuffer();
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js';
     var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    var dejaFaites = (await idbGet('ocr:' + (fichier.name || 'pdf'))) || {};
-    var chaps = [];
-    for (var p = 1; p <= pdf.numPages; p++) {
+    var cle = 'ocr:' + (fichier.name || 'pdf');
+    var dejaFaites = (await idbGet(cle)) || {};
+    var total = pdf.numPages;
+    var aFaire = [];
+    for (var i = 1; i <= total; i++) if (!dejaFaites[i]) aFaire.push(i);
+    /* v493 — PARALLÉLISME DE L'OCR. Chaque page est un aller-retour réseau
+       INDÉPENDANT : en séquentiel on payait N × latence, alors que le rendu
+       pdf.js et l'encodage sont négligeables à côté. On réutilise le réglage
+       `parallele()` déjà offert pour la traduction (1–6 ; défaut 3 en local,
+       2 en IA) : plusieurs pages en vol au lieu d'une seule.
+       Deux précautions, sinon le gain coûte plus qu'il ne rapporte :
+         · l'ORDRE des pages est conservé — les chapitres sont reconstruits
+           dans l'ordre à la fin, jamais dans l'ordre d'arrivée ;
+         · la REPRISE reste exacte — on n'écrit dans IndexedDB qu'un LOT
+           COMPLET à la fois. Des écritures concurrentes du même objet
+           perdraient des pages déjà payées. */
+    var k = Math.max(1, parallele());
+    var finis = total - aFaire.length;
+    for (var d = 0; d < aFaire.length; d += k) {
       if (S.arret) throw new Error('Arrêt');
       while (S.pause) { await new Promise(function (r) { setTimeout(r, 400); }); if (S.arret) throw new Error('Arrêt'); }
-      var texte = dejaFaites[p];
-      if (!texte) {
-        var page = await pdf.getPage(p);
-        texte = await ocrPage(page);
-        dejaFaites[p] = texte;
-        await idbPut('ocr:' + (fichier.name || 'pdf'), dejaFaites);
-      }
-      var paras = String(texte).split(/\n\s*\n/).map(function (x) { return x.replace(/\s+/g, ' ').trim(); }).filter(function (x) { return x.length > 1 && x !== '-'; });
-      if (paras.length) chaps.push({ titre: 'Page ' + p, paragraphes: paras });
-      if (surPage) surPage(p, pdf.numPages, chaps.length);
+      var lot = aFaire.slice(d, d + k);
+      var pages = await Promise.all(lot.map(function (p) { return pdf.getPage(p); }));
+      var textes = await Promise.all(pages.map(function (pg) { return ocrPage(pg); }));
+      lot.forEach(function (p, j) { dejaFaites[p] = textes[j]; });
+      await idbPut(cle, dejaFaites);
+      finis += lot.length;
+      if (surPage) surPage(finis, total, pagesUtiles(dejaFaites));
     }
+    var chaps = [];
+    for (var p2 = 1; p2 <= total; p2++) {
+      var paras = parasDe(dejaFaites[p2]);
+      if (paras.length) chaps.push({ titre: 'Page ' + p2, paragraphes: paras });
+    }
+    if (surPage) surPage(total, total, chaps.length);
     return chaps;
   }
 
