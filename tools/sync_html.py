@@ -25,7 +25,8 @@ import os
 import shutil
 import sys
 
-import embed_aivideo  # v126 — embarque ai-video.html dans THEOLOGICUS.html
+import embed_aivideo   # v126 — embarque ai-video.html dans THEOLOGICUS.html
+import embed_newsreel  # v498 — embarque newsreel.html dans THEOLOGICUS.html
 
 SOURCE = "THEOLOGICUS.html"
 
@@ -48,6 +49,14 @@ COMPAGNONS = {
         "dist/THEOLOGICUS/ai-video.html",        # distribution Windows
         "_inst_v102/ai-video.html",              # installation locale
         "_pub_v167/ai-video.html",               # build publie (2.0.167)
+    ],
+    # v498 — NewsReel (le JT par IA), ouvert depuis AI VIDEO. Meme regle : un
+    # compagnon absent de dist/ = un iframe vide, sans erreur visible.
+    "newsreel.html": [
+        "mobile/www/newsreel.html",              # Capacitor (APK)
+        "dist/THEOLOGICUS/newsreel.html",        # distribution Windows
+        "_inst_v102/newsreel.html",              # installation locale
+        "_pub_v167/newsreel.html",               # build publie (2.0.167)
     ],
 }
 
@@ -187,6 +196,10 @@ def main():
     print("")
     print("Embarquement de ai-video.html dans THEOLOGICUS.html…")
     embed_aivideo.run()
+
+    print("")
+    print("Embarquement de newsreel.html dans THEOLOGICUS.html…")
+    embed_newsreel.run()
 
     print("")
     if verifier_seulement:

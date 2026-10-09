@@ -68,16 +68,31 @@ def controle_assets():
 
 
 def controle_copie_embarquee():
-    """La copie base64 d'ai-video.html doit correspondre EXACTEMENT au fichier."""
+    """Les copies base64 des compagnons doivent correspondre EXACTEMENT aux fichiers.
+
+    v498 : il y a désormais DEUX compagnons embarqués — ai-video.html
+    (#aivideo-b64) et newsreel.html (#newsreel-b64). Chacun doit être à jour,
+    sinon l'app packagée sert une page périmée en silence."""
     html = io.open(os.path.join(ROOT, 'THEOLOGICUS.html'), encoding='utf-8').read()
-    m = re.search(r'<div id="aivideo-b64" hidden>([A-Za-z0-9+/=]+)</div>', html)
-    if not m:
-        return ['balise #aivideo-b64 introuvable dans THEOLOGICUS.html'], []
-    embarque = base64.b64decode(m.group(1))
-    reel = io.open(os.path.join(ROOT, 'ai-video.html'), 'rb').read()
-    if hashlib.sha256(embarque).hexdigest() != hashlib.sha256(reel).hexdigest():
-        return ['copie embarquée PÉRIMÉE : lancer py tools/sync_html.py puis committer THEOLOGICUS.html'], []
-    return [], ['copie embarquée à jour (%d octets)' % len(reel)]
+    erreurs, infos = [], []
+    for div_id, fichier in (('aivideo-b64', 'ai-video.html'),
+                            ('newsreel-b64', 'newsreel.html')):
+        m = re.search(r'<div id="%s" hidden>([A-Za-z0-9+/=]+)</div>' % div_id, html)
+        if not m:
+            erreurs.append('balise #%s introuvable dans THEOLOGICUS.html' % div_id)
+            continue
+        embarque = base64.b64decode(m.group(1))
+        chemin = os.path.join(ROOT, fichier)
+        if not os.path.isfile(chemin):
+            erreurs.append('compagnon %s absent (copie embarquée #%s orpheline)' % (fichier, div_id))
+            continue
+        reel = io.open(chemin, 'rb').read()
+        if hashlib.sha256(embarque).hexdigest() != hashlib.sha256(reel).hexdigest():
+            erreurs.append('copie embarquée #%s PÉRIMÉE : lancer py tools/sync_html.py '
+                           'puis committer THEOLOGICUS.html' % div_id)
+            continue
+        infos.append('copie embarquée %s à jour (%d octets)' % (fichier, len(reel)))
+    return erreurs, infos
 
 
 def controle_modules():

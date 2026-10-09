@@ -24,6 +24,7 @@ on:
     paths:
       - 'THEOLOGICUS.html'
       - 'ai-video.html'   # v126m : compagnon AI VIDEO — sans lui, un correctif du studio seul ne publiait jamais
+      - 'newsreel.html'   # v498 : compagnon NewsReel (JT), ouvert depuis AI VIDEO — même piège que ci-dessus
       - 'bible/**'
       - 'quran/**'
       - 'tafsir/**'

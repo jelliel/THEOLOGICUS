@@ -264,6 +264,14 @@
     .cm-error { display: none; margin-top: 0.35rem; padding: 0.3rem 0.45rem; border-radius: 0.35rem; font-size: 0.68rem; color: #ffb4b4; background: rgba(255,80,80,0.08); border: 1px solid rgba(255,80,80,0.25); }
     .cm-use-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.5rem; font-size: 0.7rem; color: var(--text, #ccc); }
     .cm-use-row select { flex: 1; min-width: 0; }
+    /* v498 — NewsReel (JT par IA) : studio compagnon ouvert depuis AI VIDEO. */
+    .newsreel-open-btn { margin-top: 0.7rem; background: linear-gradient(135deg,#e87b35,#e5c15a); color:#1a1a28; border:none; border-radius:0.4rem; padding:0.45rem 0.95rem; font-size:0.78rem; font-weight:700; cursor:pointer; letter-spacing:0.02em; }
+    .newsreel-open-btn:hover { filter: brightness(1.08); }
+    .newsreel-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9000; display: none; }
+    .newsreel-modal.open { display: flex; flex-direction: column; }
+    .newsreel-modal-head { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; padding:0.5rem 0.9rem; background:#12121c; border-bottom:1px solid #2a2a3a; color:#e8e6e0; font-size:0.82rem; }
+    .newsreel-modal-head button { background:none; border:none; color:#e8e6e0; font-size:1.1rem; cursor:pointer; }
+    .newsreel-frame { flex:1; width:100%; border:0; background:#0a0a12; }
 </style>
 </head>
 <body>
@@ -272,6 +280,7 @@
     <h1>Cinéma Noir</h1>
     <div class="film-strip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
     <p class="subtitle">« Studio IA complet — Timeout intelligent »</p>
+    <button type="button" id="open-newsreel-btn" class="newsreel-open-btn" title="Ouvrir NewsReel Studio — le JT généré par IA (config partagée)">📰 NewsReel — le JT par IA</button>
 </header>
 
 <div class="log-panel" id="log-panel">
@@ -3723,6 +3732,65 @@ async function enrichWithMistral(btn, textareaId) {
     decouperSecondes: decouperSecondes,
     segmentsPour: function (frames) { return decouper(frames).length; }
   };
+})();
+</script>
+
+<!-- v498 — NewsReel (le JT par IA) : studio compagnon, ouvert depuis AI VIDEO.
+     Chargé en direct (/newsreel.html) ; si la route échoue, on décode la copie
+     embarquée #newsreel-b64 (dans THEOLOGICUS.html) et on l'injecte en srcdoc. -->
+<div class="newsreel-modal" id="newsreel-modal">
+    <div class="newsreel-modal-head">
+        <span>📰 NewsReel Studio — le JT par IA · config partagée avec AI VIDEO</span>
+        <button type="button" id="newsreel-close-btn" title="Fermer">✕</button>
+    </div>
+    <iframe class="newsreel-frame" id="newsreel-frame" src="about:blank" title="NewsReel Studio"></iframe>
+</div>
+
+<script id="v498-newsreel">
+/* v498 — Entrée NewsReel depuis AI VIDEO. Le studio compagnon (newsreel.html)
+   s'ouvre dans un modal plein écran. Repli : si /newsreel.html ne charge pas
+   (exe sans le fichier), on décode #newsreel-b64 depuis le document hôte
+   (THEOLOGICUS.html, notre parent) et on injecte via srcdoc. */
+(function () {
+  'use strict';
+  function repliNewsReel(f) {
+    try {
+      var hote = (window.parent && window.parent !== window) ? window.parent : window;
+      var el = hote.document.getElementById('newsreel-b64');
+      if (!el) return;
+      var b64 = (el.textContent || '').trim();
+      if (!b64) return;
+      var bin = atob(b64);
+      var octets = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) octets[i] = bin.charCodeAt(i);
+      f.removeAttribute('src');
+      f.srcdoc = new TextDecoder('utf-8').decode(octets);
+    } catch (e) { if (typeof logWarn === 'function') logWarn('NewsReel — repli impossible : ' + e.message); }
+  }
+  function ouvrirNewsReel() {
+    var m = document.getElementById('newsreel-modal');
+    var f = document.getElementById('newsreel-frame');
+    if (!m || !f) return;
+    m.classList.add('open');
+    if (!f.__nrCharge) {
+      f.__nrCharge = true;
+      f.addEventListener('load', function () {
+        var ok = false;
+        try { ok = /NewsReel/i.test((f.contentDocument && f.contentDocument.title) || ''); } catch (e) { ok = false; }
+        if (!ok) repliNewsReel(f);
+      });
+      f.src = _VIA_RELAIS ? '/newsreel.html' : 'newsreel.html';
+    }
+  }
+  function fermerNewsReel() {
+    var m = document.getElementById('newsreel-modal');
+    if (m) m.classList.remove('open');
+  }
+  var ouvrir = document.getElementById('open-newsreel-btn');
+  if (ouvrir) ouvrir.addEventListener('click', ouvrirNewsReel);
+  var fermer = document.getElementById('newsreel-close-btn');
+  if (fermer) fermer.addEventListener('click', fermerNewsReel);
+  window.__v498NewsReel = { ouvrir: ouvrirNewsReel, fermer: fermerNewsReel, repli: repliNewsReel };
 })();
 </script>
 </body>

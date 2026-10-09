@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NewsReel Studio v6.1 — Multi-Provider</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+--bg:#0a0a12;--bg2:#12121c;--bg3:#1a1a28;
+--panel:#16161f;--border:#2a2a3a;
+--ink:#e8e6e0;--dim:#8a8896;--faint:#4a4858;
+--acc:#e5c15a;--acc2:#e87b35;
+--ok:#4a9d6a;--err:#c85a4a;--warn:#d4a017;
+--r:4px;--fs:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+--fm:ui-monospace,'SF Mono',Menlo,monospace;
+}
+html,body{background:var(--bg)}
+body{font-family:var(--fs);background:var(--bg);color:var(--ink);min-height:100vh;padding:1.5rem 1rem 24rem;font-size:15px;line-height:1.55;max-width:900px;margin:0 auto}
+header{margin-bottom:2rem;text-align:center;padding:1rem 0 1.5rem;position:relative}
+header::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:120px;height:1px;background:linear-gradient(90deg,transparent,var(--acc),transparent);opacity:.5}
+h1{font-size:2rem;font-weight:300;margin-bottom:.5rem;background:linear-gradient(135deg,var(--acc2),var(--acc));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.subtitle{font-size:.9rem;color:var(--dim);font-style:italic}
+.toast{position:fixed;top:1.5rem;left:50%;transform:translateX(-50%) translateY(-120px);background:var(--bg3);color:var(--ink);border:1px solid var(--border);border-left:3px solid var(--acc);padding:.85rem 1.4rem;border-radius:var(--r);font-size:.85rem;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:1000;opacity:0;transition:transform .35s cubic-bezier(.2,.9,.3,1.2),opacity .35s;max-width:90vw;text-align:center;display:flex;align-items:center;gap:.6rem}
+.toast.visible{transform:translateX(-50%) translateY(0);opacity:1}
+.toast.success{border-left-color:var(--ok)}.toast.error{border-left-color:var(--err)}.toast.warn{border-left-color:var(--warn)}
+.banner{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);padding:1rem 1.15rem;border-radius:var(--r);font-size:.8rem;color:var(--dim);margin-bottom:1.2rem;line-height:1.6}
+.banner strong{color:var(--ink)}.banner .hl{color:var(--acc)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem;margin-bottom:1rem}
+.panel.ok{box-shadow:inset 3px 0 0 var(--ok)}
+input[type=password],input[type=text],input[type=url]{width:100%;padding:.85rem 1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-family:var(--fm);font-size:.82rem;margin-bottom:.6rem}
+input:focus{outline:none;border-color:var(--acc)}
+.btn{width:100%;padding:.85rem 1.2rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:.85rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:.7rem}
+.btn:hover{background:var(--bg3)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{border-color:var(--acc);background:linear-gradient(135deg,rgba(232,123,53,.2),rgba(229,193,90,.15));color:var(--acc);font-size:1rem;padding:1.2rem;letter-spacing:.2em}
+.btn-primary:disabled{opacity:.3;cursor:not-allowed}
+.btn-stop{border-color:var(--err);color:var(--err);background:transparent;display:none}
+.btn-stop.visible{display:block}
+.btn-resume{border-color:var(--warn);color:var(--warn);background:transparent;display:none}
+.btn-resume.visible{display:block}
+.btn-watch{border-color:var(--ok);color:var(--ok);background:transparent;font-size:.75rem;padding:.6rem .9rem}
+.btn-watch.active{background:rgba(74,157,106,.12);border-color:var(--ok);color:var(--ok)}
+.btn-secondary{border-color:var(--faint);color:var(--dim);font-size:.75rem;padding:.6rem .9rem}
+.btn-test{border-color:var(--acc);color:var(--acc);background:transparent;font-size:.72rem;padding:.5rem .9rem;letter-spacing:.1em}
+.btn-row{display:flex;gap:.5rem;flex-wrap:wrap}
+.btn-row .btn{flex:1;min-width:120px;margin-bottom:0}
+.status{font-size:.75rem;padding:.6rem .9rem;border-radius:var(--r);margin-bottom:.5rem;display:flex;align-items:center;gap:.6rem;background:var(--bg2);color:var(--dim);border:1px solid var(--border)}
+.status.ok{background:rgba(74,157,106,.08);color:var(--ok);border-color:rgba(74,157,106,.3)}
+.status.err{background:rgba(200,90,74,.08);color:var(--err);border-color:rgba(200,90,74,.3)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex-shrink:0}
+.status.ok .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.status.err .dot{background:var(--err);box-shadow:0 0 8px var(--err)}
+.hint{font-size:.72rem;color:var(--dim);margin-top:.5rem}
+.hint a{color:var(--acc);text-decoration:none}
+.stat{font-size:.72rem;color:var(--dim);margin-top:.6rem;padding:.5rem .7rem;background:var(--bg2);border-radius:var(--r);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.3rem;border:1px solid var(--border);font-family:var(--fm)}
+.agnes-status{display:flex;align-items:center;gap:.5rem;padding:.6rem .9rem;border-radius:var(--r);background:var(--bg2);border:1px solid var(--border);font-size:.75rem;font-family:var(--fm);margin-top:.6rem;margin-bottom:.6rem}
+.agnes-status .indicator{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.agnes-status.available .indicator{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse-ok 2s infinite}
+.agnes-status.saturated .indicator{background:var(--err);box-shadow:0 0 8px var(--err)}
+.agnes-status.unknown .indicator{background:var(--faint)}
+.agnes-status.checking .indicator{background:var(--warn);animation:pulse-warn .8s infinite}
+@keyframes pulse-ok{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes pulse-warn{0%,100%{opacity:1}50%{opacity:.3}}
+.agnes-status.available{color:var(--ok);border-color:rgba(74,157,106,.3)}
+.agnes-status.saturated{color:var(--err);border-color:rgba(200,90,74,.3)}
+.provider-tabs{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem}
+.provider-tab{flex:1;min-width:90px;padding:.6rem .5rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--dim);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .2s;text-align:center}
+.provider-tab:hover{border-color:var(--faint);color:var(--ink)}
+.provider-tab.active{border-color:var(--acc);color:var(--acc);background:rgba(229,193,90,.08)}
+.provider-section{display:none;padding-top:.5rem;border-top:1px dashed var(--border);margin-top:.5rem}
+.provider-section.active{display:block}
+.sub-tabs{display:flex;gap:.4rem;margin-bottom:.8rem;border-bottom:1px solid var(--border);padding-bottom:.4rem}
+.sub-tab{padding:.45rem .9rem;border-radius:var(--r) var(--r) 0 0;background:transparent;border:none;color:var(--dim);font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.sub-tab.active{color:var(--acc);border-bottom:2px solid var(--acc);margin-bottom:-1px}
+.sub-panel{display:none}
+.sub-panel.active{display:block}
+.section{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);margin-bottom:1rem;overflow:hidden}
+.section-header{padding:1rem 1.2rem;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center}
+.section-title{font-size:.85rem;text-transform:uppercase;letter-spacing:.2em;color:var(--ink);font-weight:500;display:flex;align-items:center;gap:.6rem}
+.badge{display:inline-block;padding:.15rem .55rem;background:transparent;color:var(--acc);border:1px solid var(--border);border-radius:2px;font-size:.6rem;letter-spacing:.15em;font-weight:600}
+.chevron{font-size:.7rem;color:var(--faint);transition:transform .3s}
+.section.open .chevron{transform:rotate(180deg);color:var(--acc)}
+.section-body{max-height:0;overflow:hidden;transition:max-height .4s ease}
+.section.open .section-body{max-height:8000px}
+.section-content{padding:0 1.2rem 1.2rem}
+.row{margin-bottom:1rem}
+.label{display:block;font-size:.72rem;color:var(--dim);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.15em;font-weight:600}
+select{width:100%;padding:.8rem .95rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--ink);font-size:.88rem;appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%23e5c15a' d='M0 0l5 6 5-6z'/></svg>");background-repeat:no-repeat;background-position:right .95rem center;background-size:10px}
+select:focus{outline:none;border-color:var(--acc)}
+select option{background:var(--bg2);color:var(--ink)}
+.palette-row{display:flex;gap:.5rem;flex-wrap:wrap}
+.palette-btn{flex:1;min-width:100px;padding:.7rem .5rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);color:var(--dim);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .2s;text-align:center}
+.palette-btn:hover{border-color:var(--faint);color:var(--ink)}
+.palette-btn.active{border-color:var(--acc);color:var(--acc);background:rgba(229,193,90,.06)}
+.news-list{max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--bg2)}
+.news-item{padding:.7rem .9rem;border-bottom:1px solid var(--border);font-size:.8rem;display:flex;gap:.6rem;align-items:flex-start}
+.news-item:last-child{border-bottom:none}
+.news-rank{font-family:var(--fm);font-size:.65rem;color:var(--acc);font-weight:700;flex-shrink:0;min-width:20px}
+.news-title{color:var(--ink);line-height:1.4}
+.news-source{font-size:.65rem;color:var(--faint);margin-top:.2rem}
+.phase-bar{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);border-radius:var(--r);padding:.9rem 1rem;margin-bottom:1rem;display:none}
+.phase-bar.visible{display:block}
+.phase-steps{display:flex;gap:.4rem;margin-bottom:.7rem;flex-wrap:wrap}
+.phase-step{flex:1;min-width:60px;padding:.5rem .4rem;border-radius:var(--r);background:var(--bg2);border:1px solid var(--border);font-size:.55rem;text-transform:uppercase;letter-spacing:.06em;text-align:center;color:var(--faint);font-weight:600}
+.phase-step.active{color:var(--acc);border-color:var(--acc);background:rgba(229,193,90,.06)}
+.phase-step.done{color:var(--ok);border-color:rgba(74,157,106,.3);background:rgba(74,157,106,.05)}
+.phase-info{font-size:.75rem;font-family:var(--fm);color:var(--dim);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.4rem}
+.progress-bar{height:3px;background:var(--bg2);border-radius:2px;margin-top:.5rem;overflow:hidden;position:relative}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--acc2),var(--acc));width:0%;transition:width .4s ease;border-radius:2px}
+.queue{margin-top:1.2rem}
+.queue-summary{background:var(--panel);border:1px solid var(--border);border-left:2px solid var(--acc);border-radius:var(--r);padding:.8rem 1rem;margin-bottom:.7rem;font-size:.78rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;font-family:var(--fm)}
+.qs-progress{color:var(--acc);font-weight:600}
+.qs-eta{color:var(--dim)}
+.queue-item{display:flex;align-items:center;gap:.8rem;padding:.75rem .9rem;border-radius:var(--r);border:1px solid var(--border);margin-bottom:.4rem;background:var(--panel);font-size:.82rem}
+.queue-item.pending{opacity:.45}
+.queue-item.creating{border-color:var(--warn);background:linear-gradient(90deg,rgba(212,160,23,.05),var(--panel))}
+.queue-item.processing{border-color:var(--acc);background:linear-gradient(90deg,rgba(74,123,200,.06),var(--panel))}
+.queue-item.done{border-color:var(--ok);background:linear-gradient(90deg,rgba(74,157,106,.05),var(--panel))}
+.queue-item.failed{border-color:var(--err);background:linear-gradient(90deg,rgba(200,90,74,.05),var(--panel))}
+.queue-item.retry{border-color:var(--warn);background:linear-gradient(90deg,rgba(212,160,23,.08),var(--panel))}
+.q-icon{font-size:1rem;width:1.5rem;text-align:center;flex-shrink:0}
+.q-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-status{font-size:.7rem;color:var(--dim);text-align:right;max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--fm)}
+.jt-panel{display:none;margin-top:1.5rem}
+.jt-panel.visible{display:block}
+.jt-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1.3rem;margin-bottom:1rem}
+.jt-title{font-size:1.4rem;color:var(--acc);margin-bottom:.4rem;text-align:center}
+.jt-meta{font-size:.7rem;color:var(--dim);text-align:center;letter-spacing:.15em;text-transform:uppercase;margin-bottom:1.2rem;font-family:var(--fm)}
+.host-tag{display:inline-flex;align-items:center;gap:.4rem;font-size:.72rem;padding:.35rem .8rem;border-radius:999px;background:rgba(200,176,224,.1);border:1px solid var(--acc);color:var(--ink);margin:0 auto 1rem}
+.seg-block{border-left:2px solid var(--border);padding-left:1rem;margin-bottom:1.2rem}
+.seg-block.active{border-left-color:var(--acc)}
+.seg-block.done{border-left-color:var(--ok)}
+.seg-num{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--faint);font-family:var(--fm);margin-bottom:.3rem}
+.seg-headline{font-size:1rem;color:var(--acc);line-height:1.35;margin-bottom:.4rem}
+.seg-summary{font-size:.78rem;color:var(--ink);background:rgba(229,193,90,.05);border-left:2px solid var(--acc);padding:.5rem .7rem;border-radius:2px;margin-bottom:.5rem;line-height:1.5}
+.seg-cast{font-size:.7rem;color:var(--ink);margin-top:.3rem;padding:.35rem .6rem;background:rgba(168,216,200,.06);border-left:2px solid var(--ok);border-radius:2px}
+.seg-dialogue{font-size:.88rem;font-style:italic;color:var(--ink);line-height:1.5;padding:.35rem .6rem;margin:.3rem 0}
+.seg-dialogue .spk{font-size:.6rem;text-transform:uppercase;letter-spacing:.15em;color:var(--acc);font-style:normal;font-weight:600;display:block;margin-bottom:.15rem}
+.seg-action{font-size:.7rem;color:var(--acc2);margin-top:.3rem;padding:.3rem .5rem;background:rgba(232,123,53,.06);border-left:2px solid var(--acc2);border-radius:2px}
+.seg-loc{font-size:.7rem;color:var(--ok);margin-top:.3rem}
+.gallery{margin-top:1.8rem}
+.gallery-title{font-size:1.1rem;color:var(--ink);margin-bottom:1rem;letter-spacing:.15em;text-transform:uppercase;text-align:center;padding-bottom:.8rem;position:relative}
+.gallery-title::after{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:60px;height:1px;background:linear-gradient(90deg,transparent,var(--acc),transparent)}
+.jt-segment{margin-bottom:2rem;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--panel)}
+.jt-segment-info{padding:1rem 1.1rem;background:rgba(229,193,90,.04);border-bottom:1px solid var(--border)}
+.jt-seg-headline{font-size:1rem;color:var(--acc);line-height:1.35;margin-bottom:.4rem}
+.jt-seg-summary{font-size:.78rem;color:var(--ink);line-height:1.5}
+.jt-segment-videos{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;padding:.8rem}
+@media(max-width:480px){.jt-segment-videos{grid-template-columns:1fr}}
+.jt-video{border-radius:var(--r);overflow:hidden;border:1px solid var(--border);background:#000}
+.jt-video video{width:100%;display:block;aspect-ratio:9/16;object-fit:cover;background:#000}
+.jt-video-label{padding:.5rem .6rem;background:var(--bg2);font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;font-family:var(--fm);display:flex;justify-content:space-between;gap:.4rem}
+.jt-video.host .jt-video-label{color:var(--acc)}
+.jt-video.reporter .jt-video-label{color:var(--ok)}
+.jt-video-placeholder{display:flex;align-items:center;justify-content:center;aspect-ratio:9/16;color:var(--faint);font-size:.7rem;font-family:var(--fm);background:var(--bg2);border:1px dashed var(--border);text-align:center;padding:1rem}
+.images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:.6rem;margin-top:1.2rem}
+.image-card{border-radius:var(--r);overflow:hidden;border:1px solid var(--border);background:var(--bg2);position:relative;aspect-ratio:9/16}
+.image-card.loading{display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:.65rem;font-family:var(--fm)}
+.image-card.failed{display:flex;align-items:center;justify-content:center;color:var(--err);font-size:.6rem;font-family:var(--fm);text-align:center;padding:.3rem}
+.image-card img{width:100%;height:100%;object-fit:cover;display:block}
+.img-label{position:absolute;bottom:0;left:0;right:0;padding:.3rem .5rem;background:linear-gradient(transparent,rgba(10,10,18,.9));font-size:.6rem;font-family:var(--fm);color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
+.image-card.host .img-label{color:var(--acc)}
+.image-card.reporter .img-label{color:var(--ok)}
+.status-bar{position:fixed;bottom:0;left:0;right:0;background:var(--bg3);border-top:1px solid var(--border);color:var(--ink);padding:.85rem 1.1rem;font-size:.78rem;display:flex;align-items:center;gap:.7rem;transform:translateY(100%);transition:transform .35s cubic-bezier(.2,.9,.3,1);z-index:100;font-family:var(--fm);box-shadow:0 -4px 20px rgba(0,0,0,.4)}
+.status-bar.visible{transform:translateY(0)}
+.spinner{width:12px;height:12px;border:2px solid rgba(229,193,90,.2);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.debug-panel{position:fixed;bottom:0;left:0;right:0;height:260px;background:#05050a;border-top:2px solid var(--acc);z-index:200;display:flex;flex-direction:column;font-family:var(--fm);box-shadow:0 -8px 32px rgba(0,0,0,.7);transition:height .3s ease}
+.debug-panel.collapsed{height:36px}
+.debug-header{display:flex;justify-content:space-between;align-items:center;padding:.5rem .8rem;background:linear-gradient(90deg,#0f0f18,#1a1a28);border-bottom:1px solid var(--border);flex-shrink:0;cursor:pointer;user-select:none}
+.debug-title{font-size:.72rem;color:var(--acc);letter-spacing:.15em;text-transform:uppercase;font-weight:600;display:flex;align-items:center;gap:.5rem}
+.debug-badge{font-size:.6rem;padding:.1rem .4rem;background:var(--acc);color:var(--bg);border-radius:2px;font-weight:700}
+.debug-actions{display:flex;gap:.3rem}
+.debug-actions button{background:transparent;border:1px solid var(--border);color:var(--dim);font-size:.62rem;padding:.25rem .55rem;border-radius:2px;cursor:pointer}
+.debug-actions button:hover{color:var(--acc);border-color:var(--acc)}
+.debug-body{flex:1;overflow-y:auto;padding:.5rem .7rem 1rem;font-size:.72rem;line-height:1.45;color:#c8c8d0}
+.debug-entry{margin-bottom:.3rem;padding:.25rem .4rem;border-left:2px solid transparent;border-radius:2px;word-break:break-word}
+.debug-entry.info{border-left-color:var(--faint)}
+.debug-entry.success{border-left-color:var(--ok);background:rgba(74,157,106,.04)}
+.debug-entry.warn{border-left-color:var(--warn);background:rgba(212,160,23,.04)}
+.debug-entry.error{border-left-color:var(--err);background:rgba(200,90,74,.06);color:#f0a0a0}
+.debug-entry.api{border-left-color:var(--acc)}
+.debug-entry.response{border-left-color:var(--acc2)}
+.debug-entry.state{border-left-color:var(--acc2)}
+.debug-entry.ai{border-left-color:var(--acc)}
+.debug-time{color:var(--faint);margin-right:.5rem;font-size:.65rem}
+.debug-cat{color:var(--acc);font-weight:600;margin-right:.4rem;font-size:.65rem}
+.debug-msg{color:#d8d8e0}
+.debug-data{margin-top:.3rem;padding:.4rem .5rem;background:#0a0a12;border:1px solid var(--border);border-radius:2px;font-size:.68rem;color:#a8d8b0;max-height:180px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.4}
+.hidden{display:none!important}
+.warn-box{background:rgba(212,160,23,.08);border-left:3px solid var(--warn);padding:.7rem .9rem;border-radius:var(--r);font-size:.75rem;color:var(--ink);margin-bottom:.8rem;line-height:1.5}
+@media(max-width:480px){h1{font-size:1.8rem}.images-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr))}.phase-step{font-size:.48rem;padding:.35rem .2rem}body{padding-bottom:22rem}.debug-panel{height:220px}.provider-tab{font-size:.6rem;min-width:70px}}
+</style>
+</head>
+<body>
+
+<header>
+<h1>NewsReel Studio</h1>
+<p class="subtitle">Le JT généré par IA · v6.1 — multi-provider</p>
+</header>
+
+<div class="banner">
+<strong>Le JT :</strong> un clic. L'IA récupère les <strong class="hl">titres du jour</strong>, crée un <strong class="hl">chroniqueur plateau</strong> et pour chaque info une <strong class="hl">équipe sur place</strong>. Chaque sujet est un <strong class="hl">sketch comique</strong>. Personnages et décors <strong class="hl">rétrofuturistes et très colorés</strong>. Acting <strong>stanislavskien</strong>. <strong>Aucune musique, uniquement bruitages + oiseaux.</strong> Compatible avec <strong class="hl">n'importe quelle API OpenAI-compatible</strong>.
+</div>
+
+<div class="section open" id="section-providers">
+<div class="section-header" data-toggle="section-providers">
+<span class="section-title">🔌 Fournisseurs IA <span class="badge" id="provider-badge">Agnes</span></span>
+<span class="chevron">▼</span>
+</div>
+<div class="section-body"><div class="section-content">
+
+<div class="provider-tabs" id="provider-tabs">
+<button type="button" class="provider-tab active" data-provider="agnes">🎬 Agnes</button>
+<button type="button" class="provider-tab" data-provider="openai">🟢 OpenAI</button>
+<button type="button" class="provider-tab" data-provider="anthropic">🟠 Anthropic</button>
+<button type="button" class="provider-tab" data-provider="groq">⚡ Groq</button>
+<button type="button" class="provider-tab" data-provider="together">🤝 Together</button>
+<button type="button" class="provider-tab" data-provider="openrouter">🌐 OpenRouter</button>
+<button type="button" class="provider-tab" data-provider="custom">⚙️ Custom</button>
+</div>
+
+<div class="provider-section active" data-provider-panel="agnes">
+<input type="password" id="agnes-key" placeholder="Clé API Agnes (sk-...)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="agnes">
+<button type="button" class="sub-tab active" data-subtarget="agnes-text">📝 Texte</button>
+<button type="button" class="sub-tab" data-subtarget="agnes-image">🎨 Image</button>
+<button type="button" class="sub-tab" data-subtarget="agnes-video">🎥 Vidéo</button>
+</div>
+<div class="sub-panel active" data-subpanel="agnes-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="agnes-text-url" value="https://apihub.agnes-ai.com/v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="agnes-text-model" value="agnes-2.5-flash">
+</div>
+<div class="sub-panel" data-subpanel="agnes-image">
+<label class="label">Endpoint images</label>
+<input type="url" id="agnes-image-url" value="https://apihub.agnes-ai.com/v1/images/generations">
+<label class="label">Modèle image</label>
+<input type="text" id="agnes-image-model" value="agnes-image-2.5-flash">
+</div>
+<div class="sub-panel" data-subpanel="agnes-video">
+<label class="label">Endpoint vidéos (création)</label>
+<input type="url" id="agnes-video-url" value="https://apihub.agnes-ai.com/v1/videos">
+<label class="label">Endpoint polling</label>
+<input type="url" id="agnes-video-poll" value="https://apihub.agnes-ai.com/agnesapi">
+<label class="label">Modèle vidéo</label>
+<input type="text" id="agnes-video-model" value="agnes-video-2.5-flash">
+</div>
+<div class="hint">Clé gratuite sur <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a></div>
+</div>
+
+<div class="provider-section" data-provider-panel="openai">
+<input type="password" id="openai-key" placeholder="Clé API OpenAI (sk-...)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="openai">
+<button type="button" class="sub-tab active" data-subtarget="openai-text">📝 Texte</button>
+<button type="button" class="sub-tab" data-subtarget="openai-image">🎨 Image</button>
+<button type="button" class="sub-tab" data-subtarget="openai-video">🎥 Vidéo</button>
+</div>
+<div class="sub-panel active" data-subpanel="openai-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="openai-text-url" value="https://api.openai.com/v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="openai-text-model" value="gpt-4o-mini">
+</div>
+<div class="sub-panel" data-subpanel="openai-image">
+<label class="label">Endpoint images</label>
+<input type="url" id="openai-image-url" value="https://api.openai.com/v1/images/generations">
+<label class="label">Modèle image</label>
+<input type="text" id="openai-image-model" value="dall-e-3">
+</div>
+<div class="sub-panel" data-subpanel="openai-video">
+<label class="label">Endpoint vidéos (création)</label>
+<input type="url" id="openai-video-url" value="https://api.openai.com/v1/videos">
+<label class="label">Endpoint polling</label>
+<input type="url" id="openai-video-poll" value="https://api.openai.com/v1/videos">
+<label class="label">Modèle vidéo</label>
+<input type="text" id="openai-video-model" value="sora-2">
+</div>
+<div class="hint">Clé sur <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a></div>
+</div>
+
+<div class="provider-section" data-provider-panel="anthropic">
+<input type="password" id="anthropic-key" placeholder="Clé API Anthropic (sk-ant-...)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="anthropic">
+<button type="button" class="sub-tab active" data-subtarget="anthropic-text">📝 Texte</button>
+</div>
+<div class="sub-panel active" data-subpanel="anthropic-text">
+<label class="label">Endpoint messages</label>
+<input type="url" id="anthropic-text-url" value="https://api.anthropic.com/v1/messages">
+<label class="label">Modèle texte</label>
+<input type="text" id="anthropic-text-model" value="claude-3-5-sonnet-20241022">
+</div>
+<div class="warn-box">⚠️ Anthropic ne fournit que du <strong>texte</strong>. Configure Agnes ou un autre provider pour image/vidéo.</div>
+<div class="hint">Clé sur <a href="https://console.anthropic.com/" target="_blank">console.anthropic.com</a></div>
+</div>
+
+<div class="provider-section" data-provider-panel="groq">
+<input type="password" id="groq-key" placeholder="Clé API Groq (gsk_...)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="groq">
+<button type="button" class="sub-tab active" data-subtarget="groq-text">📝 Texte</button>
+</div>
+<div class="sub-panel active" data-subpanel="groq-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="groq-text-url" value="https://api.groq.com/openai/v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="groq-text-model" value="llama-3.3-70b-versatile">
+</div>
+<div class="warn-box">⚠️ Groq = <strong>texte ultra-rapide</strong>. Idéal combiné avec Agnes pour images/vidéos.</div>
+<div class="hint">Clé sur <a href="https://console.groq.com/keys" target="_blank">console.groq.com</a></div>
+</div>
+
+<div class="provider-section" data-provider-panel="together">
+<input type="password" id="together-key" placeholder="Clé API Together" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="together">
+<button type="button" class="sub-tab active" data-subtarget="together-text">📝 Texte</button>
+<button type="button" class="sub-tab" data-subtarget="together-image">🎨 Image</button>
+</div>
+<div class="sub-panel active" data-subpanel="together-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="together-text-url" value="https://api.together.xyz/v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="together-text-model" value="meta-llama/Llama-3.3-70B-Instruct-Turbo">
+</div>
+<div class="sub-panel" data-subpanel="together-image">
+<label class="label">Endpoint images</label>
+<input type="url" id="together-image-url" value="https://api.together.xyz/v1/images/generations">
+<label class="label">Modèle image</label>
+<input type="text" id="together-image-model" value="black-forest-labs/FLUX.1-schnell">
+</div>
+<div class="hint">Clé sur <a href="https://api.together.xyz/settings/api-keys" target="_blank">api.together.xyz</a></div>
+</div>
+
+<div class="provider-section" data-provider-panel="openrouter">
+<input type="password" id="openrouter-key" placeholder="Clé API OpenRouter (sk-or-...)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="openrouter">
+<button type="button" class="sub-tab active" data-subtarget="openrouter-text">📝 Texte</button>
+</div>
+<div class="sub-panel active" data-subpanel="openrouter-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="openrouter-text-url" value="https://openrouter.ai/api/v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="openrouter-text-model" value="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free">
+</div>
+<div class="hint">Clé sur <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a> · Accès à 100+ modèles</div>
+</div>
+
+<div class="provider-section" data-provider-panel="custom">
+<div class="warn-box">⚙️ <strong>Mode Custom</strong> : pointe vers n'importe quelle API OpenAI-compatible (LM Studio, Ollama, vLLM, Azure OpenAI, Mistral, DeepSeek, xAI…).</div>
+<input type="password" id="custom-key" placeholder="Clé API (peut être vide pour local)" autocomplete="off" spellcheck="false">
+<div class="sub-tabs" data-subgroup="custom">
+<button type="button" class="sub-tab active" data-subtarget="custom-text">📝 Texte</button>
+<button type="button" class="sub-tab" data-subtarget="custom-image">🎨 Image</button>
+<button type="button" class="sub-tab" data-subtarget="custom-video">🎥 Vidéo</button>
+</div>
+<div class="sub-panel active" data-subpanel="custom-text">
+<label class="label">Endpoint chat</label>
+<input type="url" id="custom-text-url" value="http://localhost:1234/v1/chat/completions" placeholder="http://.../v1/chat/completions">
+<label class="label">Modèle texte</label>
+<input type="text" id="custom-text-model" value="local-model">
+</div>
+<div class="sub-panel" data-subpanel="custom-image">
+<label class="label">Endpoint images</label>
+<input type="url" id="custom-image-url" value="" placeholder="http://.../v1/images/generations">
+<label class="label">Modèle image</label>
+<input type="text" id="custom-image-model" value="" placeholder="ex: sdxl">
+</div>
+<div class="sub-panel" data-subpanel="custom-video">
+<label class="label">Endpoint vidéos (création)</label>
+<input type="url" id="custom-video-url" value="" placeholder="http://.../v1/videos">
+<label class="label">Endpoint polling</label>
+<input type="url" id="custom-video-poll" value="" placeholder="http://.../v1/videos">
+<label class="label">Modèle vidéo</label>
+<input type="text" id="custom-video-model" value="" placeholder="ex: my-video-model">
+</div>
+</div>
+
+<div class="btn-row" style="margin-top:1rem;">
+<button type="button" class="btn btn-test" id="provider-test-btn">🔍 Tester ce provider</button>
+<button type="button" class="btn btn-test" id="provider-save-btn">💾 Sauvegarder</button>
+</div>
+
+<div class="status" id="provider-status"><span class="dot"></span><span id="provider-status-text">Aucun provider testé</span></div>
+
+<div class="row" style="margin-top:1rem;">
+<label class="label">Répartition des tâches</label>
+<select id="task-routing">
+<option value="same" selected>Un seul provider pour tout</option>
+<option value="text_only">Provider texte différent (image/vidéo = Agnes)</option>
+<option value="custom_split">Répartition manuelle</option>
+</select>
+</div>
+
+<div id="task-routing-split" style="display:none;">
+<div class="row">
+<label class="label">Provider TEXTE</label>
+<select id="routing-text">
+<option value="agnes">Agnes</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option>
+<option value="groq">Groq</option><option value="together">Together</option><option value="openrouter">OpenRouter</option><option value="custom">Custom</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Provider IMAGE</label>
+<select id="routing-image">
+<option value="agnes">Agnes</option><option value="openai">OpenAI</option><option value="together">Together</option><option value="custom">Custom</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Provider VIDÉO</label>
+<select id="routing-video">
+<option value="agnes">Agnes</option><option value="openai">OpenAI</option><option value="custom">Custom</option>
+</select>
+</div>
+</div>
+
+<div class="btn-row" style="margin-top:.7rem;">
+<button type="button" class="btn btn-secondary" id="export-config-btn">📤 Exporter config JSON</button>
+<button type="button" class="btn btn-secondary" id="import-config-btn">📥 Importer config</button>
+<input type="file" id="import-config-file" accept=".json" style="display:none;">
+</div>
+
+</div></div>
+</div>
+
+<div class="panel" id="watchdog-panel">
+<div class="agnes-status unknown" id="agnes-status">
+<span class="indicator"></span>
+<span id="agnes-status-text">File vidéo : ⏳ inconnu</span>
+<span style="margin-left:auto;font-size:.68rem;color:var(--dim);" id="agnes-status-meta"></span>
+</div>
+<div class="btn-row">
+<button type="button" class="btn btn-watch" id="watchdog-toggle-btn">👁️ Activer la surveillance auto</button>
+<button type="button" class="btn btn-secondary" id="agnes-check-btn">🔍 Tester maintenant</button>
+</div>
+<div class="stat" id="stat-line"><span>📊 Vitesse vidéo : <span id="stat-speed">en attente</span></span><span id="stat-samples">0 génération</span></div>
+</div>
+
+<button type="button" class="btn btn-primary" id="jt-btn" disabled>
+▶ Lancer le JT
+<span style="display:block;font-size:.65rem;letter-spacing:.15em;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">News → Scénario → Images → Vidéos hook</span>
+</button>
+
+<div class="btn-row" style="margin-bottom:.7rem;">
+<button type="button" class="btn btn-resume" id="resume-btn">▶ Reprendre la génération vidéo</button>
+<button type="button" class="btn btn-stop" id="stop-btn">⏹ Arrêter</button>
+</div>
+
+<div class="btn-row" style="margin-bottom:.7rem;">
+<button type="button" class="btn btn-secondary" id="retry-videos-btn" style="display:none;">🔄 Réessayer les vidéos échouées</button>
+<button type="button" class="btn btn-secondary" id="download-all-btn" style="display:none;">⬇ Télécharger toutes les vidéos</button>
+</div>
+
+<div class="phase-bar" id="phase-bar">
+<div class="phase-steps">
+<div class="phase-step" data-phase="text">1 · News</div>
+<div class="phase-step" data-phase="dialogue">2 · Scénario</div>
+<div class="phase-step" data-phase="images">3 · Images</div>
+<div class="phase-step" data-phase="videos">4 · Vidéos</div>
+<div class="phase-step" data-phase="done">5 · Prêt</div>
+</div>
+<div class="phase-info"><span id="phase-detail">En attente</span><span id="phase-eta"></span></div>
+<div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+</div>
+
+<div class="section open" id="section-settings">
+<div class="section-header" data-toggle="section-settings"><span class="section-title">⚙️ Réglages du JT</span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="row">
+<label class="label">Nombre d'infos</label>
+<select id="seg-count-select">
+<option value="3" selected>3 infos — court</option>
+<option value="5">5 infos — standard</option>
+<option value="7">7 infos — complet</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Catégorie des news</label>
+<select id="news-category">
+<option value="WORLD">🌍 International</option>
+<option value="NATION" selected>🇫🇷 France</option>
+<option value="BUSINESS">💼 Économie</option>
+<option value="TECHNOLOGY">💻 Technologie</option>
+<option value="SCIENCE">🔬 Science</option>
+<option value="HEALTH">🏥 Santé</option>
+<option value="SPORTS">⚽ Sport</option>
+<option value="ENTERTAINMENT">🎬 Culture</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Style de réalisation</label>
+<select id="director-select">
+<option value="wes_anderson" selected>Wes Anderson</option>
+<option value="kubrick">Stanley Kubrick</option>
+<option value="fincher">David Fincher</option>
+<option value="villeneuve">Denis Villeneuve</option>
+<option value="nolan">Christopher Nolan</option>
+<option value="manga_cyberpunk">Manga cyberpunk</option>
+<option value="retro_manga">Manga rétrofuturiste</option>
+<option value="anime_80s">Anime années 80</option>
+<option value="manga_noir">Manga noir</option>
+<option value="shonen_pop">Shonen pop</option>
+<option value="shojo_futuriste">Shojo futuriste</option>
+<option value="cyberpunk_tokyo">Cyberpunk Tokyo</option>
+<option value="french_bd_pop">BD française pop</option>
+<option value="comic_retro">Comic rétrofuturiste</option>
+<option value="clay_satire">Satire de plateau</option>
+<option value="documentary_color">Documentaire couleur</option>
+<option value="mockumentary_retro">Mockumentaire rétrofuturiste</option>
+<option value="giallo_pop">Giallo pop</option>
+<option value="bollywood_futurist">Spectacle futuriste</option>
+<option value="sci_fi_pulp">Science-fiction pulp</option>
+<option value="space_opera_comedy">Space opera comique</option>
+<option value="stopmotion_surreal">Stop-motion surréaliste</option>
+<option value="noir_neon">Noir néon</option>
+<option value="vhs_future">VHS futuriste</option>
+<option value="retro_documentary">Faux documentaire rétro</option>
+</select>
+</div>
+<div class="row">
+<label class="label">Palette dominante</label>
+<div class="palette-row">
+<button type="button" class="palette-btn active" data-palette="electric_coral_cyan">🪸 Corail & Cyan</button>
+<button type="button" class="palette-btn" data-palette="acid_lime_purple">🟢 Lime & Violet</button>
+<button type="button" class="palette-btn" data-palette="turquoise_orange">🩵 Turquoise & Orange</button>
+<button type="button" class="palette-btn" data-palette="fuchsia_yellow">💗 Fuchsia & Jaune</button>
+<button type="button" class="palette-btn" data-palette="cobalt_tangerine">🔵 Cobalt & Mandarine</button>
+<button type="button" class="palette-btn" data-palette="emerald_pink">💚 Émeraude & Rose</button>
+<button type="button" class="palette-btn" data-palette="violet_lime">🟣 Violet & Lime</button>
+<button type="button" class="palette-btn" data-palette="red_cyan">🔴 Rouge & Cyan</button>
+</div>
+</div>
+<div class="row">
+<label class="label">Durée de chaque vidéo hook</label>
+<select id="duration-select">
+<option value="4">4 secondes</option>
+<option value="5" selected>5 secondes</option>
+<option value="6">6 secondes</option>
+<option value="8">8 secondes</option>
+<option value="10">10 secondes</option>
+</select>
+</div>
+</div></div>
+</div>
+
+<div class="section" id="section-news-preview">
+<div class="section-header" data-toggle="section-news-preview"><span class="section-title">📰 Aperçu des news</span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="news-list" id="news-list">
+<div style="padding:1.2rem;text-align:center;color:var(--faint);font-size:.8rem;">Les news apparaîtront ici.</div>
+</div>
+<div style="font-size:.72rem;color:var(--dim);margin-top:.6rem;" id="news-status">En attente.</div>
+</div></div>
+</div>
+
+<div class="jt-panel" id="jt-panel">
+<div class="jt-card" id="jt-card"></div>
+<div class="btn-row" style="margin-bottom:.5rem;">
+<button type="button" class="btn btn-secondary" id="raw-scenario-toggle" style="flex:1;">▸ Voir JSON brut</button>
+<button type="button" class="btn btn-secondary" id="copy-scenario-btn" style="flex:1;">📋 Copier JSON</button>
+</div>
+<pre id="raw-scenario" style="margin-top:.6rem;padding:.7rem;background:#05050a;border:1px solid var(--border);border-radius:var(--r);font-family:var(--fm);font-size:.68rem;color:#a8d8b0;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.45;display:none;"></pre>
+<div class="images-grid" id="images-grid"></div>
+</div>
+
+<div class="queue" id="queue" style="display:none;"></div>
+
+<div class="gallery" id="gallery" style="display:none;">
+<div class="gallery-title">Le JT — vidéos hook</div>
+<div id="gallery-grid"></div>
+</div>
+
+<div class="section" id="section-medialog" style="margin-top:1.5rem;">
+<div class="section-header" data-toggle="section-medialog"><span class="section-title">🗂️ Médias générés <span class="badge" id="medialog-count">0</span></span><span class="chevron">▼</span></div>
+<div class="section-body"><div class="section-content">
+<div class="media-log" id="media-log">
+<div style="font-size:.72rem;color:var(--dim);font-family:var(--fm);">Les URLs apparaîtront ici.</div>
+</div>
+</div></div>
+</div>
+
+<div class="status-bar" id="status-bar"><div class="spinner"></div><span id="status-text">Préparation…</span></div>
+<div class="toast" id="toast"><span id="toast-icon">✓</span><span id="toast-text">Message</span></div>
+
+<div class="debug-panel" id="debug-panel">
+<div class="debug-header" id="debug-header">
+<div class="debug-title">🖥️ Console <span class="debug-badge" id="debug-count">0</span></div>
+<div class="debug-actions">
+<button type="button" id="debug-export-btn">Exporter</button>
+<button type="button" id="debug-copy-btn">Copier</button>
+<button type="button" id="debug-clear-cache-btn">Cache</button>
+<button type="button" id="debug-clear-btn">Effacer</button>
+<button type="button" id="debug-collapse-btn">−</button>
+</div>
+</div>
+<div class="debug-body" id="debug-body"></div>
+</div>
+
+<canvas id="noSleepCanvas" width="2" height="2"></canvas>
+<video id="noSleepVideo" playsinline muted loop></video>
+
+<script id="theologicus-config-bridge-seed">
+/* v498 — PONT DE CONFIGURATION (sens AI VIDEO -> NewsReel).
+   Partagé avec AI VIDEO (THEOLOGICUS) : la clé Agnes (agnes_api_key) et les
+   modèles personnalisés (cinema_noir_custom_models_v2) d'AI VIDEO alimentent
+   la config fournisseurs de NewsReel. AI VIDEO est la SOURCE DE VÉRITÉ.
+   Placé AVANT le script principal : loadProviderConfig() lira ces valeurs. */
+(function () {
+  try {
+    var K = 'newsreel_provider_keys', M = 'newsreel_provider_models';
+    var keys = {}; try { keys = JSON.parse(localStorage.getItem(K) || '{}'); } catch (e) {}
+    var models = {}; try { models = JSON.parse(localStorage.getItem(M) || '{}'); } catch (e) {}
+    var agnes = (localStorage.getItem('agnes_api_key') || '').trim();
+    if (agnes) keys.agnes = agnes;
+    var cm = []; try { cm = JSON.parse(localStorage.getItem('cinema_noir_custom_models_v2') || '[]'); } catch (e) {}
+    if (Array.isArray(cm) && cm.length) {
+      var sans = function (u) { return (u || '').replace(/\/+$/, ''); };
+      var base = cm[0], img = null, vid = null;
+      cm.forEach(function (m) { if (!img && m.image) img = m; if (!vid && m.video) vid = m; });
+      models.custom = models.custom || {};
+      if (base && base.endpoint) {
+        models.custom.text = { url: sans(base.endpoint) + '/chat/completions', model: base.id || '' };
+        if (base.apiKey) keys.custom = base.apiKey;
+      }
+      if (img && img.endpoint) {
+        models.custom.image = { url: sans(img.endpoint) + '/images/generations', model: img.id || '' };
+        if (img.apiKey) keys.custom = img.apiKey;
+      }
+      if (vid && vid.endpoint) {
+        var vb = sans(vid.endpoint);
+        models.custom.video = { url: vb + '/videos', poll: (vid.adapter === 'openai') ? (vb + '/videos') : (vb + '/agnesapi'), model: vid.id || '' };
+        if (vid.apiKey) keys.custom = vid.apiKey;
+      }
+    }
+    localStorage.setItem(K, JSON.stringify(keys));
+    localStorage.setItem(M, JSON.stringify(models));
+  } catch (e) { try { console.warn('pont config (seed) : ' + e.message); } catch (e2) {} }
+})();
+</script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIG MULTI-PROVIDER
+// ═══════════════════════════════════════════════════════════════
+
+const PROVIDER_PRESETS = {
+  agnes: {
+    label:'Agnes',
+    text:{url:'https://apihub.agnes-ai.com/v1/chat/completions', model:'agnes-2.5-flash'},
+    image:{url:'https://apihub.agnes-ai.com/v1/images/generations', model:'agnes-image-2.5-flash'},
+    video:{url:'https://apihub.agnes-ai.com/v1/videos', poll:'https://apihub.agnes-ai.com/agnesapi', model:'agnes-video-2.5-flash'}
+  },
+  openai: {
+    label:'OpenAI',
+    text:{url:'https://api.openai.com/v1/chat/completions', model:'gpt-4o-mini'},
+    image:{url:'https://api.openai.com/v1/images/generations', model:'dall-e-3'},
+    video:{url:'https://api.openai.com/v1/videos', poll:'https://api.openai.com/v1/videos', model:'sora-2'}
+  },
+  anthropic: {
+    label:'Anthropic',
+    text:{url:'https://api.anthropic.com/v1/messages', model:'claude-3-5-sonnet-20241022'}
+  },
+  groq: {
+    label:'Groq',
+    text:{url:'https://api.groq.com/openai/v1/chat/completions', model:'llama-3.3-70b-versatile'}
+  },
+  together: {
+    label:'Together',
+    text:{url:'https://api.together.xyz/v1/chat/completions', model:'meta-llama/Llama-3.3-70B-Instruct-Turbo'},
+    image:{url:'https://api.together.xyz/v1/images/generations', model:'black-forest-labs/FLUX.1-schnell'}
+  },
+  openrouter: {
+    label:'OpenRouter',
+    text:{url:'https://openrouter.ai/api/v1/chat/completions', model:'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free'}
+  },
+  custom: {
+    label:'Custom',
+    text:{url:'http://localhost:1234/v1/chat/completions', model:'local-model'},
+    image:{url:'', model:''},
+    video:{url:'', poll:'', model:''}
+  }
+};
+
+const LS = {
+  PROVIDER:'newsreel_provider',
+  KEYS:'newsreel_provider_keys',
+  MODELS:'newsreel_provider_models',
+  ROUTING:'newsreel_task_routing',
+  ROUTING_TEXT:'newsreel_routing_text',
+  ROUTING_IMAGE:'newsreel_routing_image',
+  ROUTING_VIDEO:'newsreel_routing_video',
+  WATCHDOG:'newsreel_watchdog_enabled',
+  SESSION:'newsreel_session_v61',
+  TIMING:'newsreel_timing_v6',
+  WAKE_LOCK:'newsreel_wakelock_enabled'
+};
+
+const state = {
+  currentProvider:'agnes',
+  taskRouting:'same',
+  routingText:'agnes',
+  routingImage:'agnes',
+  routingVideo:'agnes',
+  keys:{},
+  models:{},
+  newsItems:[],newsMethod:'',
+  segCount:3,durationSeconds:5,resolution:'720P',intensity:'strong',
+  director:'wes_anderson',palette:'electric_coral_cyan',
+  isRunning:false,stopRequested:false,
+  jt:null,rawScenarioResponse:'',
+  hostImage:null,sceneImages:{},videos:[],
+  jtStartTime:0,
+  consecutiveVideoFailures:0,
+  pipelineStoppedReason:null,
+  watchdogEnabled:false,watchdogTimer:null,
+  agnesStatus:'unknown',agnesLastCheck:0
+};
+
+const GOOGLE_NEWS_RSS={
+WORLD:'https://news.google.com/rss/headlines/section/topic/WORLD?hl=fr&gl=FR&ceid=FR:fr',
+NATION:'https://news.google.com/rss/headlines/section/topic/NATION?hl=fr&gl=FR&ceid=FR:fr',
+BUSINESS:'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=fr&gl=FR&ceid=FR:fr',
+TECHNOLOGY:'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=fr&gl=FR&ceid=FR:fr',
+SCIENCE:'https://news.google.com/rss/headlines/section/topic/SCIENCE?hl=fr&gl=FR&ceid=FR:fr',
+HEALTH:'https://news.google.com/rss/headlines/section/topic/HEALTH?hl=fr&gl=FR&ceid=FR:fr',
+SPORTS:'https://news.google.com/rss/headlines/section/topic/SPORTS?hl=fr&gl=FR&ceid=FR:fr',
+ENTERTAINMENT:'https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=fr&gl=FR&ceid=FR:fr'
+};
+
+const DIRECTORS={
+wes_anderson:{label:'Wes Anderson',style:'Perfect bilateral symmetry, centered frontal composition, planimetric staging, dry deadpan comedy, whimsical miniature-like production design, precise theatrical blocking.',camera:'Locked symmetrical frames, lateral whip pans, short dolly-ins, graphic centered compositions.',lighting:'Soft studio light with deliberate practical color blocks and clean separation.',film:'35mm-inspired texture, subtle halation, crisp production design.'},
+kubrick:{label:'Stanley Kubrick',style:'One-point perspective, obsessive geometry, symmetrical architecture, unsettling precision, theatrical absurdity beneath clinical seriousness.',camera:'Slow zooms, centered wide angles, controlled tracking, geometric vanishing points.',lighting:'Hard motivated practicals with sculpted pools of light.',film:'35mm-inspired grain, deep focus, high micro-detail.'},
+fincher:{label:'David Fincher',style:'Controlled compositions, precise urban detail, restrained camera motion, tactile surfaces, darkly comic seriousness.',camera:'Locked frames, exact push-ins, measured tracking, selective handheld impact.',lighting:'Motivated practicals with controlled contrast and saturated colored sources.',film:'Clean digital cinema with subtle film texture.'},
+villeneuve:{label:'Denis Villeneuve',style:'Monumental scale, graphic negative space, atmospheric depth, strange futuristic architecture, solemn spectacle.',camera:'Long-lens compression, slow tracking, crane reveals, monumental wides.',lighting:'Volumetric atmosphere, strong backlight, sculpted practical color.',film:'Large-format cinematic clarity, restrained texture.'},
+nolan:{label:'Christopher Nolan',style:'Physical realism, practical spectacle, urgent spatial storytelling, massive mechanical environments, serious performances inside absurd events.',camera:'Dynamic tracking, handheld impact shots, wide practical-action coverage.',lighting:'Naturalistic key light mixed with motivated practical effects.',film:'Large-format cinematic sharpness, realistic motion blur.'},
+manga_cyberpunk:{label:'Manga cyberpunk',style:'High-energy manga composition fused with retrofuturist cyberpunk, expressive faces, ink-like contour emphasis, holographic architecture, absurd gadgets, explosive visual punctuation.',camera:'Extreme perspective, Dutch angles, snap zooms, diagonal action lines, rapid reframing.',lighting:'Hard neon rims, colored reflections, luminous signs, saturated atmosphere.',film:'Graphic ink texture blended with cinematic depth; vivid full color.'},
+retro_manga:{label:'Manga rétrofuturiste',style:'1960s-1980s manga futurism, optimistic machines, ridiculous helmets, giant buttons, playful mechanical design, bold graphic silhouettes.',camera:'Graphic panel-like framing, dramatic low angles, fast push-ins, wide comic tableaux.',lighting:'Bright studio illumination with strong colored gels.',film:'Printed-ink texture, crisp cel-like color separation.'},
+anime_80s:{label:'Anime années 80',style:'Retro anime visual language, cel-shaded characters, mechanical detail, expressive reaction shots, colorful futuristic interiors, playful melodrama.',camera:'Dynamic anime perspective, crash zooms, dramatic close-ups, wide establishing shots.',lighting:'Hard rim lights, colored gradients, luminous practicals.',film:'Cel-shaded finish with subtle analog texture.'},
+manga_noir:{label:'Manga noir',style:'Dense graphic ink, expressive faces, urban mystery, exaggerated silhouettes, hard graphic shadows with selective vivid color.',camera:'Extreme close-ups, low angles, rapid reframing, graphic diagonals.',lighting:'Hard side light, colored practicals, graphic shadow shapes.',film:'Ink texture with crisp cinematic color.'},
+shonen_pop:{label:'Shonen pop',style:'Exaggerated action-comedy, elastic expressions, heroic poses, ridiculous props, energetic group staging, colorful graphic spectacle.',camera:'Fast push-ins, low-angle hero shots, whip pans, impact reframes.',lighting:'Bright high-key light with vivid colored accents.',film:'Clean animated-cinema texture, saturated color.'},
+shojo_futuriste:{label:'Shojo futuriste',style:'Elegant futuristic fashion, ornate dreamlike interiors, sparkling mechanical details, expressive poses, surreal romantic geometry.',camera:'Graceful tracking, floating crane moves, symmetrical portraits, elegant close-ups.',lighting:'Soft luminous sources with vivid colored highlights.',film:'Polished cinematic image with graphic decorative detail.'},
+cyberpunk_tokyo:{label:'Cyberpunk Tokyo',style:'Dense retrofuturist megacity, eccentric commuters, glowing vending machines, holographic clutter, absurd technology, saturated urban spectacle.',camera:'Street-level tracking, rapid reframing, wide crowd shots, macro gadget close-ups.',lighting:'Aggressive neon, colored reflections, luminous signage, wet surfaces.',film:'High-detail digital cinema with neon bloom.'},
+french_bd_pop:{label:'BD française pop',style:'Graphic European comic aesthetic, clean contours, expressive caricature, architectural wit, flat-but-rich color blocks, absurd staging.',camera:'Strong diagonals, clean tableaux, punchy close-ups, lateral pans.',lighting:'Graphic directional light with bold colored shapes.',film:'Ink-and-paint texture with cinematic depth.'},
+comic_retro:{label:'Comic rétrofuturiste',style:'Pulp comic spectacle, heroic caricatures, ray-gun gadgets, impossible machines, exaggerated poses, bright poster-like visual design.',camera:'Low-angle hero frames, dramatic zooms, dynamic diagonals, panel-like cuts.',lighting:'Graphic key light, saturated practical colors, bold rim light.',film:'Vintage print texture with saturated cinema color.'},
+clay_satire:{label:'Satire de plateau',style:'Theatrical practical-set absurdism, oversized props, fake machinery, comic costumes, miniature architecture, deliberately artificial spectacle.',camera:'Static tableaux interrupted by comic push-ins and sudden pans.',lighting:'Bright theatrical studio lighting with colored pools.',film:'Tactile production texture, crisp cinematic photography.'},
+documentary_color:{label:'Documentaire couleur halluciné',style:'Observational documentary framing but with impossible colorful events, eccentric costumes, surreal props treated as ordinary reality.',camera:'Reactive handheld, sudden zooms, imperfect reframing, observational close-ups.',lighting:'Available-looking light enhanced by vivid practical colors.',film:'Documentary texture, natural motion, rich color.'},
+mockumentary_retro:{label:'Mockumentaire rétrofuturiste',style:'Dead-serious fake reportage, awkward public access television energy, bizarre futuristic bureaucracy, retro costumes, visual punchlines.',camera:'Shoulder camera, awkward zooms, interview-like starts, sudden wide reveals.',lighting:'Flat practical light mixed with outrageous colored sources.',film:'Analog broadcast texture with vivid chroma.'},
+giallo_pop:{label:'Giallo pop',style:'Stylized mystery atmosphere, saturated colored lighting, baroque interiors, theatrical suspense, grotesque visual jokes, elegant silhouettes.',camera:'Slow tracking, extreme close-ups, sudden reveal cuts, graphic overheads.',lighting:'Strong colored gels, sharp highlights, dramatic shadows.',film:'Glossy cinematic texture with vivid color.'},
+bollywood_futurist:{label:'Spectacle futuriste',style:'Grand theatrical staging, flamboyant costumes, geometric crowd choreography, extravagant futuristic sets, joyful visual excess; no musical performance required.',camera:'Sweeping crane shots, frontal tableaux, fast circular moves, celebratory wides.',lighting:'Brilliant saturated stage light and colored practicals.',film:'Glossy large-scale cinema texture.'},
+sci_fi_pulp:{label:'Science-fiction pulp',style:'Retro science-fiction magazine aesthetic, chrome machines, ray-gun controls, bubble helmets, strange laboratories, comic seriousness.',camera:'Wide practical sets, gadget inserts, low-angle hero shots, quick reveals.',lighting:'Bright colored practicals, dramatic backlight, theatrical haze.',film:'Analog pulp texture with sharp saturated color.'},
+space_opera_comedy:{label:'Space opera comique',style:'Huge cosmic architecture, ridiculous uniforms, theatrical commanders, impossible vehicles, majestic absurdity, dense futuristic set dressing.',camera:'Grand wides, orbital-feeling moves, fast reaction close-ups, dramatic reveals.',lighting:'Cosmic colored ambience, bright practical sources, strong rims.',film:'Epic cinematic clarity with rich chroma.'},
+stopmotion_surreal:{label:'Stop-motion surréaliste',style:'Tactile handcrafted world, impossible proportions, oversized props, eccentric costumes, whimsical physics, deadpan comic acting.',camera:'Miniature-scale tracking, locked tableaux, abrupt comedic reframing.',lighting:'Theatrical practical light with vivid colored pools.',film:'Tactile texture and miniature depth cues, full color.'},
+noir_neon:{label:'Noir néon',style:'Graphic noir silhouettes against saturated neon, rain-slick surfaces, strange retrofuturist costumes, serious faces in ridiculous situations.',camera:'Low angles, slow tracking, close-up inserts, reflective wides.',lighting:'Hard chiaroscuro combined with saturated neon color.',film:'Cinematic grain, deep blacks, luminous color.'},
+vhs_future:{label:'VHS futuriste',style:'Analog-future television, chunky gadgets, bizarre retro computers, colorful costumes, deliberately strange consumer technology.',camera:'Zoom lenses, handheld broadcast framing, sudden push-ins, surveillance-like wides.',lighting:'Colored practicals, CRT glow, fluorescent mixtures.',film:'VHS-inspired texture, chromatic aberration, saturated color.'},
+retro_documentary:{label:'Faux documentaire rétro',style:'Old television documentary grammar, futuristic 1960s design, deadpan witnesses, absurd public infrastructure, richly colored practical props.',camera:'Tripod interviews, slow pans, zooms, observational wides.',lighting:'Warm practical illumination with strong colored accents.',film:'16mm-inspired texture with vivid chroma.'}
+};
+
+const PALETTES={
+electric_coral_cyan:{label:'Corail & Cyan',full:'dominant electric coral #FF4F79, luminous cyan #00F5FF, hot white highlights, saturated color everywhere'},
+acid_lime_purple:{label:'Lime & Violet',full:'acid lime #B6FF00, ultraviolet purple #7A00FF, hot pink highlights'},
+turquoise_orange:{label:'Turquoise & Orange',full:'bright turquoise #00D9C0, solar orange #FF6A00, cream-white highlights'},
+fuchsia_yellow:{label:'Fuchsia & Jaune',full:'laser yellow #FFF200, electric fuchsia #FF00A8, vivid blue micro-accents'},
+cobalt_tangerine:{label:'Cobalt & Mandarine',full:'deep cobalt #1746FF, vivid tangerine #FF7A00, hot white highlights'},
+emerald_pink:{label:'Émeraude & Rose',full:'electric emerald #00D978, fluorescent pink #FF2DAA, warm white highlights'},
+violet_lime:{label:'Violet & Lime',full:'ultraviolet violet #6A00FF, radioactive lime #A8FF00, cyan highlights'},
+red_cyan:{label:'Rouge & Cyan',full:'signal red #FF1838, electric cyan #00E5FF, bright ivory highlights'}
+};
+
+// ─── UTILS ───
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function formatEta(s){if(s<60)return Math.round(s)+'s';const m=Math.floor(s/60);const r=Math.round(s%60);return m+'m'+(r>0?' '+r+'s':'')}
+function countWords(str){if(!str)return 0;return String(str).trim().split(/\s+/).filter(Boolean).length}
+function approxTokens(str){if(!str)return 0;return Math.round(String(str).length/4)}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+
+// ─── PROVIDERS ───
+function loadProviderConfig(){
+  try{
+    state.currentProvider=localStorage.getItem(LS.PROVIDER)||'agnes';
+    state.keys=JSON.parse(localStorage.getItem(LS.KEYS)||'{}');
+    const savedModels=JSON.parse(localStorage.getItem(LS.MODELS)||'{}');
+    state.models={};
+    Object.keys(PROVIDER_PRESETS).forEach(pid=>{
+      state.models[pid]=clone(PROVIDER_PRESETS[pid]);
+      if(!state.models[pid].text)state.models[pid].text={url:'',model:''};
+      if(!state.models[pid].image)state.models[pid].image={url:'',model:''};
+      if(!state.models[pid].video)state.models[pid].video={url:'',poll:'',model:''};
+      if(savedModels[pid]){
+        ['text','image','video'].forEach(k=>{
+          if(savedModels[pid][k])state.models[pid][k]=Object.assign(state.models[pid][k]||{},savedModels[pid][k]);
+        });
+      }
+    });
+    state.taskRouting=localStorage.getItem(LS.ROUTING)||'same';
+    state.routingText=localStorage.getItem(LS.ROUTING_TEXT)||'agnes';
+    state.routingImage=localStorage.getItem(LS.ROUTING_IMAGE)||'agnes';
+    state.routingVideo=localStorage.getItem(LS.ROUTING_VIDEO)||'agnes';
+  }catch(e){console.warn('Config load failed',e)}
+}
+
+function saveProviderConfig(){
+  try{
+    localStorage.setItem(LS.PROVIDER,state.currentProvider);
+    localStorage.setItem(LS.KEYS,JSON.stringify(state.keys));
+    localStorage.setItem(LS.MODELS,JSON.stringify(state.models));
+    localStorage.setItem(LS.ROUTING,state.taskRouting);
+    localStorage.setItem(LS.ROUTING_TEXT,state.routingText);
+    localStorage.setItem(LS.ROUTING_IMAGE,state.routingImage);
+    localStorage.setItem(LS.ROUTING_VIDEO,state.routingVideo);
+  }catch(e){}
+}
+
+function getProviderForTask(task){
+  if(state.taskRouting==='same')return state.currentProvider;
+  if(state.taskRouting==='text_only'){
+    if(task==='text')return state.currentProvider;
+    return 'agnes';
+  }
+  if(state.taskRouting==='custom_split'){
+    if(task==='text')return state.routingText;
+    if(task==='image')return state.routingImage;
+    if(task==='video')return state.routingVideo;
+  }
+  return state.currentProvider;
+}
+
+function getKeyFor(provider){return state.keys[provider]||''}
+function getModelConfigFor(provider,task){const m=state.models[provider];if(!m||!m[task])return null;return m[task]}
+
+function resolveTaskConfig(task){
+  const provider=getProviderForTask(task);
+  const key=getKeyFor(provider);
+  const model=getModelConfigFor(provider,task);
+  return {provider,key,model};
+}
+
+function isAnthropic(provider){return provider==='anthropic'}
+
+// ─── UI PROVIDERS ───
+function switchProviderTab(pid){
+  state.currentProvider=pid;
+  document.querySelectorAll('.provider-tab').forEach(t=>t.classList.toggle('active',t.dataset.provider===pid));
+  document.querySelectorAll('.provider-section').forEach(s=>s.classList.toggle('active',s.dataset.providerPanel===pid));
+  document.getElementById('provider-badge').textContent=PROVIDER_PRESETS[pid].label;
+  hydrateProviderForm(pid);
+  saveProviderConfig();
+  updateJTButton();
+}
+
+function hydrateProviderForm(pid){
+  const keyEl=document.getElementById(pid+'-key');
+  if(keyEl)keyEl.value=state.keys[pid]||'';
+  const m=state.models[pid];
+  if(!m)return;
+  ['text','image','video'].forEach(task=>{
+    const cfg=m[task];
+    if(!cfg)return;
+    const urlEl=document.getElementById(pid+'-'+task+'-url');
+    const modelEl=document.getElementById(pid+'-'+task+'-model');
+    const pollEl=document.getElementById(pid+'-'+task+'-poll');
+    if(urlEl)urlEl.value=cfg.url||'';
+    if(modelEl)modelEl.value=cfg.model||'';
+    if(pollEl&&cfg.poll!==undefined)pollEl.value=cfg.poll||'';
+  });
+}
+
+function captureProviderForm(pid){
+  const keyEl=document.getElementById(pid+'-key');
+  if(keyEl)state.keys[pid]=keyEl.value.trim();
+  const m=state.models[pid];
+  if(!m)return;
+  ['text','image','video'].forEach(task=>{
+    const urlEl=document.getElementById(pid+'-'+task+'-url');
+    const modelEl=document.getElementById(pid+'-'+task+'-model');
+    const pollEl=document.getElementById(pid+'-'+task+'-poll');
+    if(!m[task])m[task]={};
+    if(urlEl)m[task].url=urlEl.value.trim();
+    if(modelEl)m[task].model=modelEl.value.trim();
+    if(pollEl)m[task].poll=pollEl.value.trim();
+  });
+  // 🆕 Recalcule le bouton
+  updateJTButton();
+}
+
+function bindProviderUI(){
+  document.querySelectorAll('.provider-tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{captureProviderForm(state.currentProvider);switchProviderTab(tab.dataset.provider)});
+  });
+  document.querySelectorAll('.sub-tabs').forEach(group=>{
+    const parentProvider=group.dataset.subgroup;
+    group.querySelectorAll('.sub-tab').forEach(tab=>{
+      tab.addEventListener('click',()=>{
+        group.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('active'));
+        tab.classList.add('active');
+        const targetPanel=tab.dataset.subtarget;
+        document.querySelectorAll('.sub-panel').forEach(p=>{
+          if(p.closest('.provider-section').dataset.providerPanel===parentProvider){
+            p.classList.toggle('active',p.dataset.subpanel===targetPanel);
+          }
+        });
+      });
+    });
+  });
+  const saveBtn=document.getElementById('provider-save-btn');
+  if(saveBtn)saveBtn.addEventListener('click',()=>{
+    captureProviderForm(state.currentProvider);
+    saveProviderConfig();
+    showToast('Config sauvegardée','success');
+    debugLog('success','PROVIDER','Config '+state.currentProvider+' sauvegardée');
+  });
+  const testBtn=document.getElementById('provider-test-btn');
+  if(testBtn)testBtn.addEventListener('click',async()=>{
+    captureProviderForm(state.currentProvider);
+    saveProviderConfig();
+    await testCurrentProvider();
+  });
+  const routingSel=document.getElementById('task-routing');
+  if(routingSel){
+    routingSel.value=state.taskRouting;
+    routingSel.addEventListener('change',e=>{
+      state.taskRouting=e.target.value;
+      document.getElementById('task-routing-split').style.display=e.target.value==='custom_split'?'block':'none';
+      saveProviderConfig();
+      updateJTButton();
+    });
+  }
+  ['text','image','video'].forEach(task=>{
+    const sel=document.getElementById('routing-'+task);
+    if(sel){
+      const key='routing'+task.charAt(0).toUpperCase()+task.slice(1);
+      sel.value=state[key];
+      sel.addEventListener('change',e=>{
+        state[key]=e.target.value;
+        saveProviderConfig();
+        updateJTButton();
+      });
+    }
+  });
+  const exportBtn=document.getElementById('export-config-btn');
+  if(exportBtn)exportBtn.addEventListener('click',exportConfig);
+  const importBtn=document.getElementById('import-config-btn');
+  const importFile=document.getElementById('import-config-file');
+  if(importBtn&&importFile){
+    importBtn.addEventListener('click',()=>importFile.click());
+    importFile.addEventListener('change',importConfig);
+  }
+
+  // 🆕 Mise à jour en temps réel du bouton quand on tape
+  document.querySelectorAll('input[type=password],input[type=url],input[type=text]').forEach(inp=>{
+    inp.addEventListener('input',()=>{
+      captureProviderForm(state.currentProvider);
+      saveProviderConfig();
+    });
+    inp.addEventListener('blur',()=>{
+      captureProviderForm(state.currentProvider);
+      saveProviderConfig();
+      updateJTButton();
+    });
+  });
+}
+
+function exportConfig(){
+  captureProviderForm(state.currentProvider);
+  const data={version:'6.1',currentProvider:state.currentProvider,keys:state.keys,models:state.models,taskRouting:state.taskRouting,routingText:state.routingText,routingImage:state.routingImage,routingVideo:state.routingVideo};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='newsreel_config_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  showToast('Config exportée','success');
+}
+
+function importConfig(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(data.keys)state.keys=data.keys;
+      if(data.models)state.models=data.models;
+      if(data.currentProvider)state.currentProvider=data.currentProvider;
+      if(data.taskRouting)state.taskRouting=data.taskRouting;
+      if(data.routingText)state.routingText=data.routingText;
+      if(data.routingImage)state.routingImage=data.routingImage;
+      if(data.routingVideo)state.routingVideo=data.routingVideo;
+      saveProviderConfig();
+      hydrateProviderForm(state.currentProvider);
+      switchProviderTab(state.currentProvider);
+      document.getElementById('task-routing').value=state.taskRouting;
+      document.getElementById('task-routing-split').style.display=state.taskRouting==='custom_split'?'block':'none';
+      showToast('Config importée ✓','success');
+    }catch(err){showToast('Fichier invalide','error')}
+  };
+  reader.readAsText(file);
+}
+
+async function testCurrentProvider(){
+  captureProviderForm(state.currentProvider);
+  saveProviderConfig();
+  const provider=state.currentProvider;
+  const key=getKeyFor(provider);
+  const cfg=getModelConfigFor(provider,'text');
+  const statusEl=document.getElementById('provider-status');
+  const statusTxt=document.getElementById('provider-status-text');
+  statusEl.classList.remove('ok','err');
+  statusTxt.textContent='Test en cours…';
+  debugLog('api','PROVIDER_TEST','Test '+provider+' → '+cfg.url);
+  try{
+    if(isAnthropic(provider)){
+      const res=await fetch(cfg.url,{
+        method:'POST',
+        headers:{'x-api-key':key,'anthropic-version':'2023-06-01','Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:cfg.model,max_tokens:10,messages:[{role:'user',content:'ping'}]})
+      });
+      if(res.ok){statusEl.classList.add('ok');statusTxt.textContent='✅ '+provider+' OK';showToast(provider+' fonctionne !','success')}
+      else{const err=await res.text();statusEl.classList.add('err');statusTxt.textContent='❌ HTTP '+res.status;showToast('Erreur '+res.status,'error');debugLog('error','PROVIDER_TEST',err.slice(0,300))}
+    }else{
+      const res=await fetch(cfg.url,{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        body:JSON.stringify({model:cfg.model,messages:[{role:'user',content:'ping'}],max_tokens:10})
+      });
+      if(res.ok){
+        statusEl.classList.add('ok');statusTxt.textContent='✅ '+provider+' OK';
+        showToast(provider+' fonctionne !','success');
+        try{const data=await res.clone().json();const content=data.choices?.[0]?.message?.content;if(content)debugLog('success','PROVIDER_TEST','Réponse : '+content.slice(0,80))}catch(e){}
+      }else{
+        const err=await res.text();statusEl.classList.add('err');statusTxt.textContent='❌ HTTP '+res.status;
+        showToast('Erreur '+res.status,'error');debugLog('error','PROVIDER_TEST','HTTP '+res.status,err.slice(0,500));
+      }
+    }
+  }catch(e){
+    statusEl.classList.add('err');statusTxt.textContent='❌ '+e.message;
+    showToast('Erreur réseau','error');debugLog('error','PROVIDER_TEST',e.message);
+  }
+}
+
+// ─── DEBUG LOG ───
+let debugCount=0;let debugEntries=[];let debugCollapsed=false;const DEBUG_MAX_ENTRIES=800;
+function debugLog(level,category,message,data){
+  const body=document.getElementById('debug-body');if(!body)return;
+  const time=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+  const entry=document.createElement('div');entry.className='debug-entry '+level;
+  let html='<span class="debug-time">'+time+'</span><span class="debug-cat">['+esc(category)+']</span><span class="debug-msg">'+esc(message)+'</span>';
+  if(data!==undefined&&data!==null){
+    let dataStr;if(typeof data==='string')dataStr=data;else{try{dataStr=JSON.stringify(data,null,2)}catch(e){dataStr=String(data)}}
+    if(dataStr.length>3000)dataStr=dataStr.slice(0,3000)+'\n…[tronqué]';
+    html+='<pre class="debug-data">'+esc(dataStr)+'</pre>';
+  }
+  entry.innerHTML=html;body.appendChild(entry);
+  debugEntries.push({time,level,category,message});
+  if(debugEntries.length>DEBUG_MAX_ENTRIES)debugEntries.shift();
+  while(body.children.length>DEBUG_MAX_ENTRIES)body.removeChild(body.firstChild);
+  body.scrollTop=body.scrollHeight;
+  debugCount++;const countEl=document.getElementById('debug-count');if(countEl)countEl.textContent=debugCount;
+}
+function clearDebug(){const body=document.getElementById('debug-body');if(body)body.innerHTML='';debugEntries=[];debugCount=0;const c=document.getElementById('debug-count');if(c)c.textContent='0'}
+function copyDebug(){const lines=debugEntries.map(e=>e.time+' ['+e.category+'] '+e.message).join('\n');const finish=(ok)=>{showToast(ok?'Copié':'Erreur',ok?'success':'error')};try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(lines).then(()=>finish(true)).catch(()=>legacyCopy(lines,finish));return}}catch(e){}legacyCopy(lines,finish)}
+function exportDebug(){const lines=debugEntries.map(e=>e.time+' ['+e.category+'] '+e.message).join('\n');const blob=new Blob([lines],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='newsreel_log_'+new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')+'.txt';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000);showToast('Log exporté','success')}
+function legacyCopy(text,cb){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.top='0';ta.style.left='0';ta.style.width='2em';ta.style.height='2em';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}document.body.removeChild(ta);cb(ok)}
+function toggleDebugCollapse(){const panel=document.getElementById('debug-panel');const btn=document.getElementById('debug-collapse-btn');if(!panel||!btn)return;debugCollapsed=!debugCollapsed;panel.classList.toggle('collapsed',debugCollapsed);btn.textContent=debugCollapsed?'+':'−'}
+function clearAllCaches(){try{localStorage.removeItem(LS.TIMING);localStorage.removeItem(LS.SESSION);showToast('Caches vidés','success');debugLog('success','CACHE','Caches supprimés')}catch(e){showToast('Erreur','error')}}
+
+// ─── TOAST ───
+let toastTimeout=null;
+function showToast(message,type='success',duration=2500){
+  const toast=document.getElementById('toast');const icon=document.getElementById('toast-icon');const text=document.getElementById('toast-text');
+  if(!toast||!icon||!text)return;
+  toast.classList.remove('visible','success','error','warn');void toast.offsetWidth;
+  const icons={success:'✓',error:'✕',warn:'⚠'};icon.textContent=icons[type]||'✓';text.textContent=message;
+  toast.classList.add(type);requestAnimationFrame(()=>toast.classList.add('visible'));
+  if(toastTimeout)clearTimeout(toastTimeout);
+  toastTimeout=setTimeout(()=>toast.classList.remove('visible'),duration);
+}
+
+// ─── SONS ───
+function playNotificationSound(type='ok'){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const notes=type==='ok'?[523.25,783.99]:[392.00,261.63];
+    notes.forEach((freq,i)=>{
+      const osc=ctx.createOscillator();const gain=ctx.createGain();
+      osc.connect(gain);gain.connect(ctx.destination);
+      osc.frequency.value=freq;osc.type='sine';
+      const now=ctx.currentTime+i*0.15;
+      gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.15,now+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001,now+0.35);
+      osc.start(now);osc.stop(now+0.4);
+    });
+    setTimeout(()=>ctx.close(),1000);
+  }catch(e){}
+}
+
+async function requestNotificationPermission(){
+  if(!('Notification' in window))return false;
+  if(Notification.permission==='granted')return true;
+  if(Notification.permission==='denied')return false;
+  try{const p=await Notification.requestPermission();return p==='granted'}catch(e){return false}
+}
+function sendBrowserNotification(title,body){
+  try{if('Notification' in window&&Notification.permission==='granted'){const n=new Notification(title,{body});n.onclick=()=>{window.focus();n.close()};setTimeout(()=>n.close(),15000)}}catch(e){}
+}
+
+// ─── WATCHDOG ───
+function updateAgnesStatusUI(status,meta){
+  const el=document.getElementById('agnes-status');const txt=document.getElementById('agnes-status-text');const metaEl=document.getElementById('agnes-status-meta');
+  if(!el||!txt)return;
+  el.classList.remove('available','saturated','unknown','checking');el.classList.add(status);
+  const labels={available:'File vidéo : 🟢 disponible',saturated:'File vidéo : 🔴 saturée',unknown:'File vidéo : ⏳ inconnu',checking:'File vidéo : 🔄 vérification…'};
+  txt.textContent=labels[status]||'File vidéo : inconnue';
+  if(metaEl)metaEl.textContent=meta||'';
+}
+
+async function checkAgnesQueueStatus(){
+  const cfg=resolveTaskConfig('video');
+  if(!cfg.key&&cfg.provider!=='custom'){updateAgnesStatusUI('unknown','clé API manquante');return 'unknown'}
+  if(!cfg.model||!cfg.model.url){updateAgnesStatusUI('unknown','URL vidéo manquante');return 'unknown'}
+  updateAgnesStatusUI('checking','test en cours…');
+  try{
+    const res=await fetch(cfg.model.url,{method:'POST',headers:{'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json'},body:JSON.stringify({model:cfg.model.model,prompt:'ping',seconds:'4'})});
+    let errorText='';try{errorText=(await res.clone().text()).slice(0,500)}catch(e){}
+    const queueFull=/video_queue_full|queue is full|queue_full/i.test(errorText);
+    const now=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+    state.agnesLastCheck=Date.now();
+    if(res.status===503&&queueFull){state.agnesStatus='saturated';updateAgnesStatusUI('saturated','vérifié à '+now);return 'saturated'}
+    if(res.status===400||res.status===422||res.status===200||res.status===201){state.agnesStatus='available';updateAgnesStatusUI('available','vérifié à '+now);return 'available'}
+    if(res.status===401||res.status===403){state.agnesStatus='unknown';updateAgnesStatusUI('unknown','auth refusée à '+now);return 'unknown'}
+    state.agnesStatus='unknown';updateAgnesStatusUI('unknown','HTTP '+res.status+' à '+now);return 'unknown';
+  }catch(e){state.agnesStatus='unknown';updateAgnesStatusUI('unknown','erreur réseau');return 'unknown'}
+}
+
+function onAgnesBecameAvailable(){
+  playNotificationSound('ok');
+  sendBrowserNotification('🎬 NewsReel Studio','La file vidéo est disponible !');
+  showToast('🎉 File vidéo disponible — relancez !','success',8000);
+  const hasRetryable=state.videos.some(v=>v.status==='retry'||v.status==='failed');
+  if(hasRetryable&&!state.isRunning){showResumeButton();const rb=document.getElementById('retry-videos-btn');if(rb)rb.style.display='block'}
+}
+
+async function watchdogTick(){
+  if(!state.watchdogEnabled)return;
+  const previous=state.agnesStatus;
+  const newStatus=await checkAgnesQueueStatus();
+  if(previous==='saturated'&&newStatus==='available')onAgnesBecameAvailable();
+}
+
+async function startWatchdog(){
+  await requestNotificationPermission();
+  state.watchdogEnabled=true;
+  try{localStorage.setItem(LS.WATCHDOG,'1')}catch(e){}
+  const btn=document.getElementById('watchdog-toggle-btn');
+  if(btn){btn.classList.add('active');btn.textContent='👁️ Surveillance active (10 min)'}
+  showToast('Surveillance activée','success');
+  await watchdogTick();
+  if(state.watchdogTimer)clearInterval(state.watchdogTimer);
+  state.watchdogTimer=setInterval(watchdogTick,10*60*1000);
+}
+
+function stopWatchdog(){
+  state.watchdogEnabled=false;
+  try{localStorage.setItem(LS.WATCHDOG,'0')}catch(e){}
+  if(state.watchdogTimer){clearInterval(state.watchdogTimer);state.watchdogTimer=null}
+  const btn=document.getElementById('watchdog-toggle-btn');
+  if(btn){btn.classList.remove('active');btn.textContent='👁️ Activer la surveillance auto'}
+  showToast('Surveillance désactivée','warn');
+}
+
+function initWatchdog(){
+  try{
+    if(localStorage.getItem(LS.WATCHDOG)==='1'){
+      state.watchdogEnabled=true;
+      const btn=document.getElementById('watchdog-toggle-btn');
+      if(btn){btn.classList.add('active');btn.textContent='👁️ Surveillance active (10 min)'}
+      state.watchdogTimer=setInterval(watchdogTick,10*60*1000);
+    }
+  }catch(e){}
+}
+
+// ─── WAKE LOCK ───
+let wakeLockSentinel=null;let wakeLockEnabled=true;let canvasStream=null;let canvasInterval=null;
+function isWakeLockSupported(){return'wakeLock'in navigator&&typeof navigator.wakeLock.request==='function'}
+async function requestWakeLockAPI(){if(!isWakeLockSupported())return false;try{wakeLockSentinel=await navigator.wakeLock.request('screen');wakeLockSentinel.addEventListener('release',()=>{wakeLockSentinel=null});return true}catch(e){return false}}
+async function releaseWakeLockAPI(){if(wakeLockSentinel){try{await wakeLockSentinel.release()}catch(e){}wakeLockSentinel=null}}
+function startCanvasStream(){if(canvasStream)return true;try{const canvas=document.getElementById('noSleepCanvas');const video=document.getElementById('noSleepVideo');if(!canvas||!video)return false;const ctx=canvas.getContext('2d');if(!ctx)return false;ctx.fillStyle='#000';ctx.fillRect(0,0,canvas.width,canvas.height);if(typeof canvas.captureStream!=='function')return false;canvasStream=canvas.captureStream(1);let toggle=false;canvasInterval=setInterval(()=>{toggle=!toggle;ctx.fillStyle=toggle?'#000':'#010101';ctx.fillRect(0,0,canvas.width,canvas.height)},1000);video.srcObject=canvasStream;video.muted=true;video.playsInline=true;const p=video.play();if(p&&p.catch)p.catch(()=>{});return true}catch(e){return false}}
+function stopCanvasStream(){if(canvasInterval){clearInterval(canvasInterval);canvasInterval=null}const video=document.getElementById('noSleepVideo');if(video){try{video.pause();video.srcObject=null}catch(e){}}if(canvasStream){try{canvasStream.getTracks().forEach(t=>t.stop())}catch(e){}canvasStream=null}}
+async function activateWakeLock(){let s=false;if(isWakeLockSupported())s=await requestWakeLockAPI();if(!s)s=startCanvasStream();return s}
+async function deactivateWakeLock(){await releaseWakeLockAPI();stopCanvasStream()}
+document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&wakeLockEnabled&&state.isRunning)await activateWakeLock()});
+async function ensureWakeLockActive(){if(!wakeLockEnabled||!state.isRunning)return;if(wakeLockSentinel===null&&canvasStream===null)await activateWakeLock()}
+
+// ─── TIMING ───
+function loadTimingCache(){try{return JSON.parse(localStorage.getItem(LS.TIMING)||'{}')}catch(e){return{}}}
+function saveTimingCache(c){try{localStorage.setItem(LS.TIMING,JSON.stringify(c))}catch(e){}}
+function recordGenerationTime(key,ms){const c=loadTimingCache();if(!c[key])c[key]=[];c[key].push(ms);if(c[key].length>10)c[key]=c[key].slice(-10);saveTimingCache(c);updateTimingDisplay()}
+function estimateGenerationTime(key,fb){const c=loadTimingCache();const s=c[key];if(s&&s.length>0){const sorted=[...s].sort((a,b)=>a-b);const mid=Math.floor(sorted.length/2);return sorted.length%2===0?(sorted[mid-1]+sorted[mid])/2:sorted[mid]}return fb}
+function updateTimingDisplay(){const c=loadTimingCache();const v=c['video']||[];const s=document.getElementById('stat-speed');const t=document.getElementById('stat-samples');if(!s||!t)return;if(v.length===0){s.textContent='en attente';t.textContent='0 génération';return}const avg=v.reduce((a,b)=>a+b,0)/v.length;s.textContent=(avg/1000).toFixed(1)+' s en moyenne';t.textContent=v.length+' génération'+(v.length>1?'s':'')}
+
+// ─── RSS ───
+async function fetchViaRss2Json(u){const url='https://api.rss2json.com/v1/api.json?rss_url='+encodeURIComponent(u);const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();if(d.status!=='ok')throw new Error('status: '+d.status);return(d.items||[]).map((item,i)=>({title:item.title||'',link:item.link||'',pubDate:item.pubDate||'',source:item.author||'Google News',rank:i+1}))}
+async function fetchViaAllOrigins(u){const url='https://api.allorigins.win/raw?url='+encodeURIComponent(u);const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return parseRssXml(await r.text())}
+async function fetchViaCodeTabs(u){const url='https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u);const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return parseRssXml(await r.text())}
+function parseRssXml(text){const parser=new DOMParser();const xmlDoc=parser.parseFromString(text,'text/xml');const items=xmlDoc.querySelectorAll('item');const arr=[];items.forEach((item,i)=>{if(i>=25)return;const title=item.querySelector('title')?.textContent||'';const link=item.querySelector('link')?.textContent||'';const pubDate=item.querySelector('pubDate')?.textContent||'';const source=item.querySelector('source')?.textContent||'';if(title)arr.push({title,link,pubDate,source,rank:i+1})});return arr}
+async function fetchGoogleNewsRSSWithFallback(category){
+  const rssUrl=GOOGLE_NEWS_RSS[category]||GOOGLE_NEWS_RSS.WORLD;
+  const methods=[{name:'rss2json',fn:()=>fetchViaRss2Json(rssUrl)},{name:'allorigins',fn:()=>fetchViaAllOrigins(rssUrl)},{name:'codetabs',fn:()=>fetchViaCodeTabs(rssUrl)}];
+  for(const m of methods){
+    try{debugLog('info','RSS','Tentative '+m.name);const items=await m.fn();if(items&&items.length>0){debugLog('success','RSS',m.name+' → '+items.length);return{items,method:m.name}}}catch(e){debugLog('warn','RSS',m.name+' échoué : '+e.message)}
+  }
+  return{items:getDemoNews(category),method:'demo'};
+}
+function getDemoNews(cat){const d={WORLD:['Sommet international à Genève sur le climat','L\'ONU appelle à un cessez-le-feu','Traité commercial signé entre 12 pays','Crise humanitaire dans la Corne de l\'Afrique'],NATION:['Réforme des retraites annoncée','Grève nationale dans les transports','Nouveau musée inauguré à Paris','Scandale politique au gouvernement'],BUSINESS:['La bourse de Paris bat un record','Une entreprise annonce 5 000 licenciements','L\'inflation ralentit','Fusion bancaire majeure'],TECHNOLOGY:['Une nouvelle IA bat tous les records','Géant du numérique condamné','Test de la 6G','Cyberattaque contre des hôpitaux'],SCIENCE:['Découverte sur l\'origine de l\'univers','Vaccin contre le cancer en phase 3','Mission NASA vers Mars','Supraconducteur à température ambiante'],HEALTH:['Épidémie de grippe aviaire','Traitement Alzheimer approuvé','Pollution et espérance de vie','Nouveau variant Covid'],SPORTS:['La France championne du monde de rugby','Record du monde du marathon','JO de 2036 attribués','Scandale de dopage'],ENTERTAINMENT:['Palme d\'Or pour un film français','Série phénomène','Festival à 500 000 visiteurs','Album surprise']};const t=d[cat]||d.WORLD;return t.map((title,i)=>({title,link:'#',pubDate:new Date().toISOString(),source:'Mode démo',rank:i+1}))}
+
+// ─── API FETCH ───
+let createImageIntervalMs=4000;let createVideoIntervalMs=75000;let imageAttemptsSinceLastError=0;let videoAttemptsSinceLastError=0;
+const IMAGE_PARALLEL=3;const IMAGE_INTERVAL_MS=3400;const IMAGE_INTERVAL_MIN=3200;const IMAGE_INTERVAL_MAX=12000;
+const VIDEO_INTERVAL_MIN=90000;const VIDEO_INTERVAL_MAX=300000;const VIDEO_INTERVAL_SAFE=90000;
+const VIDEO_FIRST_POLL_DELAY_SEC=90;const VIDEO_MAX_POLL_ATTEMPTS=150;
+const MAX_CONSECUTIVE_FAILURES=3;const VIDEO_MAX_ATTEMPTS=12;
+const VIDEO_IMMEDIATE_REJECTION_LIMIT=5;const VIDEO_IMMEDIATE_REJECTION_THRESHOLD_MS=1500;
+let videoImmediateRejections=0;
+
+async function apiFetch(url,options={},label='API',kind='default'){
+  const maxAttempts=kind==='video'?VIDEO_MAX_ATTEMPTS:kind==='image'?10:8;
+  for(let attempt=0;attempt<maxAttempts;attempt++){
+    if(state.stopRequested)throw new Error('Arrêt demandé');
+    debugLog('api','REQ '+label,(options.method||'GET')+' '+url+' ('+(attempt+1)+'/'+maxAttempts+')');
+    try{
+      const t0=Date.now();const res=await fetch(url,options);const dt=Date.now()-t0;
+      let retryAfter=0;try{retryAfter=parseInt(res.headers.get('Retry-After')||'0',10)||0}catch(e){}
+      let errorText='';
+      if(!res.ok&&([400,401,404,429,500,502,503,504,520].includes(res.status)||kind==='video')){
+        try{errorText=(await res.clone().text()).slice(0,1200)}catch(e){}
+      }
+      debugLog('response','RÉP '+label,'HTTP '+res.status+' en '+dt+'ms',errorText||undefined);
+      if(res.ok){
+        if(kind==='image'){imageAttemptsSinceLastError++;if(imageAttemptsSinceLastError>=4&&createImageIntervalMs>IMAGE_INTERVAL_MIN){createImageIntervalMs=Math.max(IMAGE_INTERVAL_MIN,createImageIntervalMs-250);imageAttemptsSinceLastError=0}}
+        if(kind==='video'){videoAttemptsSinceLastError++;if(videoAttemptsSinceLastError>=2&&createVideoIntervalMs>VIDEO_INTERVAL_MIN){createVideoIntervalMs=Math.max(VIDEO_INTERVAL_MIN,createVideoIntervalMs-5000);videoAttemptsSinceLastError=0};state.agnesStatus='available';updateAgnesStatusUI('available','mise à jour auto')}
+        return res;
+      }
+      if([400,401,404].includes(res.status)&&kind!=='video')throw new Error('HTTP '+res.status+' — '+errorText.slice(0,300));
+      const queueFull=/video_queue_full|queue is full|queue_full/i.test(errorText);
+      if(kind==='video'&&queueFull){
+        videoAttemptsSinceLastError++;state.agnesStatus='saturated';updateAgnesStatusUI('saturated','mise à jour auto');
+        const im=dt<VIDEO_IMMEDIATE_REJECTION_THRESHOLD_MS;if(im)videoImmediateRejections++;else videoImmediateRejections=0;
+        if(videoImmediateRejections>=VIDEO_IMMEDIATE_REJECTION_LIMIT)throw new Error('QUEUE_SATURATED');
+        const wait=retryAfter>0?retryAfter:Math.min(300,120+attempt*30);
+        setStatus('⏸️ File saturée — attente '+wait+'s…');await sleep(wait*1000);continue;
+      }
+      if(res.status===429){
+        const wait=retryAfter>0?retryAfter:Math.min(kind==='video'?180:120,kind==='video'?60+attempt*8:10+attempt*12);
+        if(kind==='image')createImageIntervalMs=Math.min(IMAGE_INTERVAL_MAX,createImageIntervalMs+1000);
+        if(kind==='video')createVideoIntervalMs=Math.min(VIDEO_INTERVAL_MAX,createVideoIntervalMs+6000);
+        setStatus('Limite API — retry '+wait+'s');await sleep(wait*1000);continue;
+      }
+      if([500,502,503,504,520].includes(res.status)){
+        const isQ=kind==='video'&&/queue_full|queue is full/i.test(errorText);
+        if(isQ){
+          videoAttemptsSinceLastError++;state.agnesStatus='saturated';updateAgnesStatusUI('saturated','mise à jour auto');
+          const im=dt<VIDEO_IMMEDIATE_REJECTION_THRESHOLD_MS;if(im)videoImmediateRejections++;else videoImmediateRejections=0;
+          if(videoImmediateRejections>=VIDEO_IMMEDIATE_REJECTION_LIMIT)throw new Error('QUEUE_SATURATED');
+          const wait=retryAfter>0?retryAfter:Math.min(300,120+attempt*30);
+          await sleep(wait*1000);continue;
+        }
+        const wait=Math.min(kind==='video'?180:60,kind==='video'?20+attempt*10:5+attempt*5);
+        await sleep(wait*1000);continue;
+      }
+      return res;
+    }catch(e){
+      if(e.message==='Arrêt demandé')throw e;
+      if(e.message==='QUEUE_SATURATED')throw e;
+      const wait=Math.min(kind==='video'?120:45,kind==='video'?10+attempt*8:3+attempt*4);
+      await sleep(wait*1000);
+    }
+  }
+  throw new Error('Tentatives épuisées pour '+label);
+}
+
+// ─── JSON PARSING ───
+function escapeControlCharsInStrings(text){let r='';let inS=false,esc=false;for(let i=0;i<text.length;i++){const ch=text[i];if(esc){r+=ch;esc=false;continue}if(ch==='\\'){r+=ch;esc=true;continue}if(ch==='"'){inS=!inS;r+=ch;continue}if(inS){if(ch==='\n'){r+='\\n';continue}if(ch==='\r'){r+='\\r';continue}if(ch==='\t'){r+='\\t';continue}const c=ch.charCodeAt(0);if(c<32){r+='\\u'+c.toString(16).padStart(4,'0');continue}}r+=ch}return r}
+function balanceJson(t){let ob=0,obr=0,is=false,es=false;for(let i=0;i<t.length;i++){const ch=t[i];if(es){es=false;continue}if(ch==='\\'){es=true;continue}if(ch==='"'){is=!is;continue}if(is)continue;if(ch==='{')ob++;else if(ch==='}')ob--;else if(ch==='[')obr++;else if(ch===']')obr--}let r=t;if(is)r+='"';while(obr>0){r+=']';obr--}while(ob>0){r+='}';ob--}return r}
+function salvageScenario(t){const tm=t.match(/"jt_title"\s*:\s*"((?:[^"\\]|\\.)*)"/);const segs=[];const rx=/"segment_number"\s*:\s*(\d+)[\s\S]*?"headline"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"summary"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"host_dialogue"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"reporter"\s*:\s*\{[\s\S]*?"name"\s*:\s*"((?:[^"\\]|\\.)*)"[\s\S]*?"dialogue"\s*:\s*"((?:[^"\\]|\\.)*)"/g;let m;while((m=rx.exec(t))!==null)segs.push({segment_number:parseInt(m[1],10),headline:m[2],summary:m[3],host_dialogue:m[4],reporter:{name:m[5],dialogue:m[6]},emotion:'spectaculaire'});if(segs.length===0)return null;return{jt_title:tm?tm[1]:'Le JT',host:null,segments:segs}}
+function extractJson(t){if(!t)return null;let c=t.trim();const fm=c.match(/```(?:json)?\s*([\s\S]*?)```/);if(fm)c=fm[1].trim();const fb=c.indexOf('{');if(fb<0)return null;c=c.slice(fb);try{return JSON.parse(c)}catch(e){}try{return JSON.parse(escapeControlCharsInStrings(c))}catch(e){}try{const lb=c.lastIndexOf('}');if(lb>0)return JSON.parse(escapeControlCharsInStrings(c.slice(0,lb+1)))}catch(e){}try{return JSON.parse(balanceJson(escapeControlCharsInStrings(c)))}catch(e){}try{const s=salvageScenario(c);if(s&&s.segments&&s.segments.length>0)return s}catch(e){}return null}
+
+// ─── PROMPTS ───
+function buildJTScenarioPrompt(newsItems,segCount,director,palette){const nl=newsItems.slice(0,20).map((n,i)=>(i+1)+'. '+n.title).join('\n');const d=DIRECTORS[director];const p=PALETTES[palette];return[
+'You are the head writer of a short-form satirical TV news show based on TODAY\'S NEWS.','',
+'CORE FORMAT — EVERY SEGMENT IS A COMPLETE COMEDIC SKETCH:',
+'- HOST on TV studio explains the actual news clearly and briefly.',
+'- FIELD REPORTER MUST NOT repeat or paraphrase the host.',
+'- Field reporter says ONE original funny sentence inspired by the absurd physical situation.',
+'- Each clip feels like a self-contained sketch.','',
+'NEWS LIST:',nl,'',
+'ABSOLUTE FACT RULE:',
+'- headline: exact news title.',
+'- summary: only supported facts.',
+'- host_dialogue: 8-16 French words.',
+'- reporter.dialogue: 8-18 French words, a joke ABOUT THE SCENE.','',
+'VISUAL WORLD — retrofuturist, funny, hallucinatory, highly colorful.',
+'STANISLAVSKI acting for all characters.','',
+'DIRECTOR — '+d.label.toUpperCase()+':',d.style,'Camera: '+d.camera,'Lighting: '+d.lighting,'Film: '+d.film,'',
+'COLOR PALETTE — '+p.label.toUpperCase()+':',p.full,'','',
+'SOUND: no music. Only diegetic foley + birds.','',
+'OUTPUT JSON ONLY:',
+'{"jt_title":"...","host":{"name":"...","description":"...","plateau":"...","host_action":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}},"segments":[{"segment_number":1,"headline":"...","summary":"...","host_dialogue":"...","host_action":"...","people":[{"name":"...","description":"...","role":"...","stanislavski":{"objective":"...","obstacle":"...","given_circumstances":"...","physical_action":"..."}}],"location":"...","scene_action":"...","camera_plan":"...","reporter":{"name":"...","description":"...","dialogue":"..."},"emotion":"..."}]}',
+'Exactly '+segCount+' segments.'
+].join('\n')}
+
+function buildImageStyleBlock(director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];return['VISUAL STYLE: '+d.style,'CAMERA: '+d.camera,'LIGHTING: '+d.lighting,'TEXTURE: '+d.film,'COLOR: '+p.full,'MANDATORY: saturated colors, no grayscale, retrofuturist costumes, hallucinatory sets.','NO readable text, NO watermark.'].join('\n')}
+function buildHostImagePrompt(host,director,palette){return['KEYFRAME FOR TV NEWS SKETCH.','HOST: '+host.name+' — '+host.description,'SET: '+host.plateau,buildImageStyleBlock(director,palette),'Portrait 9:16, saturated color.'].join('\n')}
+function buildReporterImagePrompt(seg,director,palette){const r=seg.reporter;const pl=(seg.people||[]).map(p=>p.name+' ('+p.role+'): '+p.description).join(' | ');return['KEYFRAME FOR FIELD-REPORT SKETCH.','REPORTER: '+r.name+' — '+r.description,'CAST: '+pl,'LOCATION: '+seg.location,'ACTION: '+seg.scene_action,buildImageStyleBlock(director,palette),'Portrait 9:16, extremely colorful.'].join('\n')}
+function buildHostVideoPrompt(jt,seg,director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];const line=(seg.host_dialogue||'').replace(/"/g,'\"');return['TV NEWS SKETCH — '+state.durationSeconds+'s.',d.label.toUpperCase()+'.','HOST: '+jt.host.name+' — '+jt.host.description,'STUDIO: '+jt.host.plateau,'GAG: '+(seg.host_action||jt.host.host_action||''),'CAMERA: '+d.camera,'STYLE: '+d.style,'PALETTE: '+p.full,'NO MUSIC. Only foley + birds.','AUDIO — host says in French: "'+line+'"'].join('\n')}
+function buildReporterVideoPrompt(jt,seg,director,palette){const d=DIRECTORS[director];const p=PALETTES[palette];const r=seg.reporter;const line=(r.dialogue||'').replace(/"/g,'\"');const pl=(seg.people||[]).map(p=>p.name+' ('+p.role+') — '+p.description).join(' || ');return['FIELD-REPORT SKETCH — '+state.durationSeconds+'s.',d.label.toUpperCase()+'.','REPORTER: '+r.name+' — '+r.description,'CAST: '+pl,'LOCATION: '+seg.location,'GAG: '+(seg.scene_action||''),'CAMERA: '+(seg.camera_plan||'establishing, close-ups, punchline wide'),'STYLE: '+d.style,'PALETTE: '+p.full,'NO MUSIC. Only foley + birds.','CRITICAL: reporter does NOT repeat facts. Says only: "'+line+'"'].join('\n')}
+
+// ─── SCÉNARIO ───
+async function generateJTScenario(newsItems,segCount,director,palette){
+  setPhase('text','🧠 Analyse des actualités…','');
+  setStatus('L\'IA analyse les titres du jour…');
+  if(window.MOCK_JT){await sleep(500);return window.MOCK_JT}
+  const cfg=resolveTaskConfig('text');
+  if(!cfg.key&&cfg.provider!=='custom')throw new Error('Clé manquante pour provider texte : '+cfg.provider);
+  if(!cfg.model||!cfg.model.url)throw new Error('URL modèle texte manquante pour '+cfg.provider);
+  const prompt=buildJTScenarioPrompt(newsItems,segCount,director,palette);
+  debugLog('ai','PROMPT JT','Provider : '+cfg.provider+' · modèle : '+cfg.model.model);
+  let body,headers;
+  if(isAnthropic(cfg.provider)){
+    headers={'x-api-key':cfg.key,'anthropic-version':'2023-06-01','Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'};
+    body={model:cfg.model.model,max_tokens:9000,system:'You are a TV news producer. Always return valid JSON matching the schema. No markdown.',messages:[{role:'user',content:prompt}]};
+  }else{
+    headers={'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json'};
+    body={model:cfg.model.model,messages:[{role:'system',content:'You are a TV news producer. Return strict JSON matching schema. Satirical comedy. Stanislavski. Retrofuturist colorful. No music, foley + birds only.'},{role:'user',content:prompt}],temperature:0.9,max_tokens:9000};
+    if(cfg.provider==='agnes'||cfg.provider==='openai'||cfg.provider==='together'||cfg.provider==='openrouter'){
+      body.response_format={type:'json_object'};
+    }
+  }
+  const res=await apiFetch(cfg.model.url,{method:'POST',headers,body:JSON.stringify(body)},'Scénario JT','text');
+  if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+' — '+err.slice(0,200))}
+  const data=await res.json();
+  let content;
+  if(isAnthropic(cfg.provider))content=data.content&&data.content[0]&&data.content[0].text;
+  else content=data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content;
+  state.rawScenarioResponse=content||'';
+  const rawEl=document.getElementById('raw-scenario');
+  if(rawEl)rawEl.textContent=content||'(vide)';
+  const jt=extractJson(content);
+  if(!jt||!jt.segments||!Array.isArray(jt.segments)||jt.segments.length===0)throw new Error('Scénario JT invalide');
+  // Garde-fous
+  if(!jt.host||typeof jt.host!=='object')jt.host={};
+  if(!jt.host.name)jt.host.name='Chroniqueur';
+  if(!jt.host.description)jt.host.description='silver-haired anchor, retrofuturist chrome suit';
+  if(!jt.host.plateau)jt.host.plateau='symmetrical retrofuturist TV studio';
+  if(!jt.host.host_action)jt.host.host_action='the host presses a chrome button and the studio rotates';
+  if(!jt.host.stanislavski)jt.host.stanislavski={objective:'deliver news',obstacle:'absurd studio',given_circumstances:'veteran',physical_action:'presses button'};
+  if(jt.segments.length<segCount){const last=jt.segments[jt.segments.length-1];while(jt.segments.length<segCount){jt.segments.push(clone(last));jt.segments[jt.segments.length-1].segment_number=jt.segments.length}}
+  if(jt.segments.length>segCount)jt.segments=jt.segments.slice(0,segCount);
+  const retro='retro-futuristic funny costume with chrome accessories';
+  jt.segments.forEach((s,i)=>{
+    if(!s||typeof s!=='object')s={};
+    s.segment_number=i+1;
+    if(!s.emotion)s.emotion='spectaculaire';
+    if(!s.headline)s.headline='Information '+(i+1);
+    if(!s.summary)s.summary=s.headline;
+    if(!s.host_action)s.host_action=jt.host.host_action;
+    if(!s.scene_action)s.scene_action='the reporter and the people perform a synchronized choreography';
+    if(!s.camera_plan)s.camera_plan='Opening wide, close-ups, punchline wide.';
+    if(!s.location)s.location='hallucinatory retrofuturist location, chrome arches';
+    if(!s.host_dialogue||typeof s.host_dialogue!=='string')s.host_dialogue='Voici l\'information principale du jour.';
+    let hw=countWords(s.host_dialogue);if(hw>18)s.host_dialogue=s.host_dialogue.trim().split(/\s+/).slice(0,16).join(' ');
+    if(!s.reporter||typeof s.reporter!=='object')s.reporter={};
+    if(!s.reporter.name)s.reporter.name='Reporter';
+    if(!s.reporter.description)s.reporter.description='field reporter in retrofuturist outfit';
+    if(!/retro|futur/i.test(s.reporter.description))s.reporter.description+='; '+retro;
+    if(!s.reporter.dialogue||typeof s.reporter.dialogue!=='string')s.reporter.dialogue='Même ma machine à café aurait demandé une mutation.';
+    let rw=countWords(s.reporter.dialogue);if(rw>22)s.reporter.dialogue=s.reporter.dialogue.trim().split(/\s+/).slice(0,18).join(' ');
+    if(s.reporter.dialogue===s.host_dialogue)s.reporter.dialogue='Même ma machine à café aurait demandé une mutation.';
+    if(!s.people||!Array.isArray(s.people)||s.people.length===0){s.people=[{name:'Figurant 1',description:'news-related '+retro,role:'witness',stanislavski:{objective:'to be seen',obstacle:'anonymity',given_circumstances:'caught in event',physical_action:'waves'}},{name:'Figurant 2',description:'news-related '+retro,role:'witness',stanislavski:{objective:'to understand',obstacle:'chaos',given_circumstances:'confused',physical_action:'shrugs'}},{name:'Figurant 3',description:'news-related '+retro,role:'witness',stanislavski:{objective:'to help',obstacle:'helplessness',given_circumstances:'wants to help',physical_action:'reaches out'}}]}
+    s.people.forEach(p=>{if(!p||typeof p!=='object')return;if(!p.name)p.name='Figurant';if(!p.role)p.role='witness';if(!p.description)p.description='news-related '+retro;if(!/retro|futur/i.test(p.description))p.description+='; '+retro;if(!p.stanislavski)p.stanislavski={objective:'to participate',obstacle:'chaos',given_circumstances:'caught in event',physical_action:'gestures'}});
+    if(!/hallucin/i.test(s.location))s.location+='; hallucinatory retrofuturist architecture';
+  });
+  debugLog('success','JT',jt.segments.length+' segments créés · provider '+cfg.provider);
+  return jt;
+}
+
+// ─── IMAGES ───
+async function retryTask(name,fn,max=3){let lastError=null;for(let i=1;i<=max;i++){if(state.stopRequested)throw new Error('Arrêt demandé');try{return await fn()}catch(e){lastError=e;if(e.message==='Arrêt demandé')throw e;if(e.message==='QUEUE_SATURATED')throw e;if(i<max){const wait=Math.min(90,8*i*i);setStatus(name+' — reprise '+wait+'s');await sleep(wait*1000)}}}throw lastError||new Error(name+' échoué')}
+
+async function generateImage(prompt){
+  return retryTask('Image',async()=>{
+    const cfg=resolveTaskConfig('image');
+    if(!cfg.key&&cfg.provider!=='custom')throw new Error('Clé manquante provider image : '+cfg.provider);
+    if(!cfg.model||!cfg.model.url)throw new Error('URL modèle image manquante pour '+cfg.provider);
+    const headers={'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json'};
+    const body={model:cfg.model.model,prompt:prompt};
+    if(cfg.provider==='agnes'){body.size='1K';body.ratio='9:16';body.n=1}
+    else if(cfg.provider==='openai'){body.size='1024x1792';body.n=1;body.quality='standard'}
+    else if(cfg.provider==='together'){body.width=768;body.height=1344;body.n=1}
+    else{body.size='1024x1792';body.n=1}
+    const res=await apiFetch(cfg.model.url,{method:'POST',headers,body:JSON.stringify(body)},'Image','image');
+    if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+' — '+err.slice(0,300))}
+    const data=await res.json();
+    if(data.data&&data.data[0]){
+      const item=data.data[0];
+      if(item.url)return item.url;
+      if(item.b64_json)return 'data:image/png;base64,'+item.b64_json;
+    }
+    if(data.output&&Array.isArray(data.output)&&data.output[0])return data.output[0];
+    throw new Error('Format réponse image inconnu');
+  },4);
+}
+
+// ─── VIDÉOS ───
+async function generateVideo(firstFrame,lastFrame,prompt){
+  return retryTask('Vidéo',async()=>{
+    const cfg=resolveTaskConfig('video');
+    if(!cfg.key&&cfg.provider!=='custom')throw new Error('Clé manquante provider vidéo : '+cfg.provider);
+    if(!cfg.model||!cfg.model.url)throw new Error('URL modèle vidéo manquante pour '+cfg.provider);
+    const headers={'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json'};
+    const body={model:cfg.model.model,prompt,seconds:String(state.durationSeconds),mode:'keyframe',size:'720P',aspect_ratio:'9:16',first_frame:firstFrame,last_frame:lastFrame};
+    debugLog('ai','PROMPT VIDÉO','Provider : '+cfg.provider);
+    const res=await apiFetch(cfg.model.url,{method:'POST',headers,body:JSON.stringify(body)},'Vidéo','video');
+    if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+' — '+err.slice(0,300))}
+    const data=await res.json();
+    const videoId=data.video_id||data.id||data.task_id||data.request_id;
+    if(!videoId)throw new Error('Pas de video_id');
+    return videoId;
+  },5);
+}
+
+async function pollVideo(videoId,onProgress){
+  const cfg=resolveTaskConfig('video');
+  const pollBase=cfg.model.poll||cfg.model.url;
+  const estimatedMs=estimateGenerationTime('video',120000+state.durationSeconds*8000);
+  const minWait=Math.max(30,Math.min(VIDEO_FIRST_POLL_DELAY_SEC,Math.floor(estimatedMs/1000*0.4)));
+  let remaining=minWait;
+  while(remaining>0){if(state.stopRequested)throw new Error('Arrêt demandé');await ensureWakeLockActive();onProgress('File vidéo — '+remaining+'s');await sleep(1000);remaining--}
+  let attempt=0;
+  while(attempt<VIDEO_MAX_POLL_ATTEMPTS){
+    if(state.stopRequested)throw new Error('Arrêt demandé');
+    attempt++;
+    const url=pollBase+'?video_id='+encodeURIComponent(videoId)+'&model_name='+encodeURIComponent(cfg.model.model);
+    let res;try{res=await fetch(url,{headers:{'Authorization':'Bearer '+cfg.key}})}catch(e){await sleep(15000);continue}
+    let d;try{d=await res.json()}catch(e){await sleep(10000);continue}
+    const status=String(d.status||'unknown').toLowerCase();
+    const progress=Number(d.progress||0);
+    onProgress('Création — '+progress+'%');
+    if(status==='completed'||status==='succeeded'||status==='done'){
+      const videoUrl=d.url||(d.metadata&&d.metadata.url)||(d.output&&d.output.url)||(d.video&&d.video.url);
+      if(!videoUrl)throw new Error("Terminé mais pas d'URL");
+      return videoUrl;
+    }
+    if(status==='failed'||status==='error'||status==='cancelled')throw new Error('Échec ('+status+')');
+    const wait=attempt<5?10:Math.min(35,12+Math.floor(attempt/5)*3);
+    onProgress('File vidéo — prochaine vérif dans '+wait+'s');
+    await sleep(wait*1000);
+  }
+  throw new Error('Polling timeout');
+}
+
+// ─── QUEUE ───
+function createRateLimitedQueue(maxConcurrent,minIntervalMs){
+  let running=0;let lastStart=0;const queue=[];let resolveIdle=null;
+  function tryNext(){
+    if(running>=maxConcurrent)return;
+    if(queue.length===0){if(running===0&&resolveIdle){resolveIdle();resolveIdle=null}return}
+    const now=Date.now();const wait=Math.max(0,lastStart+minIntervalMs-now);
+    if(wait>0){setTimeout(tryNext,wait);return}
+    const task=queue.shift();running++;lastStart=Date.now();
+    task().finally(()=>{running--;setTimeout(tryNext,0)});
+  }
+  return{add(fn){return new Promise((res,rej)=>{queue.push(()=>fn().then(res,rej));setTimeout(tryNext,0)})},idle(){return new Promise(r=>{if(running===0&&queue.length===0)return r();resolveIdle=r})}};
+}
+
+// ─── UI PRINCIPALE ───
+function setStatus(text){const bar=document.getElementById('status-bar');const txt=document.getElementById('status-text');if(!bar||!txt)return;if(text){bar.classList.add('visible');txt.textContent=text}else bar.classList.remove('visible')}
+function setPhase(phase,detail,eta){const bar=document.getElementById('phase-bar');if(bar)bar.classList.add('visible');document.querySelectorAll('.phase-step').forEach(el=>{el.classList.remove('active','done');const order=['text','dialogue','images','videos','done'];const ci=order.indexOf(phase);const ei=order.indexOf(el.dataset.phase);if(ei<ci)el.classList.add('done');else if(ei===ci)el.classList.add('active')});const d=document.getElementById('phase-detail');const e=document.getElementById('phase-eta');if(d)d.innerHTML=detail||'';if(e)e.textContent=eta||''}
+function setProgress(pct){const f=document.getElementById('progress-fill');if(f)f.style.width=Math.max(0,Math.min(100,pct))+'%'}
+
+function renderNewsList(){const list=document.getElementById('news-list');if(!list)return;if(state.newsItems.length===0){list.innerHTML='<div style="padding:1.2rem;text-align:center;color:var(--faint);font-size:.8rem;">Aucune actualité chargée.</div>';return}list.innerHTML=state.newsItems.slice(0,15).map(item=>'<div class="news-item"><span class="news-rank">'+item.rank+'.</span><div><div class="news-title">'+esc(item.title)+'</div><div class="news-source">'+esc(item.source||'')+'</div></div></div>').join('')}
+
+function renderJT(){const panel=document.getElementById('jt-panel');const card=document.getElementById('jt-card');if(!panel||!card||!state.jt)return;const jt=state.jt;let html='';html+='<div class="jt-title">'+esc(jt.jt_title||'Le JT')+'</div>';html+='<div class="jt-meta">'+jt.segments.length+' sujets · '+DIRECTORS[state.director].label+' · '+PALETTES[state.palette].label+'</div>';if(jt.host)html+='<div style="text-align:center;margin-bottom:1rem;"><span class="host-tag">🎙️ <strong>'+esc(jt.host.name||'')+'</strong> — '+esc((jt.host.description||'').slice(0,90))+'</span></div>';jt.segments.forEach((s,i)=>{html+='<div class="seg-block" data-seg="'+i+'">';html+='<div class="seg-num">Sujet '+(i+1)+' / '+jt.segments.length+'</div>';html+='<div class="seg-headline">'+esc(s.headline)+'</div>';html+='<div class="seg-summary">'+esc(s.summary)+'</div>';if(s.host_dialogue)html+='<div class="seg-dialogue"><span class="spk">🎙️ Plateau</span>« '+esc(s.host_dialogue)+' »</div>';if(s.host_action)html+='<div class="seg-action">🎬 Plateau : '+esc(s.host_action.slice(0,180))+'</div>';if(s.people&&s.people.length>0)html+='<div class="seg-cast">👥 '+s.people.map(p=>'<strong>'+esc(p.name)+'</strong> ('+esc(p.role)+')').join(' · ')+'</div>';if(s.reporter){html+='<div class="seg-dialogue"><span class="spk">📍 '+esc(s.reporter.name)+'</span>« '+esc(s.reporter.dialogue)+' »</div>';if(s.scene_action)html+='<div class="seg-action">🎬 Reporter : '+esc(s.scene_action.slice(0,200))+'</div>';html+='<div class="seg-loc">📍 '+esc((s.location||'').slice(0,160))+'</div>'}html+='</div>'});card.innerHTML=html;panel.classList.add('visible')}
+
+function renderImagesGrid(){const grid=document.getElementById('images-grid');if(!grid||!state.jt)return;let html='';if(state.hostImage)html+='<div class="image-card host"><img src="'+state.hostImage+'"><div class="img-label">🎙️ Plateau</div></div>';else html+='<div class="image-card loading host">Plateau…</div>';state.jt.segments.forEach((s,i)=>{const img=state.sceneImages['reporter-'+i];if(img&&img.url)html+='<div class="image-card reporter"><img src="'+img.url+'"><div class="img-label">📍 '+esc(s.reporter.name)+'</div></div>';else if(img&&img.failed)html+='<div class="image-card failed reporter">⚠️ Échec<br>'+esc(s.reporter.name)+'</div>';else html+='<div class="image-card loading reporter">Reporter '+(i+1)+'…</div>'});grid.innerHTML=html}
+function updateHostImageCard(url){const el=document.querySelector('.image-card.host');if(!el)return;el.classList.remove('loading','failed');el.innerHTML='<img src="'+url+'"><div class="img-label">🎙️ Plateau</div>'}
+function updateReporterImageCard(i,url,name,failed){const el=document.querySelectorAll('.image-card.reporter')[i];if(!el)return;el.classList.remove('loading','failed');if(failed){el.classList.add('failed');el.innerHTML='⚠️ Échec<br>'+esc(name)}else el.innerHTML='<img src="'+url+'"><div class="img-label">📍 '+esc(name)+'</div>'}
+
+function renderQueue(){const q=document.getElementById('queue');if(!q)return;if(!state.videos.length){q.style.display='none';return}const total=state.videos.length;const done=state.videos.filter(v=>v.status==='done').length;const failed=state.videos.filter(v=>v.status==='failed').length;const retry=state.videos.filter(v=>v.status==='retry').length;let html='<div class="queue-summary"><span class="qs-progress">VIDÉOS : '+done+'/'+total+'</span>';if(failed>0)html+='<span style="color:var(--err);">'+failed+' échec'+(failed>1?'s':'')+'</span>';if(retry>0)html+='<span style="color:var(--warn);">'+retry+' à relancer</span>';html+='<span class="qs-eta">'+(done+failed+retry<total?'en cours':'Terminé')+'</span></div>';html+=state.videos.map(item=>{let icon='○',st='En file',cls='pending';if(item.status==='creating'){icon='◐';st='Préparation…';cls='creating'}else if(item.status==='processing'){icon='◐';st=item.progress||'En cours…';cls='processing'}else if(item.status==='done'){icon='●';st='Terminé';cls='done'}else if(item.status==='failed'){icon='✕';st=item.progress||'Échec';cls='failed'}else if(item.status==='retry'){icon='↻';st='À relancer';cls='retry'}return'<div class="queue-item '+cls+'"><div class="q-icon">'+icon+'</div><div class="q-name">'+esc(item.label)+'</div><div class="q-status">'+esc(st)+'</div></div>'}).join('');q.innerHTML=html;q.style.display='block'}
+function markSeg(idx,status){const el=document.querySelector('.seg-block[data-seg="'+idx+'"]');if(!el)return;el.classList.remove('active','done');if(status)el.classList.add(status)}
+
+function ensureJTGallerySkeleton(){const g=document.getElementById('gallery');const grid=document.getElementById('gallery-grid');if(!g||!grid||!state.jt)return;if(grid.dataset.built==='1')return;grid.innerHTML='';state.jt.segments.forEach((s,i)=>{const seg=document.createElement('div');seg.className='jt-segment';seg.dataset.seg=i;const castLine=(s.people||[]).map(p=>p.name+' ('+p.role+')').join(' · ');seg.innerHTML='<div class="jt-segment-info"><div class="jt-seg-headline">📰 '+esc(s.headline)+'</div><div class="jt-seg-summary">'+esc(s.summary)+'</div>'+(castLine?'<div class="seg-cast">👥 '+esc(castLine)+'</div>':'')+'</div><div class="jt-segment-videos"><div class="jt-video host" data-video="host-'+i+'"><div class="jt-video-placeholder">🎙️ Plateau — en attente…</div><div class="jt-video-label"><span class="who">🎙️ '+esc(state.jt.host.name||'Plateau')+'</span><span class="loc">Plateau</span></div></div><div class="jt-video reporter" data-video="reporter-'+i+'"><div class="jt-video-placeholder">📍 Sur place — en attente…</div><div class="jt-video-label"><span class="who">📍 '+esc(s.reporter.name)+'</span><span class="loc">'+esc((s.location||'').slice(0,40))+'</span></div></div></div>';grid.appendChild(seg)});grid.dataset.built='1';g.style.display='block'}
+function setJTVideo(key,url){const el=document.querySelector('.jt-video[data-video="'+key+'"]');if(!el)return;const ph=el.querySelector('.jt-video-placeholder');if(ph)ph.remove();const ex=el.querySelector('video');if(ex)ex.remove();const v=document.createElement('video');v.controls=true;v.preload='metadata';v.playsInline=true;v.src=url;el.insertBefore(v,el.firstChild)}
+
+function addMediaLogEntry(kind,url){const log=document.getElementById('media-log');if(!log)return;const empty=log.querySelector('div[style]');if(empty)empty.remove();const time=new Date().toLocaleTimeString('fr-FR',{hour12:false});const el=document.createElement('div');el.className='media-log-entry';const dU=url.length>120?url.slice(0,120)+'…':url;el.innerHTML='<span style="font-size:.58rem;padding:.15rem .4rem;border-radius:2px;text-transform:uppercase;font-weight:700;background:rgba(232,123,53,.15);color:var(--acc2);">'+kind+'</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><a href="'+esc(url)+'" target="_blank" rel="noopener" style="color:var(--acc);text-decoration:none;font-size:.66rem;">'+esc(dU)+'</a></span><span style="color:var(--faint);font-size:.62rem;">'+time+'</span>';log.appendChild(el);const cEl=document.getElementById('medialog-count');if(cEl)cEl.textContent=String(log.querySelectorAll('.media-log-entry').length)}
+
+// ─── SESSION ───
+function saveSession(){try{const data={newsItems:state.newsItems.slice(0,10),newsMethod:state.newsMethod,segCount:state.segCount,durationSeconds:state.durationSeconds,director:state.director,palette:state.palette,jt:state.jt,rawScenarioResponse:state.rawScenarioResponse,hostImage:state.hostImage,sceneImages:state.sceneImages,videos:state.videos.map(v=>({key:v.key,label:v.label,status:v.status,progress:v.progress,videoId:v.videoId,videoUrl:v.videoUrl})),timestamp:Date.now()};localStorage.setItem(LS.SESSION,JSON.stringify(data))}catch(e){}}
+function loadSession(){try{const raw=localStorage.getItem(LS.SESSION);if(!raw)return null;const data=JSON.parse(raw);if(Date.now()-(data.timestamp||0)>24*3600*1000)return null;return data}catch(e){return null}}
+function clearSession(){try{localStorage.removeItem(LS.SESSION)}catch(e){}}
+function restoreSession(){const data=loadSession();if(!data||!data.jt)return;Object.assign(state,{newsItems:data.newsItems||[],newsMethod:data.newsMethod||'',segCount:data.segCount||3,durationSeconds:data.durationSeconds||5,director:data.director||'wes_anderson',palette:data.palette||'electric_coral_cyan',jt:data.jt,rawScenarioResponse:data.rawScenarioResponse||'',hostImage:data.hostImage||null,sceneImages:data.sceneImages||{},videos:data.videos||[]});renderNewsList();if(state.jt){document.getElementById('news-status').textContent='Session restaurée.';renderJT();ensureJTGallerySkeleton();renderImagesGrid();state.videos.forEach(v=>{if(v.status==='done'&&v.videoUrl){setJTVideo(v.key,v.videoUrl);addMediaLogEntry('video',v.videoUrl)}});renderQueue();if(state.videos.filter(v=>v.status==='failed'||v.status==='retry').length>0)showResumeButton();if(state.videos.filter(v=>v.status==='done').length>0)showDownloadButton()}debugLog('success','SESSION','Session restaurée — '+state.videos.filter(v=>v.status==='done').length+' vidéos OK')}
+
+function showResumeButton(){const btn=document.getElementById('resume-btn');if(!btn)return;const has=state.videos.some(v=>v.status==='failed'||v.status==='retry'||v.status==='pending');if(has&&!state.isRunning)btn.classList.add('visible');else btn.classList.remove('visible');const rb=document.getElementById('retry-videos-btn');if(rb){if(has&&!state.isRunning)rb.style.display='block';else rb.style.display='none'}}
+function showDownloadButton(){const btn=document.getElementById('download-all-btn');if(!btn)return;btn.style.display=state.videos.filter(v=>v.status==='done'&&v.videoUrl).length>0?'block':'none'}
+
+async function downloadAllVideos(){const d=state.videos.filter(v=>v.status==='done'&&v.videoUrl);if(!d.length){showToast('Aucune vidéo','warn');return}showToast('Téléchargement de '+d.length+'…','success',3000);for(const v of d){try{const res=await fetch(v.videoUrl);const blob=await res.blob();const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=v.key+'.mp4';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),2000);await sleep(600)}catch(e){}}showToast('Téléchargements terminés','success')}
+
+// 🆕 updateJTButton corrigé — vérifie les 3 tâches
+function updateJTButton(){
+  const btn=document.getElementById('jt-btn');if(!btn)return;
+  const tasks=['text','image','video'];
+  const missing=[];
+  for(const t of tasks){
+    const cfg=resolveTaskConfig(t);
+    const hasKey=!!cfg.key||cfg.provider==='custom';
+    const hasUrl=!!(cfg.model&&cfg.model.url);
+    if(!hasKey)missing.push(t+' (clé '+cfg.provider+')');
+    else if(!hasUrl)missing.push(t+' (URL '+cfg.provider+')');
+  }
+  const ok=missing.length===0;
+  btn.disabled=!ok||state.isRunning;
+  const cfgText=resolveTaskConfig('text');
+  if(state.isRunning){
+    btn.innerHTML='⏳ JT en cours…<span style="display:block;font-size:.65rem;color:var(--dim);margin-top:.4rem;">Ne fermez pas l\'onglet</span>';
+  }else if(!ok){
+    btn.innerHTML='🔑 Configuration incomplète<span style="display:block;font-size:.65rem;color:var(--dim);margin-top:.4rem;font-weight:400;text-transform:none;">Manque : '+missing.join(', ')+'</span>';
+  }else{
+    btn.innerHTML='▶ Lancer le JT<span style="display:block;font-size:.65rem;color:var(--dim);margin-top:.4rem;">'+state.segCount+' infos · '+(state.segCount*2)+' vidéos · '+PROVIDER_PRESETS[cfgText.provider].label+'</span>';
+  }
+}
+
+// ─── PIPELINE ───
+async function startJT(){
+  if(state.isRunning)return;
+  const cfgText=resolveTaskConfig('text');
+  if(!cfgText.key&&cfgText.provider!=='custom'){showToast('Clé API manquante','error');return}
+  state.isRunning=true;state.stopRequested=false;state.consecutiveVideoFailures=0;videoImmediateRejections=0;state.pipelineStoppedReason=null;
+  state.jt=null;state.rawScenarioResponse='';state.hostImage=null;state.sceneImages={};state.videos=[];
+  clearSession();
+  ['jt-card','images-grid','queue','gallery-grid'].forEach(id=>{const el=document.getElementById(id);if(el){if(id==='gallery-grid')el.dataset.built='0';else el.innerHTML=''}});
+  document.getElementById('jt-panel').classList.remove('visible');
+  document.getElementById('queue').style.display='none';
+  document.getElementById('gallery').style.display='none';
+  document.getElementById('media-log').innerHTML='<div style="font-size:.72rem;color:var(--dim);font-family:var(--fm);">Les URLs apparaîtront ici.</div>';
+  document.getElementById('medialog-count').textContent='0';
+  document.getElementById('stop-btn').classList.add('visible');
+  document.getElementById('resume-btn').classList.remove('visible');
+  document.getElementById('retry-videos-btn').style.display='none';
+  document.getElementById('download-all-btn').style.display='none';
+  document.getElementById('jt-btn').disabled=true;
+  document.getElementById('phase-bar').classList.add('visible');
+  setProgress(0);
+  await ensureWakeLockActive();
+  const totalStart=Date.now();
+  debugLog('state','START','════════════════════════════════════════');
+  debugLog('state','START','DÉMARRAGE DU JT (v6.1)');
+  debugLog('state','CONFIG','Texte : '+cfgText.provider+' ('+cfgText.model.model+')');
+  debugLog('state','CONFIG','Image : '+resolveTaskConfig('image').provider);
+  debugLog('state','CONFIG','Vidéo : '+resolveTaskConfig('video').provider);
+  try{
+    setPhase('text','📡 Récupération des actualités…','');setStatus('Chargement des Google News…');setProgress(5);
+    const category=document.getElementById('news-category').value;
+    const newsResult=await fetchGoogleNewsRSSWithFallback(category);
+    state.newsItems=newsResult.items;state.newsMethod=newsResult.method;
+    renderNewsList();
+    document.getElementById('news-status').textContent=newsResult.items.length+' actualités ('+newsResult.method+').';
+
+    setPhase('text','🧠 Analyse IA — '+state.segCount+' infos…','');setProgress(10);
+    const jt=await generateJTScenario(state.newsItems,state.segCount,state.director,state.palette);
+    state.jt=jt;state.segCount=jt.segments.length;setProgress(20);
+    renderJT();ensureJTGallerySkeleton();renderImagesGrid();
+    state.videos=[];
+    jt.segments.forEach((s,i)=>{state.videos.push({key:'host-'+i,label:'🎙️ Plateau — sujet '+(i+1),status:'pending',progress:null,videoId:null,videoUrl:null,startTime:null});state.videos.push({key:'reporter-'+i,label:'📍 '+s.reporter.name+' — sujet '+(i+1),status:'pending',progress:null,videoId:null,videoUrl:null,startTime:null})});
+    renderQueue();saveSession();
+
+    setPhase('images','🎨 Création du chroniqueur plateau…','');setStatus('Création image plateau…');setProgress(25);
+    try{
+      const hostUrl=await generateImage(buildHostImagePrompt(jt.host,state.director,state.palette));
+      state.hostImage=hostUrl;updateHostImageCard(hostUrl);addMediaLogEntry('image',hostUrl);
+      setProgress(30);saveSession();
+    }catch(e){debugLog('warn','HOST','Échec : '+e.message)}
+
+    setPhase('images','🎨 Création des '+state.segCount+' équipes sur place…','');
+    const imageQueue=createRateLimitedQueue(IMAGE_PARALLEL,IMAGE_INTERVAL_MS);
+    const imgTasks=[];let imagesDone=0;
+    for(let i=0;i<jt.segments.length;i++){
+      const idx=i;const seg=jt.segments[idx];
+      imgTasks.push(imageQueue.add(async()=>{
+        if(state.stopRequested)return;
+        try{
+          const url=await generateImage(buildReporterImagePrompt(seg,state.director,state.palette));
+          state.sceneImages['reporter-'+idx]={url,name:seg.reporter.name};
+          updateReporterImageCard(idx,url,seg.reporter.name);addMediaLogEntry('image',url);
+          imagesDone++;setProgress(30+(imagesDone/jt.segments.length)*15);saveSession();
+        }catch(e){
+          if(e.message==='Arrêt demandé')return;
+          state.sceneImages['reporter-'+idx]={url:null,name:seg.reporter.name,failed:true};
+          updateReporterImageCard(idx,null,seg.reporter.name,true);
+        }
+      }));
+    }
+    await Promise.allSettled(imgTasks);
+    await imageQueue.idle();
+
+    setPhase('videos','🎬 Génération des '+state.videos.length+' vidéos…','');setProgress(45);
+    createVideoIntervalMs=VIDEO_INTERVAL_SAFE;videoAttemptsSinceLastError=0;videoImmediateRejections=0;
+    const pollingTasks=[];
+    for(let i=0;i<state.videos.length;i++){
+      if(state.stopRequested)break;
+      const item=state.videos[i];
+      const isHost=item.key.startsWith('host-');
+      const segIdx=parseInt(item.key.split('-')[1],10);
+      const seg=jt.segments[segIdx];
+      const imageUrl=isHost?state.hostImage:(state.sceneImages['reporter-'+segIdx]&&state.sceneImages['reporter-'+segIdx].url);
+      if(!imageUrl){item.status='failed';item.progress='Image manquante';renderQueue();continue}
+      item.status='creating';item.progress='Préparation…';renderQueue();
+      markSeg(segIdx,'active');
+      setPhase('videos','🎬 '+(isHost?'Plateau':'Reporter')+' — sujet '+(segIdx+1)+' / '+jt.segments.length,'');
+      setProgress(45+(i/state.videos.length)*50);
+      try{
+        const prompt=isHost?buildHostVideoPrompt(jt,seg,state.director,state.palette):buildReporterVideoPrompt(jt,seg,state.director,state.palette);
+        const videoId=await generateVideo(imageUrl,imageUrl,prompt);
+        item.videoId=videoId;item.startTime=Date.now();item.status='processing';item.progress='En cours…';
+        renderQueue();state.consecutiveVideoFailures=0;saveSession();
+        pollingTasks.push((async()=>{
+          try{
+            const videoUrl=await pollVideo(videoId,prog=>{item.progress=prog;renderQueue()});
+            const elapsed=Date.now()-item.startTime;recordGenerationTime('video',elapsed);
+            item.status='done';item.videoUrl=videoUrl;item.progress='Terminé';renderQueue();
+            setJTVideo(item.key,videoUrl);addMediaLogEntry('video',videoUrl);
+            if(!isHost)markSeg(segIdx,'done');
+            saveSession();showDownloadButton();
+          }catch(e){
+            if(e.message==='Arrêt demandé'){item.status='failed';item.progress='Arrêté'}
+            else{item.status='failed';item.progress='Échec'}
+            renderQueue();
+          }
+        })());
+      }catch(e){
+        if(e.message==='Arrêt demandé')break;
+        if(e.message==='QUEUE_SATURATED'){
+          state.pipelineStoppedReason='File saturée';
+          setStatus('⚠️ File saturée — pipeline arrêté. Réessayez dans 30–60 min.');
+          for(let k=i;k<state.videos.length;k++){if(state.videos[k].status==='pending'||state.videos[k].status==='creating')state.videos[k].status='retry'}
+          state.videos[i].status='retry';state.videos[i].progress='À relancer';
+          renderQueue();saveSession();break;
+        }
+        item.status='failed';item.progress='Échec';state.consecutiveVideoFailures++;renderQueue();
+        if(state.consecutiveVideoFailures>=MAX_CONSECUTIVE_FAILURES){
+          state.pipelineStoppedReason='Circuit breaker';
+          setStatus('⚠️ Pipeline interrompu');
+          for(let k=i+1;k<state.videos.length;k++){if(state.videos[k].status==='pending')state.videos[k].status='retry'}
+          renderQueue();saveSession();break;
+        }
+      }
+      if(i<state.videos.length-1&&!state.stopRequested){
+        const waitSec=Math.ceil(createVideoIntervalMs/1000);
+        for(let r=waitSec;r>0;r--){if(state.stopRequested)break;setPhase('videos','🌬️ Respiration — prochaine vidéo dans '+r+'s','');await sleep(1000)}
+      }
+    }
+    if(pollingTasks.length>0){setPhase('videos','🎞️ Finalisation…','');setProgress(95);await Promise.allSettled(pollingTasks)}
+    setPhase('done','✦ JT terminé ✦','');setProgress(100);
+  }catch(e){
+    debugLog('error','GLOBAL',e.message);
+  }
+  const totalElapsed=(Date.now()-totalStart)/1000;
+  const doneV=state.videos.filter(v=>v.status==='done').length;
+  const totalV=state.videos.length;
+  let summary;
+  if(state.stopRequested)summary='Arrêté — '+doneV+'/'+totalV;
+  else if(state.pipelineStoppedReason)summary='⚠️ Interrompu ('+state.pipelineStoppedReason+') — '+doneV+'/'+totalV;
+  else summary='✦ JT prêt — '+doneV+'/'+totalV+' vidéos en '+formatEta(totalElapsed)+' ✦';
+  debugLog('state','FIN',summary);
+  setStatus(summary);saveSession();
+  await sleep(4500);setStatus(null);
+  state.isRunning=false;state.stopRequested=false;
+  document.getElementById('stop-btn').classList.remove('visible');
+  updateJTButton();showResumeButton();showDownloadButton();
+  if(doneV>0)showToast(doneV+' vidéo'+(doneV>1?'s':'')+' générée'+(doneV>1?'s':''),'success',4000);
+  else if(state.pipelineStoppedReason)showToast(state.pipelineStoppedReason+' — réessayez plus tard','warn',5000);
+  await deactivateWakeLock();
+}
+
+async function retryFailedVideos(){
+  if(state.isRunning)return;
+  const failed=state.videos.filter(v=>v.status==='failed'||v.status==='retry'||v.status==='pending');
+  if(!failed.length){showToast('Aucune vidéo à relancer','warn');return}
+  state.isRunning=true;state.stopRequested=false;state.consecutiveVideoFailures=0;videoImmediateRejections=0;
+  document.getElementById('jt-btn').disabled=true;
+  document.getElementById('stop-btn').classList.add('visible');
+  document.getElementById('resume-btn').classList.remove('visible');
+  document.getElementById('retry-videos-btn').style.display='none';
+  await ensureWakeLockActive();
+  failed.forEach(v=>{v.status='pending';v.progress=null;v.videoId=null});
+  renderQueue();
+  const jt=state.jt;
+  try{
+    createVideoIntervalMs=VIDEO_INTERVAL_SAFE;
+    for(let i=0;i<state.videos.length;i++){
+      if(state.stopRequested)break;
+      const item=state.videos[i];if(item.status==='done')continue;
+      const isHost=item.key.startsWith('host-');
+      const segIdx=parseInt(item.key.split('-')[1],10);
+      const seg=jt.segments[segIdx];
+      const imageUrl=isHost?state.hostImage:(state.sceneImages['reporter-'+segIdx]&&state.sceneImages['reporter-'+segIdx].url);
+      if(!imageUrl){item.status='failed';item.progress='Image manquante';renderQueue();continue}
+      item.status='creating';item.progress='Préparation…';renderQueue();
+      setPhase('videos','🔄 Relance '+item.label,'');
+      try{
+        const prompt=isHost?buildHostVideoPrompt(jt,seg,state.director,state.palette):buildReporterVideoPrompt(jt,seg,state.director,state.palette);
+        const videoId=await generateVideo(imageUrl,imageUrl,prompt);
+        item.videoId=videoId;item.startTime=Date.now();item.status='processing';item.progress='En cours…';
+        renderQueue();state.consecutiveVideoFailures=0;
+        const videoUrl=await pollVideo(videoId,prog=>{item.progress=prog;renderQueue()});
+        const elapsed=Date.now()-item.startTime;recordGenerationTime('video',elapsed);
+        item.status='done';item.videoUrl=videoUrl;item.progress='Terminé';renderQueue();
+        setJTVideo(item.key,videoUrl);addMediaLogEntry('video',videoUrl);
+        if(!isHost)markSeg(segIdx,'done');
+      }catch(e){
+        if(e.message==='Arrêt demandé')break;
+        if(e.message==='QUEUE_SATURATED'){
+          item.status='retry';item.progress='À relancer';
+          for(let k=i+1;k<state.videos.length;k++){if(state.videos[k].status==='pending')state.videos[k].status='retry'}
+          renderQueue();break;
+        }
+        item.status='failed';item.progress='Échec';state.consecutiveVideoFailures++;renderQueue();
+        if(state.consecutiveVideoFailures>=MAX_CONSECUTIVE_FAILURES){
+          for(let k=i+1;k<state.videos.length;k++){if(state.videos[k].status==='pending')state.videos[k].status='retry'}
+          renderQueue();break;
+        }
+      }
+      if(i<state.videos.length-1&&!state.stopRequested){
+        const waitSec=Math.ceil(createVideoIntervalMs/1000);
+        for(let r=waitSec;r>0;r--){if(state.stopRequested)break;setPhase('videos','🌬️ Respiration — '+r+'s','');await sleep(1000)}
+      }
+    }
+  }catch(e){debugLog('error','RETRY-GLOBAL',e.message)}
+  saveSession();
+  state.isRunning=false;state.stopRequested=false;
+  document.getElementById('stop-btn').classList.remove('visible');
+  updateJTButton();showResumeButton();showDownloadButton();
+  const doneV=state.videos.filter(v=>v.status==='done').length;
+  showToast('Relance terminée — '+doneV+'/'+state.videos.length,'success',4000);
+  await deactivateWakeLock();
+}
+
+// ─── INIT ───
+(function init(){
+  loadProviderConfig();
+  bindProviderUI();
+
+  document.querySelectorAll('.provider-tab').forEach(t=>t.classList.toggle('active',t.dataset.provider===state.currentProvider));
+  document.querySelectorAll('.provider-section').forEach(s=>s.classList.toggle('active',s.dataset.providerPanel===state.currentProvider));
+  document.getElementById('provider-badge').textContent=PROVIDER_PRESETS[state.currentProvider].label;
+  hydrateProviderForm(state.currentProvider);
+  document.getElementById('task-routing').value=state.taskRouting;
+  document.getElementById('task-routing-split').style.display=state.taskRouting==='custom_split'?'block':'none';
+  ['text','image','video'].forEach(t=>{const sel=document.getElementById('routing-'+t);if(sel)sel.value=state['routing'+t.charAt(0).toUpperCase()+t.slice(1)]});
+
+  document.querySelectorAll('[data-toggle]').forEach(h=>h.addEventListener('click',()=>document.getElementById(h.dataset.toggle).classList.toggle('open')));
+
+  document.getElementById('jt-btn').addEventListener('click',startJT);
+  document.getElementById('stop-btn').addEventListener('click',()=>{state.stopRequested=true;setStatus('Arrêt en cours…')});
+  document.getElementById('resume-btn').addEventListener('click',retryFailedVideos);
+  document.getElementById('retry-videos-btn').addEventListener('click',retryFailedVideos);
+  document.getElementById('download-all-btn').addEventListener('click',downloadAllVideos);
+  document.getElementById('watchdog-toggle-btn').addEventListener('click',()=>{state.watchdogEnabled?stopWatchdog():startWatchdog()});
+  document.getElementById('agnes-check-btn').addEventListener('click',async()=>{
+    const s=await checkAgnesQueueStatus();
+    if(s==='available')showToast('🟢 File disponible','success',4000);
+    else if(s==='saturated')showToast('🔴 File saturée','warn',4000);
+    else showToast('⏳ Statut inconnu','warn',3000);
+  });
+
+  document.getElementById('seg-count-select').addEventListener('change',e=>{state.segCount=parseInt(e.target.value,10);updateJTButton()});
+  document.getElementById('duration-select').addEventListener('change',e=>{state.durationSeconds=parseInt(e.target.value,10);updateJTButton()});
+  document.getElementById('director-select').addEventListener('change',e=>{state.director=e.target.value});
+  document.querySelectorAll('.palette-btn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.palette-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.palette=b.dataset.palette}));
+
+  document.getElementById('debug-header').addEventListener('click',e=>{if(e.target.tagName==='BUTTON')return;toggleDebugCollapse()});
+  document.getElementById('debug-collapse-btn').addEventListener('click',e=>{e.stopPropagation();toggleDebugCollapse()});
+  document.getElementById('debug-clear-btn').addEventListener('click',e=>{e.stopPropagation();clearDebug()});
+  document.getElementById('debug-clear-cache-btn').addEventListener('click',e=>{e.stopPropagation();clearAllCaches()});
+  document.getElementById('debug-copy-btn').addEventListener('click',e=>{e.stopPropagation();copyDebug()});
+  document.getElementById('debug-export-btn').addEventListener('click',e=>{e.stopPropagation();exportDebug()});
+
+  const rawToggle=document.getElementById('raw-scenario-toggle');
+  if(rawToggle)rawToggle.addEventListener('click',()=>{const el=document.getElementById('raw-scenario');if(!el)return;el.style.display=el.style.display==='none'?'block':'none';rawToggle.textContent=el.style.display==='none'?'▸ Voir JSON brut':'▾ Masquer'});
+  const copyScen=document.getElementById('copy-scenario-btn');
+  if(copyScen)copyScen.addEventListener('click',()=>{const txt=state.rawScenarioResponse||'';if(!txt){showToast('Aucun JSON','warn');return}legacyCopy(txt,ok=>showToast(ok?'Copié':'Erreur',ok?'success':'error'))});
+
+  try{wakeLockEnabled=localStorage.getItem(LS.WAKE_LOCK)!=='0'}catch(e){}
+  updateJTButton();updateTimingDisplay();renderNewsList();
+  initWatchdog();
+  restoreSession();
+
+  debugLog('success','INIT','NewsReel Studio v6.1 prêt');
+  debugLog('info','INIT','Provider actif : '+state.currentProvider);
+  debugLog('info','INIT','Routing : '+state.taskRouting);
+})();
+</script>
+<script id="theologicus-config-bridge-mirror">
+/* v498 — PONT DE CONFIGURATION (sens NewsReel -> AI VIDEO).
+   Quand NewsReel enregistre sa config, on recopie la clé Agnes vers
+   agnes_api_key (clé partagée d'AI VIDEO) : une seule clé pour les deux UIs. */
+(function () {
+  try {
+    if (typeof window.saveProviderConfig !== 'function') return;
+    var orig = window.saveProviderConfig;
+    window.saveProviderConfig = function () {
+      var r = orig.apply(this, arguments);
+      try {
+        // On relit la config VENANT D'ÊTRE écrite par saveProviderConfig :
+        // `state` est un `const` de portée lexicale (pas une propriété de
+        // window), donc on ne peut pas s'y fier depuis un script séparé.
+        var keys = {};
+        try { keys = JSON.parse(localStorage.getItem('newsreel_provider_keys') || '{}'); } catch (e) {}
+        var k = String(keys.agnes || '').trim();
+        if (k) localStorage.setItem('agnes_api_key', k);
+      } catch (e) {}
+      return r;
+    };
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
