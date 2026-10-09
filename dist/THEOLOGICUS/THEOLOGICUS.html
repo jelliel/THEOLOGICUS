@@ -44936,61 +44936,81 @@ window.continueTradApart = async function (msgId) {
     return out + esc(orig.slice(last));
   }
 
-  var _bibStarted = false, _bibVerses = null;
-  function ensureBibleText(cb){
-    if (C.bib && C.bib !== 'loading') { if (cb) cb(); return; }
-    if (_bibStarted){
-      var iv = setInterval(function(){ if (C.bib && C.bib !== 'loading'){ clearInterval(iv); if (cb) cb(); } }, 300);
+  /* v510 — RECHERCHE BIBLIQUE MULTILINGUE : on peut interroger le texte
+     français, latin, grec (NT), syriaque ou hébreu (AT). Chaque version est
+     chargée à la demande (mise en cache) et nettoyée si strong-taggée. */
+  var BIB_META = {
+    fr:  { nom: 'Français',   nettoie: false, url: function (b) { return 'bible/b' + b + '.js'; } },
+    la:  { nom: 'Latin',      nettoie: false, url: function (b) { return 'biblelt/b' + b + '.js'; } },
+    gr:  { nom: 'Grec (NT)',  nettoie: true,  url: function (b) { return 'biblegr/b' + b + '.js'; } },
+    syr: { nom: 'Syriaque',   nettoie: false, url: function (b) { return 'syriaque/b' + b + '.js'; } },
+    hb:  { nom: 'Hébreu (AT)', nettoie: true, url: function (b) { return 'biblehb/b' + b + '.js'; } }
+  };
+  var BIB_VERSION = 'fr';
+  var _bibEtat = {};   /* version -> { etat: 'loading'|true|false, versets: [] } */
+
+  function bibNettoie(s) {
+    return String(s || '').split(/\s+/).map(function (t) { return t.split('|')[0]; }).filter(Boolean).join(' ');
+  }
+  function chargerVersionBible(vk, cb) {
+    var st = _bibEtat[vk];
+    if (st && st.etat === true) { if (cb) cb(st.versets); return; }
+    if (st && st.etat === 'loading') {
+      var iv = setInterval(function () { if (_bibEtat[vk].etat !== 'loading') { clearInterval(iv); if (cb) cb(_bibEtat[vk].versets); } }, 300);
       return;
     }
-    _bibStarted = true; C.bib = 'loading';
-    var restant = 66, livres = {};
-    for (var n = 1; n <= 66; n++){
-      (function(n){
-        fetch('bible/b' + n + '.js').then(function(r){ return r.text(); }).then(function(t){
+    _bibEtat[vk] = { etat: 'loading', versets: [] };
+    C.bib = true;   /* le moteur devient « disponible » pour le rendu */
+    var meta = BIB_META[vk], restant = 66, livres = {};
+    for (var n = 1; n <= 66; n++) {
+      (function (n) {
+        fetch(meta.url(n)).then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+          if (!t) return;
           try {
             var ancre = t.indexOf('||{})[');
             var i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
             var j = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
             livres[n] = (j[n] && Object.keys(j).length === 1) ? j[n] : j;
           } catch (e) {}
-        }).catch(function(){}).then(function(){
-          if (--restant === 0){ C.bib = Object.keys(livres).length ? livres : false; if (cb) cb(); }
+        }).catch(function () {}).then(function () {
+          if (--restant === 0) {
+            var vs = [];
+            Object.keys(livres).forEach(function (n2) {
+              var livre = livres[n2];
+              Object.keys(livre).forEach(function (c) {
+                var chap = livre[c];
+                Object.keys(chap).forEach(function (v) {
+                  if (typeof chap[v] === 'string') vs.push({ n: +n2, c: +c, v: +v, t: meta.nettoie ? bibNettoie(chap[v]) : chap[v] });
+                });
+              });
+            });
+            _bibEtat[vk] = { etat: vs.length ? true : false, versets: vs };
+            if (cb) cb(vs);
+          }
         });
       })(n);
     }
   }
-  function versesBible(){
-    if (_bibVerses) return _bibVerses;
-    if (!C.bib || C.bib === 'loading') return null;
-    var out = [];
-    Object.keys(C.bib).forEach(function(n){
-      var livre = C.bib[n];
-      Object.keys(livre).forEach(function(c){
-        var chap = livre[c];
-        Object.keys(chap).forEach(function(v){
-          if (typeof chap[v] === 'string') out.push({ n: +n, c: +c, v: +v, t: chap[v] });
-        });
-      });
-    });
-    _bibVerses = out;
-    return out;
+  function versesBible() {
+    var st = _bibEtat[BIB_VERSION];
+    return (st && st.etat === true) ? st.versets : null;
   }
 
   var ENGINES = [
     /* v504 — Bible : plein texte des 66 livres (corpus central). */
-    { key: 'bib', label: '📖 Bible — versets', src: 'texte local · 66 livres',
-      run: function(q){
+    { key: 'bib', label: '📖 Bible — versets', src: 'texte local · version au choix',
+      run: function (q) {
         var vs = versesBible();
         if (!vs) return [];
         var nq = norm(q);
         if (nq.length < 3) return [];
         var out = [];
-        for (var i = 0; i < vs.length && out.length < 40; i++){
+        for (var i = 0; i < vs.length && out.length < 40; i++) {
           var x = vs[i];
-          if (norm(x.t).indexOf(nq) >= 0){
+          if (norm(x.t).indexOf(nq) >= 0) {
             var ref = NOMS_BIBLE[x.n - 1] + ' ' + x.c + ':' + x.v;
-            out.push({ h: '📖 <b>' + esc(ref) + '</b>', snHtml: surligne(x.t, q), go: { bref: ref }, syn: ref });
+            out.push({ h: '📖 <b>' + esc(ref) + '</b> <span style="opacity:.55">· ' + esc(BIB_META[BIB_VERSION].nom) + '</span>',
+                       snHtml: surligne(x.t, q), go: { bref: ref }, syn: ref });
           }
         }
         return out;
@@ -45226,7 +45246,7 @@ window.continueTradApart = async function (msgId) {
       + '<div id="v180-box">'
       + '<div id="v180-head"><span>🔎 Recherche globale<small>Bible · Pères · Doctrines · Arguments · Articles · Sefaria · Talmud · Mishna · Philon · Coran · Thèmes</small></span>'
       + '<button id="v180-close" aria-label="Fermer">✕</button></div>'
-      + '<div id="v180-q"><input id="v180-qin" placeholder="Un mot, un auteur, un thème, une œuvre… (Ctrl+K)" /></div>'
+      + '<div id="v180-q"><input id="v180-qin" placeholder="Un mot, un auteur, un thème, une œuvre… (Ctrl+K)" /><select id="v180-bibver" title="Version interrogée par le moteur Bible (plein texte)"><option value="fr">📖 Français</option><option value="la">📜 Latin</option><option value="gr">🇬🇷 Grec (NT)</option><option value="syr">ܣ Syriaque</option><option value="hb">✡ Hébreu (AT)</option></select></div>'
       + '<div id="v180-status"></div>'
       + '<div id="v180-body"><div class="v180-hint">Tapez une recherche : toutes les bibliothèques hors-ligne sont interrogées d\u2019un coup, résultats groupés par source. Les textes s\u2019affichent sur place avec traduction FR ; « ouvrir » plonge dans le panneau correspondant.</div></div></div>';
     document.body.appendChild(p);
@@ -45289,6 +45309,14 @@ window.continueTradApart = async function (msgId) {
       if (tm) clearTimeout(tm);
       tm = setTimeout(runSearch, 260);
     });
+    /* v510 — sélecteur de version : recharge la version choisie puis relance */
+    var bv = p.querySelector('#v180-bibver');
+    if (bv) bv.addEventListener('change', function () {
+      BIB_VERSION = bv.value;
+      var stat = document.getElementById('v180-status');
+      if (stat) stat.textContent = 'chargement de la version ' + BIB_META[BIB_VERSION].nom + '…';
+      chargerVersionBible(BIB_VERSION, function () { runSearch(); });
+    });
     return p;
   }
   function close(){
@@ -45301,7 +45329,7 @@ window.continueTradApart = async function (msgId) {
     var stat = document.getElementById('v180-status');
     if (stat) stat.textContent = 'chargement des bibliothèques…';
     ensureQuranText();               /* v184 — texte coranique en tâche de fond */
-    ensureBibleText();               /* v504 — texte biblique en tâche de fond */
+    chargerVersionBible(BIB_VERSION);  /* v510 — version biblique choisie en tâche de fond */
     loadAll(function(){
       var st1 = document.getElementById('v180-status');
       if (st1) st1.textContent = '';
