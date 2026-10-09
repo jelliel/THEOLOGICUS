@@ -53570,6 +53570,55 @@ window.continueTradApart = async function (msgId) {
   window.__v508A11y = { panneaux: PANNEAUX, marquer: marquer, actif: function () { return actif ? actif.id : null; } };
 })();
 </script>
+<script id="v509-design">
+/* v509 — DESIGN SYSTEM UNIFIÉ (Niveau 3, item 6).
+   L'app a 78 modules empilés depuis ~500 versions : les composants (boutons,
+   panneaux, cartes) ont divergé. Plutôt qu'un refactor massif (risqué), on pose
+   une SOURCE DE VÉRITÉ : des jetons (tokens) et un petit jeu de composants
+   communs, que les nouveaux modules (et les prochaines retouches) utilisent.
+   Aucun style existant n'est écrasé — tout est sous le préfixe `ui-`. */
+(function () {
+  'use strict';
+  if (document.getElementById('v509-tokens')) return;
+
+  var CSS = ''
+    + ':root{'
+    + '--ui-bg:#0a0a12;--ui-panel:#16161f;--ui-panel-2:#1a1a28;--ui-border:#2a2a3a;'
+    + '--ui-ink:#e8e6e0;--ui-dim:#8a8896;--ui-faint:#4a4858;'
+    + '--ui-accent:#e5c15a;--ui-accent-2:#e87b35;'
+    + '--ui-ok:#4a9d6a;--ui-err:#c85a4a;--ui-warn:#d4a017;'
+    + '--ui-radius:10px;--ui-radius-sm:6px;'
+    + '--ui-space-1:.35rem;--ui-space-2:.6rem;--ui-space-3:1rem;--ui-space-4:1.5rem;'
+    + '--ui-font:-apple-system,BlinkMacSystemFont,\'Helvetica Neue\',Arial,sans-serif;'
+    + '--ui-mono:ui-monospace,\'SF Mono\',Menlo,monospace;'
+    + '--ui-shadow:0 12px 40px rgba(0,0,0,.5);'
+    + '}'
+    + '.ui-btn{display:inline-flex;align-items:center;gap:.4rem;background:var(--ui-panel-2);color:var(--ui-ink);'
+    + 'border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);padding:.45rem .9rem;'
+    + 'font-family:var(--ui-font);font-size:.8rem;line-height:1.2;cursor:pointer;'
+    + 'transition:border-color .15s,color .15s}'
+    + '.ui-btn:hover{border-color:var(--ui-accent);color:var(--ui-accent)}'
+    + '.ui-btn:focus-visible{outline:2px solid var(--ui-accent);outline-offset:2px}'
+    + '.ui-btn.primary{background-image:linear-gradient(135deg,var(--ui-accent),var(--ui-accent-2));'
+    + 'background-color:var(--ui-accent);color:#1a1a28;border:none;font-weight:700}'
+    + '.ui-btn.ghost{background:transparent;border-color:transparent}'
+    + '.ui-panel{background:var(--ui-panel);border:1px solid var(--ui-border);border-radius:var(--ui-radius);'
+    + 'box-shadow:var(--ui-shadow);padding:var(--ui-space-3)}'
+    + '.ui-card{background:var(--ui-panel-2);border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);'
+    + 'padding:var(--ui-space-2)}'
+    + '.ui-badge{display:inline-block;font-size:.66rem;padding:.1rem .5rem;border-radius:999px;'
+    + 'border:1px solid var(--ui-accent);color:var(--ui-accent)}'
+    + '.ui-muted{color:var(--ui-dim)}'
+    + '.ui-row{display:flex;gap:var(--ui-space-2);flex-wrap:wrap;align-items:center}';
+
+  var s = document.createElement('style');
+  s.id = 'v509-tokens';
+  s.textContent = CSS;
+  (document.head || document.documentElement).appendChild(s);
+
+  window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge'] };
+})();
+</script>
 </body>
 </html>
 </html>
