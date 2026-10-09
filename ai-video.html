@@ -299,6 +299,51 @@
     .preset-row { display:flex; gap:0.35rem; flex-wrap:wrap; margin-bottom:0.5rem; }
     .preset-btn { background:var(--panel-2); color:var(--ink); border:1px solid var(--border); border-radius:999px; padding:0.22rem 0.6rem; font-size:0.68rem; cursor:pointer; font-family:inherit; }
     .preset-btn:hover { border-color:var(--accent); color:var(--accent); }
+    /* v502 — ASSISTANT GUIDÉ (onboarding) : élégant et structuré. */
+    .ob-open-btn { margin-top: 0.5rem; background: var(--panel-2); color: var(--ink); border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.4rem 0.85rem; font-size: 0.74rem; cursor: pointer; font-family: inherit; }
+    .ob-open-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .onboard { position: fixed; inset: 0; z-index: 9500; display: none; align-items: center; justify-content: center; padding: 1.2rem;
+        background: radial-gradient(1100px 560px at 50% -10%, rgba(201,169,97,0.20), transparent 62%), rgba(6,6,12,0.92); backdrop-filter: blur(10px); }
+    .onboard.open { display: flex; }
+    .ob-card { width: 100%; max-width: 760px; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden;
+        background: linear-gradient(180deg,#15151f,#0f0f16); border: 1px solid rgba(201,169,97,0.35); border-radius: 18px; box-shadow: 0 30px 90px rgba(0,0,0,0.72); }
+    .ob-head { padding: 1.1rem 1.4rem 0.7rem; }
+    .ob-title { font-size: 1.15rem; font-weight: 600; background: linear-gradient(135deg,#e5c15a,#e87b35); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .ob-sub { font-size: 0.76rem; color: var(--ink-dim); margin-top: 0.2rem; }
+    .ob-close { background: none; border: none; color: var(--ink-dim); font-size: 1.1rem; cursor: pointer; }
+    .ob-steps { display: flex; gap: 0.3rem; margin-top: 0.7rem; }
+    .ob-dot { flex: 1; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); transition: background 0.35s; }
+    .ob-dot.on { background: linear-gradient(90deg,#e5c15a,#e87b35); }
+    .ob-body { padding: 1.1rem 1.4rem; overflow-y: auto; flex: 1; }
+    .ob-pane { display: none; animation: obIn 0.35s ease; }
+    .ob-pane.on { display: block; }
+    @keyframes obIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .ob-hero { text-align: center; padding: 0.4rem 0 0.2rem; }
+    .ob-hero h2 { font-size: 1.45rem; font-weight: 300; margin-bottom: 0.4rem; color: var(--ink); }
+    .ob-pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin-top: 1rem; }
+    .ob-pillar { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 0.85rem 0.6rem; text-align: center; }
+    .ob-pillar .ic { font-size: 1.4rem; }
+    .ob-pillar .t { font-size: 0.74rem; color: var(--ink); margin-top: 0.35rem; font-weight: 600; }
+    .ob-pillar .d { font-size: 0.66rem; color: var(--ink-dim); margin-top: 0.2rem; line-height: 1.4; }
+    .ob-label { font-size: 0.8rem; color: var(--ink); font-weight: 600; margin: 0.9rem 0 0.45rem; display: block; }
+    .ob-label:first-child { margin-top: 0; }
+    .ob-tip { font-size: 0.71rem; color: var(--ink-dim); margin-top: 0.5rem; line-height: 1.55; }
+    .ob-tip b { color: var(--accent); }
+    .ob-tip a { color: var(--accent); }
+    .ob-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .ob-choice { flex: 1; min-width: 150px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem 0.7rem; cursor: pointer; text-align: left; color: var(--ink); font-family: inherit; transition: all 0.2s; }
+    .ob-choice.on { border-color: var(--accent); background: rgba(201,169,97,0.1); }
+    .ob-choice .t { font-size: 0.78rem; font-weight: 600; }
+    .ob-choice .d { font-size: 0.66rem; color: var(--ink-dim); margin-top: 0.2rem; line-height: 1.4; }
+    .ob-check-list { list-style: none; margin: 0.3rem 0 0; padding: 0; }
+    .ob-check-list li { display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.4rem; font-size: 0.78rem; color: var(--ink); }
+    .ob-check-list li.ok { border-color: var(--success); background: rgba(74,157,106,0.08); }
+    .ob-check-list li.ko { border-color: rgba(200,90,74,0.5); }
+    .ob-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.9rem 1.4rem 1.1rem; border-top: 1px solid var(--border); }
+    .ob-btn { padding: 0.6rem 1.15rem; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--ink); font-family: inherit; font-size: 0.82rem; cursor: pointer; }
+    .ob-btn:hover { border-color: var(--accent); }
+    .ob-btn.primary { background: linear-gradient(135deg,#e5c15a,#e87b35); color: #1a1a28; border: none; font-weight: 700; }
+    .ob-btn.primary:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -308,6 +353,7 @@
     <div class="film-strip"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
     <p class="subtitle">« Studio IA complet — Timeout intelligent »</p>
     <button type="button" id="open-newsreel-btn" class="newsreel-open-btn" title="Ouvrir NewsReel Studio — le JT généré par IA (config partagée)">📰 NewsReel — le JT par IA</button>
+    <button type="button" id="ob-open-btn" class="ob-open-btn" title="Assistant guidé : créer une vidéo réussie, pas à pas">🎓 Guide — créer une vidéo réussie</button>
     <div class="flux-bar">
         <label for="video-parallel">⚡ Parallélisme :</label>
         <select id="video-parallel" title="Jobs simultanés. Agnes gratuit = 1 à la fois ; un endpoint perso peut encaisser davantage.">
@@ -1562,6 +1608,67 @@ window.__v500 = {
     assainirPrompt: assainirPrompt, quotaRestant: quotaRestant, VIDEO_REPLI: VIDEO_REPLI,
     clesAgnes: clesAgnes, rotation: rotationCle, hash: hashPrompt,
     cacheGet: cacheVideoGet, cacheSet: cacheVideoSet, file: verifierFile, etat: state
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   v502 — ASSISTANT GUIDÉ : 5 étapes vers une vidéo réussie.
+   « Réussite assurée » = une liste de contrôle vivante (clé, scène, quota,
+   modèle) avant le lancement, et des choix recommandés à chaque étape.
+   ═══════════════════════════════════════════════════════════════════ */
+const OB_ETAPES = 5;
+let obStep = 0;
+
+function obLigne(ok, txt) { return '<li class="' + (ok ? 'ok' : 'ko') + '"><span>' + (ok ? '✅' : '⚠️') + '</span><span>' + txt + '</span></li>'; }
+
+function obAffiche(n) {
+    obStep = Math.max(0, Math.min(OB_ETAPES - 1, n));
+    const racine = document.getElementById('onboard'); if (!racine) return;
+    racine.querySelectorAll('.ob-pane').forEach(function (p, i) { p.classList.toggle('on', i === obStep); });
+    racine.querySelectorAll('.ob-dot').forEach(function (d, i) { d.classList.toggle('on', i <= obStep); });
+    const sub = document.getElementById('ob-sub'); if (sub) sub.textContent = 'Guide pas à pas — étape ' + (obStep + 1) + '/' + OB_ETAPES;
+    const prev = document.getElementById('ob-prev'); if (prev) prev.style.visibility = obStep === 0 ? 'hidden' : 'visible';
+    const next = document.getElementById('ob-next'); if (next) next.textContent = (obStep === OB_ETAPES - 1) ? '🚀 Lancer la génération' : 'Suivant →';
+    if (obStep === 1) obSyncCle();
+    if (obStep === 3) obSyncPrompt();
+    if (obStep === 4) obMajChecks();
+}
+function obOuvre() { const o = document.getElementById('onboard'); if (!o) return; obAffiche(0); o.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function obFerme() { const o = document.getElementById('onboard'); if (!o) return; o.classList.remove('open'); document.body.style.overflow = ''; try { localStorage.setItem('theologicus_onboard_vu', '1'); } catch (e) {} }
+function obSyncCle() { const k = document.getElementById('ob-key'); if (k && !k.value) k.value = getApiKey(); }
+function obSyncPrompt() { const p = document.getElementById('ob-prompt'); const m = document.getElementById('main-prompt'); if (p && !p.value && m && m.value) p.value = m.value; }
+
+function obMajChecks() {
+    const ul = document.getElementById('ob-checks'); if (!ul) return;
+    const cle = !!getApiKey();
+    const prompt = String(((document.getElementById('ob-prompt') || {}).value) || ((document.getElementById('main-prompt') || {}).value) || '').trim();
+    const reste = quotaRestant();
+    const mode = (state && state.mode) || 'image';
+    const duree = Math.round((state.durationFrames || 153) / FRAME_RATE * 10) / 10;
+    ul.innerHTML =
+        obLigne(cle, cle ? 'Clé Agnes renseignée' : 'Clé Agnes manquante — <b>étape 1</b>') +
+        obLigne(prompt.length > 8, prompt.length > 8 ? 'Scène décrite (' + prompt.length + ' caractères)' : 'Décrivez la scène — <b>étape 4</b>') +
+        obLigne(reste > duree, 'Quota vidéo gratuit : ~' + Math.round(reste) + 's restantes (scène ' + duree + 's)') +
+        obLigne(true, 'Mode : <b>' + escapeHtml(mode) + '</b> · modèle : <b>' + escapeHtml(getSelectedModelId()) + '</b>');
+    const next = document.getElementById('ob-next');
+    if (next) next.disabled = !(cle && prompt.length > 8);
+    const tip = document.getElementById('ob-final-tip');
+    if (tip) tip.textContent = (cle && prompt.length > 8)
+        ? 'Tout est vert ✅ — lancez la génération.'
+        : 'Complétez les points ⚠️ ci-dessus pour débloquer le lancement.';
+}
+
+function obLance() {
+    const cle = document.getElementById('ob-key');
+    if (cle && cle.value.trim()) { try { localStorage.setItem(SK.AGNES, cle.value.trim()); } catch (e) {} }
+    const p = document.getElementById('ob-prompt'); const m = document.getElementById('main-prompt');
+    if (p && m && p.value.trim()) { m.value = p.value; m.dispatchEvent(new Event('input')); }
+    obFerme();
+    setTimeout(function () { try { startGeneration(); } catch (e) { logError('Lancement : ' + escapeHtml(String(e && e.message || e))); } }, 250);
+}
+
+window.__v502 = {
+    ouvre: obOuvre, ferme: obFerme, etape: obAffiche, checks: obMajChecks,
+    courant: function () { return obStep; }, total: OB_ETAPES, etat: state
 };
 function maskKey(k) { return k ? k.slice(0, 6) + '…' + k.slice(-4) : '—'; }
 function formatBytes(b) { if (!b) return '0 o'; if (b < 1024) return b + ' o'; if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko'; return (b / (1024 * 1024)).toFixed(1) + ' Mo'; }
@@ -3266,6 +3373,49 @@ async function enrichWithMistral(btn, textareaId) {
                 showToast('Preset appliqué', 'success', 1200);
             });
         });
+        /* v502 — assistant guidé : câblage DIFFÉRÉ. L'assistant est parsé APRÈS
+           ce script (fin de <body>) : le câbler ici laisserait #ob-steps,
+           #ob-presets, #ob-close… à null (constaté au banc). On attend donc la
+           fin du parsing (readyState) avant de câbler. */
+        function cablerV502() {
+            const st = document.getElementById('ob-steps');
+            if (st) st.innerHTML = Array.from({ length: OB_ETAPES }).map(function () { return '<div class="ob-dot"></div>'; }).join('');
+            const ob = document.getElementById('ob-open-btn'); if (ob) ob.addEventListener('click', obOuvre);
+            const cl = document.getElementById('ob-close'); if (cl) cl.addEventListener('click', obFerme);
+            const sk = document.getElementById('ob-skip'); if (sk) sk.addEventListener('click', obFerme);
+            const pv = document.getElementById('ob-prev'); if (pv) pv.addEventListener('click', function () { obAffiche(obStep - 1); });
+            const nx = document.getElementById('ob-next'); if (nx) nx.addEventListener('click', function () { if (obStep >= OB_ETAPES - 1) obLance(); else obAffiche(obStep + 1); });
+            document.querySelectorAll('#ob-modes [data-mode]').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    document.querySelectorAll('#ob-modes .ob-choice').forEach(function (x) { x.classList.remove('on'); });
+                    b.classList.add('on'); try { setMode(b.dataset.mode); } catch (e) {}
+                });
+            });
+            const od = document.getElementById('ob-duration'); const ds = document.getElementById('duration-select');
+            if (od && ds) {
+                od.innerHTML = ds.innerHTML; od.value = ds.value;
+                od.addEventListener('change', function () { ds.value = od.value; state.durationFrames = parseInt(od.value, 10); });
+            }
+            const op = document.getElementById('ob-presets'); const pr2 = document.getElementById('preset-row');
+            if (op && pr2) {
+                op.innerHTML = pr2.innerHTML;
+                op.querySelectorAll('[data-preset]').forEach(function (b) {
+                    b.addEventListener('click', function () { const t = document.getElementById('ob-prompt'); if (t) { t.value = b.dataset.preset; t.dispatchEvent(new Event('input')); } });
+                });
+            }
+            const tb = document.getElementById('ob-test');
+            if (tb) tb.addEventListener('click', async function () {
+                const inp = document.getElementById('ob-key'); const stt = document.getElementById('ob-key-status');
+                if (inp) { try { localStorage.setItem(SK.AGNES, inp.value.trim()); } catch (e) {} }
+                if (stt) stt.textContent = '🔍 Vérification…';
+                let bon = false; try { bon = await verifyAgnesKey(true); } catch (e) { bon = false; }
+                if (stt) stt.textContent = bon ? '✅ Clé valide — vous pouvez continuer.' : '❌ Clé refusée ou réseau — vérifiez la clé.';
+                obMajChecks();
+            });
+            try { if (localStorage.getItem('theologicus_onboard_vu') !== '1') setTimeout(obOuvre, 900); } catch (e) {}
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cablerV502);
+        else cablerV502();
         try {
             const enAttente = loadPendingTasks();
             if (enAttente.length) {
@@ -4148,6 +4298,67 @@ async function enrichWithMistral(btn, textareaId) {
         <button type="button" id="newsreel-close-btn" title="Fermer">✕</button>
     </div>
     <iframe class="newsreel-frame" id="newsreel-frame" src="about:blank" title="NewsReel Studio"></iframe>
+</div>
+
+<!-- v502 — ASSISTANT GUIDÉ : 5 étapes vers une vidéo réussie. -->
+<div class="onboard" id="onboard">
+    <div class="ob-card">
+        <div class="ob-head">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+                <div><div class="ob-title">🎬 Créer une vidéo réussie</div><div class="ob-sub" id="ob-sub">Guide pas à pas — étape 1/5</div></div>
+                <button type="button" class="ob-close" id="ob-close" title="Fermer">✕</button>
+            </div>
+            <div class="ob-steps" id="ob-steps"></div>
+        </div>
+        <div class="ob-body" id="ob-body">
+            <div class="ob-pane on" data-pane="0">
+                <div class="ob-hero"><h2>Bienvenue dans le studio</h2><p class="ob-sub">Ce guide vous mène à une vidéo réussie du premier coup.</p></div>
+                <div class="ob-pillars">
+                    <div class="ob-pillar"><div class="ic">🆓</div><div class="t">Gratuit d'abord</div><div class="d">Plan gratuit Agnes, quota affiché en direct</div></div>
+                    <div class="ob-pillar"><div class="ic">🛟</div><div class="t">Repli automatique</div><div class="d">Un modèle qui échoue est remplacé tout seul</div></div>
+                    <div class="ob-pillar"><div class="ic">♻️</div><div class="t">Reprise</div><div class="d">Un run interrompu reprend au chargement</div></div>
+                </div>
+                <p class="ob-tip">⏱️ <b>~3 minutes.</b> Aucune carte bancaire n'est requise.</p>
+            </div>
+            <div class="ob-pane" data-pane="1">
+                <label class="ob-label">1 · Votre clé Agnes</label>
+                <div class="ob-row">
+                    <input type="password" class="api-key-input" id="ob-key" placeholder="Clé Agnes (sk-...)" autocomplete="off" style="flex:1;">
+                    <button type="button" class="ob-btn" id="ob-test">🔍 Tester</button>
+                </div>
+                <p class="ob-tip" id="ob-key-status">Collez votre clé, puis « Tester ». <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Obtenir une clé gratuite →</a></p>
+            </div>
+            <div class="ob-pane" data-pane="2">
+                <label class="ob-label">2 · Le type de génération</label>
+                <div class="ob-row" id="ob-modes">
+                    <button type="button" class="ob-choice on" data-mode="image"><div class="t">🖼️ Image → Vidéo</div><div class="d">Le plus fiable : une image guide la vidéo</div></button>
+                    <button type="button" class="ob-choice" data-mode="video"><div class="t">🎥 Vidéo de départ</div><div class="d">Transformer une vidéo existante</div></button>
+                    <button type="button" class="ob-choice" data-mode="combo"><div class="t">🎬 Combo</div><div class="d">Image + vidéo + audio ensemble</div></button>
+                </div>
+                <label class="ob-label">3 · Durée</label>
+                <select id="ob-duration" class="api-key-input" style="width:100%;"></select>
+                <p class="ob-tip">✅ <b>5–6 s = le plus fiable et le plus rapide.</b> Au-delà, la vidéo est découpée en segments puis assemblée automatiquement.</p>
+            </div>
+            <div class="ob-pane" data-pane="3">
+                <label class="ob-label">4 · Décrivez la scène</label>
+                <div class="preset-row" id="ob-presets"></div>
+                <textarea class="prompt-main" id="ob-prompt" placeholder="Ex : un renard traverse une forêt enneigée au crépuscule, lumière dorée, plan large, mouvement fluide."></textarea>
+                <p class="ob-tip">🎯 <b>Sujet + action + décor + lumière.</b> Évitez le texte à l'écran (souvent illisible) et les consignes contradictoires.</p>
+            </div>
+            <div class="ob-pane" data-pane="4">
+                <label class="ob-label">5 · Prêt à générer</label>
+                <ul class="ob-check-list" id="ob-checks"></ul>
+                <p class="ob-tip" id="ob-final-tip">Tout est vert ? Lancez — le studio enchaîne les scènes et vous prévient en cas d'échec.</p>
+            </div>
+        </div>
+        <div class="ob-foot">
+            <button type="button" class="ob-btn" id="ob-prev">← Précédent</button>
+            <div style="display:flex;gap:0.5rem;">
+                <button type="button" class="ob-btn" id="ob-skip">Passer le guide</button>
+                <button type="button" class="ob-btn primary" id="ob-next">Suivant →</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script id="v498-newsreel">
