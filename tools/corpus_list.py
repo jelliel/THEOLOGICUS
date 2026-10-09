@@ -27,6 +27,7 @@ CORPUS = [
 IGNORES = [
     "tools", "dist", "android", "build", "output", "node_modules",
     ".git", ".github", ".workbuddy-ai", "__pycache__", "fonts",
+    "theo_tests",  # v504 : tests unitaires (outillage, pas un corpus embarqué)
 ]
 
 # Nombre de tranches attendu par dossier (contrôle de cohérence) :

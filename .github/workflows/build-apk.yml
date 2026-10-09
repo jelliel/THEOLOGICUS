@@ -25,6 +25,7 @@ on:
       - 'THEOLOGICUS.html'
       - 'ai-video.html'   # v126m : compagnon AI VIDEO — sans lui, un correctif du studio seul ne publiait jamais
       - 'newsreel.html'   # v498 : compagnon NewsReel (JT), ouvert depuis AI VIDEO — même piège que ci-dessus
+      - 'theo_tests/**'   # v504 : tests unitaires du cœur — un test seul doit déclencher la CI
       - 'bible/**'
       - 'quran/**'
       - 'tafsir/**'
@@ -69,8 +70,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Cohérence (assets, copie embarquée, modules)
         run: python tools/verifier_assets.py
+      # v504 — le CŒUR (parseur de références, normalisation) n'était couvert
+      # que par des bancs Playwright bout-en-bout. Ces tests unitaires sont
+      # rapides, déterministes, sans navigateur.
+      - name: Tests unitaires du cœur
+        run: node theo_tests/test_coeur.js
 
   # ── BANCS (v462) ─────────────────────────────────────────────────────
   # Les vérifications vivaient uniquement sur la machine de développement :

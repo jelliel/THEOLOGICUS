@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """Vérifie la cohérence des ASSETS et des MODULES avant publication.
 
-Trois contrôles, chacun motivé par un défaut RÉELLEMENT survenu :
+Contrôles, chacun motivé par un défaut RÉELLEMENT survenu :
+
+0. CORPUS (v504) — un corpus tronqué (tranches manquantes, fichier vide, UTF-8
+   invalide) doit FAIRE ÉCHOUER la CI. Avant, un écart de comptage n'était qu'un
+   avertissement : l'app publiée pouvait être muette en silence.
 
 1. ASSETS — un dossier de données du dépôt absent de `tools/corpus_list.py`
    serait chargé par l'application mais ABSENT des binaires (cas vécu :
@@ -63,8 +67,47 @@ def controle_assets():
             continue
         got = len([f for f in os.listdir(p) if f.startswith(prefixe) and f.endswith(ext) and f != 'index.js'])
         if got != attendu:
-            avertissements.append('%s : %d tranches (attendu %d)' % (nom, got, attendu))
+            # v504 — un nombre de tranches inattendu n'est PLUS un simple
+            # avertissement : un corpus tronqué doit FAIRE ÉCHOUER la CI, sinon
+            # l'app publiée est muette en silence (cas vécu : biblelt/syriaque).
+            erreurs.append('%s : %d tranches (attendu %d)' % (nom, got, attendu))
     return erreurs, avertissements
+
+
+# v504 — contrôles d'intégrité du CONTENU des corpus (pas seulement le nombre).
+# Un fichier vide, tronqué ou mal encodé passait inaperçu : la tranche existait,
+# mais l'app ne pouvait rien en lire.
+def controle_corpus():
+    """Chaque tranche de corpus doit être non vide, en UTF-8 valide, d'une taille
+    plausible. On échantillonne la première ET la dernière tranche (les plus
+    susceptibles d'être tronquées) pour un coût négligeable."""
+    erreurs, infos = [], []
+    TAILLE_MINI = 64  # octets : en dessous, le fichier est quasi sûrement cassé
+    for nom, (prefixe, ext, attendu) in EXPECTED.items():
+        dossier = os.path.join(ROOT, nom)
+        if not os.path.isdir(dossier):
+            continue
+        fichiers = sorted(f for f in os.listdir(dossier)
+                          if f.startswith(prefixe) and f.endswith(ext) and f != 'index.js')
+        if not fichiers:
+            continue
+        echantillon = [fichiers[0], fichiers[-1]]
+        for f in echantillon:
+            p = os.path.join(dossier, f)
+            try:
+                data = open(p, 'rb').read()
+            except OSError as e:
+                erreurs.append('%s/%s : illisible (%s)' % (nom, f, e))
+                continue
+            if len(data) < TAILLE_MINI:
+                erreurs.append('%s/%s : fichier trop petit (%d o) — tronqué ?' % (nom, f, len(data)))
+                continue
+            try:
+                data.decode('utf-8')
+            except UnicodeDecodeError as e:
+                erreurs.append('%s/%s : encodage UTF-8 invalide (%s)' % (nom, f, e))
+        infos.append('%s : %d tranche(s), échantillon vérifié' % (nom, len(fichiers)))
+    return erreurs, infos
 
 
 def controle_copie_embarquee():
@@ -131,7 +174,7 @@ def controle_bancs():
 
 def main():
     erreurs, infos = [], []
-    for controle in (controle_assets, controle_copie_embarquee, controle_modules, controle_bancs):
+    for controle in (controle_assets, controle_corpus, controle_copie_embarquee, controle_modules, controle_bancs):
         e, i = controle()
         erreurs += e
         infos += i
