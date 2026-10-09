@@ -344,6 +344,20 @@
     .ob-btn:hover { border-color: var(--accent); }
     .ob-btn.primary { background: linear-gradient(135deg,#e5c15a,#e87b35); color: #1a1a28; border: none; font-weight: 700; }
     .ob-btn.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    /* v503 — WIZARD PAS-À-PAS : visite guidée avec projecteur. */
+    .tour { position: fixed; inset: 0; z-index: 9600; display: none; }
+    .tour.open { display: block; }
+    .tour-hole { position: absolute; border-radius: 12px; border: 2px solid var(--accent);
+        box-shadow: 0 0 0 9999px rgba(6,6,12,0.74), 0 0 26px rgba(201,169,97,0.55); pointer-events: none;
+        transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease; }
+    .tour-tip { position: absolute; background: linear-gradient(180deg,#15151f,#101018); border: 1px solid rgba(201,169,97,0.4);
+        border-radius: 14px; padding: 0.9rem 1rem; box-shadow: 0 20px 60px rgba(0,0,0,0.72);
+        transition: top 0.28s ease, left 0.28s ease; }
+    .tour-count { font-size: 0.66rem; color: var(--accent); font-family: var(--fm); }
+    .tour-t { font-size: 0.95rem; font-weight: 600; color: var(--ink); margin: 0.25rem 0 0.35rem; }
+    .tour-d { font-size: 0.76rem; color: var(--ink-dim); line-height: 1.5; }
+    .tour-nav { display: flex; gap: 0.4rem; justify-content: space-between; margin-top: 0.85rem; }
+    .tour-nav .ob-btn { padding: 0.42rem 0.8rem; font-size: 0.76rem; }
 </style>
 </head>
 <body>
@@ -382,12 +396,9 @@
     <div class="quickstart" id="quickstart">
         <div class="qs-head" id="qs-head"><span>🚀 Démarrage rapide</span><span>▾</span></div>
         <div class="qs-body">
-            <ol>
-                <li><strong>Clé Agnes gratuite</strong> : créez-en une sur <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">platform.agnes-ai.com</a>, puis collez-la dans la section API.</li>
-                <li><strong>Décrivez la scène</strong> (ou cliquez un preset dans « ✍️ Scénario »).</li>
-                <li><strong>Lancez</strong> : le studio enchaîne images puis vidéos, avec repli de modèle, reprise et cadence adaptative automatiques.</li>
-            </ol>
-            <div class="qs-note">🆓 <strong>Gratuit d'abord</strong> : quota, file et cadence s'affichent ci-dessus. Le plan gratuit Agnes ne demande pas de carte bancaire.</div>
+            <p style="margin:0 0 0.6rem;">Un <strong>parcours guidé</strong> vous montre, écran par écran, où cliquer pour réussir votre première vidéo.</p>
+            <button type="button" class="ob-btn primary" id="tour-btn">▶️ Démarrer la visite guidée pas à pas</button>
+            <div class="qs-note">🆓 Gratuit d'abord · 🛟 repli automatique · ♻️ reprise — tout est déjà actif.</div>
         </div>
     </div>
 </header>
@@ -1670,6 +1681,56 @@ window.__v502 = {
     ouvre: obOuvre, ferme: obFerme, etape: obAffiche, checks: obMajChecks,
     courant: function () { return obStep; }, total: OB_ETAPES, etat: state
 };
+
+/* ═══════════════════════════════════════════════════════════════════
+   v503 — WIZARD PAS-À-PAS : visite guidée avec projecteur (spotlight) sur
+   les CONTRÔLES RÉELS. Remplace le panneau statique : au lieu de lire,
+   on montre où cliquer, un écran à la fois.
+   ═══════════════════════════════════════════════════════════════════ */
+const TOUR_ETAPES = [
+    { sel: '#api-key-input', t: 'Votre clé Agnes', d: 'Collez ici une clé gratuite (platform.agnes-ai.com). Le bouton « Vérifier » confirme qu’elle fonctionne.' },
+    { sel: '.mode-switch', t: 'Le type de génération', d: '« Image → Vidéo » est le plus fiable : une image guide le mouvement de la vidéo.' },
+    { sel: '#duration-select', t: 'La durée', d: '5–6 s = le plus rapide et le plus sûr. Au-delà, la vidéo est assemblée à partir de segments.' },
+    { sel: '#main-prompt', mode: 'image', t: 'Décrivez la scène', d: 'Sujet + action + décor + lumière. Cliquez un preset juste au-dessus si vous manquez d’idées.' },
+    { sel: '#generate-btn', t: 'Lancez !', d: 'Le studio enchaîne les scènes, applique le repli automatique et reprend en cas d’interruption.' }
+];
+let tourIdx = 0;
+
+function tourOuvre() { const t = document.getElementById('tour'); if (!t) return; t.classList.add('open'); tourGo(0); }
+function tourFerme() { const t = document.getElementById('tour'); if (t) t.classList.remove('open'); }
+
+function tourGo(n) {
+    const total = TOUR_ETAPES.length;
+    tourIdx = Math.max(0, Math.min(total - 1, n));
+    const step = TOUR_ETAPES[tourIdx];
+    if (step.mode) { try { setMode(step.mode); } catch (e) {} }   /* la cible doit être visible */
+    const el = document.querySelector(step.sel);
+    const hole = document.getElementById('tour-hole');
+    const tip = document.getElementById('tour-tip');
+    if (!el || !hole || !tip) return;
+    const sec = el.closest ? el.closest('.section') : null;
+    if (sec) sec.classList.add('open');                 /* la cible peut être repliée */
+    try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (e) {}
+    const r = el.getBoundingClientRect();
+    const pad = 6;
+    hole.style.top = (r.top - pad) + 'px';
+    hole.style.left = (r.left - pad) + 'px';
+    hole.style.width = Math.max(24, r.width + pad * 2) + 'px';
+    hole.style.height = Math.max(24, r.height + pad * 2) + 'px';
+    const c = document.getElementById('tour-count'); if (c) c.textContent = (tourIdx + 1) + ' / ' + total;
+    const tt = document.getElementById('tour-t'); if (tt) tt.textContent = step.t;
+    const td = document.getElementById('tour-d'); if (td) td.textContent = step.d;
+    const vh = window.innerHeight, vw = window.innerWidth;
+    const tipW = Math.min(360, Math.max(220, vw - 32));
+    tip.style.width = tipW + 'px';
+    let top = r.bottom + 14, left = Math.min(Math.max(12, r.left), Math.max(12, vw - tipW - 12));
+    if (top + 180 > vh) top = Math.max(12, r.top - 190);
+    tip.style.top = top + 'px'; tip.style.left = left + 'px';
+    const pv = document.getElementById('tour-prev'); if (pv) pv.style.visibility = tourIdx === 0 ? 'hidden' : 'visible';
+    const nx = document.getElementById('tour-next'); if (nx) nx.textContent = tourIdx === total - 1 ? 'Terminer ✓' : 'Suivant →';
+}
+
+window.__v503 = { ouvre: tourOuvre, ferme: tourFerme, etape: tourGo, courant: function () { return tourIdx; }, total: TOUR_ETAPES.length };
 function maskKey(k) { return k ? k.slice(0, 6) + '…' + k.slice(-4) : '—'; }
 function formatBytes(b) { if (!b) return '0 o'; if (b < 1024) return b + ' o'; if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko'; return (b / (1024 * 1024)).toFixed(1) + ' Mo'; }
 function formatDuration(sec) { if (!sec) return '—'; const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
@@ -3414,8 +3475,16 @@ async function enrichWithMistral(btn, textareaId) {
             });
             try { if (localStorage.getItem('theologicus_onboard_vu') !== '1') setTimeout(obOuvre, 900); } catch (e) {}
         }
-        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cablerV502);
-        else cablerV502();
+        /* v503 — wizard pas-à-pas : câblage (également différé, même raison). */
+        function cablerV503() {
+            const b = document.getElementById('tour-btn'); if (b) b.addEventListener('click', tourOuvre);
+            const pv = document.getElementById('tour-prev'); if (pv) pv.addEventListener('click', function () { tourGo(tourIdx - 1); });
+            const nx = document.getElementById('tour-next'); if (nx) nx.addEventListener('click', function () { if (tourIdx >= TOUR_ETAPES.length - 1) tourFerme(); else tourGo(tourIdx + 1); });
+            const sk = document.getElementById('tour-skip'); if (sk) sk.addEventListener('click', tourFerme);
+            window.addEventListener('resize', function () { const t = document.getElementById('tour'); if (t && t.classList.contains('open')) tourGo(tourIdx); });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { cablerV502(); cablerV503(); });
+        else { cablerV502(); cablerV503(); }
         try {
             const enAttente = loadPendingTasks();
             if (enAttente.length) {
@@ -4357,6 +4426,21 @@ async function enrichWithMistral(btn, textareaId) {
                 <button type="button" class="ob-btn" id="ob-skip">Passer le guide</button>
                 <button type="button" class="ob-btn primary" id="ob-next">Suivant →</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- v503 — WIZARD PAS-À-PAS : visite guidée avec projecteur sur les contrôles. -->
+<div class="tour" id="tour">
+    <div class="tour-hole" id="tour-hole"></div>
+    <div class="tour-tip" id="tour-tip">
+        <div class="tour-count" id="tour-count">1 / 5</div>
+        <div class="tour-t" id="tour-t">Titre</div>
+        <div class="tour-d" id="tour-d">Description</div>
+        <div class="tour-nav">
+            <button type="button" class="ob-btn" id="tour-prev">← Précédent</button>
+            <button type="button" class="ob-btn" id="tour-skip">Quitter</button>
+            <button type="button" class="ob-btn primary" id="tour-next">Suivant →</button>
         </div>
     </div>
 </div>
