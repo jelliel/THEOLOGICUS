@@ -53492,6 +53492,84 @@ window.continueTradApart = async function (msgId) {
   window.__v507Diag = { ouvrir: ouvrir, fermer: fermer, sonder: sonder, corpus: CORPUS };
 })();
 </script>
+<script id="v508-a11y">
+/* v508 — ACCESSIBILITÉ DES PANNEAUX (Niveau 3, item 7).
+   Les panneaux plein écran (recherche, synopse, diagnostic) étaient
+   inaccessibles au clavier : pas de rôle ARIA, le focus restait derrière,
+   Échap ne fermait pas, la tabulation sortait du panneau.
+   Ici, SANS toucher aux modules : on observe l'ouverture/fermeture et on
+   applique rôles ARIA, gestion du focus (entrée + restitution), piège à
+   tabulation et fermeture par Échap. */
+(function () {
+  'use strict';
+  if (window.__v508A11y) return;
+
+  var PANNEAUX = { 'v180-gs': 'Recherche globale', 'v506-syn': 'Synopse multi-versions', 'v507-diag': 'Diagnostic' };
+  var actif = null, focusAvant = null;
+
+  function focusables(el) {
+    var sel = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.prototype.filter.call(el.querySelectorAll(sel), function (x) {
+      return x.offsetParent !== null || x === document.activeElement;
+    });
+  }
+  function marquer() {
+    Object.keys(PANNEAUX).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el || el.getAttribute('role')) return;
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
+      el.setAttribute('aria-label', PANNEAUX[id]);
+    });
+  }
+  function activer(el) {
+    actif = el; focusAvant = document.activeElement;
+    var f = focusables(el);
+    if (f.length) setTimeout(function () { try { f[0].focus(); } catch (e) {} }, 80);
+  }
+  function desactiver() {
+    if (focusAvant && focusAvant.focus) { try { focusAvant.focus(); } catch (e) {} }
+    actif = null; focusAvant = null;
+  }
+
+  var obs = new MutationObserver(function (muts) {
+    marquer();
+    muts.forEach(function (m) {
+      if (m.type !== 'attributes' || m.attributeName !== 'class') return;
+      var el = m.target;
+      if (!PANNEAUX[el.id]) return;
+      var ouvert = el.classList.contains('open');
+      if (ouvert && actif !== el) activer(el);
+      else if (!ouvert && actif === el) desactiver();
+    });
+  });
+  function demarrer() {
+    if (!document.body) return;
+    obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
+    marquer();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer); else demarrer();
+
+  document.addEventListener('keydown', function (e) {
+    if (!actif) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      var x = actif.querySelector('#v180-close, #v506-x, #v507-x');
+      if (x) x.click(); else actif.classList.remove('open');
+      return;
+    }
+    if (e.key === 'Tab') {
+      var f = focusables(actif);
+      if (f.length < 2) return;
+      var premier = f[0], dernier = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === premier) { e.preventDefault(); dernier.focus(); }
+      else if (!e.shiftKey && document.activeElement === dernier) { e.preventDefault(); premier.focus(); }
+    }
+  });
+
+  window.__v508A11y = { panneaux: PANNEAUX, marquer: marquer, actif: function () { return actif ? actif.id : null; } };
+})();
+</script>
 </body>
 </html>
 </html>
