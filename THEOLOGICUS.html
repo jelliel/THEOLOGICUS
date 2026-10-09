@@ -12888,7 +12888,11 @@ function initSettingsModal() {
         const now = Date.now();
         ids.forEach((modelId, idx) => {
           if (state.customModels.some(x => x.model === modelId)) return;
-          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: modelId, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || (prov === 'ollama' ? 'local' : ''), format: pdef.format || 'chat-completions', vision: false, audio: false });
+          /* v493 — /models n’expose PAS les capacités : on devine « vision »
+             au NOM (qwen2.5vl d’Ollama s’écrit sans tiret, d’où le motif
+             spécifique) ; la case 👁 de la fiche reste modifiable à la main. */
+          const estVisionHeur = /vision|llava|pixtral|qwen2(\.5)?-?vl|minicpm-v|moondream|bakllava|internvl|gemma3|olmocr|granite/i.test(modelId);
+          state.customModels.push({ uid: 'c_' + now + '_' + idx + '_' + Math.random().toString(36).slice(2,7), name: modelId, model: modelId, baseUrl: pdef.base, apiKey: state.keys[prov] || (prov === 'ollama' ? 'local' : ''), format: pdef.format || 'chat-completions', vision: estVisionHeur, audio: false });
           added++;
         });
         btn.textContent = '+ Ajouter modèles';
@@ -35573,7 +35577,7 @@ html.v129-anim-toutes .message.assistant { animation-name: msgInLeft; }
    sinon version.txt à côté de la page (desktop build) sinon « dev ». */
 (function () {
   'use strict';
-  var STAMPED = '2.0.404';
+  var STAMPED = '2.0.492';
   function detect(cb) {
     /* v462 — ORDRE FIABLE. Avant : STAMPED (un littéral figé au dernier build)
        était renvoyé d'abord, donc l'app pouvait ANNONCER UNE VERSION FAUSSE
@@ -51291,7 +51295,10 @@ window.continueTradApart = async function (msgId) {
      ses clés, au lieu de coder Agnes et Mistral en dur. */
   var VISION_FRAGMENTS = ['gpt-4o', 'gpt-4.1', 'o4', 'claude-3', 'claude-4', 'claude-sonnet', 'claude-opus',
     'gemini-1.5', 'gemini-2', 'pixtral', 'agnes-2.5', 'agnes-2.0', 'llava', 'qwen2.5-vl', 'qwen-vl',
-    'minicpm-v', 'moondream', 'bakllava', 'internvl'];
+    'minicpm-v', 'moondream', 'bakllava', 'internvl',
+    /* v493 — Ollama écrit son modèle vision « qwen2.5vl » SANS tiret : la
+       famille vision locale (base d’olmOCR) n’était jamais reconnue. */
+    'qwen2.5vl', 'qwen2vl', 'gemma3', 'olmocr'];
   function estVision(id) {
     var m = String(id || '').toLowerCase();
     return VISION_FRAGMENTS.some(function (f) { return m.indexOf(f) >= 0; });
