@@ -276,6 +276,18 @@
     .flux-bar { display:flex; align-items:center; gap:0.4rem; justify-content:center; margin-top:0.7rem; font-size:0.72rem; color:var(--ink-dim); flex-wrap:wrap; }
     .flux-bar select { background:var(--panel-2); color:var(--ink); border:1px solid var(--border); border-radius:0.3rem; padding:0.2rem 0.45rem; font-size:0.72rem; font-family:inherit; }
     .flux-info { color:var(--ink-dim); font-family:var(--fm); font-size:0.68rem; }
+    .flux-btn { background:var(--panel-2); color:var(--ink); border:1px solid var(--border); border-radius:0.3rem; padding:0.2rem 0.5rem; font-size:0.7rem; cursor:pointer; font-family:inherit; }
+    .flux-btn:hover { border-color:var(--accent); }
+    /* v500 — C1 : barre de phases + progression. */
+    .phase-bar { display:none; margin:0.7rem auto 0; max-width:640px; padding:0 0.5rem; }
+    .phase-bar.visible { display:block; }
+    .phase-steps { display:flex; gap:0.4rem; justify-content:center; flex-wrap:wrap; }
+    .phase-step { font-size:0.66rem; color:var(--ink-dim); border:1px solid var(--border); border-radius:999px; padding:0.15rem 0.55rem; }
+    .phase-step.active { color:#1a1a28; background:var(--accent); border-color:var(--accent); }
+    .phase-step.done { color:var(--accent); border-color:var(--accent); }
+    .phase-info { text-align:center; font-size:0.68rem; color:var(--ink-dim); margin-top:0.3rem; font-family:var(--fm); }
+    .phase-progress { height:5px; background:var(--panel-2); border-radius:999px; overflow:hidden; margin-top:0.35rem; }
+    .phase-fill { height:100%; width:0; background:linear-gradient(90deg,var(--accent),#e87b35); transition:width 0.4s ease; }
 </style>
 </head>
 <body>
@@ -286,14 +298,29 @@
     <p class="subtitle">« Studio IA complet — Timeout intelligent »</p>
     <button type="button" id="open-newsreel-btn" class="newsreel-open-btn" title="Ouvrir NewsReel Studio — le JT généré par IA (config partagée)">📰 NewsReel — le JT par IA</button>
     <div class="flux-bar">
-        <label for="video-parallel">⚡ Parallélisme vidéo :</label>
+        <label for="video-parallel">⚡ Parallélisme :</label>
         <select id="video-parallel" title="Jobs simultanés. Agnes gratuit = 1 à la fois ; un endpoint perso peut encaisser davantage.">
             <option value="1" selected>1 — séquentiel</option>
             <option value="2">2 — parallèle</option>
             <option value="3">3 — parallèle</option>
             <option value="4">4 — parallèle</option>
         </select>
+        <button type="button" id="file-check-btn" class="flux-btn" title="Sonder l'état de la file vidéo Agnes (sans consommer de quota)">🔍 File</button>
+        <span class="flux-info" id="file-status"></span>
         <span class="flux-info" id="cadence-info"></span>
+    </div>
+    <div class="flux-bar">
+        <span class="flux-info" id="quota-global"></span>
+    </div>
+    <div class="phase-bar" id="phase-bar">
+        <div class="phase-steps">
+            <div class="phase-step" data-phase="prep">1 · Préparation</div>
+            <div class="phase-step" data-phase="gen">2 · Génération</div>
+            <div class="phase-step" data-phase="mont">3 · Assemblage</div>
+            <div class="phase-step" data-phase="done">4 · Terminé</div>
+        </div>
+        <div class="phase-info" id="phase-detail"></div>
+        <div class="phase-progress"><div class="phase-fill" id="phase-fill"></div></div>
     </div>
 </header>
 
@@ -1401,12 +1428,124 @@ window.__v499 = {
     file: createQueue,
     etat: state
 };
+
+/* ═══════════════════════════════════════════════════════════════════
+   v500 — RIVALISER : succès de génération, gratuité, élégance.
+   A) succès   : repli multi-modèle vidéo, sonde de file, pré-vol quota,
+                 échec -> action, assainissement du prompt.
+   B) gratuité : quota visible partout, rotation de clés, anti-gaspillage
+                 (cache prompt+modèle), indicateur « gratuit d'abord ».
+   C) élégance : barre de phases + ETA globale, galerie enrichie.
+   ═══════════════════════════════════════════════════════════════════ */
+const VIDEO_REPLI = 'agnes-video-v2.0';        /* A1 — repli vidéo fiable */
+const SK_CACHE = 'cinema_noir_video_cache_v1'; /* B3 — cache anti-gaspillage */
+
+/* A5 — assainit un prompt avant envoi (caractères de contrôle, longueur). */
+function assainirPrompt(p) {
+    p = String(p == null ? '' : p);
+    p = p.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ');
+    p = p.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    if (p.length > 4000) p = p.slice(0, 4000);
+    return p;
+}
+
+/* A3 — quota vidéo gratuit restant (secondes), via le compteur v455. */
+function quotaRestant() {
+    try { const q = window.__v455Long && window.__v455Long.quotaJour(); if (q) return Math.max(0, 500 - q.secondes); } catch (e) {}
+    return 500;
+}
+
+/* B2 — rotation de clés Agnes (plusieurs clés séparées par , ; ou retour ligne). */
+function clesAgnes() {
+    try { return (localStorage.getItem(SK.AGNES) || '').split(/[\n,;]+/).map(function (s) { return s.trim(); }).filter(Boolean); }
+    catch (e) { return []; }
+}
+let cleIndex = 0;
+function rotationCle() {
+    const c = clesAgnes();
+    if (c.length > 1) { cleIndex = (cleIndex + 1) % c.length; logWarn('🔑 Rotation de clé Agnes (' + (cleIndex + 1) + '/' + c.length + ')'); return true; }
+    return false;
+}
+
+/* B3 — anti-gaspillage : cache (hash prompt+modèle) -> id de vidéo en galerie. */
+function hashPrompt(s) { let h = 5381; s = String(s); for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h.toString(36); }
+function cacheVideoGet(k) { try { const o = JSON.parse(localStorage.getItem(SK_CACHE) || '{}'); return o[k] || null; } catch (e) { return null; } }
+function cacheVideoSet(k, id) {
+    try {
+        const o = JSON.parse(localStorage.getItem(SK_CACHE) || '{}');
+        o[k] = id; const ks = Object.keys(o);
+        if (ks.length > 60) delete o[ks[0]];
+        localStorage.setItem(SK_CACHE, JSON.stringify(o));
+    } catch (e) {}
+}
+
+/* C1 — barre de phases + ETA globale. */
+function majPhaseBar(phase, pct, detail) {
+    const bar = document.getElementById('phase-bar'); if (!bar) return;
+    bar.classList.add('visible');
+    const ordre = ['prep', 'gen', 'mont', 'done'];
+    const ci = ordre.indexOf(phase);
+    bar.querySelectorAll('.phase-step').forEach(function (el) {
+        el.classList.remove('active', 'done');
+        const ei = ordre.indexOf(el.dataset.phase);
+        if (ei < ci) el.classList.add('done'); else if (ei === ci) el.classList.add('active');
+    });
+    const f = document.getElementById('phase-fill'); if (f) f.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    const d = document.getElementById('phase-detail'); if (d) d.textContent = detail || '';
+}
+function masquerPhaseBar() { const b = document.getElementById('phase-bar'); if (b) setTimeout(function () { b.classList.remove('visible'); }, 5000); }
+
+/* B1 — quota gratuit visible dans l'en-tête (tous modes). */
+function majQuotaGlobal() {
+    const el = document.getElementById('quota-global'); if (!el) return;
+    const reste = quotaRestant();
+    el.textContent = '🆓 ~' + Math.round(reste) + 's vidéo gratuite restante(s)';
+    el.style.color = reste < 100 ? '#ffb347' : '';
+}
+
+/* A2 — sonde l'état de la file vidéo Agnes (bouton manuel, sans consommer de quota). */
+async function verifierFile() {
+    const el = document.getElementById('file-status');
+    const base = _viaRelais('https://apihub.agnes-ai.com/v1');
+    const key = getApiKey();
+    if (!key) { if (el) el.textContent = 'file : clé manquante'; return 'unknown'; }
+    if (el) el.textContent = 'file : test…';
+    try {
+        /* corps VOLONTAIREMENT incomplet (prompt vide) : le fournisseur répond
+           400 = disponible, sans créer de vraie tâche (donc sans consommer). */
+        const res = await fetch(base + '/videos', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: VIDEO_REPLI, prompt: '' })
+        });
+        let t = ''; try { t = (await res.clone().text()).slice(0, 300); } catch (e) {}
+        if (res.status === 503 && /queue_full|queue is full|satur/i.test(t)) { if (el) el.textContent = 'file : ⛔ saturée'; return 'saturated'; }
+        if (res.status === 400 || res.status === 422 || res.status === 200 || res.status === 201) { if (el) el.textContent = 'file : ✅ disponible'; return 'available'; }
+        if (res.status === 401 || res.status === 403) { if (el) el.textContent = 'file : clé refusée'; return 'unknown'; }
+        if (el) el.textContent = 'file : HTTP ' + res.status;
+        return 'unknown';
+    } catch (e) { if (el) el.textContent = 'file : réseau ?'; return 'unknown'; }
+}
+
+window.__v500 = {
+    assainirPrompt: assainirPrompt, quotaRestant: quotaRestant, VIDEO_REPLI: VIDEO_REPLI,
+    clesAgnes: clesAgnes, rotation: rotationCle, hash: hashPrompt,
+    cacheGet: cacheVideoGet, cacheSet: cacheVideoSet, file: verifierFile, etat: state
+};
 function maskKey(k) { return k ? k.slice(0, 6) + '…' + k.slice(-4) : '—'; }
 function formatBytes(b) { if (!b) return '0 o'; if (b < 1024) return b + ' o'; if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' Ko'; return (b / (1024 * 1024)).toFixed(1) + ' Mo'; }
 function formatDuration(sec) { if (!sec) return '—'; const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
 function formatTimeStr(sec) { const m = Math.floor(sec / 60); const s = sec % 60; return m > 0 ? m + 'm ' + String(s).padStart(2, '0') + 's' : s + 's'; }
 
-function getApiKey() { try { return (localStorage.getItem(SK.AGNES) || '').trim(); } catch (e) { return ''; } }
+function getApiKey() {
+    try {
+        /* v500 — B2 : plusieurs clés Agnes (séparées par , ; ou retour ligne)
+           sont tournées automatiquement quand l'une sature. */
+        const c = clesAgnes();
+        if (c.length > 1) return c[Math.min(cleIndex, c.length - 1)];
+        return c.length ? c[0] : '';
+    } catch (e) { return ''; }
+}
 function getMistralKey() { try { return (localStorage.getItem(SK.MISTRAL) || '').trim(); } catch (e) { return ''; } }
 function getSelectedModelId() { try { return localStorage.getItem(SK.AGNES_MODEL) || 'agnes-video-v2.0'; } catch (e) { return 'agnes-video-v2.0'; } }
 function loadExtraModels() { try { return JSON.parse(localStorage.getItem(SK.EXTRA_MODELS) || '[]'); } catch (e) { return []; } }
@@ -1516,7 +1655,7 @@ function renderGallery() {
         const dateStr = new Date(v.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         const sizeStr = v.size ? formatBytes(v.size) : '—';
         return '<div class="video-card"><video src="' + src + '" preload="metadata" muted playsinline data-video-click="' + v.id + '"></video>' +
-            '<div class="vc-info"><span class="vc-label">' + escapeHtml(v.label) + '</span><span class="vc-meta">' + sizeStr + ' · ' + dateStr + '</span></div>' +
+            '<div class="vc-info"><span class="vc-label">' + escapeHtml(v.label) + '</span><span class="vc-meta">' + (v.model ? escapeHtml(v.model) + ' · ' : '') + sizeStr + ' · ' + dateStr + '</span></div>' +
             '<div class="vc-actions">' +
                 '<button class="vc-btn" data-vc-preview="' + v.id + '">🔍 Voir</button>' +
                 '<button class="vc-btn" data-vc-download="' + v.id + '">⬇️ DL</button>' +
@@ -2440,6 +2579,7 @@ async function apiFetch(url, options = {}) {
             if (res.status === 429) {
                 const w = retryAfterSeconds(res, APIFETCH_429_WAITS[attempt]);
                 cadenceSaturation();   /* v499 — #3 : la file est saturée -> cadence +15 s */
+                rotationCle();         /* v500 — B2 : bascule sur la clé suivante si plusieurs */
                 if (saturation === SEUIL_SATURATION) logWarn('🛑 <strong>File fournisseur saturée</strong> (' + saturation + ' × 429) — la cadence passe à ' + Math.round(cadenceMs / 1000) + 's pour laisser respirer l’API');
                 logWarn('⏳ Limite API Agnes (gratuit : une génération à la fois) — reprise automatique dans ' + w + 's');
                 setStatus('Limite API… reprise dans ' + w + 's');
@@ -2468,6 +2608,7 @@ async function apiFetch(url, options = {}) {
 async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri, cm) {
     const base = cm ? _viaRelais(cm.endpoint) : API_BASE;
     const key = cm ? (cm.apiKey || '') : getApiKey();
+    prompt = assainirPrompt(prompt);   /* v500 — A5 : prompt propre (contrôle, longueur) */
     const body = { model: modelId, prompt, num_frames: state.durationFrames, frame_rate: FRAME_RATE };
     if (imageDataUri) body.image = imageDataUri;
     if (audioDataUri) body.audio = audioDataUri;
@@ -2702,6 +2843,23 @@ async function startGeneration() {
     const echecs = [];   /* v460 : les causes, pour que le résumé les dise */
     const totalStart = Date.now();
     const totalJobs = items.length * modelsToUse.length;
+    /* v500 — A3 : PRÉ-VOL. On refuse proprement un run voué à l'échec faute de
+       quota gratuit, au lieu de le découvrir après 5 jobs. */
+    if (state.mode === 'video' && !cmVid) {
+        const besoin = Math.round((state.durationFrames / FRAME_RATE) * totalJobs);
+        const reste = quotaRestant();
+        logInfo('🆓 Quota vidéo gratuit : ~' + Math.round(reste) + 's restantes — besoin estimé ~' + besoin + 's');
+        if (besoin > reste) {
+            logWarn('⚠️ Quota gratuit probablement insuffisant (~' + besoin + 's requis, ~' + Math.round(reste) + 's restants).');
+            if (!confirm('Quota vidéo gratuit insuffisant (~' + besoin + 's requis, ~' + Math.round(reste) + 's restants). Continuer quand même ?')) {
+                state.isRunning = false; state.stopRequested = false;
+                document.getElementById('stop-btn').classList.remove('visible'); updateGenerateBtn();
+                setLogStatusDot('idle');
+                return;
+            }
+        }
+    }
+    majPhaseBar('gen', 0, 'Génération…');   /* C1 */
     let jobIndex = 0;
     /* v499 — #5 : parallélisme (1 par défaut). Agnes gratuit = 1 à la fois ;
        un endpoint perso peut encaisser plusieurs jobs simultanés. */
@@ -2715,18 +2873,28 @@ async function startGeneration() {
         const item = items[i]; const modelId = modelsToUse[mi];
         const sceneLabel = 'Scène ' + (i + 1) + '/' + items.length + ' · ' + modelId;
         logStep('━━━ <strong>Job ' + idx + '/' + totalJobs + '</strong> ━━━');
+        majPhaseBar('gen', Math.round(100 * (idx - 1) / totalJobs), 'Job ' + idx + '/' + totalJobs);   /* C1 */
         const t0 = Date.now();
+        let prompt;
+        if (item.mode === 'text') prompt = buildTextPrompt(item.text);
+        else if (item.mode === 'audio') prompt = buildAudioPrompt();
+        else if (item.mode === 'image_text') prompt = buildImageTextPrompt();
+        else if (item.mode === 'video') prompt = buildVideoPrompt();
+        else if (item.mode === 'combo') prompt = buildComboPrompt();
+        else prompt = buildImagePrompt();
+        prompt = assainirPrompt(prompt);   /* v500 — A5 */
+        const img = item.image ? item.image.dataUri : null;
+        const aud = item.audio ? item.audio.dataUri : null;
+        const vid = item.video ? item.video.dataUri : null;
+        /* v500 — B3 : anti-gaspillage — ne pas régénérer une scène identique. */
+        const cleCache = hashPrompt((cmVid ? 'cm:' + cmVid.id : 'ag:' + modelId) + '|' + prompt + '|' + state.durationFrames);
+        const enCache = cacheVideoGet(cleCache);
+        if (enCache && loadGallery().some(function (e) { return e.id === enCache; })) {
+            logInfo('♻️ Scène déjà en galerie (cache) — réutilisée, 0 s de quota consommé');
+            completed++; cadenceSucces();
+            return;
+        }
         try {
-            let prompt;
-            if (item.mode === 'text') prompt = buildTextPrompt(item.text);
-            else if (item.mode === 'audio') prompt = buildAudioPrompt();
-            else if (item.mode === 'image_text') prompt = buildImageTextPrompt();
-            else if (item.mode === 'video') prompt = buildVideoPrompt();
-            else if (item.mode === 'combo') prompt = buildComboPrompt();
-            else prompt = buildImagePrompt();
-            const img = item.image ? item.image.dataUri : null;
-            const aud = item.audio ? item.audio.dataUri : null;
-            const vid = item.video ? item.video.dataUri : null;
             /* v455 — au-delà du plafond du fournisseur (15 s), découpage
                en segments + assemblage ; sinon chemin d'origine, intact. */
             if (window.__v455Long && window.__v455Long.necessaire()) {
@@ -2738,6 +2906,7 @@ async function startGeneration() {
             completed++;
             cadenceSucces();                          /* #1/#3 : succès -> cadence baisse, saturation levée */
             recordTiming('job', Date.now() - t0);     /* #4 */
+            const g = loadGallery(); if (g[0]) cacheVideoSet(cleCache, g[0].id);   /* B3 */
             const restant = totalJobs - idx;
             if (restant > 0) {
                 const etaMs = restant * estimateTiming('job', 120000);
@@ -2745,6 +2914,27 @@ async function startGeneration() {
             }
         } catch (e) {
             if (e.message === 'Arrêt') { logWarn('⏹ Arrêt'); return; }
+            /* v500 — A4 : échec -> ACTION (au lieu d'un simple message). */
+            const cls = classerEchec(String(e && e.message || e));
+            if (/clé Agnes refusée/i.test(cls)) {
+                logError('🛑 ' + cls + ' — arrêt du run (inutile de réessayer).');
+                state.stopRequested = true;
+                return;
+            }
+            /* A1 — repli sur un modèle vidéo fiable, une seule fois. */
+            if (!cmVid && modelId !== VIDEO_REPLI) {
+                logWarn('🔁 Échec de <code>' + escapeHtml(modelId) + '</code> — repli sur <code>' + VIDEO_REPLI + '</code>');
+                try {
+                    const vidRepli = await createVideoTask(prompt, img, aud, VIDEO_REPLI, vid, null);
+                    await pollUntilDone(vidRepli, VIDEO_REPLI, sceneLabel + ' (repli)', null);
+                    completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
+                    const g2 = loadGallery(); if (g2[0]) cacheVideoSet(cleCache, g2[0].id);
+                    logSuccess('✅ Repli réussi avec <code>' + VIDEO_REPLI + '</code>');
+                    return;
+                } catch (e2) {
+                    logError('💥 Repli <code>' + VIDEO_REPLI + '</code> échoué : ' + escapeHtml(String(e2 && e2.message || e2)));
+                }
+            }
             failed++;
             echecs.push(String(e.message || e));
             logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
@@ -2793,6 +2983,9 @@ async function startGeneration() {
         logError('❌ <strong>Aucune vidéo</strong>' + (cause ? ' — ' + cause : ''));
         showToast('Aucune vidéo — ' + (cause || 'voir le journal'), 'error', 8000);
     }
+    majPhaseBar('done', 100, completed + '/' + totalJobs + ' réussies');   /* C1 */
+    masquerPhaseBar();
+    majQuotaGlobal();                                                       /* B1 */
     await sleep(4000); setStatus(null);
     setTimeout(() => setLogStatusDot('idle'), 5000);
 }
@@ -3008,6 +3201,10 @@ async function enrichWithMistral(btn, textareaId) {
     (function () {
         const ci = document.getElementById('cadence-info');
         if (ci) ci.textContent = '· cadence ' + Math.round(cadenceMs / 1000) + 's (apprise)';
+        majQuotaGlobal();                       /* v500 — B1 */
+        setInterval(majQuotaGlobal, 30000);
+        const fcb = document.getElementById('file-check-btn');
+        if (fcb) fcb.addEventListener('click', verifierFile);   /* v500 — A2 */
         try {
             const enAttente = loadPendingTasks();
             if (enAttente.length) {
