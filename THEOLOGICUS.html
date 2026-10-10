@@ -53370,6 +53370,13 @@ window.continueTradApart = async function (msgId) {
       + '#v506-syn .vn{color:var(--ui-accent,#e5c15a);font-weight:700;margin-right:.35rem}'
       + '#v506-syn .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:30px;height:30px;cursor:pointer}'
       + '#v506-syn .nav button:disabled{opacity:.35;cursor:not-allowed}'
+      + '#v506-syn .xr{font-size:.7rem;margin-top:.6rem;border-top:1px solid var(--ui-border,#2a2a3a);padding-top:.5rem}'
+      + '#v506-syn .xr.dim{color:var(--ui-dim,#8a8896)}'
+      + '#v506-syn .xr-t{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ui-accent,#e5c15a);margin-bottom:.3rem}'
+      + '#v506-syn .xr-i{font-size:.72rem;color:var(--ui-ink,#e8e6e0);margin:.25rem 0;line-height:1.5}'
+      + '#v506-syn .xr-tp{font-size:.6rem;color:var(--ui-info,#4f8ef7);border:1px solid var(--ui-border,#2a2a3a);border-radius:999px;padding:0 .35rem;margin-right:.25rem}'
+      + '#v506-syn .xr-ex{color:var(--ui-dim,#8a8896)}'
+      + '#v506-syn .xr a{color:var(--ui-accent,#e5c15a);font-size:.68rem}'
       + '</style>'
       + '<div class="b"><button class="x" id="v506-x">✕</button><h3 id="v506-t">Synopse</h3><div class="st" id="v506-s"></div>'
       + '<div class="nav" id="v506-nav">'
@@ -53381,7 +53388,7 @@ window.continueTradApart = async function (msgId) {
       + '<button type="button" class="ui-btn ghost" id="v506-export" title="Exporter en Markdown">⬇️ Markdown</button>'
       + '<button type="button" class="ui-btn ghost" id="v506-reseau" title="Qui cite ce passage dans les autres corpus ?">🔗 Cité par</button>'
       + '</div>'
-      + '<div id="v506-c"></div></div>';
+      + '<div id="v506-c"></div><div id="v506-xref"></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
     p.querySelector('#v506-x').addEventListener('click', fermer);
@@ -53464,6 +53471,7 @@ window.continueTradApart = async function (msgId) {
     var ref = document.getElementById('v506-ref');
     if (ref) ref.textContent = refCourante();
     majHash();   /* v516 — le lien profond suit la reference affichee */
+    xref(refPartageable());   /* v532 — citations croisées (graphe v526) */
     var mb = document.getElementById('v506-mode');
     if (mb) mb.textContent = e.mode === 'chapitre' ? '📄 Verset seul' : '📜 Chapitre entier';
     var c = document.getElementById('v506-c');
@@ -53514,6 +53522,31 @@ window.continueTradApart = async function (msgId) {
         }
       });
     });
+  }
+
+  /* ── v532 — SYNOPSE ÉTENDUE : les citations croisées (graphe v526) entrent
+     dans le panneau, pour un seul écran par passage (versions + qui le cite). ── */
+  var XREF_REF = '';
+  function xref(ref) {
+    XREF_REF = ref;
+    var c = document.getElementById('v506-xref');
+    if (!c) return;
+    if (!(window.__v526Graphe && window.__v526Graphe.citePar && window.__v526Graphe.charge)) { c.innerHTML = ''; return; }
+    c.innerHTML = '<div class="xr dim">🔗 citations croisées…</div>';
+    window.__v526Graphe.charge().then(function () {
+      if (XREF_REF !== ref) return;          /* la référence a changé entre-temps */
+      var l = window.__v526Graphe.citePar(ref);
+      if (!l.length) { c.innerHTML = '<div class="xr dim">🔗 aucune citation de ce passage dans les corpus croisés (Valtorta, parallèles coraniques, thèmes).</div>'; return; }
+      var h = '<div class="xr-t">🔗 Cité par ' + l.length + ' source(s)</div>';
+      for (var i = 0; i < l.length; i++) {
+        var x = l[i];
+        h += '<div class="xr-i"><span class="xr-tp">' + esc(x.type) + '</span> ' + esc(x.titre)
+          + (x.extrait ? ' <span class="xr-ex">— ' + esc(x.extrait) + '</span>' : '')
+          + (x.lien ? ' <a href="' + esc(x.lien) + '" target="_blank" rel="noopener">↗</a>' : '')
+          + '</div>';
+      }
+      c.innerHTML = h;
+    }).catch(function () { if (XREF_REF === ref) c.innerHTML = ''; });
   }
 
   /* ── v515 — EXPORT / PARTAGE de la synopse ── */
