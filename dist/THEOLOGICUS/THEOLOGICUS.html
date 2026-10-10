@@ -49310,6 +49310,21 @@ window.continueTradApart = async function (msgId) {
     return { livre: livre, nom: m[1].trim(), ch: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
   }
 
+  /* v518 — STYLE DE LA FICHE DE VERSET. Constat : #v446-ref-pop n'avait
+     AUCUNE regle CSS (seuls display/width/left/top etaient poses en JS) — le
+     texte s'affichait NU, sans fond ni bordure. On lui donne enfin un style,
+     entierement pilote par les JETONS du design system. */
+  (function () {
+    if (document.getElementById('v446-pop-style')) return;
+    var s = document.createElement('style');
+    s.id = 'v446-pop-style';
+    s.textContent = '#v446-ref-pop{position:fixed;z-index:100001;display:none;width:min(430px,94vw);max-height:72vh;overflow:auto;'
+      + 'background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,12px);'
+      + 'padding:12px 14px;color:var(--ui-ink,#e8e6e0);font:12.5px var(--ui-mono,Consolas,monospace);'
+      + 'box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6))}';
+    (document.head || document.documentElement).appendChild(s);
+  })();
+
   /* ── popup unique ── */
   let POP = null;
   function popup(html, x, y) {
@@ -49342,17 +49357,17 @@ window.continueTradApart = async function (msgId) {
     try {
       const chap = await livre(r.livre);
       const c = chap[String(r.ch)];
-      if (!c) { popup('<div style="color:#ff8a80">📖 ' + esc(texte) + ' — chapitre introuvable dans la Bible embarquée.</div>', x, y); return true; }
-      let h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#ffc94d;margin-bottom:4px">📖 ' + esc(r.nom + ' ' + r.ch) + (r.v1 !== r.v2 ? ' · ' + r.v1 + '-' + r.v2 : '') + ' — Bible de Jérusalem (locale)</div>';
+      if (!c) { popup('<div style="color:var(--ui-err,#ff8a80)">📖 ' + esc(texte) + ' — chapitre introuvable dans la Bible embarquée.</div>', x, y); return true; }
+      let h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ui-accent,#ffc94d);margin-bottom:4px">📖 ' + esc(r.nom + ' ' + r.ch) + (r.v1 !== r.v2 ? ' · ' + r.v1 + '-' + r.v2 : '') + ' — Bible de Jérusalem (locale)</div>';
       for (let v = r.v1; v <= Math.min(r.v2, 200); v++) {
         const t = c[String(v)];
-        if (t) h += '<div style="margin:4px 0"><b style="color:#ffc94d">' + v + '</b> <span style="font-size:12.5px;line-height:1.6">' + esc(t) + '</span></div>';
+        if (t) h += '<div style="margin:4px 0"><b style="color:var(--ui-accent,#ffc94d)">' + v + '</b> <span style="font-size:12.5px;line-height:1.6">' + esc(t) + '</span></div>';
       }
-      h += '<div style="margin-top:6px;font-size:10px;color:#8fa3b8">Clic ailleurs pour fermer</div>';
+      h += '<div style="margin-top:6px;font-size:10px;color:var(--ui-dim,#8fa3b8)">Clic ailleurs pour fermer</div>';
       popup(h, x, y);
       return true;
     } catch (e) {
-      popup('<div style="color:#ff8a80">📖 Erreur locale : ' + esc(e.message) + '</div>', x, y);
+      popup('<div style="color:var(--ui-err,#ff8a80)">📖 Erreur locale : ' + esc(e.message) + '</div>', x, y);
       return true;
     }
   }
@@ -49363,12 +49378,12 @@ window.continueTradApart = async function (msgId) {
     try {
       const idx = await cec();
       const p = idx[n];
-      if (!p) { popup('<div style="color:#ff8a80">📕 § ' + n + ' introuvable dans le Catéchisme local.</div>', x, y); return true; }
-      const h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#f5c542;margin-bottom:4px">📕 Catéchisme § ' + n + ' — édition française (locale)</div>'
-        + '<div style="font-size:12.5px;line-height:1.65;color:#eaf4ff">' + esc(p.t) + '</div>';
+      if (!p) { popup('<div style="color:var(--ui-err,#ff8a80)">📕 § ' + n + ' introuvable dans le Catéchisme local.</div>', x, y); return true; }
+      const h = '<div style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ui-accent,#f5c542);margin-bottom:4px">📕 Catéchisme § ' + n + ' — édition française (locale)</div>'
+        + '<div style="font-size:12.5px;line-height:1.65;color:var(--ui-ink,#eaf4ff)">' + esc(p.t) + '</div>';
       popup(h, x, y);
       return true;
-    } catch (e) { popup('<div style="color:#ff8a80">📕 Erreur locale : ' + esc(e.message) + '</div>', x, y); return true; }
+    } catch (e) { popup('<div style="color:var(--ui-err,#ff8a80)">📕 Erreur locale : ' + esc(e.message) + '</div>', x, y); return true; }
   }
 
   /* capture : on passe AVANT le gestionnaire existant (BibleGateway) */
@@ -49407,7 +49422,7 @@ window.continueTradApart = async function (msgId) {
         span.className = 'cec-ref';
         span.setAttribute('data-n', m[1]);
         span.textContent = m[0];
-        span.style.cssText = 'color:#f5c542;border-bottom:1px dotted rgba(245,197,66,.6);cursor:pointer';
+        span.style.cssText = 'color:var(--ui-accent,#f5c542);border-bottom:1px dotted color-mix(in srgb, var(--ui-accent,#f5c542) 60%, transparent);cursor:pointer';
         frag.appendChild(span);
         dernier = m.index + m[0].length;
       }
