@@ -53374,6 +53374,7 @@ window.continueTradApart = async function (msgId) {
       + '<button type="button" class="ui-btn" id="v506-mode">📜 Chapitre entier</button>'
       + '<button type="button" class="ui-btn ghost" id="v506-copy" title="Copier la comparaison">📋 Copier</button>'
       + '<button type="button" class="ui-btn ghost" id="v506-export" title="Exporter en Markdown">⬇️ Markdown</button>'
+      + '<button type="button" class="ui-btn ghost" id="v506-reseau" title="Qui cite ce passage dans les autres corpus ?">🔗 Cité par</button>'
       + '</div>'
       + '<div id="v506-c"></div></div>';
     document.body.appendChild(p);
@@ -53384,6 +53385,10 @@ window.continueTradApart = async function (msgId) {
     p.querySelector('#v506-mode').addEventListener('click', basculeMode);
     p.querySelector('#v506-copy').addEventListener('click', copierSyn);
     p.querySelector('#v506-export').addEventListener('click', exporterSyn);
+    /* v526 — graphe de références croisées : qui cite ce passage ailleurs ? */
+    p.querySelector('#v506-reseau').addEventListener('click', function () {
+      if (window.__v526Graphe && window.__v526Graphe.ouvre) window.__v526Graphe.ouvre(refPartageable());
+    });
     return p;
   }
   function fermer() { var p = document.getElementById('v506-syn'); if (p) p.classList.remove('open'); }
@@ -55154,6 +55159,193 @@ window.continueTradApart = async function (msgId) {
     prepareEtVerifie: prepareEtVerifie,
     dernier: function () { return DERNIER; }
   };
+})();
+</script>
+
+<script id="v526-graphe-script">
+/* v526 — GRAPHE DE RÉFÉRENCES CROISÉES (Axe 1 de la 3.0, lot A2).
+   Les corpus de l'application se CITENT les uns les autres, mais rien ne le
+   montrait : pour un passage donné, on ne pouvait pas savoir qui le cite.
+
+   Ce module ADDITIF construit, À LA DEMANDE, un index « référence biblique ->
+   sources qui la citent » à partir des corpus DÉJÀ présents :
+     • tradition/valtorta.json   (186 épisodes, citations PARSÉES b/c/v1/v2) ;
+     • tradition/paralleles.json (221 mises en regard biblique-coraniques) ;
+     • tradition/themes.json     (45 thèmes croisés, chacun avec ses références).
+   Puis il offre un panneau « 🔗 Cité par » : pour une référence, toutes les
+   sources qui la citent, groupées par type, avec le texte en regard.
+   Rien d'autre n'est modifié. Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v526Graphe) return;
+
+  var IDX = null, PRET = false, EN_COURS = false, STATS = null;
+  var SOURCES = [
+    { f: 'tradition/valtorta.json', type: 'valtorta', label: '🌊 Valtorta (L\'Évangile tel qu\'il m\'a été révélé)' },
+    { f: 'tradition/paralleles.json', type: 'coran', label: '🕌 Parallèles biblique-coraniques' },
+    { f: 'tradition/themes.json', type: 'theme', label: '🎯 Thèmes croisés Bible-Coran' }
+  ];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function cle(n, c, v) { return n + '|' + c + '|' + v; }
+  function parse(ref) {
+    try { return (window.__v446Refs && window.__v446Refs.parseRef) ? window.__v446Refs.parseRef(ref) : null; }
+    catch (e) { return null; }
+  }
+  /* « Ex 3:14 — « Je suis… » » -> { ref, extrait } */
+  function decoupe(t) {
+    var s = String(t || ''), i = s.indexOf(' — ');
+    return { ref: (i >= 0 ? s.slice(0, i) : s).trim(), extrait: i >= 0 ? s.slice(i + 3).trim() : '' };
+  }
+
+  async function charge() {
+    if (PRET) return STATS;
+    if (EN_COURS) { while (EN_COURS) await new Promise(function (r) { setTimeout(r, 120); }); return STATS; }
+    EN_COURS = true;
+    IDX = new Map();
+    var nV = 0, nP = 0, nT = 0;
+    function ajoute(n, c, v1, v2, item) {
+      for (var v = v1; v <= (v2 || v1); v++) {
+        var k = cle(n, c, v);
+        var a = IDX.get(k);
+        if (!a) { a = []; IDX.set(k, a); }
+        var dup = false;
+        for (var j = 0; j < a.length; j++) { if (a[j].type === item.type && a[j].titre === item.titre) { dup = true; break; } }
+        if (!dup) a.push(item);
+      }
+    }
+    /* 1) Valtorta — citations déjà parsées */
+    try {
+      var v = await (await fetch('tradition/valtorta.json')).json();
+      (v.episodes || []).forEach(function (ep) {
+        (ep.cit || []).forEach(function (ci) {
+          var p = parse(ci.b + ' ' + ci.c + ':' + ci.v1);
+          if (!p) return;
+          ajoute(p.livre, p.ch, p.v1, ci.v2 || ci.v1,
+            { type: 'valtorta', titre: ep.title || ep.fid || '', lien: ep.u || '', ref: ci.raw || '', tome: ep.tome || '' });
+          nV++;
+        });
+      });
+    } catch (e) {}
+    /* 2) Parallèles biblique-coraniques */
+    try {
+      var pa = await (await fetch('tradition/paralleles.json')).json();
+      (pa.paralleles || []).forEach(function (e) {
+        (e.refs || []).forEach(function (r) {
+          var x = decoupe(r), p = parse(x.ref);
+          if (!p) return;
+          ajoute(p.livre, p.ch, p.v1, p.v2,
+            { type: 'coran', titre: 'Coran ' + e.q + (e.t ? ' — ' + e.t : ''), extrait: x.extrait, q: e.q, note: e.n || '' });
+          nP++;
+        });
+      });
+    } catch (e) {}
+    /* 3) Thèmes croisés */
+    try {
+      var th = await (await fetch('tradition/themes.json')).json();
+      (th.themes || []).forEach(function (t) {
+        (t.bible || []).forEach(function (r) {
+          var x = decoupe(r), p = parse(x.ref);
+          if (!p) return;
+          ajoute(p.livre, p.ch, p.v1, p.v2, { type: 'theme', titre: t.label || '', extrait: x.extrait, note: t.note || '' });
+          nT++;
+        });
+      });
+    } catch (e) {}
+    STATS = { valtorta: nV, coran: nP, theme: nT, refs: IDX.size, total: nV + nP + nT };
+    PRET = true; EN_COURS = false;
+    return STATS;
+  }
+
+  /* ── qui cite cette référence ? ── */
+  function citePar(ref) {
+    var out = [];
+    if (!PRET) return out;
+    var p = parse(ref);
+    if (!p) return out;
+    var vus = {};
+    for (var v = p.v1; v <= p.v2; v++) {
+      var a = IDX.get(cle(p.livre, p.ch, v));
+      if (!a) continue;
+      for (var i = 0; i < a.length; i++) {
+        var x = a[i];
+        var k = x.type + '|' + x.titre + '|' + (x.q || '') + '|' + v;
+        if (vus[k]) continue;
+        vus[k] = 1;
+        out.push({ type: x.type, titre: x.titre, extrait: x.extrait || '', lien: x.lien || '', q: x.q || '', verset: v });
+      }
+    }
+    return out;
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v526-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v526-panel';
+    p.innerHTML = '<style>'
+      + '#v526-panel{position:fixed;inset:0;z-index:140750;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+      + '#v526-panel.open{display:flex}'
+      + '#v526-panel .b{width:min(820px,95vw);max-height:84vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v526-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v526-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v526-panel .hd .st{font-size:.68rem;color:var(--ui-dim,#8a8896)}'
+      + '#v526-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v526-panel .l{overflow:auto;padding:.6rem}'
+      + '#v526-panel .sec{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ui-info,#4f8ef7);margin:.75rem .25rem .35rem}'
+      + '#v526-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.5rem .6rem;margin-bottom:.4rem}'
+      + '#v526-panel .ti{font-size:.82rem;color:var(--ui-ink,#e8e6e0);font-weight:600}'
+      + '#v526-panel .ex{font-size:.76rem;color:var(--ui-dim,#8a8896);margin-top:.2rem;line-height:1.5}'
+      + '#v526-panel .go{display:inline-block;margin-top:.3rem;font-size:.68rem;color:var(--ui-accent,#e5c15a)}'
+      + '#v526-panel .empty{padding:1.3rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '#v526-panel .vs{font-size:.62rem;color:var(--ui-dim,#8a8896)}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3 id="v526-t">🔗 Réseau de références</h3><span class="st" id="v526-st"></span>'
+      + '<button class="x" id="v526-x">✕</button></div><div class="l" id="v526-l"></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v526-x').addEventListener('click', function () { p.classList.remove('open'); });
+    return p;
+  }
+  function rendre(ref, liste) {
+    var l = document.getElementById('v526-l'); if (!l) return;
+    document.getElementById('v526-t').textContent = '🔗 ' + ref + ' — cité par';
+    var st = document.getElementById('v526-st');
+    if (st) st.textContent = liste.length + ' citation(s)';
+    if (!liste.length) {
+      l.innerHTML = '<div class="empty">Aucune citation de ce passage dans les corpus croisés (Valtorta, parallèles coraniques, thèmes).</div>';
+      return;
+    }
+    var h = '', courant = '';
+    SOURCES.forEach(function (s) {
+      var items = liste.filter(function (x) { return x.type === s.type; });
+      if (!items.length) return;
+      h += '<div class="sec">' + esc(s.label) + ' · ' + items.length + '</div>';
+      items.forEach(function (x) {
+        h += '<div class="it"><div class="ti">' + esc(x.titre || '(sans titre)') + ' <span class="vs">v.' + x.verset + '</span></div>';
+        if (x.extrait) h += '<div class="ex">« ' + esc(x.extrait) + ' »</div>';
+        if (x.note) h += '<div class="ex">' + esc(x.note.slice(0, 260)) + '</div>';
+        if (x.lien) h += '<a class="go" href="' + esc(x.lien) + '" target="_blank" rel="noopener">ouvrir la source ↗</a>';
+        h += '</div>';
+      });
+    });
+    l.innerHTML = h;
+  }
+
+  async function ouvre(ref) {
+    panneau().classList.add('open');
+    var l = document.getElementById('v526-l');
+    if (l) l.innerHTML = '<div class="empty">Construction du réseau de références…</div>';
+    await charge();
+    rendre(ref, citePar(ref));
+  }
+
+  window.__v526Graphe = { charge: charge, citePar: citePar, ouvre: ouvre, fermer: function () { var p = document.getElementById('v526-panel'); if (p) p.classList.remove('open'); },
+    pret: function () { return PRET; }, stats: function () { return STATS; }, sources: SOURCES };
 })();
 </script>
 
