@@ -57164,6 +57164,329 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v537-archives-selection-script">
+/* v537 — SÉLECTION MULTIPLE DANS LES ARCHIVES (suppression simultanée).
+   Constat : effacer plusieurs conversations obligeait à répéter « ✕ Effacer »
+   puis la confirmation POUR CHACUNE. On ajoute une case à cocher par
+   conversation et UNE action groupée.
+
+   Module ADDITIF : il n'entre pas dans renderArchives(), il l'ENVELOPPE.
+   `renderArchives` est une DÉCLARATION de fonction globale (script 9956-25863,
+   hors IIFE) : `window.renderArchives` est le MÊME lien que celui des appels
+   internes, donc l'enveloppe est réellement empruntée. Après chaque rendu on
+   « habille » les items des listes VISIBLES.
+
+   Pourquoi des CLASSES et pas des id : renderArchives() écrit le MÊME html dans
+   TOUTES les .archives-list du document (panneau, vue plein écran, sidebar
+   inline) — des id y seraient dupliqués et `getElementById` ne verrait qu'un
+   seul des trois. Les cases sont donc liées une à une, et la barre se met à jour
+   dans les listes à la fois.
+
+   BARRE D'ACTION, ET POURQUOI LE BOUTON EST CONTEXTUEL.
+   Le banc v513 verrouille un invariant du projet : « aucun composant ui-* dans
+   le DOM au repos », qui prouve que les panneaux se construisent À LA DEMANDE.
+   Or la sidebar d'Archives (#tpai-arch-list) est VISIBLE dès l'amorçage
+   (mesuré : 267×175, pointer-events:auto) : y poser un bouton ui-* ferait
+   tomber l'invariant. Une première version « habillage paresseux » (n'habiller
+   que les listes visibles) ne suffisait pas non plus : #archives-panel se ferme
+   par une TRANSITION d'opacité, si bien qu'un test de visibilité exécuté dans
+   la première image de l'ouverture conclut encore « fermé » (course mesurée).
+
+   Solution retenue, sans course et sans exception :
+     • le COMPTEUR et la case « Tout » sont de simples <span>/<input> — l'audit
+       ne compte que les classes ui-*, donc ils ne pèsent pas sur l'invariant,
+       et la barre peut rester affichée en permanence (découvrable) ;
+     • le BOUTON « Supprimer » (seul composant ui-*) n'est créé QUE s'il y a une
+       sélection, et retiré dès qu'il n'y en a plus. Au repos : aucun ui-* ⇒
+       invariant tenu par construction, quelle que soit la visibilité.
+   Le test de visibilité ne sert donc qu'à décider OÙ poser cases et barre, et il
+   ignore volontairement l'opacité (animée) : display:none (rects vides),
+   visibility:hidden et pointer-events:none suffisent et ne sont pas animés.
+
+   Suppression : on passe par la CORBEILLE (v521, `__v521Corbeille.mettre`) quand
+   elle est présente — c'est le comportement de « ✕ Effacer », donc réversible.
+   Sinon on retombe sur la destruction, et le message de confirmation le DIT.
+*/
+(function () {
+  'use strict';
+  if (window.__v537Selection) return;
+
+  var SEL = {};          /* id -> true (sélection courante) */
+  var EN_COURS = false;  /* une suppression groupée est en cours */
+  var OBS = null;
+
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function ids() {
+    var o = [];
+    for (var k in SEL) if (Object.prototype.hasOwnProperty.call(SEL, k) && SEL[k]) o.push(k);
+    return o;
+  }
+  function nb() { return ids().length; }
+  function vide() { SEL = {}; }
+  function liste() { try { return document.querySelectorAll('.archives-list'); } catch (e) { return []; } }
+  function estBarre(el) { return !!(el && el.classList && el.classList.contains('arch-sel-bar')); }
+  function estCase(el) { return !!(el && el.classList && el.classList.contains('arch-sel-ck')); }
+
+  /* Une liste est « affichée » si elle est mise en page ET interactive.
+     On n'utilise NI opacity NI transform : #archives-panel les ANIME à
+     l'ouverture, et un test lu dans la première image de la transition la
+     croirait encore fermée (course mesurée). display/visibility/pointer-events,
+     eux, basculent instantanément. */
+  function estVisible(el) {
+    try {
+      if (!el || !el.getClientRects || el.getClientRects().length === 0) return false;
+      var cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.visibility === 'collapse') return false;
+      if (cs.pointerEvents === 'none') return false;
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function creerBarre(l) {
+    var bar = document.createElement('div');
+    bar.className = 'arch-sel-bar';
+    /* NI compteur NI « Tout » ne portent de classe ui-* : ils peuvent donc être
+       présents au repos sans toucher à l'invariant. Le BOUTON, lui, est ajouté
+       à la demande (voir majBarres) : c'est le seul composant du design system. */
+    bar.innerHTML = '<span class="arch-sel-n">0 sélectionnée(s)</span>'
+      + '<label class="arch-sel-all"><input type="checkbox" class="arch-sel-all-ck"> Tout</label>'
+      + '<span class="arch-sel-sp"></span>';
+    l.insertBefore(bar, l.firstChild);
+    var all = bar.querySelector('.arch-sel-all-ck');
+    if (all) all.addEventListener('change', function () { tout(this.checked); });
+    return bar;
+  }
+
+  /* ── barre d'action : le bouton n'existe QUE s'il y a une sélection ──
+     C'est ce qui tient l'invariant v513 (« aucun composant ui-* au repos »)
+     sans dépendre d'un test de visibilité, donc sans course. */
+  function majBarres() {
+    var n = nb(), ls = liste();
+    for (var i = 0; i < ls.length; i++) {
+      var l = ls[i];
+      var bar = l.querySelector('.arch-sel-bar');
+      if (!estVisible(l)) { if (bar) bar.remove(); continue; }
+      if (!bar) bar = creerBarre(l);
+      var c = bar.querySelector('.arch-sel-n');
+      if (c) c.textContent = n + ' sélectionnée(s)';
+      var a = bar.querySelector('.arch-sel-all-ck');
+      if (a) {
+        var tot = l.querySelectorAll('.archive-item').length;
+        a.checked = n >= tot && tot > 0;
+        a.indeterminate = n > 0 && n < tot;
+      }
+      var d = bar.querySelector('.arch-sel-del');
+      if (n) {
+        if (!d) {
+          d = document.createElement('button');
+          d.className = 'ui-btn arch-sel-del';
+          d.title = 'Déplacer les conversations sélectionnées dans la corbeille';
+          d.addEventListener('click', function (e) { e.stopPropagation(); supprimerSelection(); });
+          bar.appendChild(d);
+        }
+        d.disabled = (EN_COURS === true);
+        d.textContent = '🗑 Supprimer (' + n + ')';
+      } else if (d) {
+        d.remove();
+      }
+    }
+  }
+
+  /* ── cocher / décocher ── */
+  function bascule(id, on) {
+    if (!id) return;
+    if (on) SEL[id] = true; else delete SEL[id];
+    /* Mise à jour visuelle, sans re-rendre : un re-rendu relirait toutes les
+       conversations dans IndexedDB et ferait perdre la position de défilement
+       pour un simple clic. */
+    var its = document.querySelectorAll('.archive-item');
+    for (var i = 0; i < its.length; i++) {
+      if (its[i].getAttribute('data-chat-id') !== id) continue;
+      var ck = its[i].firstElementChild;
+      if (estCase(ck)) ck.checked = !!on;
+      its[i].classList.toggle('arch-sel-on', !!on);
+    }
+    majBarres();
+  }
+  function tout(on) {
+    var its = document.querySelectorAll('.archives-list .archive-item');
+    vide();
+    for (var i = 0; i < its.length; i++) {
+      var id = its[i].getAttribute('data-chat-id');
+      if (!id) continue;
+      if (on) SEL[id] = true;
+      var ck = its[i].firstElementChild;
+      if (estCase(ck)) ck.checked = !!on;
+      its[i].classList.toggle('arch-sel-on', !!on);
+    }
+    majBarres();
+  }
+
+  /* ── cases à cocher, dans les listes affichées ── */
+  function habiller() {
+    var ls = liste(), presents = {}, vu = 0;
+    for (var i = 0; i < ls.length; i++) {
+      var l = ls[i];
+      if (!estVisible(l)) continue;
+      vu++;
+      var items = l.querySelectorAll('.archive-item');
+      for (var j = 0; j < items.length; j++) {
+        var it = items[j];
+        var id = it.getAttribute('data-chat-id');
+        if (!id) continue;
+        presents[id] = 1;
+        if (!estCase(it.firstElementChild)) {
+          var ck = document.createElement('input');
+          ck.type = 'checkbox';
+          ck.className = 'arch-sel-ck';
+          ck.setAttribute('data-id', id);
+          ck.checked = !!SEL[id];
+          ck.title = 'Sélectionner cette conversation';
+          ck.setAttribute('aria-label', 'Sélectionner la conversation');
+          /* l'item porte un onclick inline (charger la conversation) :
+             sans cela, cocher la chargerait aussi. */
+          ck.addEventListener('click', function (e) { e.stopPropagation(); });
+          ck.addEventListener('change', function () { bascule(this.getAttribute('data-id'), this.checked); });
+          it.insertBefore(ck, it.firstChild);
+        } else {
+          it.firstElementChild.checked = !!SEL[id];
+        }
+        it.classList.toggle('arch-sel-on', !!SEL[id]);
+      }
+    }
+    /* La sélection suit ce qui est AFFICHÉ : une conversation qui n'est plus
+       listée (supprimée, ou écartée par la recherche) sort de la sélection.
+       Sans cela, le compteur annoncerait des conversations invisibles.
+       On ne purge QUE si au moins une liste a été parcourue — sinon fermer le
+       dernier panneau viderait la sélection. */
+    if (vu) {
+      for (var k in SEL) {
+        if (Object.prototype.hasOwnProperty.call(SEL, k) && !presents[k]) delete SEL[k];
+      }
+    }
+    majBarres();
+  }
+
+  /* ── réhabiller dès qu'un panneau s'ouvre (sans dépendre d'un re-rendu) ── */
+  function surveille() {
+    if (OBS || typeof MutationObserver !== 'function') return;
+    var cibles = [], ls = liste();
+    for (var i = 0; i < ls.length; i++) {
+      /* les ANCÊTRES : c'est eux qui portent la classe « active » ou [hidden] */
+      for (var n = ls[i].parentElement; n && n !== document.body; n = n.parentElement) {
+        if (cibles.indexOf(n) < 0) cibles.push(n);
+      }
+    }
+    if (!cibles.length) return;
+    OBS = new MutationObserver(function () { try { habiller(); } catch (e) {} });
+    for (var j = 0; j < cibles.length; j++) {
+      try { OBS.observe(cibles[j], { attributes: true, attributeFilter: ['class', 'hidden', 'style'] }); } catch (e) {}
+    }
+  }
+
+  /* ── suppression groupée ── */
+  async function supprimerSelection() {
+    if (EN_COURS) return 0;
+    var a = ids();
+    if (!a.length) { toast('Aucune conversation sélectionnée', 'info'); return 0; }
+    var n = a.length;
+    var corb = window.__v521Corbeille;
+    var versCorbeille = !!(corb && typeof corb.mettre === 'function');
+    var quoi = (n === 1) ? 'cette conversation' : ('ces ' + n + ' conversations');
+    var msg = versCorbeille
+      ? ('Déplacer ' + quoi + ' dans la corbeille ? (restaurables ensuite)')
+      : ('Supprimer DÉFINITIVEMENT ' + quoi + ' ? (irréversible)');
+    if (!confirm(msg)) return 0;
+
+    EN_COURS = true; majBarres();
+    var ok = 0, rates = 0;
+    try {
+      for (var i = 0; i < a.length; i++) {
+        var id = a[i], chat = null;
+        try { chat = await db.get('chats', id); } catch (e) { chat = null; }
+        try {
+          if (chat && versCorbeille) corb.mettre(chat);   /* réversible */
+          await db.delete('chats', id);
+          ok++;
+        } catch (e) { rates++; }
+        /* la conversation supprimée ne doit pas rester ouverte à l'écran */
+        try {
+          if (typeof state !== 'undefined' && state && state.chatId === id && typeof window.newChat === 'function') {
+            await window.newChat();
+          }
+        } catch (e) {}
+      }
+      vide();
+      try { if (typeof window.renderArchives === 'function') await window.renderArchives(); } catch (e) {}
+    } finally {
+      EN_COURS = false;
+    }
+    var bilan = ok + ' conversation(s) ' + (versCorbeille ? 'déplacée(s) dans la corbeille' : 'supprimée(s)');
+    if (rates) bilan += ' — ' + rates + ' en échec';
+    toast(bilan, rates ? 'warn' : 'success');
+    majBarres();
+    return ok;
+  }
+
+  /* ── style (jetons du design system v509) ── */
+  function style() {
+    if (document.getElementById('v537-css')) return;
+    var st = document.createElement('style');
+    st.id = 'v537-css';
+    st.textContent =
+      '.archives-list .arch-sel-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:.45rem;'
+      + 'padding:.4rem .5rem;margin:0 0 .4rem;background:var(--ui-panel,#0d1626);'
+      + 'border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);flex-wrap:wrap}'
+      + '.archives-list .arch-sel-all{display:flex;align-items:center;gap:.35rem;font-size:.68rem;'
+      + 'color:var(--ui-dim,#8a8896);cursor:pointer;white-space:nowrap}'
+      + '.archives-list .arch-sel-all-ck,.archives-list .arch-sel-ck{width:15px;height:15px;flex:0 0 auto;'
+      + 'accent-color:var(--ui-accent,#e5c15a);cursor:pointer;margin:0}'
+      + '.archives-list .arch-sel-n{font-size:.68rem;color:var(--ui-accent,#e5c15a);white-space:nowrap}'
+      + '.archives-list .arch-sel-sp{flex:1}'
+      + '.archives-list .arch-sel-del{font-size:.68rem;padding:.25rem .5rem}'
+      + '.archives-list .arch-sel-del[disabled]{opacity:.45;cursor:not-allowed}'
+      + '.archives-list .archive-item.arch-sel-on{background:rgba(229,193,90,.10);'
+      + 'box-shadow:inset 3px 0 0 var(--ui-accent,#e5c15a)}'
+      + '.archives-list .archive-item>.arch-sel-ck{margin-right:.15rem}';
+    document.head.appendChild(st);
+  }
+
+  /* ── enveloppe de renderArchives ── */
+  function enveloppe() {
+    var orig = window.renderArchives;
+    if (!orig || orig.__v537) return false;
+    var f = async function () {
+      var r = await orig.apply(this, arguments);
+      try { habiller(); } catch (e) {}
+      return r;
+    };
+    f.__v537 = true;
+    f.__orig = orig;
+    window.renderArchives = f;
+    return true;
+  }
+
+  function init() {
+    style();
+    enveloppe();
+    surveille();
+    try { habiller(); } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  /* renderArchives peut être (re)défini plus tard par l'app : on réessaie. */
+  setTimeout(init, 1500);
+
+  window.__v537Selection = {
+    ids: ids, nb: nb, vide: vide, bascule: bascule, tout: tout,
+    habiller: habiller, majBarres: majBarres, estVisible: estVisible,
+    supprimerSelection: supprimerSelection,
+    enveloppee: function () { return !!(window.renderArchives && window.renderArchives.__v537); },
+    enCours: function () { return EN_COURS; }
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>

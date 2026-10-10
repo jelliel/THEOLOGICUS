@@ -10,11 +10,24 @@
 //   (a) le miroir ne dépasse jamais son budget ;
 //   (b) localStorage garde de la place pour les vraies données (une note s'écrit) ;
 //   (c) la borne est un PLAFOND, pas un BLOCAGE : les conversations arrivent
-//       quand même, dans IndexedDB (qui les contient toutes).
+//       quand même, dans IndexedDB (qui les contient toutes) ;
+//   (d) le quota n'est JAMAIS atteint (le miroir ne s'arrête pas).
+//
+// ⚠️ AUTONOMIE — leçon de l'échec CI du 2026-10-10.
+// Une première version lisait le magasin PARTAGÉ de la machine : elle passait en
+// local (42 Mo, 690 clés) et ÉCHOUAIT en CI, où le runner part d'un magasin VIDE
+// (« des conversations ont bien été mirées -- n=0 »). Un banc ne doit pas dépendre
+// d'un état local. Celui-ci :
+//   • lance le relais avec un LOCALAPPDATA ISOLÉ (dossier temporaire) — le
+//     magasin de l'utilisateur n'est ni lu ni pollué ;
+//   • REMPLIT lui-même le magasin de N conversations assez grosses pour que la
+//     somme dépasse le quota (~5 Mo) : c'est exactement la panne d'origine.
 //
 // Usage : node verify_v536_quota.js [--port 8765]
 
 const path = require("path");
+const os = require("os");
+const fs = require("fs");
 const { spawn, execSync } = require("child_process");
 const PW = process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright";
 const { chromium } = require("playwright");
@@ -38,6 +51,12 @@ const PY = process.env.PY_BIN || "C:/Users/toshr/.workbuddy-ai/binaries/python/v
 const AUTH_HASH = "ca9cc135dea09c84e670f62659826f1d9d76a633e421cdc54c67ffa20b3a1a96";
 
 const SEUIL_SUR = 3500000;   /* 3,5 Mo : au-delà, l'utilisateur n'a plus de marge */
+const N_CHATS = 60;          /* conversations semées dans le magasin */
+const KO_PAR_CHAT = 120;     /* 60 × 120 Ko ≈ 7,2 Mo : dépasse le quota (~5 Mo) */
+const PREFIXE = "bench-quota-";
+
+/* Magasin ISOLÉ : jamais celui de l'utilisateur. */
+const STORE_DIR = path.join(os.tmpdir(), "theo-banc-v536-" + process.pid);
 
 const resultats = [];
 function ok(nom, cond, detail) { resultats.push([!!cond, nom, detail === undefined ? "" : String(detail)]); console.log(`  ${cond ? "[OK]  " : "[ECHEC]"} ${nom}${detail !== undefined ? "  -- " + detail : ""}`); return !!cond; }
@@ -46,14 +65,40 @@ function section(t) { console.log("\n" + t); }
 let relais = null;
 async function relaisVit() { try { const r = await fetch(`http://127.0.0.1:${PORT}/__theologicus_ping`, { signal: AbortSignal.timeout(3000) }); return r.status === 200; } catch (e) { return false; } }
 async function assurerRelais() {
-  tuerPort(PORT); await new Promise(r => setTimeout(r, 600));
-  console.log("  … lancement de proxy_server.py (port " + PORT + ")");
-  relais = spawn(PY, ["-u", "proxy_server.py"], { cwd: RACINE, stdio: "ignore", windowsHide: true });
+  tuerPort(PORT); await new Promise(r => setTimeout(r, 1500));
+  try { fs.mkdirSync(STORE_DIR, { recursive: true }); } catch (e) {}
+  console.log("  … lancement de proxy_server.py (port " + PORT + ", magasin isolé)");
+  relais = spawn(PY, ["-u", "proxy_server.py"], {
+    cwd: RACINE, stdio: "ignore", windowsHide: true,
+    env: Object.assign({}, process.env, { LOCALAPPDATA: STORE_DIR })
+  });
   for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 500)); if (await relaisVit()) return true; if (relais.exitCode !== null) return false; }
   return false;
 }
 
-/* Mesure objective du localStorage (identifie les miroirs de conversation). */
+/* Remplit le magasin partagé : c'est la panne d'origine qu'on veut reproduire. */
+async function semerMagasin() {
+  const entries = [], t = Date.now();
+  for (let i = 0; i < N_CHATS; i++) {
+    const v = JSON.stringify({
+      id: PREFIXE + i,
+      title: 'Conversation de banc ' + i,
+      updated: t - i * 1000,
+      messages: [
+        { role: 'user', content: 'Question ' + i },
+        { role: 'assistant', content: 'r'.repeat(KO_PAR_CHAT * 1024) }
+      ]
+    });
+    entries.push({ k: 'chat::' + PREFIXE + i, v: v, ts: t - i });
+  }
+  const r = await fetch(`http://127.0.0.1:${PORT}/theologicus-store`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: entries })
+  });
+  if (!r.ok) return { ok: false, status: r.status };
+  const j = await r.json().catch(() => ({}));
+  return { ok: true, rev: j && j.rev };
+}
+
 function etatLS() {
   var n = 0, oct = 0, mir = 0, octMir = 0;
   for (var i = 0; i < localStorage.length; i++) {
@@ -71,18 +116,23 @@ function etatLS() {
   console.log("=".repeat(72));
   if (!await assurerRelais()) { console.log("\nRelais injoignable."); process.exit(2); }
 
+  section("0. Semis du magasin partagé (la panne d'origine, reproduite)");
+  const sem = await semerMagasin();
+  ok("le magasin partagé contient les " + N_CHATS + " conversations du banc", sem.ok, JSON.stringify(sem));
+  console.log("  (≈ " + Math.round(N_CHATS * KO_PAR_CHAT / 1024) + " Mo semés — de quoi saturer le quota si rien n'est borné)");
+
   const optionsNav = Object.assign({ args: ["--no-sandbox", "--no-proxy-server"] },
     process.env.PW_DIR ? { executablePath: path.join(PW, "chromium-1234", "chrome-win64", "chrome.exe") } : {});
   const browser = await chromium.launch(optionsNav);
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const erreurs = [];
-  const BRUIT = /version\.txt|Failed to load resource|net::ERR|Failed to fetch|401|403|404|Unauthorized/i;
+  const BRUIT = /version\.txt|Failed to load resource|net::ERR|Failed to fetch|401|403|404|Unauthorized|\[corpus\]/i;
   page.on("pageerror", e => erreurs.push(String(e)));
   page.on("console", m => { if (m.type() === "error" && !BRUIT.test(m.text())) erreurs.push("console: " + m.text()); });
 
   await page.addInitScript(() => { try { localStorage.setItem("theologicus_wizard_skipped", "1"); } catch (e) {} });
 
-  section("0. Ouverture (profil neuf) et authentification");
+  section("1. Ouverture (profil neuf) et authentification");
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.evaluate((h) => {
     const enc = new TextEncoder().encode("remember:" + h);
@@ -96,10 +146,9 @@ function etatLS() {
   ok("le module de synchronisation est chargé", await page.evaluate(() => !!window.__theoSync));
   ok("il publie l'état de son miroir", await page.evaluate(() => !!(window.__theoSync && window.__theoSync.miroir)));
 
-  section("1. Le premier pull ne sature plus localStorage");
-  /* On laisse le temps au pull initial (démarré à 800 ms, répété toutes les 5 s). */
-  await page.waitForFunction(() => window.__theoSync.miroir().octets > 0, { timeout: 60000 }).catch(() => {});
-  await page.waitForTimeout(4000);
+  section("2. Le premier pull ne sature plus localStorage");
+  await page.waitForFunction(() => window.__theoSync.miroir().octets > 0, { timeout: 90000 }).catch(() => {});
+  await page.waitForTimeout(5000);
   const ls = await page.evaluate(etatLS);
   const mi = await page.evaluate(() => window.__theoSync.miroir());
   console.log("  mesure : clés=" + ls.cles + "  total=" + Math.round(ls.octets / 1024) + " Ko"
@@ -116,8 +165,9 @@ function etatLS() {
     }, mi.plafond), "plafond=" + mi.plafond);
   ok("localStorage garde de la marge pour les vraies données", ls.octets <= SEUIL_SUR,
     Math.round(ls.octets / 1024) + " Ko <= " + Math.round(SEUIL_SUR / 1024) + " Ko");
+  ok("le quota n'a JAMAIS été atteint (le miroir ne s'est pas arrêté)", mi.arrete === false, "arrêté=" + mi.arrete);
 
-  section("2. L'utilisateur peut encore enregistrer (la panne d'origine)");
+  section("3. L'utilisateur peut encore enregistrer (la panne d'origine)");
   const ecrit = await page.evaluate(() => {
     try {
       localStorage.setItem('theo_panel_notes_v1', JSON.stringify([
@@ -132,23 +182,27 @@ function etatLS() {
     catch (e) { return false; }
   }));
 
-  section("3. La borne est un PLAFOND, pas un BLOCAGE (les conversations arrivent)");
+  section("4. La borne est un PLAFOND, pas un BLOCAGE (les conversations arrivent)");
   const idb = await page.evaluate(async () => {
-    try { const t = await db.getAll('chats'); return Array.isArray(t) ? t.length : -1; } catch (e) { return -2; }
+    try {
+      const t = await db.getAll('chats');
+      return Array.isArray(t) ? t.filter(c => String(c.id).indexOf('bench-quota-') === 0).length : -1;
+    } catch (e) { return -2; }
   });
-  ok("IndexedDB (magasin canonique) contient des conversations", idb >= 1, "n=" + idb);
+  ok("les " + N_CHATS + " conversations du magasin sont dans IndexedDB", idb >= N_CHATS, "n=" + idb);
   ok("le miroir est un SOUS-ENSEMBLE d'IndexedDB (aucune conversation perdue)",
     idb >= ls.miroirs, "IDB=" + idb + " >= miroirs=" + ls.miroirs);
   ok("des conversations arrivent SANS être mirées (preuve que ce n'est pas un blocage)",
     idb > ls.miroirs, "IDB=" + idb + " > miroirs=" + ls.miroirs);
 
-  section("4. Propreté");
+  section("5. Propreté");
   const quota = erreurs.filter(e => /QuotaExceeded/i.test(e));
   ok("aucune erreur QuotaExceededError", quota.length === 0, quota.slice(0, 2).join(" | "));
   ok("aucune erreur JavaScript", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
 
   await browser.close();
   if (relais) relais.kill();
+  try { fs.rmSync(STORE_DIR, { recursive: true, force: true }); } catch (e) {}
 
   const total = resultats.length;
   const bons = resultats.filter(r => r[0]).length;
