@@ -53427,11 +53427,13 @@ window.continueTradApart = async function (msgId) {
     if (t) t.textContent = '📊 Synopse — ' + refCourante();
     var ref = document.getElementById('v506-ref');
     if (ref) ref.textContent = refCourante();
+    majHash();   /* v516 — le lien profond suit la reference affichee */
     var mb = document.getElementById('v506-mode');
     if (mb) mb.textContent = e.mode === 'chapitre' ? '📄 Verset seul' : '📜 Chapitre entier';
     var c = document.getElementById('v506-c');
     if (!c) return;
     c.innerHTML = '<div style="color:var(--ui-dim,#8a8896);font-size:.8rem">Chargement des versions…</div>';
+    DERNIER = null;   /* v516b — pas d'export perime pendant le chargement */
     var attendus = VERSIONS.length, faits = 0, blocs = [], donnees = [];
     VERSIONS.forEach(function (v, idx) {
       charger(v, e.livre, function (livre) {
@@ -53464,14 +53466,15 @@ window.continueTradApart = async function (msgId) {
         }
         blocs[idx] = bloc;
         donnees[idx] = versets.length ? { nom: v.nom, prov: v.ed + ' · ' + v.langue + ' · ' + v.dat, versets: versets } : null;
+        /* v516b — DERNIER suit le rendu AU FIL DE L'EAU : un export/copie
+           immediat reflete ce qui est affiche, pas l'etat precedent. */
+        DERNIER = { ref: refCourante(), mode: e.mode, versions: donnees.filter(Boolean) };
         if (++faits === attendus) {
           var html = blocs.filter(Boolean).join('');
           c.innerHTML = html || '<div style="color:var(--ui-err,#ff8a80);font-size:.8rem">Aucune version disponible pour cette référence.</div>';
           var s = document.getElementById('v506-s');
           if (s) s.innerHTML = '<span class="ui-badge">' + blocs.filter(Boolean).length + ' version(s)</span>'
                               + '<span>comparaison hors-ligne</span>';
-          /* v515 — memorise la comparaison rendue, pour Copier / Exporter. */
-          DERNIER = { ref: refCourante(), mode: e.mode, versions: donnees.filter(Boolean) };
         }
       });
     });
@@ -53537,11 +53540,44 @@ window.continueTradApart = async function (msgId) {
     return true;
   }
 
+  /* ── v516 — LIEN PROFOND : partager la synopse par URL (#synopse=…). ── */
+  function refPartageable() {
+    if (!ETAT) return '';
+    return ETAT.nom + ' ' + ETAT.ch + ':' + (ETAT.mode === 'chapitre' ? 1 : ETAT.v1);
+  }
+  function majHash() {
+    try {
+      if (!ETAT) return;
+      var h = '#synopse=' + encodeURIComponent(refPartageable()) + (ETAT.mode === 'chapitre' ? '&mode=chapitre' : '');
+      if (location.hash !== h) history.replaceState(null, '', h);
+    } catch (e) {}
+  }
+  function depuisHash() {
+    var m = String(location.hash || '').match(/^#synopse=([^&]+)(?:&mode=([a-z]+))?/i);
+    if (!m) return null;
+    var ref = m[1];
+    try { ref = decodeURIComponent(ref); } catch (e) {}
+    return { ref: ref, mode: (m[2] || '').toLowerCase() === 'chapitre' ? 'chapitre' : 'verset' };
+  }
+  function appliqueHash() {
+    var d = depuisHash();
+    if (!d || !d.ref) return;
+    if (ETAT && refPartageable() === d.ref && ETAT.mode === d.mode) return;   /* deja affiche */
+    var parse = window.__v446Refs && window.__v446Refs.parseRef;
+    if (!parse || !parse(d.ref)) return;
+    if (ouvrir(d.ref) && d.mode === 'chapitre' && ETAT) { ETAT.mode = 'chapitre'; rendre(); }
+  }
+  window.addEventListener('hashchange', appliqueHash);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(appliqueHash, 800); });
+  else setTimeout(appliqueHash, 800);
+
   window.__v506Synopse = { ouvrir: ouvrir, fermer: fermer, rendre: rendre, deplace: deplace,
                            basculeMode: basculeMode, refCourante: refCourante,
                            versions: VERSIONS, nettoieStrong: nettoieStrong,
                            texte: texteSynopse, copier: copierSyn, exporter: exporterSyn,
                            dernier: function () { return DERNIER; },
+                           hash: depuisHash, majHash: majHash, refPartageable: refPartageable,
+                           appliqueHash: appliqueHash,
                            etat: function () { return ETAT; } };
 })();
 </script>
