@@ -54711,6 +54711,211 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v524-memoire-script">
+/* v524 — MÉMOIRE PERTINENTE (Axe 1 de la 3.0, lot A5).
+   Constat mesuré : buildSystemPrompt appelle `memory.getRelevant("context", …)`.
+   La requête est le MOT LITTÉRAL « context », et le score ajoute TOUJOURS
+   l'importance (>= 1) → le filtre `score > 0` est toujours vrai → TOUTES les
+   mémoires sont injectées dans le prompt, sans aucune pertinence (et le prompt
+   gonfle à chaque mémoire ajoutée).
+
+   Ce module ADDITIF corrige la pertinence :
+     1. LEXICAL (toujours) : la VRAIE question est utilisée (dernier message
+        utilisateur) ; les mémoires sont classées par recouvrement de termes
+        PONDÉRÉ PAR IDF, plus un bonus de tag exact ; seules les vraies
+        correspondances sont retenues (+ jusqu'à 2 mémoires « durables »,
+        importance >= 4).
+     2. SÉMANTIQUE (si Ollama est joignable) : la question et les mémoires sont
+        embeddées (nomic-embed-text) ; les mémoires proches par le SENS mais
+        absentes du lexical sont ajoutées dans un bloc dédié.
+   Il remplace `memory.getRelevant` (sans toucher au site d'appel : la valeur de
+   repli « context » reste gérée, donc aucun risque de casse). */
+(function () {
+  'use strict';
+  if (window.__v524Memo) return;
+
+  var BASE = 'http://127.0.0.1:11434', MODEL = 'nomic-embed-text';
+  var MARQUEUR = 'RÈGLES DE VÉRIFICATION';
+  var VEC = new Map();          /* id -> { h, v } */
+  var OLLAMA = null;            /* null = inconnu, true/false */
+  var DERNIER = { lexical: [], semantique: [] };
+  var STOP = { de:1, la:1, le:1, les:1, des:1, du:1, un:1, une:1, et:1, ou:1, en:1, au:1, aux:1,
+    il:1, elle:1, on:1, nous:1, vous:1, ils:1, que:1, qui:1, quoi:1, dont:1, ou:1, pour:1, par:1,
+    sur:1, dans:1, avec:1, sans:1, est:1, sont:1, etre:1, avoir:1, ce:1, cet:1, cette:1, ces:1,
+    son:1, sa:1, ses:1, mon:1, ma:1, mes:1, plus:1, pas:1, ne:1, je:1, tu:1, se:1, si:1, tout:1,
+    tous:1, toute:1, faire:1, dit:1, dois:1, doit:1, mes:1, tes:1, ton:1 };
+
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function jetons(s) {
+    return norm(s).split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3 && !STOP[w]; });
+  }
+  function etat() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
+  function derniereQuestion() {
+    var st = etat(), ms = (st && st.messages) || [];
+    for (var i = ms.length - 1; i >= 0; i--) {
+      var m = ms[i];
+      if (m && m.role === 'user' && typeof m.content === 'string') return m.content;
+    }
+    return '';
+  }
+
+  /* ── 1) pertinence LEXICALE (IDF) ── */
+  function classe(query, liste) {
+    var qt = jetons(query), out = [];
+    if (!qt.length || !liste || !liste.length) return out;
+    var df = {};
+    liste.forEach(function (m) {
+      var s = {};
+      jetons((m.content || '') + ' ' + ((m.tags || []).join(' '))).forEach(function (t) { s[t] = 1; });
+      Object.keys(s).forEach(function (t) { df[t] = (df[t] || 0) + 1; });
+    });
+    var N = liste.length;
+    liste.forEach(function (m) {
+      var hay = {};
+      jetons((m.content || '') + ' ' + ((m.tags || []).join(' '))).forEach(function (t) { hay[t] = 1; });
+      var s = 0;
+      qt.forEach(function (t) { if (hay[t]) s += Math.log(1 + N / (df[t] || 1)); });
+      var tagsN = (m.tags || []).map(norm);
+      if (tagsN.some(function (tg) { return qt.indexOf(tg) >= 0; })) s += 1.2;
+      if (s > 0) out.push({ m: m, s: s });
+    });
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out;
+  }
+
+  function getRelevant(query, limit) {
+    var st = etat();
+    var liste = (st && st.globalMemories) || [];
+    if (!liste.length) return [];
+    limit = limit || 5;
+    var q = String(query == null ? '' : query).trim();
+    if (!q || q.toLowerCase() === 'context') q = derniereQuestion();   /* v524 — la VRAIE question */
+    var durables = liste.filter(function (m) { return (m.importance || 1) >= 4; }).slice(0, 2);
+    var classes = classe(q, liste);
+    DERNIER.lexical = classes.slice(0, limit).map(function (x) { return x.m; });
+    var res = [], vu = {};
+    durables.concat(DERNIER.lexical).forEach(function (m) {
+      if (!vu[m.id]) { vu[m.id] = 1; res.push(m); }
+    });
+    return res.slice(0, limit).map(function (m) { return '[MEM:' + ((m.tags || []).join(',')) + '] ' + m.content; });
+  }
+
+  function patch() {
+    try {
+      if (typeof memory === 'undefined' || !memory || memory.__v524) return;
+      memory.getRelevant = getRelevant;
+      memory.__v524 = true;
+    } catch (e) {}
+  }
+
+  /* ── 2) couche SÉMANTIQUE (optionnelle : Ollama) ── */
+  async function ollamaOk() {
+    if (OLLAMA !== null) return OLLAMA;
+    try {
+      var c = new AbortController(), t = setTimeout(function () { c.abort(); }, 1500);
+      var r = await fetch(BASE + '/v1/models', { signal: c.signal });
+      clearTimeout(t); OLLAMA = !!r.ok;
+    } catch (e) { OLLAMA = false; }
+    return OLLAMA;
+  }
+  async function embed(txt) {
+    var r = await fetch(BASE + '/v1/embeddings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, input: [txt] })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var j = await r.json();
+    return j.data[0].embedding;
+  }
+  function norme(v) { var s = 0; for (var i = 0; i < v.length; i++) s += v[i] * v[i]; s = Math.sqrt(s) || 1; return v.map(function (x) { return x / s; }); }
+  function cos(a, b) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+  function hash(s) { var h = 0; s = String(s || ''); for (var i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; } return String(h); }
+
+  async function semantique(q, limite) {
+    if (!(await ollamaOk())) return [];
+    var st = etat();
+    var liste = (st && st.globalMemories) || [];
+    if (liste.length < 2 || !q || q.trim().length < 3) return [];
+    try {
+      var vq = norme(await embed(q)), res = [];
+      for (var i = 0; i < liste.length; i++) {
+        var m = liste[i], h = hash(m.content), c = VEC.get(m.id);
+        if (!c || c.h !== h) {
+          try { c = { h: h, v: norme(await embed(m.content || '')) }; VEC.set(m.id, c); }
+          catch (e) { continue; }
+        }
+        res.push({ m: m, s: cos(vq, c.v) });
+      }
+      res.sort(function (a, b) { return b.s - a.s; });
+      return res.filter(function (x) { return x.s > 0.45; }).slice(0, limite || 3);
+    } catch (e) { return []; }
+  }
+
+  /* ── injection du bloc sémantique dans le chat principal ── */
+  async function enrichir(messages) {
+    try {
+      var estChat = false, i;
+      for (i = 0; i < messages.length; i++) {
+        var x = messages[i];
+        if (x && x.role === 'system' && typeof x.content === 'string' && x.content.indexOf(MARQUEUR) >= 0) estChat = true;
+      }
+      if (!estChat) return messages;
+      var q = '';
+      for (i = messages.length - 1; i >= 0; i--) {
+        var m = messages[i];
+        if (m && m.role === 'user' && typeof m.content === 'string') { q = m.content; break; }
+      }
+      if (!q || q.trim().length < 3) return messages;
+      var sem = await semantique(q, 3);
+      DERNIER.semantique = sem.map(function (x) { return x.m; });
+      if (!sem.length) return messages;
+      var deja = {};
+      DERNIER.lexical.forEach(function (m2) { deja[m2.id] = 1; });
+      var neuf = sem.filter(function (x) { return !deja[x.m.id]; });
+      if (!neuf.length) return messages;
+      var l = ['═══ MÉMOIRE PERTINENTE (recherche sémantique locale) ═══', ''];
+      neuf.forEach(function (x, k) {
+        var tg = (x.m.tags || []).join(', ');
+        l.push('[' + (k + 1) + '] ' + (tg ? '(' + tg + ') ' : '') + x.m.content);
+      });
+      l.push('');
+      l.push('CONSIGNE : ces éléments de mémoire concernent la demande en cours ; tiens-en compte.');
+      var idx = -1;
+      for (i = 0; i < messages.length; i++) { if (messages[i] && messages[i].role === 'system') idx = i; }
+      var copie = messages.slice();
+      copie.splice(idx + 1, 0, { role: 'system', content: l.join('\n') });
+      return copie;
+    } catch (e) { return messages; }
+  }
+
+  function installe() {
+    patch();
+    var o1 = window.callLLM;
+    if (o1 && !o1.__v524) {
+      var f1 = async function (cfg, msgs, opts) { return o1(cfg, await enrichir(msgs), opts); };
+      f1.__v524 = true; window.callLLM = f1;
+    }
+    var o2 = window.callLLMStream;
+    if (o2 && !o2.__v524) {
+      var f2 = async function (cfg, msgs, opts, onChunk) { return o2(cfg, await enrichir(msgs), opts, onChunk); };
+      f2.__v524 = true; window.callLLMStream = f2;
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installe);
+  else installe();
+  setTimeout(installe, 1500);
+
+  window.__v524Memo = {
+    getRelevant: getRelevant, classe: classe, jetons: jetons, derniereQuestion: derniereQuestion,
+    semantique: semantique, enrichir: enrichir, ollamaOk: ollamaOk, patche: function () { try { return !!(typeof memory !== 'undefined' && memory && memory.__v524); } catch (e) { return false; } },
+    dernier: function () { return DERNIER; }
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>

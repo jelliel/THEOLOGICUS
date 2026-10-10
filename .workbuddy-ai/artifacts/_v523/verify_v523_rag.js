@@ -95,7 +95,12 @@ async function assurerRelais() {
   await page.waitForTimeout(800);
   ok("le module v523 est chargé", await page.evaluate(() => !!window.__v523Rag));
   ok("l'ancrage est ACTIF par défaut", await page.evaluate(() => window.__v523Rag.actif()));
-  ok("callLLM a bien été enveloppé", await page.evaluate(() => !!(window.callLLM && window.callLLM.__v523)));
+  // v524 s'enveloppe PAR-DESSUS v523 : le drapeau __v523 est sur la couche
+  // INTERNE. On vérifie donc que les DEUX routes portent une couche RAG.
+  ok("callLLM ET callLLMStream sont enveloppés (chaîne RAG)", await page.evaluate(() => {
+    const f = window.callLLM, g = window.callLLMStream;
+    return !!(f && g && (f.__v523 || f.__v524) && (g.__v523 || g.__v524));
+  }));
 
   section("1. Détection du chat principal et extraction de la question");
   const det = await page.evaluate(() => {
