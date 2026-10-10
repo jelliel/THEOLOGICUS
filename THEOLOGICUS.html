@@ -54916,6 +54916,247 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v525-verif-script">
+/* v525 — VÉRIFICATEUR DE CITATIONS (Axe 1 de la 3.0, lot A4).
+   Le prompt système EXIGE des références, mais rien ne vérifie qu'elles
+   EXISTENT ni que le texte cité correspond. Une référence inventée
+   (« Jean 99:99 ») ou une citation déformée passe donc sans contrôle.
+
+   Ce module ADDITIF relit les réponses de l'assistant et, pour chaque référence
+   biblique balisée (.bible-ref), confronte à la BIBLE EMBARQUÉE (via
+   window.fetchVerse, donc les éditions de l'application) :
+     • la référence EXISTE-t-elle ?            -> ✅ / ❌ introuvable
+     • le texte CITÉ correspond-il au verset ? -> conforme / non conforme
+   puis appose un VERDICT sur le message (cliquable : détail référence par
+   référence). Aucun autre module n'est modifié. Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v525Verif) return;
+
+  var OBS = null, TIMER = null, DERNIER = null;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+    catch (e) { return String(s || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+  }
+
+  /* ── texte situé APRÈS une référence (jusqu'à la suivante) ── */
+  function texteApres(el, max) {
+    var out = '', n = el;
+    var racine = el.closest ? el.closest('.message-content') : null;
+    while (n && out.length < max) {
+      n = n.nextSibling;
+      if (!n) break;
+      if (n.nodeType === 1 && n.classList && n.classList.contains('bible-ref')) break;
+      out += (n.textContent || '');
+    }
+    return out.slice(0, max);
+  }
+  /* ── extraction d'un segment cité (« … » ou " … " ou après « : ») ── */
+  function extraitCitation(s) {
+    s = String(s || '');
+    var m = s.match(/[«"“]([^»"”]{15,400})[»"”]/);
+    if (m) return m[1].trim();
+    m = s.match(/:\s*([^.!?\n]{25,400})/);
+    if (m) return m[1].trim();
+    return '';
+  }
+  /* ── comparaison citation / verset local ── */
+  function compare(cite, local) {
+    var a = norm(cite), b = norm(local);
+    if (!a || !b) return 'inconnu';
+    var court = a.slice(0, 40);
+    if (court.length >= 15 && b.indexOf(court) >= 0) return 'exact';
+    var ta = a.split(' ').filter(function (w) { return w.length > 2; });
+    var tb = b.split(' ').filter(function (w) { return w.length > 2; });
+    if (!ta.length || !tb.length) return 'inconnu';
+    var set = {}; tb.forEach(function (w) { set[w] = 1; });
+    var communs = 0;
+    ta.forEach(function (w) { if (set[w]) communs++; });
+    var r = communs / Math.max(1, Math.min(ta.length, tb.length));
+    if (r >= 0.6) return 'partiel';
+    return 'different';
+  }
+
+  /* ── vérification d'un message ── */
+  function verifie(msgEl) {
+    try {
+      var content = msgEl.querySelector('.message-content');
+      if (!content) return null;
+      var refs = Array.prototype.slice.call(content.querySelectorAll('.bible-ref'))
+        .filter(function (a) { return !(a.classList && a.classList.contains('bible-ref-ext')); });
+      if (!refs.length) return null;
+      var out = [], vus = {};
+      refs.forEach(function (a) {
+        var ref = String(a.textContent || '').trim();
+        if (!ref || vus[ref]) return;
+        vus[ref] = 1;
+        var v = null;
+        try { if (typeof window.fetchVerse === 'function') v = window.fetchVerse(ref); } catch (e) { v = null; }
+        var item = { ref: ref, ok: !!v, texte: v ? String(v.text || '') : '', cite: '', conforme: null };
+        if (v) {
+          var cite = extraitCitation(texteApres(a, 320));
+          if (cite) { item.cite = cite; item.conforme = compare(cite, item.texte); }
+        }
+        out.push(item);
+      });
+      var introuvables = out.filter(function (x) { return !x.ok; });
+      var nonConformes = out.filter(function (x) { return x.ok && x.conforme === 'different'; });
+      var conformes = out.filter(function (x) { return x.ok && x.conforme === 'exact'; });
+      return { refs: out, total: out.length, introuvables: introuvables.length,
+               nonConformes: nonConformes.length, conformes: conformes.length };
+    } catch (e) { return null; }
+  }
+
+  /* ── pré-chargement des livres cités PUIS vérification ──
+     fetchVerse est SYNCHRONE et déclenche le chargement du livre en tâche de
+     fond : sans pré-chargement, un livre pas encore chargé donnerait un FAUX
+     « introuvable ». On garantit donc le chargement avant de vérifier. */
+  async function prepareEtVerifie(msgEl) {
+    try {
+      var content = msgEl.querySelector('.message-content');
+      if (!content) return null;
+      var refs = Array.prototype.slice.call(content.querySelectorAll('.bible-ref'))
+        .filter(function (a) { return !(a.classList && a.classList.contains('bible-ref-ext')); });
+      var livres = {};
+      refs.forEach(function (a) {
+        var r = String(a.textContent || '').trim();
+        if (!r) return;
+        try {
+          var p = (window.__v446Refs && window.__v446Refs.parseRef) ? window.__v446Refs.parseRef(r) : null;
+          if (p && p.livre) livres[p.livre] = 1;
+        } catch (e) {}
+      });
+      var ks = Object.keys(livres);
+      for (var i = 0; i < ks.length; i++) {
+        try { if (typeof window.__ensureBibleBook === 'function') await window.__ensureBibleBook(ks[i]); } catch (e) {}
+      }
+      return verifie(msgEl);
+    } catch (e) { return null; }
+  }
+
+  /* ── verdict affiché sur le message ── */
+  function verdict(r) {
+    if (!r) return { cls: 'ok', txt: '' };
+    if (r.introuvables || r.nonConformes) {
+      var p = [];
+      if (r.introuvables) p.push(r.introuvables + ' référence(s) INTROUVABLE(S)');
+      if (r.nonConformes) p.push(r.nonConformes + ' citation(s) NON CONFORME(S)');
+      return { cls: 'warn', txt: '⚠ ' + p.join(' · ') };
+    }
+    var t = '✅ ' + r.total + ' référence(s) vérifiée(s)';
+    if (r.conformes) t += ' · ' + r.conformes + ' citation(s) exacte(s)';
+    return { cls: 'ok', txt: t };
+  }
+
+  async function appose(msgEl) {
+    if (msgEl.querySelector('.v525-verdict')) return;
+    var r = await prepareEtVerifie(msgEl);
+    if (!r || !r.total) return;
+    var v = verdict(r);
+    var b = document.createElement('div');
+    b.className = 'v525-verdict ' + v.cls;
+    b.textContent = v.txt;
+    b.title = 'Vérifié sur les éditions embarquées — cliquez pour le détail';
+    b.addEventListener('click', function (e) { e.stopPropagation(); panneau(r); });
+    var content = msgEl.querySelector('.message-content');
+    (content || msgEl).appendChild(b);
+  }
+
+  /* ── panneau de détail ── */
+  function panneau(r) {
+    var p = document.getElementById('v525-panel');
+    if (!p) {
+      p = document.createElement('div');
+      p.id = 'v525-panel';
+      p.innerHTML = '<style>'
+        + '#v525-panel{position:fixed;inset:0;z-index:140700;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+        + '#v525-panel.open{display:flex}'
+        + '#v525-panel .b{width:min(760px,95vw);max-height:84vh;margin-top:7vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+        + '#v525-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+        + '#v525-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+        + '#v525-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+        + '#v525-panel .l{overflow:auto;padding:.6rem}'
+        + '#v525-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.5rem .6rem;margin-bottom:.45rem}'
+        + '#v525-panel .rf{font-weight:600;font-size:.82rem;color:var(--ui-accent,#e5c15a)}'
+        + '#v525-panel .ok{color:var(--ui-ok,#4a9d6a)}'
+        + '#v525-panel .ko{color:var(--ui-err,#c85a4a)}'
+        + '#v525-panel .warn{color:var(--ui-warn,#d4a017)}'
+        + '#v525-panel .t{font-size:.78rem;color:var(--ui-ink,#e8e6e0);margin-top:.25rem;line-height:1.5}'
+        + '#v525-panel .dim{color:var(--ui-dim,#8a8896);font-size:.68rem}'
+        + '</style>'
+        + '<div class="b"><div class="hd"><h3>🔎 Vérification des citations</h3><button class="x" id="v525-x">✕</button></div><div class="l" id="v525-l"></div></div>';
+      document.body.appendChild(p);
+      p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+      p.querySelector('#v525-x').addEventListener('click', function () { p.classList.remove('open'); });
+    }
+    var l = p.querySelector('#v525-l'), h = '';
+    r.refs.forEach(function (x) {
+      var st = !x.ok ? '<span class="ko">❌ introuvable dans les éditions locales</span>'
+        : (x.conforme === 'different' ? '<span class="ko">⚠ citation non conforme au verset local</span>'
+          : (x.conforme === 'exact' ? '<span class="ok">✅ citation exacte</span>'
+            : (x.conforme === 'partiel' ? '<span class="warn">≈ citation partielle</span>'
+              : '<span class="dim">référence présente (pas de citation à comparer)</span>')));
+      h += '<div class="it"><div class="rf">' + esc(x.ref) + '</div><div>' + st + '</div>';
+      if (x.texte) h += '<div class="t"><span class="dim">Local :</span> « ' + esc(x.texte.slice(0, 220)) + ' »</div>';
+      if (x.cite) h += '<div class="t"><span class="dim">Cité :</span> « ' + esc(x.cite.slice(0, 220)) + ' »</div>';
+      h += '</div>';
+    });
+    l.innerHTML = h || '<div class="dim">Aucune référence.</div>';
+    p.classList.add('open');
+  }
+
+  /* ── style du verdict ── */
+  function style() {
+    if (document.getElementById('v525-css')) return;
+    var s = document.createElement('style');
+    s.id = 'v525-css';
+    s.textContent = '.v525-verdict{display:inline-block;margin-top:.5rem;font-size:.68rem;padding:.15rem .55rem;'
+      + 'border-radius:999px;border:1px solid var(--ui-border,#2a2a3a);cursor:pointer;user-select:none}'
+      + '.v525-verdict.ok{color:var(--ui-ok,#4a9d6a);border-color:var(--ui-ok,#4a9d6a)}'
+      + '.v525-verdict.warn{color:var(--ui-warn,#d4a017);border-color:var(--ui-warn,#d4a017)}';
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  /* ── observation des réponses ── */
+  async function balaye() {
+    try {
+      var msgs = document.querySelectorAll('#chat-container .message.assistant');
+      for (var i = 0; i < msgs.length; i++) {
+        var c = msgs[i].querySelector('.message-content');
+        if (!c || c.textContent.trim().length < 40) continue;
+        if (msgs[i].querySelector('.v525-verdict')) continue;
+        await appose(msgs[i]);
+      }
+    } catch (e) {}
+  }
+  function planifie() { if (TIMER) return; TIMER = setTimeout(function () { TIMER = null; balaye(); }, 900); }
+
+  function init() {
+    style();
+    var c = document.getElementById('chat-container');
+    if (!c || OBS) return;
+    OBS = new MutationObserver(planifie);
+    OBS.observe(c, { childList: true, subtree: true, characterData: true });
+    balaye();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(init, 1200); });
+  else setTimeout(init, 1200);
+  setTimeout(init, 2500);
+
+  window.__v525Verif = {
+    verifie: verifie, verdict: verdict, compare: compare, extraitCitation: extraitCitation,
+    texteApres: texteApres, balaye: balaye, appose: appose, panneau: panneau,
+    prepareEtVerifie: prepareEtVerifie,
+    dernier: function () { return DERNIER; }
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
