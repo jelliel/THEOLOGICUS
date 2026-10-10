@@ -47293,8 +47293,10 @@ window.continueTradApart = async function (msgId) {
     'theo_tm_v1',                /* mémoire de traduction unifiée */
     'theo_v171_tr',              /* cache Pères FR */
     'theo_v193_ai',              /* cache traduction IA */
-    'theologicus_currentChatId', /* conversation courante */
-    'theo_chats_trash_v1'        /* v521 — corbeille des conversations */
+    'theologicus_currentChatId'  /* conversation courante */
+    /* v522 — la corbeille des conversations reste LOCALE (non synchronisée) :
+       inutile de dupliquer sur le magasin partagé des contenus SUPPRIMÉS, et
+       cela évite qu'une corbeille d'un appareil ressuscite ailleurs. */
   ];
   var PREFIX = ['theologicus_chat_'];   /* conversations (miroir localStorage) */
 
@@ -54363,6 +54365,54 @@ window.continueTradApart = async function (msgId) {
     window.deleteArchiveChat = f;
   }
 
+  /* ── v522 — RÉCUPÉRATION des conversations « orphelines » ──
+     Avant v521, effacer une conversation était DÉFINITIF dans IndexedDB — mais
+     le MIROIR localStorage 'theologicus_chat_<id>' n'était JAMAIS supprimé
+     (localStorageBackup n'est posé qu'en repli d'erreur IDB, et par le pull
+     serveur). Une conversation effacée AVANT la mise à jour peut donc encore
+     être là. On liste les miroirs dont l'id n'est plus dans les Archives. */
+  async function orphelins() {
+    var d = DB(); if (!d) return [];
+    var existants = {};
+    try { var a = await d.getAll('chats'); for (var i = 0; i < a.length; i++) existants[a[i].id] = 1; } catch (e) {}
+    var out = [];
+    try {
+      for (var j = 0; j < localStorage.length; j++) {
+        var k = localStorage.key(j);
+        if (!k || k.indexOf('theologicus_chat_') !== 0) continue;
+        var id = k.slice('theologicus_chat_'.length);
+        if (!id || existants[id]) continue;
+        var brut = localStorage.getItem(k) || '';
+        var chat = null;
+        try { chat = JSON.parse(brut); } catch (e) { chat = null; }
+        if (!chat || typeof chat !== 'object') continue;
+        if (!chat.id) chat.id = id;
+        var nm = (chat.messages || []).filter(function (m) { return m.role !== 'system'; }).length;
+        out.push({ id: id, chat: chat, msgs: nm, taille: brut.length });
+      }
+    } catch (e) {}
+    out.sort(function (x, y) { return (y.chat.updated || 0) - (x.chat.updated || 0); });
+    return out;
+  }
+  async function recuperer(id) {
+    var d = DB(); if (!d) { toast('Base indisponible', 'error'); return false; }
+    var chat = null;
+    try { chat = JSON.parse(localStorage.getItem('theologicus_chat_' + id) || 'null'); } catch (e) {}
+    if (!chat || typeof chat !== 'object') { toast('Copie de secours illisible', 'error'); return false; }
+    if (!chat.id) chat.id = id;
+    try { await d.put('chats', chat); } catch (e) { toast('Récupération impossible', 'error'); return false; }
+    try { if (window.renderArchives) await window.renderArchives(); } catch (e) {}
+    toast('Conversation récupérée ✓', 'success');
+    rendre();
+    return true;
+  }
+  function oubliMiroir(id) {
+    if (!confirm('Supprimer cette copie de secours ? (définitif)')) return;
+    try { localStorage.removeItem('theologicus_chat_' + id); } catch (e) {}
+    rendre();
+    toast('Copie de secours supprimée', 'success');
+  }
+
   /* ── panneau ── */
   function panneau() {
     var p = document.getElementById('v521-panel');
@@ -54385,6 +54435,8 @@ window.continueTradApart = async function (msgId) {
       + '#v521-panel .it .ac{display:flex;gap:.35rem;flex:0 0 auto}'
       + '#v521-panel .ft{display:flex;justify-content:space-between;gap:.5rem;padding:.6rem .9rem;border-top:1px solid var(--ui-border,#2a2a3a)}'
       + '#v521-panel .empty{padding:1.4rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.82rem}'
+      + '#v521-panel .sec{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ui-accent,#e5c15a);margin:.8rem .3rem .4rem;border-top:1px solid var(--ui-border,#2a2a3a);padding-top:.7rem}'
+      + '#v521-panel .sec .dim{text-transform:none;letter-spacing:0;color:var(--ui-dim,#8a8896)}'
       + '</style>'
       + '<div class="b"><div class="hd"><h3>🗑 Corbeille des conversations</h3><span class="st" id="v521-st"></span>'
       + '<button class="x" id="v521-x" title="Fermer">✕</button></div>'
@@ -54400,7 +54452,11 @@ window.continueTradApart = async function (msgId) {
       var r = e.target.closest ? e.target.closest('[data-rest]') : null;
       if (r) { restaurer(r.dataset.rest); return; }
       var d = e.target.closest ? e.target.closest('[data-purge]') : null;
-      if (d) { purger(d.dataset.purge); }
+      if (d) { purger(d.dataset.purge); return; }
+      var r2 = e.target.closest ? e.target.closest('[data-recup]') : null;
+      if (r2) { recuperer(r2.dataset.recup); return; }
+      var o2 = e.target.closest ? e.target.closest('[data-oubli]') : null;
+      if (o2) { oubliMiroir(o2.dataset.oubli); }
     });
     return p;
   }
@@ -54409,12 +54465,12 @@ window.continueTradApart = async function (msgId) {
     try { return new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
     catch (e) { return ''; }
   }
-  function rendre() {
+  async function rendre() {
     var l = document.getElementById('v521-l'); if (!l) return;
     var a = lister();
+    var orph = await orphelins();
     var st = document.getElementById('v521-st');
-    if (st) st.textContent = a.length + ' conversation(s)';
-    if (!a.length) { l.innerHTML = '<div class="empty">La corbeille est vide.<br>Les conversations effacées apparaîtront ici, prêtes à être restaurées.</div>'; return; }
+    if (st) st.textContent = a.length + ' dans la corbeille · ' + orph.length + ' récupérable(s)';
     var h = '';
     for (var i = 0; i < a.length; i++) {
       var c = a[i];
@@ -54424,6 +54480,21 @@ window.continueTradApart = async function (msgId) {
         + '<div class="mt">supprimée le ' + dateFr(c._trashTs) + ' · ' + nm + ' message(s)</div></div>'
         + '<div class="ac"><button class="ui-btn" data-rest="' + esc(c.id) + '">↩ Restaurer</button>'
         + '<button class="ui-btn ghost" data-purge="' + esc(c.id) + '" title="Supprimer définitivement">🗑</button></div></div>';
+    }
+    if (!a.length) h += '<div class="empty">Corbeille vide — les conversations effacées à partir de maintenant apparaîtront ici.</div>';
+    /* v522 — conversations effacées AVANT la corbeille, retrouvées dans la
+       copie de secours localStorage. */
+    if (orph.length) {
+      h += '<div class="sec">🕮 Conversations récupérables <span class="dim">(effacées avant la corbeille — copie de secours retrouvée)</span></div>';
+      for (var j = 0; j < orph.length; j++) {
+        var o = orph[j];
+        var t2 = o.chat.title || 'Sans titre';
+        var d2 = o.chat.updated ? dateFr(o.chat.updated) : '';
+        h += '<div class="it"><div class="t"><div class="tt">' + esc(t2) + '</div>'
+          + '<div class="mt">' + o.msgs + ' message(s)' + (d2 ? ' · dernière activité ' + d2 : '') + ' · copie ' + Math.round(o.taille / 1024) + ' Ko</div></div>'
+          + '<div class="ac"><button class="ui-btn" data-recup="' + esc(o.id) + '">↩ Récupérer</button>'
+          + '<button class="ui-btn ghost" data-oubli="' + esc(o.id) + '" title="Supprimer la copie de secours">✕</button></div></div>';
+      }
     }
     l.innerHTML = h;
   }
@@ -54444,7 +54515,8 @@ window.continueTradApart = async function (msgId) {
   window.__v521Corbeille = {
     ouvrir: ouvrir, fermer: fermer, lister: lister, nb: nb,
     mettre: mettre, restaurer: restaurer, restaurerTout: restaurerTout,
-    purger: purger, vider: vider, rendre: rendre, CLE: CLE
+    purger: purger, vider: vider, rendre: rendre, CLE: CLE,
+    orphelins: orphelins, recuperer: recuperer, oubliMiroir: oubliMiroir
   };
 })();
 </script>

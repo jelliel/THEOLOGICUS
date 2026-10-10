@@ -110,7 +110,7 @@ const semer = (page, id, titre) => page.evaluate(([i, t]) => db.put('chats', { i
   ok("une conversation est listée", ui.items === 1, "items=" + ui.items);
   ok("son titre s'affiche", /Conversation à sauver/.test(ui.titre), ui.titre);
   ok("la date de suppression s'affiche", /supprimée le/.test(ui.date), ui.date);
-  ok("le compteur du panneau est juste", /1 conversation/.test(ui.st), ui.st);
+  ok("le compteur du panneau est juste", /1 dans la corbeille/.test(ui.st), ui.st);
 
   section("3. « Restaurer » remet la conversation dans les Archives");
   await page.evaluate(() => document.querySelector('#v521-panel [data-rest]').click());
@@ -126,7 +126,8 @@ const semer = (page, id, titre) => page.evaluate(([i, t]) => db.put('chats', { i
   ok("de nouveau dans la corbeille", (await trash(page)).length === 1);
   await page.evaluate(() => document.querySelector('#v521-panel [data-purge]').click());
   await page.waitForTimeout(400);
-  ok("retirée de la corbeille", (await trash(page)).length === 0, "n=" + (await trash(page)).length);
+  const tr4 = await trash(page);
+  ok("retirée de la corbeille", tr4.length === 0, "n=" + tr4.length + " ids=" + tr4.map(c => c.id).join(","));
   ok("et ABSENTE des Archives", !(await inChats(page, 'test-trash-1')));
 
   section("5. « Vider la corbeille »");
