@@ -7764,6 +7764,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
     <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
+    <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
@@ -55940,6 +55941,270 @@ window.continueTradApart = async function (msgId) {
 
   window.__v529Sources = { sources: SOURCES, provenanceDe: provenanceDe, parId: parId,
     ouvrir: ouvrir, fermer: fermer, rendre: rendre, texteCredits: texteCredits, copier: copier };
+})();
+</script>
+
+<script id="v530-concordance-script">
+/* v530 — CONCORDANCE MULTI-CORPUS (Axe 2 de la 3.0, lot B4).
+   La recherche globale (v180) répond « où », le moteur rapide (v520) classe, le
+   graphe (v526) relie. Il manquait le COMPTAGE : « combien de fois ce mot
+   apparaît-il, et dans quels corpus ? » — c'est l'outil de base du travail
+   concordantiel (et il révèle des faits : la traduction coranique dit « Allah »,
+   la Bible dit « Dieu »).
+
+   Module ADDITIF : on INDEXE les corpus choisis (à la demande, avec progression),
+   puis on COMPTE les occurrences d'un terme dans chacun, avec les premiers
+   passages en exemple. Le comptage est insensible aux diacritiques et à la casse.
+   Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v530Conc) return;
+
+  var DOCS = {};          /* id -> [{ref, texte}] */
+  var INDEXES = {};       /* id -> true */
+  var EN_COURS = null;
+
+  var CORPUS = [
+    { id: 'bible',    nom: 'Bible (français)', n: 66,  src: function (i) { return 'bible/b' + i + '.js'; },    globe: '__bibleBooks' },
+    { id: 'coran',    nom: 'Coran (français)', n: 114, src: function (i) { return 'quran/q' + i + '.js'; },    globe: '__quranSurahs' },
+    { id: 'vulgate',  nom: 'Vulgate (latin)',  n: 66,  src: function (i) { return 'biblelt/b' + i + '.js'; },  globe: '__bibleLt' },
+    { id: 'denzinger',nom: 'Denzinger',        n: 130, src: function (i) { return 'denzinger/ddz_' + ('00' + i).slice(-3) + '.js'; }, globe: '__denzingerWorks' }
+  ];
+  function meta(id) { for (var i = 0; i < CORPUS.length; i++) { if (CORPUS[i].id === id) return CORPUS[i]; } return null; }
+  function nomDe(id) { var m = meta(id); return m ? m.nom : id; }
+
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+
+  /* ── extraction des documents d'un corpus ── */
+  function extraireBible(j) {
+    var out = [];
+    Object.keys(j).forEach(function (c) {
+      var ch = j[c]; if (!ch || typeof ch !== 'object') return;
+      Object.keys(ch).forEach(function (v) {
+        if (typeof ch[v] === 'string') out.push({ ref: c + ':' + v, texte: ch[v] });
+      });
+    });
+    return out;
+  }
+  function extraireCoran(j) {
+    var out = [];
+    Object.keys(j.versets || {}).forEach(function (v) {
+      var d = j.versets[v] || {};
+      if (typeof d.text === 'string') out.push({ ref: (j.nomPhon || '') + ' ' + v, texte: d.text });
+    });
+    return out;
+  }
+  function extraireDenzinger(glob) {
+    var out = [];
+    Object.keys(glob || {}).forEach(function (k) {
+      var w = glob[k]; if (!w) return;
+      (w.c || []).forEach(function (ch) {
+        (ch.s || []).forEach(function (se) {
+          (se.p || []).forEach(function (p) {
+            if (typeof p === 'string' && p.length > 20) out.push({ ref: (w.t || k) + ' §' + (se.t || ''), texte: p });
+          });
+        });
+      });
+    });
+    return out;
+  }
+
+  async function indexe(id, prog) {
+    if (INDEXES[id]) return DOCS[id].length;
+    if (EN_COURS === id) { while (EN_COURS === id) await new Promise(function (r) { setTimeout(r, 150); }); return DOCS[id].length; }
+    var m = meta(id); if (!m) return 0;
+    EN_COURS = id;
+    var docs = [], restant = m.n, faits = 0;
+    /* On ATTEND réellement la fin de tous les chargements : sans cette
+       promesse, indexe() rendait la main immédiatement (0 document indexé). */
+    await new Promise(function (fini) {
+      for (var i = 1; i <= m.n; i++) {
+        (function (i) {
+          fetch(m.src(i)).then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+            if (t) {
+              try {
+                /* ancre selon le format : « ||{})[ » (Bible, Coran, Vulgate),
+                   sinon la dernière affectation (Denzinger : __denzingerWorks[...]). */
+                var ancre = t.indexOf('||{})['), pos = -1;
+                if (ancre >= 0) pos = t.indexOf('=', ancre);
+                else { var kd = t.lastIndexOf('__denzingerWorks['); if (kd >= 0) pos = t.indexOf('=', kd); }
+                if (pos < 0) pos = t.lastIndexOf('=');
+                var j = JSON.parse(t.slice(pos + 1).replace(/;\s*$/, ''));
+                var lot = id === 'coran' ? extraireCoran(j) : (id === 'denzinger' ? extraireDenzinger(j) : extraireBible(j));
+                for (var k = 0; k < lot.length; k++) docs.push(lot[k]);
+              } catch (e) {}
+            }
+          }).catch(function () {}).then(function () {
+            faits++; if (prog) prog(faits / m.n);
+            if (--restant === 0) {
+              DOCS[id] = docs; INDEXES[id] = true; EN_COURS = null;
+              if (prog) prog(1);
+              fini();
+            }
+          });
+        })(i);
+      }
+    });
+    return DOCS[id].length;
+  }
+
+  /* ── comptage ── */
+  function compte(terme) {
+    var t = norm(terme).trim();
+    if (t.length < 2) return [];
+    var out = [];
+    CORPUS.forEach(function (m) {
+      if (!INDEXES[m.id]) return;
+      var docs = DOCS[m.id] || [], occ = 0, vers = 0, ex = [];
+      for (var i = 0; i < docs.length; i++) {
+        var n = norm(docs[i].texte), c = 0, p = 0;
+        while ((p = n.indexOf(t, p)) >= 0) { c++; p += t.length; }
+        if (c) { occ += c; vers++; if (ex.length < 6) ex.push(docs[i]); }
+      }
+      out.push({ corpus: m.id, nom: m.nom, occ: occ, versets: vers, total: docs.length, exemples: ex });
+    });
+    return out;
+  }
+  function texteTableau(terme, res) {
+    var l = ['Concordance — « ' + terme + ' »', ''];
+    res.forEach(function (r) {
+      l.push(r.nom + ' : ' + r.occ + ' occurrence(s) dans ' + r.versets + ' verset(s) (sur ' + r.total + ')');
+    });
+    l.push('');
+    l.push('THEOLOGICUS — corpus locaux');
+    return l.join('\n');
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v530-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v530-panel';
+    p.innerHTML = '<style>'
+      + '#v530-panel{position:fixed;inset:0;z-index:140950;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}'
+      + '#v530-panel.open{display:flex}'
+      + '#v530-panel .b{width:min(900px,95vw);max-height:88vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v530-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v530-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v530-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v530-panel .cfg{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;padding:.55rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v530-panel .cfg label{font-size:.72rem;color:var(--ui-ink,#e8e6e0);display:flex;gap:.25rem;align-items:center}'
+      + '#v530-panel input[type=text]{flex:1;min-width:180px;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.4rem .55rem;font-size:.78rem}'
+      + '#v530-panel .l{overflow:auto;padding:.7rem}'
+      + '#v530-panel .cc{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.55rem .65rem;margin-bottom:.5rem}'
+      + '#v530-panel .ch{display:flex;justify-content:space-between;font-size:.82rem;color:var(--ui-ink,#e8e6e0);font-weight:600}'
+      + '#v530-panel .cn{color:var(--ui-accent,#e5c15a)}'
+      + '#v530-panel .ex{font-size:.74rem;color:var(--ui-dim,#8a8896);margin-top:.25rem;line-height:1.5}'
+      + '#v530-panel .ex b{color:var(--ui-info,#4f8ef7)}'
+      + '#v530-panel .ms{font-size:.66rem;color:var(--ui-dim,#8a8896)}'
+      + '#v530-panel .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '#v530-panel .bar{height:3px;background:var(--ui-border,#2a2a3a);border-radius:2px;overflow:hidden;margin-top:.3rem}'
+      + '#v530-panel .bar i{display:block;height:100%;width:0;background:var(--ui-accent,#e5c15a)}'
+      + '#v530-panel .cc.vide{opacity:.6}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🔢 Concordance multi-corpus</h3><span class="ms" id="v530-st"></span>'
+      + '<button class="x" id="v530-x">✕</button></div>'
+      + '<div class="cfg" id="v530-cfg"></div>'
+      + '<div class="cfg"><input type="text" id="v530-q" placeholder="Un mot (sans accent, casse indifférente)…">'
+      + '<button class="ui-btn" id="v530-copier">📋 Copier le tableau</button></div>'
+      + '<div class="l" id="v530-l"><div class="empty">Choisissez les corpus à indexer, puis tapez un mot.</div></div>'
+      + '</div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v530-x').addEventListener('click', function () { p.classList.remove('open'); });
+    var tm = null;
+    p.querySelector('#v530-q').addEventListener('input', function () {
+      if (tm) clearTimeout(tm);
+      tm = setTimeout(function () { lancer(); }, 220);
+    });
+    p.querySelector('#v530-copier').addEventListener('click', function () {
+      var q = document.getElementById('v530-q').value.trim();
+      if (!q) return;
+      try {
+        navigator.clipboard.writeText(texteTableau(q, compte(q)));
+        toast('Tableau copié', 'success');
+      } catch (e) { toast('Copie impossible', 'error'); }
+    });
+    p.querySelector('#v530-cfg').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-idx]') : null;
+      if (!b) return;
+      indexer(b.dataset.idx, b);
+    });
+    return p;
+  }
+  function cfg() {
+    var c = document.getElementById('v530-cfg'); if (!c) return;
+    c.innerHTML = '<span class="ms">Corpus :</span>' + CORPUS.map(function (m) {
+      var fait = INDEXES[m.id];
+      return '<button class="ui-btn' + (fait ? ' ghost' : '') + '" data-idx="' + m.id + '">'
+        + (fait ? '● ' : '○ ') + esc(m.nom) + (fait ? ' (' + (DOCS[m.id] || []).length + ')' : '') + '</button>';
+    }).join('');
+  }
+  async function indexer(id, btn) {
+    var m = meta(id); if (!m) return;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ ' + m.nom; }
+    var bar = document.getElementById('v530-bar');
+    if (!bar) {
+      var l = document.getElementById('v530-l');
+      if (l) l.innerHTML = '<div class="empty">Indexation de ' + esc(m.nom) + '…</div><div class="bar"><i id="v530-bar"></i></div>';
+      bar = document.getElementById('v530-bar');
+    }
+    var st = document.getElementById('v530-st');
+    await indexe(id, function (f) {
+      if (bar) bar.style.width = Math.round(f * 100) + '%';
+      if (st) st.textContent = m.nom + '… ' + Math.round(f * 100) + '%';
+    });
+    cfg();
+    if (st) st.textContent = Object.keys(INDEXES).length + ' corpus indexé(s)';
+    lancer();
+  }
+  function lancer() {
+    var l = document.getElementById('v530-l'); if (!l) return;
+    var q = document.getElementById('v530-q').value.trim();
+    if (Object.keys(INDEXES).length === 0) { l.innerHTML = '<div class="empty">Indexez d\'abord au moins un corpus (boutons ci-dessus).</div>'; return; }
+    if (q.length < 2) { l.innerHTML = '<div class="empty">Tapez au moins deux lettres.</div>'; return; }
+    var res = compte(q);
+    var avec = res.filter(function (r) { return r.occ > 0; });
+    var st = document.getElementById('v530-st');
+    if (st) st.textContent = avec.reduce(function (s, r) { return s + r.occ; }, 0) + ' occurrence(s) dans ' + avec.length + '/' + res.length + ' corpus';
+    if (!avec.length) { l.innerHTML = '<div class="empty">« ' + esc(q) + ' » n\'apparaît dans aucun corpus indexé.</div>'; return; }
+    /* On affiche TOUS les corpus indexés, y compris à 0 : « absent de la Bible »
+       est un RÉSULTAT de concordance, pas une ligne à cacher. */
+    l.innerHTML = res.map(function (r) {
+      return '<div class="cc' + (r.occ ? '' : ' vide') + '"><div class="ch"><span>' + esc(r.nom) + '</span><span class="cn">' + r.occ + '× <span class="ms">dans ' + r.versets + ' verset(s) / ' + r.total + '</span></span></div>'
+        + r.exemples.slice(0, 4).map(function (e) {
+            return '<div class="ex"><b>' + esc(e.ref) + '</b> — ' + esc(String(e.texte).slice(0, 150)) + '</div>';
+          }).join('')
+        + '</div>';
+    }).join('');
+  }
+
+  async function ouvre() { panneau().classList.add('open'); cfg(); lancer(); }
+  function fermer() { var p = document.getElementById('v530-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-concordance');
+      if (b && !b.__v530) { b.__v530 = true; b.addEventListener('click', ouvre); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v530Conc = { ouvre: ouvre, fermer: fermer, indexe: indexe, compte: compte,
+    indexer: indexer, lancer: lancer, texteTableau: texteTableau,
+    etat: function () { return { indexes: Object.keys(INDEXES), tailles: Object.keys(DOCS).reduce(function (o, k) { o[k] = DOCS[k].length; return o; }, {}) }; },
+    corpus: CORPUS };
 })();
 </script>
 
