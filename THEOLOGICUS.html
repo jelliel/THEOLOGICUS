@@ -53312,6 +53312,7 @@ window.continueTradApart = async function (msgId) {
   }
 
   var ETAT = null;   /* { livre, nom, ch, v1, v2, mode:'verset'|'chapitre' } */
+  var DERNIER = null; /* v515 — derniere comparaison rendue, pour l'export */
 
   function panneau() {
     var p = document.getElementById('v506-syn');
@@ -53345,6 +53346,8 @@ window.continueTradApart = async function (msgId) {
       + '<span class="ref" id="v506-ref"></span>'
       + '<button type="button" class="ui-btn ghost" id="v506-next">Suivant ▶</button>'
       + '<button type="button" class="ui-btn" id="v506-mode">📜 Chapitre entier</button>'
+      + '<button type="button" class="ui-btn ghost" id="v506-copy" title="Copier la comparaison">📋 Copier</button>'
+      + '<button type="button" class="ui-btn ghost" id="v506-export" title="Exporter en Markdown">⬇️ Markdown</button>'
       + '</div>'
       + '<div id="v506-c"></div></div>';
     document.body.appendChild(p);
@@ -53353,6 +53356,8 @@ window.continueTradApart = async function (msgId) {
     p.querySelector('#v506-prev').addEventListener('click', function () { deplace(-1); });
     p.querySelector('#v506-next').addEventListener('click', function () { deplace(1); });
     p.querySelector('#v506-mode').addEventListener('click', basculeMode);
+    p.querySelector('#v506-copy').addEventListener('click', copierSyn);
+    p.querySelector('#v506-export').addEventListener('click', exporterSyn);
     return p;
   }
   function fermer() { var p = document.getElementById('v506-syn'); if (p) p.classList.remove('open'); }
@@ -53426,12 +53431,12 @@ window.continueTradApart = async function (msgId) {
     if (mb) mb.textContent = e.mode === 'chapitre' ? '📄 Verset seul' : '📜 Chapitre entier';
     var c = document.getElementById('v506-c');
     if (!c) return;
-    c.innerHTML = '<div style="color:#8a8896;font-size:.8rem">Chargement des versions…</div>';
-    var attendus = VERSIONS.length, faits = 0, blocs = [];
+    c.innerHTML = '<div style="color:var(--ui-dim,#8a8896);font-size:.8rem">Chargement des versions…</div>';
+    var attendus = VERSIONS.length, faits = 0, blocs = [], donnees = [];
     VERSIONS.forEach(function (v, idx) {
       charger(v, e.livre, function (livre) {
         var chap = livre && livre[String(e.ch)];
-        var bloc = null;
+        var bloc = null, versets = [];
         if (chap) {
           var corps = '';
           if (e.mode === 'chapitre') {
@@ -53439,6 +53444,7 @@ window.continueTradApart = async function (msgId) {
               .sort(function (a, b) { return a - b; }).forEach(function (n) {
                 var tx = chap[String(n)]; if (tx == null) return;
                 if (v.nettoie) tx = nettoieStrong(tx);
+                versets.push({ n: n, t: tx });
                 corps += '<span class="vv"><span class="vn">' + n + '</span>' + esc(tx) + '</span>';
               });
           } else {
@@ -53446,6 +53452,7 @@ window.continueTradApart = async function (msgId) {
             for (var n2 = e.v1; n2 <= e.v2; n2++) {
               var tx2 = chap[String(n2)]; if (tx2 == null) continue;
               if (v.nettoie) tx2 = nettoieStrong(tx2);
+              versets.push({ n: n2, t: tx2 });
               corps += '<span class="vv">' + (multi ? '<span class="vn">' + n2 + '</span>' : '') + esc(tx2) + '</span>';
             }
           }
@@ -53456,15 +53463,68 @@ window.continueTradApart = async function (msgId) {
           }
         }
         blocs[idx] = bloc;
+        donnees[idx] = versets.length ? { nom: v.nom, prov: v.ed + ' · ' + v.langue + ' · ' + v.dat, versets: versets } : null;
         if (++faits === attendus) {
           var html = blocs.filter(Boolean).join('');
-          c.innerHTML = html || '<div style="color:#ff8a80;font-size:.8rem">Aucune version disponible pour cette référence.</div>';
+          c.innerHTML = html || '<div style="color:var(--ui-err,#ff8a80);font-size:.8rem">Aucune version disponible pour cette référence.</div>';
           var s = document.getElementById('v506-s');
           if (s) s.innerHTML = '<span class="ui-badge">' + blocs.filter(Boolean).length + ' version(s)</span>'
                               + '<span>comparaison hors-ligne</span>';
+          /* v515 — memorise la comparaison rendue, pour Copier / Exporter. */
+          DERNIER = { ref: refCourante(), mode: e.mode, versions: donnees.filter(Boolean) };
         }
       });
     });
+  }
+
+  /* ── v515 — EXPORT / PARTAGE de la synopse ── */
+  function texteSynopse() {
+    if (!DERNIER || !DERNIER.versions.length) return '';
+    var out = ['# Synopse — ' + DERNIER.ref, '', 'Comparaison hors-ligne · THEOLOGICUS', ''];
+    DERNIER.versions.forEach(function (v) {
+      out.push('## ' + v.nom);
+      out.push('*' + v.prov + '*');
+      out.push('');
+      v.versets.forEach(function (x) { out.push(DERNIER.mode === 'chapitre' ? (x.n + '. ' + x.t) : x.t); });
+      out.push('');
+    });
+    out.push('---');
+    out.push('Généré par THEOLOGICUS — ' + new Date().toLocaleDateString('fr-FR'));
+    return out.join('\n');
+  }
+
+  function retourBouton(id, txt) {
+    var b = document.getElementById(id); if (!b) return;
+    var orig = b.getAttribute('data-lib') || b.textContent;
+    b.setAttribute('data-lib', orig);
+    b.textContent = txt;
+    setTimeout(function () { b.textContent = orig; }, 1600);
+  }
+
+  function copierSyn() {
+    var txt = texteSynopse();
+    if (!txt) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(function () { retourBouton('v506-copy', '✓ Copié'); },
+          function () { retourBouton('v506-copy', '✗ Échec'); });
+      } else { retourBouton('v506-copy', '✗ Indisponible'); }
+    } catch (e) { retourBouton('v506-copy', '✗ Échec'); }
+  }
+
+  function exporterSyn() {
+    var txt = texteSynopse();
+    if (!txt) return;
+    try {
+      var nom = 'synopse_' + String(DERNIER.ref || 'reference').replace(/[^0-9A-Za-zÀ-ÿ]+/g, '_').replace(/^_+|_+$/g, '') + '.md';
+      var blob = new Blob([txt], { type: 'text/markdown;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = nom;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 1500);
+      retourBouton('v506-export', '✓ Téléchargé');
+    } catch (e) { retourBouton('v506-export', '✗ Échec'); }
   }
 
   function ouvrir(ref) {
@@ -53480,6 +53540,8 @@ window.continueTradApart = async function (msgId) {
   window.__v506Synopse = { ouvrir: ouvrir, fermer: fermer, rendre: rendre, deplace: deplace,
                            basculeMode: basculeMode, refCourante: refCourante,
                            versions: VERSIONS, nettoieStrong: nettoieStrong,
+                           texte: texteSynopse, copier: copierSyn, exporter: exporterSyn,
+                           dernier: function () { return DERNIER; },
                            etat: function () { return ETAT; } };
 })();
 </script>
