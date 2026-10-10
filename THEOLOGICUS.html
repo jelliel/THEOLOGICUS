@@ -54521,6 +54521,196 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v523-rag-script">
+/* v523 — RAG ANCRÉ SUR LES SOURCES (Axe 1 de la 3.0, lot A1).
+   Constat mesuré : le prompt système (buildSystemPrompt) DEMANDE au modèle de
+   citer ses sources… mais AUCUN passage des corpus embarqués ne lui est fourni.
+   Le modèle répond donc de mémoire (risque d'hallucination, et jamais les
+   éditions vérifiées de l'app).
+
+   Ce module ADDITIF branche une RÉCUPÉRATION avant l'appel au modèle :
+     question -> passages pertinents (moteur BM25 v520, index local) -> injection
+     dans la conversation comme bloc système -> le modèle répond AVEC les textes.
+   Il enveloppe les DEUX routes d'appel (callLLM ET callLLMStream : le chat
+   utilise le streaming), et n'agit que sur le chat principal (détecté par le
+   marqueur du prompt système). */
+(function () {
+  'use strict';
+  if (window.__v523Rag) return;
+
+  var CLE = 'theo_rag_on_v1';
+  var K = 6;                                   /* passages transmis */
+  var MARQUEUR = 'RÈGLES DE VÉRIFICATION';      /* présent dans buildSystemPrompt */
+  var DERNIERES = [];
+  var CHAUFFE = false;
+
+  function actif() { try { return localStorage.getItem(CLE) !== '0'; } catch (e) { return true; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function statut(txt) { var s = document.getElementById('v523-src'); if (s) s.innerHTML = txt; }
+
+  /* ── moteur de récupération (réutilise le BM25 de v520) ── */
+  function moteur() {
+    try { return (window.__v520Rapid && window.__v520Rapid.etat && window.__v520Rapid.etat().pret) ? window.__v520Rapid : null; }
+    catch (e) { return null; }
+  }
+  function chauffe() {
+    if (CHAUFFE || moteur()) return;
+    if (!window.__v520Rapid || !window.__v520Rapid.prete) return;
+    CHAUFFE = true;
+    window.__v520Rapid.prete().catch(function () {});
+  }
+  async function passages(question) {
+    var m = moteur();
+    if (!m) { chauffe(); if (window.__v520Rapid && window.__v520Rapid.prete) { try { await window.__v520Rapid.prete(); } catch (e) {} } m = moteur(); }
+    if (!m) return [];
+    try { return m.requete(question).slice(0, K); } catch (e) { return []; }
+  }
+
+  /* ── détection du chat principal + question ── */
+  function estChatPrincipal(messages) {
+    try {
+      for (var i = 0; i < messages.length; i++) {
+        var x = messages[i];
+        if (x && x.role === 'system' && typeof x.content === 'string' && x.content.indexOf(MARQUEUR) >= 0) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  function derniereQuestion(messages) {
+    for (var i = messages.length - 1; i >= 0; i--) {
+      var m = messages[i];
+      if (!m || m.role !== 'user') continue;
+      if (typeof m.content === 'string') return m.content;
+      if (Array.isArray(m.content)) {
+        for (var j = m.content.length - 1; j >= 0; j--) {
+          var p = m.content[j];
+          if (p && p.type === 'text' && p.text) return p.text;
+        }
+      }
+    }
+    return '';
+  }
+  function blocContexte(ps) {
+    var l = ['═══ PASSAGES PERTINENTS — corpus LOCAUX VÉRIFIÉS de l\'application ═══', ''];
+    for (var i = 0; i < ps.length; i++) l.push('[' + (i + 1) + '] ' + ps[i].ref + ' — « ' + ps[i].t + ' »');
+    l.push('');
+    l.push('CONSIGNE : appuie-toi EN PRIORITÉ sur ces passages (ils proviennent des éditions embarquées dans l\'application, donc vérifiables). Cite leur référence exacte (Livre Chapitre:Verset). Si AUCUN de ces passages ne répond à la question, dis-le explicitement au lieu de conjecturer.');
+    return l.join('\n');
+  }
+
+  /* ── enrichissement commun aux deux routes d'appel ── */
+  async function enrichir(messages) {
+    try {
+      if (!actif() || !Array.isArray(messages) || !estChatPrincipal(messages)) return messages;
+      var q = derniereQuestion(messages);
+      if (!q || q.trim().length < 3) return messages;
+      if (!moteur()) statut('récupération des passages…');
+      var ps = await passages(q);
+      DERNIERES = ps;
+      majBarre();
+      if (!ps.length) return messages;
+      var idx = -1;
+      for (var i = 0; i < messages.length; i++) { if (messages[i] && messages[i].role === 'system') idx = i; }
+      var copie = messages.slice();
+      copie.splice(idx + 1, 0, { role: 'system', content: blocContexte(ps) });
+      return copie;
+    } catch (e) { return messages; }
+  }
+
+  /* ── interception des DEUX routes ── */
+  function installe() {
+    var o1 = window.callLLM;
+    if (o1 && !o1.__v523) {
+      var f1 = async function (cfg, messages, opts) { return o1(cfg, await enrichir(messages), opts); };
+      f1.__v523 = true;
+      window.callLLM = f1;
+    }
+    var o2 = window.callLLMStream;
+    if (o2 && !o2.__v523) {
+      var f2 = async function (cfg, messages, opts, onChunk) { return o2(cfg, await enrichir(messages), opts, onChunk); };
+      f2.__v523 = true;
+      window.callLLMStream = f2;
+    }
+  }
+
+  /* ── barre d'état au-dessus du composer ── */
+  function barre() {
+    var b = document.getElementById('v523-bar');
+    if (b) return b;
+    var zone = document.getElementById('input-area');
+    if (!zone) return null;
+    b = document.createElement('div');
+    b.id = 'v523-bar';
+    b.innerHTML = '<style>'
+      + '#v523-bar{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;padding:.3rem .6rem;margin:0 0 .25rem;'
+      + 'font-size:.68rem;color:var(--ui-dim,#8a8896);border:1px solid var(--ui-border,#2a2a3a);'
+      + 'border-radius:var(--ui-radius-sm,6px);background:var(--ui-panel,#0d1626)}'
+      + '#v523-bar .sw{cursor:pointer;font-weight:600;color:var(--ui-accent,#e5c15a);border:1px solid var(--ui-border,#2a2a3a);'
+      + 'border-radius:999px;padding:.05rem .5rem;background:none}'
+      + '#v523-bar .sw.off{color:var(--ui-dim,#8a8896)}'
+      + '#v523-bar .rf{cursor:pointer;color:var(--ui-info,#4f8ef7);border-bottom:1px dotted currentColor}'
+      + '#v523-bar .warn{color:var(--ui-warn,#d4a017)}'
+      + '</style>'
+      + '<button type="button" class="sw" id="v523-sw" title="Ancrer les réponses sur les corpus locaux">📖 Ancré</button>'
+      + '<span id="v523-src"></span>';
+    zone.insertBefore(b, zone.firstChild);
+    b.querySelector('#v523-sw').addEventListener('click', bascule);
+    b.querySelector('#v523-src').addEventListener('click', function (e) {
+      var r = e.target.closest ? e.target.closest('.rf') : null;
+      if (!r) return;
+      var ref = r.getAttribute('data-ref');
+      if (window.__v506Synopse && window.__v506Synopse.ouvrir) { try { window.__v506Synopse.ouvrir(ref); } catch (er) {} }
+    });
+    return b;
+  }
+  function majBarre() {
+    var b = barre(); if (!b) return;
+    var sw = document.getElementById('v523-sw');
+    if (sw) { sw.classList.toggle('off', !actif()); sw.textContent = actif() ? '📖 Ancré' : '📖 Ancrage off'; }
+    var s = document.getElementById('v523-src');
+    if (!s) return;
+    if (!actif()) { s.textContent = 'réponses non ancrées sur les sources'; return; }
+    if (!DERNIERES.length) { s.innerHTML = '<span class="warn">aucun passage trouvé — réponse non ancrée</span>'; return; }
+    var h = 'sources : ';
+    for (var i = 0; i < DERNIERES.length; i++) {
+      if (i) h += ' · ';
+      h += '<span class="rf" data-ref="' + esc(DERNIERES[i].ref) + '">' + esc(DERNIERES[i].ref) + '</span>';
+    }
+    s.innerHTML = h;
+  }
+  function bascule() {
+    try { localStorage.setItem(CLE, actif() ? '0' : '1'); } catch (e) {}
+    DERNIERES = [];
+    majBarre();
+    toast(actif() ? 'Réponses ancrées sur les corpus locaux' : 'Ancrage désactivé', 'info');
+  }
+
+  /* ── amorçage : index prêt dès que l'utilisateur écrit ── */
+  function init() {
+    installe();
+    majBarre();
+    try {
+      var inp = document.getElementById('user-input');
+      if (inp && !inp.__v523) { inp.__v523 = true; inp.addEventListener('input', chauffe, { passive: true }); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v523Rag = {
+    actif: actif, bascule: bascule, passages: passages, blocContexte: blocContexte,
+    estChatPrincipal: estChatPrincipal, derniereQuestion: derniereQuestion,
+    enrichir: enrichir, chauffe: chauffe, majBarre: majBarre,
+    dernieres: function () { return DERNIERES; }, K: K
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
