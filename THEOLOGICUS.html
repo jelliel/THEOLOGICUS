@@ -53319,20 +53319,24 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v506-syn';
     p.innerHTML = '<style>'
+      /* v514 — MIGRATION au design system : plus de couleurs en dur, tout par
+         les JETONS (var(--ui-*, repli)). Les blocs de version adoptent le
+         composant .ui-card ; le decompte, un .ui-badge. Aucun selecteur .v/.vh/
+         .vp/.vt ne change (compatibilite bancs). */
       + '#v506-syn{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:9800;display:none;align-items:center;justify-content:center;padding:1rem}'
       + '#v506-syn.open{display:flex}'
-      + '#v506-syn .b{position:relative;width:100%;max-width:820px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,#15151f,#0f0f16);border:1px solid rgba(201,169,97,.35);border-radius:16px;padding:1.1rem 1.2rem}'
-      + '#v506-syn h3{margin:0 0 .2rem;font-size:1.05rem;color:#e5c15a}'
-      + '#v506-syn .st{font-size:.68rem;color:#8a8896;margin-bottom:.8rem}'
+      + '#v506-syn .b{position:relative;width:100%;max-width:820px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,var(--ui-panel,#15151f),var(--ui-bg,#0f0f16));border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,12px);padding:1.1rem 1.2rem}'
+      + '#v506-syn h3{margin:0 0 .2rem;font-size:1.05rem;color:var(--ui-accent,#e5c15a)}'
+      + '#v506-syn .st{font-size:.68rem;color:var(--ui-dim,#8a8896);margin-bottom:.8rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}'
       + '#v506-syn .nav{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:0 0 .7rem}'
-      + '#v506-syn .nav .ref{font-weight:700;color:#e5c15a;font-size:.85rem;flex:1;text-align:center;min-width:8rem}'
-      + '#v506-syn .v{border:1px solid #2a2a3a;border-radius:10px;padding:.6rem .75rem;margin-bottom:.5rem}'
-      + '#v506-syn .vh{font-size:.72rem;color:#e5c15a;font-weight:600}'
-      + '#v506-syn .vp{font-size:.62rem;color:#8a8896;margin:.1rem 0 .35rem}'
-      + '#v506-syn .vt{font-size:.9rem;line-height:1.6;color:#e8e6e0}'
+      + '#v506-syn .nav .ref{font-weight:700;color:var(--ui-accent,#e5c15a);font-size:.85rem;flex:1;text-align:center;min-width:8rem}'
+      + '#v506-syn .v{margin-bottom:.5rem}'
+      + '#v506-syn .vh{font-size:.72rem;color:var(--ui-accent,#e5c15a);font-weight:600}'
+      + '#v506-syn .vp{font-size:.62rem;color:var(--ui-dim,#8a8896);margin:.1rem 0 .35rem}'
+      + '#v506-syn .vt{font-size:.9rem;line-height:1.6;color:var(--ui-ink,#e8e6e0)}'
       + '#v506-syn .vv{display:block;margin:.25rem 0}'
-      + '#v506-syn .vn{color:#e5c15a;font-weight:700;margin-right:.35rem}'
-      + '#v506-syn .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid #2a2a3a;color:#8a8896;border-radius:50%;width:30px;height:30px;cursor:pointer}'
+      + '#v506-syn .vn{color:var(--ui-accent,#e5c15a);font-weight:700;margin-right:.35rem}'
+      + '#v506-syn .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:30px;height:30px;cursor:pointer}'
       + '#v506-syn .nav button:disabled{opacity:.35;cursor:not-allowed}'
       + '</style>'
       + '<div class="b"><button class="x" id="v506-x">✕</button><h3 id="v506-t">Synopse</h3><div class="st" id="v506-s"></div>'
@@ -53446,7 +53450,7 @@ window.continueTradApart = async function (msgId) {
             }
           }
           if (corps) {
-            bloc = '<div class="v"><div class="vh">' + esc(v.nom) + '</div>'
+            bloc = '<div class="v ui-card"><div class="vh">' + esc(v.nom) + '</div>'
                  + '<div class="vp">' + esc(v.ed) + ' · ' + esc(v.langue) + ' · ' + esc(v.dat) + '</div>'
                  + '<div class="vt">' + corps + '</div></div>';
           }
@@ -53456,7 +53460,8 @@ window.continueTradApart = async function (msgId) {
           var html = blocs.filter(Boolean).join('');
           c.innerHTML = html || '<div style="color:#ff8a80;font-size:.8rem">Aucune version disponible pour cette référence.</div>';
           var s = document.getElementById('v506-s');
-          if (s) s.textContent = blocs.filter(Boolean).length + ' version(s) — comparaison hors-ligne';
+          if (s) s.innerHTML = '<span class="ui-badge">' + blocs.filter(Boolean).length + ' version(s)</span>'
+                              + '<span>comparaison hors-ligne</span>';
         }
       });
     });
