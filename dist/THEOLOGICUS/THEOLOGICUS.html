@@ -7767,6 +7767,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
     <button class="hud-btn" id="open-diag" title="Diagnostic — état des corpus, du stockage, des clés IA et d'Ollama (Ctrl+Alt+D)">🩺 DIAGNOSTIC</button>
     <button class="hud-btn" id="open-rapid" title="Recherche instantanée classée — moteur BM25 tolérant aux fautes sur toute la Bible (Ctrl+Maj+K)">⚡ RAPIDE</button>
+    <button class="hud-btn" id="open-corbeille" title="Corbeille — restaurer une conversation supprimée">🗑 CORBEILLE</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -47292,7 +47293,8 @@ window.continueTradApart = async function (msgId) {
     'theo_tm_v1',                /* mémoire de traduction unifiée */
     'theo_v171_tr',              /* cache Pères FR */
     'theo_v193_ai',              /* cache traduction IA */
-    'theologicus_currentChatId'  /* conversation courante */
+    'theologicus_currentChatId', /* conversation courante */
+    'theo_chats_trash_v1'        /* v521 — corbeille des conversations */
   ];
   var PREFIX = ['theologicus_chat_'];   /* conversations (miroir localStorage) */
 
@@ -54242,6 +54244,207 @@ window.continueTradApart = async function (msgId) {
       return { pret: PRET, enCours: EN_COURS, docs: DOCS.length, mots: INDEX ? INDEX.size : 0,
                msConstruction: TPS_BUILD, msRequete: TPS_REQ, longMoy: LONG_MOY };
     }
+  };
+})();
+</script>
+
+<script id="v521-corbeille-script">
+/* v521 — CORBEILLE DE CONVERSATIONS (restauration après suppression).
+   Jusqu'ici, « ✕ Effacer » dans les Archives appelait deleteArchiveChat() qui
+   faisait un db.delete('chats', id) DÉFINITIF : la conversation était perdue.
+
+   Ce module ADDITIF installe une CORBEILLE : l'effacement DÉPLACE la
+   conversation dans une corbeille (localStorage 'theo_chats_trash_v1', donc
+   synchronisée comme les autres contenus), d'où on peut la RESTAURER ou la
+   supprimer définitivement. Il ne modifie aucune autre fonction : il enveloppe
+   seulement deleteArchiveChat. Style : jetons du design system (--ui-*). */
+(function () {
+  'use strict';
+  if (window.__v521Corbeille) return;
+
+  var CLE = 'theo_chats_trash_v1';
+  var MAX = 300;   /* garde-fou */
+
+  /* L'app déclare « const db = … » : un const de portée script est un LIEN
+     LEXICAL GLOBAL (pas une propriété de window). On y accède par son nom. */
+  function DB() {
+    try { return (typeof db !== 'undefined' && db && db.conn && db.put && db.getAll) ? db : null; }
+    catch (e) { return null; }
+  }
+  function ETAT() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+
+  function lire() {
+    try { var a = JSON.parse(localStorage.getItem(CLE) || '[]'); return Array.isArray(a) ? a : []; }
+    catch (e) { return []; }
+  }
+  function ecrire(a) { try { localStorage.setItem(CLE, JSON.stringify(a.slice(0, MAX))); } catch (e) {} }
+  function nb() { return lire().length; }
+  function majBadge() {
+    var b = document.getElementById('open-corbeille');
+    if (b) b.textContent = '🗑 CORBEILLE' + (nb() ? ' (' + nb() + ')' : '');
+  }
+
+  /* ── mise en corbeille ── */
+  function mettre(chat) {
+    var a = lire().filter(function (x) { return x.id !== chat.id; });
+    var copie = {};
+    for (var k in chat) if (Object.prototype.hasOwnProperty.call(chat, k)) copie[k] = chat[k];
+    copie._trashTs = Date.now();
+    a.unshift(copie);
+    ecrire(a);
+    majBadge();
+  }
+  function lister() { return lire().sort(function (a, b) { return (b._trashTs || 0) - (a._trashTs || 0); }); }
+
+  /* ── restauration ── */
+  async function restaurer(id) {
+    var a = lire(), i = -1;
+    for (var k = 0; k < a.length; k++) { if (a[k].id === id) { i = k; break; } }
+    if (i < 0) return false;
+    var chat = a[i];
+    var d = DB();
+    if (!d) { toast('Base indisponible — restauration impossible', 'error'); return false; }
+    var copie = {};
+    for (var k2 in chat) if (Object.prototype.hasOwnProperty.call(chat, k2) && k2 !== '_trashTs') copie[k2] = chat[k2];
+    try { await d.put('chats', copie); } catch (e) { toast('Restauration impossible', 'error'); return false; }
+    a.splice(i, 1); ecrire(a); majBadge();
+    try { if (window.renderArchives) await window.renderArchives(); } catch (e) {}
+    toast('Conversation restaurée', 'success');
+    if (document.getElementById('v521-panel') && document.getElementById('v521-panel').classList.contains('open')) rendre();
+    return true;
+  }
+  async function restaurerTout() {
+    var a = lister(), ok = 0;
+    for (var i = 0; i < a.length; i++) { if (await restaurer(a[i].id)) ok++; }
+    if (!ok) toast('Rien à restaurer', 'warn');
+    else toast(ok + ' conversation(s) restaurée(s)', 'success');
+    rendre();
+  }
+  /* ── suppression DÉFINITIVE ── */
+  function purger(id) {
+    if (!confirm('Supprimer DÉFINITIVEMENT cette conversation ? (irréversible)')) return;
+    ecrire(lire().filter(function (x) { return x.id !== id; }));
+    majBadge(); rendre();
+    toast('Conversation supprimée définitivement', 'success');
+  }
+  function vider() {
+    if (!nb()) { toast('Corbeille déjà vide', 'info'); return; }
+    if (!confirm('Vider TOUTE la corbeille ? (irréversible)')) return;
+    ecrire([]); majBadge(); rendre();
+    toast('Corbeille vidée', 'success');
+  }
+
+  /* ── interception : « Effacer » met en corbeille au lieu de détruire ── */
+  function intercepte() {
+    var orig = window.deleteArchiveChat;
+    if (!orig || orig.__v521) return;
+    var f = async function (id) {
+      if (!confirm('Déplacer cette conversation dans la corbeille ?')) return;
+      var d = DB();
+      if (!d) { return orig(id); }            /* repli : comportement d'origine */
+      var chat = null;
+      try { chat = await d.get('chats', id); } catch (e) {}
+      if (chat) mettre(chat);
+      try { await d.delete('chats', id); } catch (e) {}
+      var st = ETAT();
+      if (st && st.chatId === id && window.newChat) { try { await window.newChat(); } catch (e) {} }
+      try { if (window.renderArchives) await window.renderArchives(); } catch (e) {}
+      toast('Conversation déplacée dans la corbeille', 'success');
+      majBadge();
+      /* si le panneau est ouvert, on le rafraîchit tout de suite */
+      if (document.getElementById('v521-panel')) rendre();
+    };
+    f.__v521 = true;
+    window.deleteArchiveChat = f;
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v521-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v521-panel';
+    p.innerHTML = '<style>'
+      + '#v521-panel{position:fixed;inset:0;z-index:140600;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+      + '#v521-panel.open{display:flex}'
+      + '#v521-panel .b{width:min(720px,95vw);max-height:84vh;margin-top:7vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v521-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v521-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v521-panel .hd .st{font-size:.68rem;color:var(--ui-dim,#8a8896)}'
+      + '#v521-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v521-panel .l{overflow:auto;padding:.5rem}'
+      + '#v521-panel .it{display:flex;align-items:center;gap:.6rem;padding:.55rem .6rem;border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);margin-bottom:.4rem}'
+      + '#v521-panel .it .t{flex:1;min-width:0}'
+      + '#v521-panel .it .tt{font-size:.84rem;color:var(--ui-ink,#e8e6e0);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+      + '#v521-panel .it .mt{font-size:.66rem;color:var(--ui-dim,#8a8896);margin-top:.15rem}'
+      + '#v521-panel .it .ac{display:flex;gap:.35rem;flex:0 0 auto}'
+      + '#v521-panel .ft{display:flex;justify-content:space-between;gap:.5rem;padding:.6rem .9rem;border-top:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v521-panel .empty{padding:1.4rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.82rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🗑 Corbeille des conversations</h3><span class="st" id="v521-st"></span>'
+      + '<button class="x" id="v521-x" title="Fermer">✕</button></div>'
+      + '<div class="l" id="v521-l"></div>'
+      + '<div class="ft"><button class="ui-btn" id="v521-tout">↩ Tout restaurer</button>'
+      + '<button class="ui-btn" id="v521-vider">🗑 Vider la corbeille</button></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
+    p.querySelector('#v521-x').addEventListener('click', fermer);
+    p.querySelector('#v521-tout').addEventListener('click', restaurerTout);
+    p.querySelector('#v521-vider').addEventListener('click', vider);
+    p.querySelector('#v521-l').addEventListener('click', function (e) {
+      var r = e.target.closest ? e.target.closest('[data-rest]') : null;
+      if (r) { restaurer(r.dataset.rest); return; }
+      var d = e.target.closest ? e.target.closest('[data-purge]') : null;
+      if (d) { purger(d.dataset.purge); }
+    });
+    return p;
+  }
+  function fermer() { var p = document.getElementById('v521-panel'); if (p) p.classList.remove('open'); }
+  function dateFr(ts) {
+    try { return new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return ''; }
+  }
+  function rendre() {
+    var l = document.getElementById('v521-l'); if (!l) return;
+    var a = lister();
+    var st = document.getElementById('v521-st');
+    if (st) st.textContent = a.length + ' conversation(s)';
+    if (!a.length) { l.innerHTML = '<div class="empty">La corbeille est vide.<br>Les conversations effacées apparaîtront ici, prêtes à être restaurées.</div>'; return; }
+    var h = '';
+    for (var i = 0; i < a.length; i++) {
+      var c = a[i];
+      var titre = c.title || 'Sans titre';
+      var nm = (c.messages || []).filter(function (m) { return m.role !== 'system'; }).length;
+      h += '<div class="it"><div class="t"><div class="tt">' + esc(titre) + '</div>'
+        + '<div class="mt">supprimée le ' + dateFr(c._trashTs) + ' · ' + nm + ' message(s)</div></div>'
+        + '<div class="ac"><button class="ui-btn" data-rest="' + esc(c.id) + '">↩ Restaurer</button>'
+        + '<button class="ui-btn ghost" data-purge="' + esc(c.id) + '" title="Supprimer définitivement">🗑</button></div></div>';
+    }
+    l.innerHTML = h;
+  }
+  function ouvrir() { panneau().classList.add('open'); rendre(); }
+
+  /* ── amorçage ── */
+  function init() {
+    intercepte();
+    majBadge();
+    var b = document.getElementById('open-corbeille');
+    if (b) b.addEventListener('click', ouvrir);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  /* l'app peut (re)lier deleteArchiveChat plus tard : on réessaie un instant */
+  setTimeout(function () { intercepte(); majBadge(); }, 1500);
+
+  window.__v521Corbeille = {
+    ouvrir: ouvrir, fermer: fermer, lister: lister, nb: nb,
+    mettre: mettre, restaurer: restaurer, restaurerTout: restaurerTout,
+    purger: purger, vider: vider, rendre: rendre, CLE: CLE
   };
 })();
 </script>
