@@ -7759,6 +7759,7 @@ window.__ensureTafsirSurah = function(p){
   </div>
 
   <div class="header-controls">
+    <button class="hud-btn" id="open-palette" title="Palette de commandes — trouver et lancer n'importe quelle action de l'application (Ctrl+Maj+P)">⌘ PALETTE</button>
     <select class="hud-select" id="model-select"></select>
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
@@ -56657,6 +56658,177 @@ window.continueTradApart = async function (msgId) {
   window.__v533Notes = { TYPES: TYPES, lire: lire, stats: stats, filtre: filtre, definiType: definiType,
     typeDe: typeDe, texteExport: texteExport, ouvre: ouvre, fermer: fermer, rendre: rendre,
     setFiltre: function (f) { FILTRE = f || ''; rendre(); }, filtreCourant: function () { return FILTRE; } };
+})();
+</script>
+
+<script id="v535-palette-script">
+/* v535 — PALETTE DE COMMANDES (Axe 3 de la 3.0, lot C2).
+   Constat : le HUD compte 30 boutons ; retrouver « la concordance » ou « la
+   corbeille » demande de balayer une barre saturée. Ctrl+K est déjà pris TROIS
+   fois (deux palettes internes + la recherche globale) — on n'y touche pas.
+
+   Ce module ADDITIF ouvre une palette (Ctrl+Maj+P) qui INDEXE AUTOMATIQUEMENT
+   les boutons existants (HUD + barre du composeur) : libellé, infobulle et id.
+   La recherche est insensible aux diacritiques et porte aussi sur l'infobulle
+   (donc « restaurer une conversation » trouve la corbeille). Entrée exécute.
+   Rien n'est déplacé : aucun bouton ne quitte le HUD. Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v535Palette) return;
+
+  var ENTREES = [], RES = [], SEL = 0, PRET = false;
+
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+
+  /* ── indexation AUTOMATIQUE des boutons existants ── */
+  function collecte() {
+    var out = [], vus = {};
+    var sels = ['button.hud-btn', '.v12-bar button', '#send-btn', '#new-chat', '#open-archives-desktop'];
+    sels.forEach(function (s) {
+      var els;
+      try { els = document.querySelectorAll(s); } catch (e) { return; }
+      for (var i = 0; i < els.length; i++) {
+        var b = els[i], id = b.id || '';
+        if (!id || vus[id]) continue;
+        vus[id] = 1;
+        var label = String(b.textContent || '').replace(/\s+/g, ' ').trim() || id;
+        out.push({ id: id, label: label, titre: String(b.title || ''), el: b,
+                   mots: norm(label + ' ' + (b.title || '') + ' ' + id) });
+      }
+    });
+    return out;
+  }
+  function recharge() { ENTREES = collecte(); PRET = true; return ENTREES.length; }
+
+  /* ── recherche ── */
+  function cherche(q, limite) {
+    if (!PRET) recharge();
+    var t = norm(q).trim();
+    if (!t) return ENTREES.slice(0, 40);
+    var mots = t.split(/\s+/).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < ENTREES.length; i++) {
+      var e = ENTREES[i], s = 0, ok = true;
+      for (var k = 0; k < mots.length; k++) {
+        if (e.mots.indexOf(mots[k]) < 0) { ok = false; break; }
+        s += (norm(e.label).indexOf(mots[k]) >= 0 ? 3 : 1);
+      }
+      if (ok && s > 0) out.push({ e: e, s: s });
+    }
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out.slice(0, limite || 40).map(function (x) { return x.e; });
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v535-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v535-panel';
+    p.innerHTML = '<style>'
+      + '#v535-panel{position:fixed;inset:0;z-index:141100;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72);backdrop-filter:blur(4px)}'
+      + '#v535-panel.open{display:flex}'
+      + '#v535-panel .b{width:min(680px,94vw);max-height:70vh;margin-top:12vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid color-mix(in srgb, var(--ui-accent,#e5c15a) 40%, transparent);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v535-panel input{background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:0;border-bottom:1px solid var(--ui-border,#2a2a3a);padding:.75rem .9rem;font-size:.86rem;outline:none}'
+      + '#v535-panel .l{overflow:auto;padding:.35rem}'
+      + '#v535-panel .it{padding:.45rem .6rem;border-radius:var(--ui-radius-sm,6px);cursor:pointer;border-left:3px solid transparent}'
+      + '#v535-panel .it.sel{background:color-mix(in srgb, var(--ui-accent,#e5c15a) 14%, transparent);border-left-color:var(--ui-accent,#e5c15a)}'
+      + '#v535-panel .lb{font-size:.82rem;color:var(--ui-ink,#e8e6e0);font-weight:600}'
+      + '#v535-panel .tt{font-size:.68rem;color:var(--ui-dim,#8a8896);margin-top:.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+      + '#v535-panel .ft{padding:.4rem .8rem;border-top:1px solid var(--ui-border,#2a2a3a);font-size:.64rem;color:var(--ui-dim,#8a8896)}'
+      + '#v535-panel .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '</style>'
+      + '<div class="b"><input id="v535-q" type="text" autocomplete="off" spellcheck="false" placeholder="Que voulez-vous faire ? (ex. corbeille, concordance, agents…)">'
+      + '<div class="l" id="v535-l"></div>'
+      + '<div class="ft">↑ ↓ naviguer · Entrée exécuter · Échap fermer · Ctrl+Maj+P rouvrir</div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
+    var inp = p.querySelector('#v535-q');
+    inp.addEventListener('input', function () { lancer(inp.value); });
+    p.querySelector('#v535-l').addEventListener('click', function (e) {
+      var it = e.target.closest ? e.target.closest('.it') : null;
+      if (!it) return;
+      var r = RES[+it.dataset.i]; if (r) execute(r);
+    });
+    return p;
+  }
+  function bouge(d) {
+    if (!RES.length) return;
+    SEL = Math.max(0, Math.min(RES.length - 1, SEL + d));
+    var els = document.querySelectorAll('#v535-l .it');
+    for (var i = 0; i < els.length; i++) els[i].classList.toggle('sel', i === SEL);
+    if (els[SEL] && els[SEL].scrollIntoView) els[SEL].scrollIntoView({ block: 'nearest' });
+  }
+  function lancer(q) {
+    var l = document.getElementById('v535-l'); if (!l) return;
+    RES = cherche(q); SEL = 0;
+    if (!RES.length) { l.innerHTML = '<div class="empty">Aucune action pour « ' + esc(q) + ' ».</div>'; return; }
+    l.innerHTML = RES.map(function (e, i) {
+      return '<div class="it' + (i === 0 ? ' sel' : '') + '" data-i="' + i + '"><div class="lb">' + esc(e.label) + '</div>'
+        + (e.titre ? '<div class="tt">' + esc(e.titre) + '</div>' : '') + '</div>';
+    }).join('');
+  }
+  function execute(e) {
+    if (!e || !e.el) return;
+    fermer();
+    setTimeout(function () { try { e.el.click(); } catch (er) {} }, 60);
+  }
+  function ouvrir() {
+    var p = panneau();
+    recharge();
+    p.classList.add('open');
+    var inp = p.querySelector('#v535-q');
+    inp.value = '';
+    lancer('');
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+  }
+  function fermer() { var p = document.getElementById('v535-panel'); if (p) p.classList.remove('open'); }
+
+  var RACCORDI_OK = false;
+  function init() {
+    try {
+      var b = document.getElementById('open-palette');
+      if (b && !b.__v535) { b.__v535 = true; b.addEventListener('click', ouvrir); }
+    } catch (e) {}
+    /* init() est appele DEUX fois (chargement + delai) : sans ce garde, le
+       raccourci etait enregistre DEUX fois et se neutralisait (ouvre puis
+       referme aussitot). */
+    if (RACCORDI_OK) return;
+    RACCORDI_OK = true;
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        var pp = document.getElementById('v535-panel');
+        if (pp && pp.classList.contains('open')) fermer(); else ouvrir();
+        return;
+      }
+      /* Les touches de la palette sont traitees AU NIVEAU DOCUMENT : le champ
+         peut ne pas avoir le focus (le panneau est au-dessus), et la palette
+         doit rester pilotable au clavier dans tous les cas. */
+      var p2 = document.getElementById('v535-panel');
+      if (!p2 || !p2.classList.contains('open')) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); bouge(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); bouge(-1); }
+      else if (e.key === 'Enter') { e.preventDefault(); var r = RES[SEL]; if (r) execute(r); }
+      else if (e.key === 'Escape') { e.preventDefault(); fermer(); }
+    }, true);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v535Palette = { ouvrir: ouvrir, fermer: fermer, recharge: recharge, cherche: cherche,
+    lancer: lancer, execute: execute, bouge: bouge,
+    entrees: function () { return ENTREES; }, resultats: function () { return RES; },
+    selection: function () { return SEL; } };
 })();
 </script>
 
