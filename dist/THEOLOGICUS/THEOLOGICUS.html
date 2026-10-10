@@ -44816,27 +44816,31 @@ window.continueTradApart = async function (msgId) {
   window.__theoV180 = true;
 
   var st = document.createElement('style');
+  /* v517 — MIGRATION au design system : plus aucune couleur en dur. Le bleu
+     « information » du panneau devient un JETON semantique (--ui-info), les
+     surfaces/texte/rayons/police viennent de --ui-*. Les fonds translucides
+     passent par color-mix(in srgb, var(--ui-info) X%, transparent). */
   st.textContent =
     '#v180-gs{position:fixed;inset:0;z-index:140000;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}' +
     '#v180-gs.open{display:flex}' +
-    '#v180-box{width:min(860px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--bg-card,#0d1626);border:1px solid rgba(79,142,247,.45);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}' +
-    '#v180-head{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid rgba(79,142,247,.25);color:#d6e4ff;font-weight:800;letter-spacing:.4px;font-size:13px}' +
+    '#v180-box{width:min(860px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 45%, transparent);border-radius:var(--ui-radius,14px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}' +
+    '#v180-head{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 25%, transparent);color:var(--ui-info-ink,#d6e4ff);font-weight:800;letter-spacing:.4px;font-size:13px}' +
     '#v180-head small{opacity:.55;font-weight:400;margin-left:8px}' +
-    '#v180-close{background:none;border:none;color:#8fa8d8;font-size:15px;cursor:pointer}' +
+    '#v180-close{background:none;border:none;color:var(--ui-dim,#8fa8d8);font-size:15px;cursor:pointer}' +
     '#v180-close:hover{color:#fff}' +
-    '#v180-q{padding:11px 16px;border-bottom:1px solid rgba(79,142,247,.2)}' +
-    '#v180-q input{width:100%;box-sizing:border-box;background:rgba(10,16,28,.9);color:#eaf4ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:9px 12px;font:13px Consolas,monospace}' +
-    '#v180-status{padding:6px 16px 0;font-size:11px;opacity:.6;color:#d6e4ff;min-height:17px}' +
+    '#v180-q{padding:11px 16px;border-bottom:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 20%, transparent)}' +
+    '#v180-q input{width:100%;box-sizing:border-box;background:var(--ui-bg,#0a101c);color:var(--ui-info-ink,#eaf4ff);border:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 35%, transparent);border-radius:var(--ui-radius-sm,8px);padding:9px 12px;font:13px var(--ui-mono,Consolas,monospace)}' +
+    '#v180-status{padding:6px 16px 0;font-size:11px;opacity:.6;color:var(--ui-info-ink,#d6e4ff);min-height:17px}' +
     '#v180-body{overflow:auto;padding:6px 10px 16px}' +
-    '.v180-g{border:1px solid rgba(79,142,247,.18);border-radius:10px;margin:8px 4px;background:rgba(12,20,36,.6)}' +
-    '.v180-g>summary{cursor:pointer;padding:9px 12px;font-weight:700;color:#bfd4ff;font-size:12.5px;list-style:none}' +
+    '.v180-g{border:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 18%, transparent);border-radius:var(--ui-radius-sm,10px);margin:8px 4px;background:color-mix(in srgb, var(--ui-panel-2,#1a1a28) 75%, transparent)}' +
+    '.v180-g>summary{cursor:pointer;padding:9px 12px;font-weight:700;color:var(--ui-info-ink,#bfd4ff);font-size:12.5px;list-style:none}' +
     '.v180-g>summary::-webkit-details-marker{display:none}' +
-    '.v180-g[open]>summary{border-bottom:1px solid rgba(79,142,247,.18)}' +
-    '.v180-r{padding:9px 14px;border-bottom:1px dashed rgba(79,142,247,.10)}' +
+    '.v180-g[open]>summary{border-bottom:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 18%, transparent)}' +
+    '.v180-r{padding:9px 14px;border-bottom:1px dashed color-mix(in srgb, var(--ui-info,#4f8ef7) 10%, transparent)}' +
     '.v180-r:last-child{border-bottom:none}' +
-    '.v180-r>b{color:#9fe3b8;font-size:12.5px}' +
+    '.v180-r>b{color:var(--ui-ok,#9fe3b8);font-size:12.5px}' +
     '.v180-r .v167-sn{margin-top:3px}' +
-    '.v180-go{color:#f5c542;cursor:pointer;font-size:11.5px;font-weight:700;background:none;border:none;padding:0;text-decoration:underline}' +
+    '.v180-go{color:var(--ui-accent,#f5c542);cursor:pointer;font-size:11.5px;font-weight:700;background:none;border:none;padding:0;text-decoration:underline}' +
     '.v180-hint{padding:16px;opacity:.6;font-size:12px}';
   document.head.appendChild(st);
 
@@ -53836,6 +53840,7 @@ window.continueTradApart = async function (msgId) {
     + '--ui-ink:#e8e6e0;--ui-dim:#8a8896;--ui-faint:#4a4858;'
     + '--ui-accent:#e5c15a;--ui-accent-2:#e87b35;'
     + '--ui-ok:#4a9d6a;--ui-err:#c85a4a;--ui-warn:#d4a017;'
+    + '--ui-info:#4f8ef7;--ui-info-ink:#d6e4ff;'
     + '--ui-radius:10px;--ui-radius-sm:6px;'
     + '--ui-space-1:.35rem;--ui-space-2:.6rem;--ui-space-3:1rem;--ui-space-4:1.5rem;'
     + '--ui-font:-apple-system,BlinkMacSystemFont,\'Helvetica Neue\',Arial,sans-serif;'
@@ -53872,7 +53877,7 @@ window.continueTradApart = async function (msgId) {
     var sel = '.ui-btn,.ui-panel,.ui-card,.ui-badge,.ui-row';
     var usages = 0;
     try { usages = document.querySelectorAll(sel).length; } catch (e) {}
-    var jetons = 0, noms = ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3', '--ui-ok', '--ui-err', '--ui-warn'];
+    var jetons = 0, noms = ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3', '--ui-ok', '--ui-err', '--ui-warn', '--ui-info', '--ui-info-ink'];
     try {
       var cs = getComputedStyle(document.documentElement);
       noms.forEach(function (t) { if ((cs.getPropertyValue(t) || '').trim()) jetons++; });
@@ -53881,7 +53886,7 @@ window.continueTradApart = async function (msgId) {
              composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'] };
   }
 
-  window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'], audit: audit };
+  window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3', '--ui-info'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'], audit: audit };
 })();
 </script>
 </body>

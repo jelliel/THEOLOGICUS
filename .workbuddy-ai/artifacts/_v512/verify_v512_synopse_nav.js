@@ -75,6 +75,9 @@ async function etat(page) {
 async function suivant(page) { await page.evaluate(() => document.getElementById('v506-next').click()); await page.waitForTimeout(350); }
 async function precedent(page) { await page.evaluate(() => document.getElementById('v506-prev').click()); await page.waitForTimeout(350); }
 async function bascule(page) { await page.evaluate(() => document.getElementById('v506-mode').click()); await page.waitForTimeout(350); }
+// Le rendu des versions est ASYNCHRONE (5 scripts, dont un 404 grec hors NT) :
+// attendre l'état attendu plutôt qu'un délai fixe (sinon flaky).
+async function attendre(page, pred, timeout = 20000) { try { await page.waitForFunction(pred, { timeout }); } catch (e) {} }
 
 (async () => {
   console.log("=".repeat(72));
@@ -118,6 +121,7 @@ async function bascule(page) { await page.evaluate(() => document.getElementById
 
   section("2. Verset SUIVANT");
   await suivant(page);
+  await attendre(page, () => document.querySelectorAll('#v506-syn #v506-c .v').length >= 4);
   const e2 = await etat(page);
   ok("la référence devient Genèse 1:2", /Genèse 1:2/.test(e2.ref), e2.ref);
   ok("le contenu est re-rendu (blocs présents)", e2.versions >= 4, "versions=" + e2.versions);
@@ -149,6 +153,7 @@ async function bascule(page) { await page.evaluate(() => document.getElementById
   await ouvrirSyn(page, "Genèse 1:1");
   const avant = await etat(page);
   await bascule(page);
+  await attendre(page, () => document.querySelectorAll('#v506-syn #v506-c .v .vv').length >= 31);
   const e7 = await etat(page);
   ok("le mode bascule vers « chapitre entier »", /entier/.test(e7.ref), e7.ref);
   ok("le bouton propose le retour « verset seul »", /[Vv]erset seul/.test(e7.mode), e7.mode);
@@ -160,6 +165,7 @@ async function bascule(page) { await page.evaluate(() => document.getElementById
   section("8. Navigation en mode chapitre (chapitre suivant)");
   await bascule(page);                       // -> chapitre entier
   await suivant(page);                       // -> Genèse 2 (entier)
+  await attendre(page, () => document.querySelectorAll('#v506-syn #v506-c .v .vv').length >= 20);
   const e8 = await etat(page);
   ok("chapitre entier + Suivant -> Genèse 2 (entier)", /Genèse 2 \(entier\)/.test(e8.ref), e8.ref);
   ok("le chapitre 2 contient des versets", e8.vv >= 20, "vv=" + e8.vv);

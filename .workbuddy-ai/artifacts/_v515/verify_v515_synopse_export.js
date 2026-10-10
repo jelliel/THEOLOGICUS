@@ -126,7 +126,9 @@ async function assurerRelais() {
 
   section("5. En mode « chapitre entier », l'export NUMÉROTE les versets");
   await page.evaluate(() => document.getElementById('v506-mode').click());
-  await page.waitForTimeout(400);
+  // attendre que le mode soit effectivement rendu (rendu asynchrone)
+  try { await page.waitForFunction(() => /\(entier\)/.test(document.getElementById('v506-ref').textContent), { timeout: 15000 }); } catch (e) {}
+  await page.waitForTimeout(200);
   const txtCh = await page.evaluate(() => window.__v506Synopse.texte());
   ok("l'export du chapitre porte la mention (entier)", /Genèse 1 \(entier\)/.test(txtCh), (txtCh.split("\n")[0] || ""));
   ok("les versets sont numérotés dans l'export (« 1. »)", /^1\. /m.test(txtCh), (txtCh.match(/^\d+\. .*/m) || [""])[0].slice(0, 50));
