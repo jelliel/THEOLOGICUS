@@ -7766,6 +7766,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
     <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
     <button class="hud-btn" id="open-themes" title="Index thématique unifié — thèmes croisés, sujets patristiques, parallèles coraniques, doctrines (465 entrées)">🗂️ THÈMES</button>
+    <button class="hud-btn" id="open-notes" title="Notes typées — classer vos notes d'étude (exégétique, historique, doctrinal, spirituel…) et les filtrer">🏷️ NOTES</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
@@ -56488,6 +56489,174 @@ window.continueTradApart = async function (msgId) {
     ouvre: ouvre, fermer: fermer, lancer: lancer, selectionne: selectionne,
     pret: function () { return PRET; }, stats: function () { return STATS; },
     items: function () { return ITEMS; }, types: TYPES };
+})();
+</script>
+
+<script id="v533-notes-script">
+/* v533 — NOTES TYPÉES (Axe 2 de la 3.0, lot B5).
+   Les notes d'étude existent (module v189, localStorage 'theo_panel_notes_v1')
+   mais elles sont TOUTES du même genre : rien ne distingue une remarque
+   exégétique d'un rappel historique ou d'une note spirituelle. Impossible donc
+   de filtrer, de relire par angle, ou d'exporter « mes notes doctrinales ».
+
+   Ce module ADDITIF ajoute un TYPE aux notes (sans rien casser : le champ est
+   simplement ajouté aux objets existants) et offre un panneau de gestion :
+     • liste des notes avec leur source, leur ancre et leur texte ;
+     • sélecteur de type par note (persisté) ;
+     • FILTRES par type avec compteurs ;
+     • EXPORT (texte) de la sélection courante.
+   Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v533Notes) return;
+
+  var CLE = 'theo_panel_notes_v1';
+  var TYPES = [
+    { id: 'exegetique', nom: '📖 Exégétique', desc: 'ce que dit le texte' },
+    { id: 'textuel',    nom: '📜 Textuel',    desc: 'traduction, variante' },
+    { id: 'historique', nom: '🏛️ Historique', desc: 'contexte, datation' },
+    { id: 'doctrinal',  nom: '⛪ Doctrinal',  desc: 'foi, magistère' },
+    { id: 'spirituel',  nom: '🕊️ Spirituel', desc: 'prière, vie' },
+    { id: 'personnel',  nom: '💭 Personnel',  desc: 'réaction, question' }
+  ];
+  var FILTRE = '';
+
+  function typeMeta(id) { for (var i = 0; i < TYPES.length; i++) { if (TYPES[i].id === id) return TYPES[i]; } return null; }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function lire() { try { var a = JSON.parse(localStorage.getItem(CLE) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+  function ecrire(a) { try { localStorage.setItem(CLE, JSON.stringify(a)); return true; } catch (e) { return false; } }
+  function srcLabel(key) {
+    if (!key) return 'Sélection';
+    return String(key).replace(/^v183#/, 'Coran ').replace(/^v167#/, 'Bible ');
+  }
+  function typeDe(n) { return n && n.type ? n.type : ''; }
+  function definiType(id, type) {
+    var a = lire(), ok = false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id === id) { if (type) a[i].type = type; else delete a[i].type; ok = true; break; }
+    }
+    if (ok) ecrire(a);
+    return ok;
+  }
+  function stats() {
+    var a = lire(), o = { total: a.length, sans: 0 };
+    TYPES.forEach(function (t) { o[t.id] = 0; });
+    a.forEach(function (n) { var t = typeDe(n); if (t && o[t] !== undefined) o[t]++; else o.sans++; });
+    return o;
+  }
+  function filtre(type) {
+    var a = lire();
+    if (!type) return a;
+    if (type === 'sans') return a.filter(function (n) { return !typeDe(n); });
+    return a.filter(function (n) { return typeDe(n) === type; });
+  }
+  function texteExport(type) {
+    var a = filtre(type).slice().sort(function (x, y) { return (y.ts || 0) - (x.ts || 0); });
+    var l = ['Notes d\'étude — ' + (type ? (typeMeta(type) ? typeMeta(type).nom : 'sans type') : 'toutes'), ''];
+    a.forEach(function (n) {
+      var tm = typeMeta(typeDe(n));
+      l.push('── ' + srcLabel(n.key) + (tm ? ' [' + tm.nom + ']' : ' [sans type]'));
+      if (n.anchor) l.push('« ' + String(n.anchor).replace(/\s+/g, ' ').trim() + ' »');
+      l.push(n.note || '');
+      l.push('');
+    });
+    l.push('THEOLOGICUS — ' + a.length + ' note(s)');
+    return l.join('\n');
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v533-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v533-panel';
+    p.innerHTML = '<style>'
+      + '#v533-panel{position:fixed;inset:0;z-index:141050;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}'
+      + '#v533-panel.open{display:flex}'
+      + '#v533-panel .b{width:min(880px,95vw);max-height:86vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v533-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v533-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v533-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v533-panel .cfg{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;padding:.55rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v533-panel .l{overflow:auto;padding:.7rem}'
+      + '#v533-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.55rem .65rem;margin-bottom:.45rem}'
+      + '#v533-panel .sr{font-size:.72rem;color:var(--ui-info,#4f8ef7);font-weight:600}'
+      + '#v533-panel .an{font-size:.72rem;color:var(--ui-dim,#8a8896);font-style:italic;margin:.2rem 0;line-height:1.5}'
+      + '#v533-panel .tx{font-size:.8rem;color:var(--ui-ink,#e8e6e0);line-height:1.55}'
+      + '#v533-panel select{background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.25rem .4rem;font-size:.72rem;margin-top:.35rem}'
+      + '#v533-panel .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🏷️ Notes typées</h3><span class="sr" id="v533-st" style="color:var(--ui-dim,#8a8896);font-weight:400"></span>'
+      + '<button class="x" id="v533-x">✕</button></div>'
+      + '<div class="cfg" id="v533-cfg"></div>'
+      + '<div class="l" id="v533-l"></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v533-x').addEventListener('click', function () { p.classList.remove('open'); });
+    p.querySelector('#v533-cfg').addEventListener('click', function (e) {
+      var f = e.target.closest ? e.target.closest('[data-f]') : null;
+      if (f) { FILTRE = f.dataset.f; rendre(); return; }
+      var ex = e.target.closest ? e.target.closest('#v533-exp') : null;
+      if (ex) {
+        try { navigator.clipboard.writeText(texteExport(FILTRE)); toast('Notes copiées', 'success'); }
+        catch (er) { toast('Copie impossible', 'error'); }
+      }
+    });
+    p.querySelector('#v533-l').addEventListener('change', function (e) {
+      var s = e.target.closest ? e.target.closest('select[data-id]') : null;
+      if (!s) return;
+      definiType(s.dataset.id, s.value);
+      toast(s.value ? 'Type appliqué' : 'Type retiré', 'success');
+      rendre();
+    });
+    return p;
+  }
+  function rendre() {
+    var c = document.getElementById('v533-cfg'), l = document.getElementById('v533-l');
+    if (!c || !l) return;
+    var s = stats();
+    var chips = '<button class="ui-btn' + (FILTRE === '' ? '' : ' ghost') + '" data-f="">Toutes (' + s.total + ')</button>';
+    TYPES.forEach(function (t) {
+      if (!s[t.id]) return;
+      chips += '<button class="ui-btn' + (FILTRE === t.id ? '' : ' ghost') + '" data-f="' + t.id + '">' + esc(t.nom) + ' (' + s[t.id] + ')</button>';
+    });
+    if (s.sans) chips += '<button class="ui-btn' + (FILTRE === 'sans' ? '' : ' ghost') + '" data-f="sans">Sans type (' + s.sans + ')</button>';
+    chips += '<span style="flex:1"></span><button class="ui-btn" id="v533-exp">📋 Copier</button>';
+    c.innerHTML = chips;
+    var st = document.getElementById('v533-st');
+    if (st) st.textContent = s.total + ' note(s)' + (FILTRE ? ' · filtre actif' : '');
+    var a = filtre(FILTRE).slice().sort(function (x, y) { return (y.ts || 0) - (x.ts || 0); });
+    if (!a.length) { l.innerHTML = '<div class="empty">Aucune note' + (FILTRE ? ' pour ce filtre' : ' pour l\'instant') + '.</div>'; return; }
+    l.innerHTML = a.map(function (n) {
+      var opts = '<option value="">(sans type)</option>' + TYPES.map(function (t) {
+        return '<option value="' + t.id + '"' + (typeDe(n) === t.id ? ' selected' : '') + '>' + esc(t.nom) + ' — ' + esc(t.desc) + '</option>';
+      }).join('');
+      return '<div class="it"><div class="sr">' + esc(srcLabel(n.key)) + '</div>'
+        + (n.anchor ? '<div class="an">📌 ' + esc(String(n.anchor).replace(/\s+/g, ' ').slice(0, 160)) + '</div>' : '')
+        + '<div class="tx">' + esc(n.note || '') + '</div>'
+        + '<select data-id="' + esc(n.id) + '">' + opts + '</select></div>';
+    }).join('');
+  }
+  function ouvre() { panneau().classList.add('open'); rendre(); }
+  function fermer() { var p = document.getElementById('v533-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-notes');
+      if (b && !b.__v533) { b.__v533 = true; b.addEventListener('click', ouvre); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v533Notes = { TYPES: TYPES, lire: lire, stats: stats, filtre: filtre, definiType: definiType,
+    typeDe: typeDe, texteExport: texteExport, ouvre: ouvre, fermer: fermer, rendre: rendre,
+    setFiltre: function (f) { FILTRE = f || ''; rendre(); }, filtreCourant: function () { return FILTRE; } };
 })();
 </script>
 
