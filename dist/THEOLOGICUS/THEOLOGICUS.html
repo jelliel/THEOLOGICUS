@@ -7762,6 +7762,7 @@ window.__ensureTafsirSurah = function(p){
     <select class="hud-select" id="model-select"></select>
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
+    <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
@@ -55558,6 +55559,232 @@ window.continueTradApart = async function (msgId) {
   setTimeout(init, 1500);
 
   window.__v527Agents = { presets: PRESETS, seme: seme, liste: liste, active: active, ouvre: ouvre, fermer: fermer, rendre: rendre };
+})();
+</script>
+
+<script id="v528-conseil-script">
+/* v528 — CONSEIL DE MODÈLES (Axe 1 de la 3.0, lot A3 — dernier lot).
+   Le « Duel » compare DEUX modèles sans conclure. Ici on va plus loin : la même
+   question est posée à TROIS modèles EN PARALLÈLE, puis un quatrième appel
+   ANALYSE les réponses pour dégager ce sur quoi elles CONVERGENT, ce sur quoi
+   elles DIVERGENT (avec la position de chacun) et ce qui reste À VÉRIFIER.
+
+   Les appels passent par `callLLM` avec le prompt système habituel : l'ancrage
+   sur les sources (v523) et la mémoire (v524) s'appliquent donc AUSSI au conseil.
+   L'appel d'analyse, lui, n'a pas ce marqueur : il n'est pas pollué par le RAG.
+   Module ADDITIF — n'écrase rien. Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v528Conseil) return;
+
+  var RES = [], ANALYSE = '', EN_COURS = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function ETAT() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
+  function modeles() { try { return (typeof MODELS !== 'undefined' && MODELS) ? MODELS : []; } catch (e) { return []; } }
+  function court(id) {
+    var m = modeles().filter(function (x) { return x.id === id; })[0];
+    return m ? String(m.name).replace(/^[^A-Za-zÀ-ÿ0-9]+/, '').slice(0, 28) : id;
+  }
+
+  /* ── un appel modèle (avec le prompt système : donc ancré) ── */
+  async function demande(modele, q, sys) {
+    var cfg = resolveModelConfig(modele);
+    var msgs = [{ role: 'system', content: sys }, { role: 'user', content: q }];
+    var t0 = Date.now();
+    var txt = await callLLM(cfg, msgs, { temperature: 0.5, max_tokens: 1400 });
+    return { modele: modele, texte: String(txt || ''), ms: Date.now() - t0 };
+  }
+
+  /* ── l'analyse comparative (juge) ── */
+  function promptJuge(q, reponses) {
+    var l = ['Tu es un analyste rigoureux et impartial. On te donne la MÊME question posée à plusieurs modèles.',
+      'Ta tâche : comparer leurs réponses, sans prendre parti pour l\'un d\'eux.', '',
+      'QUESTION : ' + q, ''];
+    reponses.forEach(function (r, i) {
+      l.push('─── RÉPONSE ' + (i + 1) + ' (' + r.modele + ') ───');
+      l.push(r.texte.slice(0, 2600));
+      l.push('');
+    });
+    l.push('Réponds STRICTEMENT dans ce format, en français :');
+    l.push('## ✅ CONVERGENCES');
+    l.push('- les points sur lesquels les réponses s\'accordent réellement');
+    l.push('## ⚠️ DIVERGENCES');
+    l.push('- les points où elles diffèrent, en indiquant la position de CHAQUE modèle (et en précisant si le désaccord est doctrinal, historique ou méthodologique)');
+    l.push('## 🔎 À VÉRIFIER');
+    l.push('- les affirmations factuelles (références, dates, citations) qu\'aucune réponse n\'étaie');
+    l.push('## ⚖️ SYNTHÈSE');
+    l.push('- 3 lignes maximum : ce qu\'un lecteur peut retenir, et ce qui reste ouvert');
+    l.push('Si les réponses ne divergent pas, dis-le explicitement plutôt que d\'inventer un désaccord.');
+    return l.join('\n');
+  }
+  async function analyse(q, reponses) {
+    var st = ETAT();
+    var modele = (st && st.model) || (modeles()[0] && modeles()[0].id);
+    var cfg = resolveModelConfig(modele);
+    var txt = await callLLM(cfg, [
+      { role: 'system', content: 'Analyste comparatif. Tu distingues strictement accord, désaccord et incertitude.' },
+      { role: 'user', content: promptJuge(q, reponses) }
+    ], { temperature: 0.2, max_tokens: 1400 });
+    return String(txt || '');
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v528-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v528-panel';
+    p.innerHTML = '<style>'
+      + '#v528-panel{position:fixed;inset:0;z-index:140850;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}'
+      + '#v528-panel.open{display:flex}'
+      + '#v528-panel .b{width:min(1100px,96vw);max-height:90vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v528-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v528-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v528-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v528-panel .cfg{display:flex;gap:.5rem;flex-wrap:wrap;padding:.6rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a);align-items:center}'
+      + '#v528-panel select,#v528-panel textarea{background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.4rem .5rem;font-size:.76rem}'
+      + '#v528-panel textarea{width:100%;box-sizing:border-box;min-height:52px;resize:vertical;font-family:var(--ui-font,sans-serif)}'
+      + '#v528-panel .l{overflow:auto;padding:.7rem}'
+      + '#v528-panel .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.6rem}'
+      + '#v528-panel .col{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.6rem}'
+      + '#v528-panel .col h4{margin:0 0 .4rem;font-size:.74rem;color:var(--ui-info,#4f8ef7)}'
+      + '#v528-panel .col pre{white-space:pre-wrap;font-size:.76rem;line-height:1.55;color:var(--ui-ink,#e8e6e0);margin:0;font-family:var(--ui-font,sans-serif)}'
+      + '#v528-panel .an{margin-top:.8rem;border:1px solid var(--ui-accent,#e5c15a);border-radius:var(--ui-radius-sm,6px);padding:.7rem}'
+      + '#v528-panel .an h4{margin:0 0 .4rem;font-size:.8rem;color:var(--ui-accent,#e5c15a)}'
+      + '#v528-panel .an pre{white-space:pre-wrap;font-size:.78rem;line-height:1.6;color:var(--ui-ink,#e8e6e0);margin:0;font-family:var(--ui-font,sans-serif)}'
+      + '#v528-panel .ms{font-size:.62rem;color:var(--ui-dim,#8a8896)}'
+      + '#v528-panel .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🧠 Conseil de modèles</h3><span class="ms" id="v528-st"></span>'
+      + '<button class="x" id="v528-x">✕</button></div>'
+      + '<div class="cfg">'
+      + '<select id="v528-m1"></select><select id="v528-m2"></select><select id="v528-m3"></select>'
+      + '<button class="ui-btn" id="v528-go">🧠 Délibérer</button></div>'
+      + '<div class="cfg"><textarea id="v528-q" rows="2" placeholder="La question posée aux trois modèles…"></textarea></div>'
+      + '<div class="l" id="v528-l"><div class="empty">Trois modèles répondent en parallèle ; un quatrième compare et dégage les convergences et les divergences.</div></div>'
+      + '</div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v528-x').addEventListener('click', function () { p.classList.remove('open'); });
+    p.querySelector('#v528-go').addEventListener('click', function () {
+      var q = document.getElementById('v528-q').value.trim();
+      if (!q) { toast('Posez d\'abord la question', 'error'); return; }
+      delibere(q, [document.getElementById('v528-m1').value, document.getElementById('v528-m2').value, document.getElementById('v528-m3').value]);
+    });
+    p.querySelector('#v528-l').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-garde]') : null;
+      if (b) garder(+b.dataset.garde);
+    });
+    return p;
+  }
+  function remplit() {
+    var ms = modeles();
+    ['v528-m1', 'v528-m2', 'v528-m3'].forEach(function (id) {
+      var s = document.getElementById(id); if (!s || s.options.length) return;
+      s.innerHTML = ms.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>'; }).join('');
+    });
+    var st = ETAT();
+    var ids = ms.map(function (m) { return m.id; });
+    /* Défauts DISTINCTS : on part du modèle actif puis on prend les suivants de
+       la liste (jamais deux fois le même — un conseil de clones n'a aucun sens). */
+    var i1 = ids.indexOf((st && st.model) || '');
+    if (i1 < 0) i1 = 0;
+    var i2 = (i1 + 1) % ids.length, i3 = (i1 + 2) % ids.length;
+    var s1 = document.getElementById('v528-m1'); if (s1) s1.value = ids[i1];
+    var s2 = document.getElementById('v528-m2'); if (s2) s2.value = ids[i2];
+    var s3 = document.getElementById('v528-m3'); if (s3) s3.value = ids[i3];
+  }
+
+  async function delibere(q, choix) {
+    if (EN_COURS) return;
+    var ms = modeles();
+    if (!ms.length) { toast('Aucun modèle disponible', 'error'); return; }
+    choix = (choix && choix.length ? choix : []).filter(Boolean);
+    /* on ne délibère jamais avec deux fois le même modèle */
+    var vus = {}, uniq = [];
+    choix.forEach(function (m) { if (!vus[m]) { vus[m] = 1; uniq.push(m); } });
+    choix = uniq;
+    if (choix.length < 2) { toast('Choisissez au moins deux modèles DIFFÉRENTS', 'error'); return; }
+    EN_COURS = true;
+    var go = document.getElementById('v528-go');
+    if (go) { go.disabled = true; go.textContent = '⏳ Délibération…'; }
+    var l = document.getElementById('v528-l');
+    if (l) l.innerHTML = '<div class="empty">Les ' + choix.length + ' modèles répondent en parallèle…</div>';
+    var sys = (typeof window.buildSystemPrompt === 'function') ? window.buildSystemPrompt() : '';
+    var t0 = Date.now();
+    var res = await Promise.all(choix.map(function (m) { return demande(m, q, sys).catch(function (e) { return { modele: m, texte: '⚠ ' + (e && e.message ? e.message : e), ms: 0, err: true }; }); }));
+    RES = res;
+    var st = document.getElementById('v528-st');
+    if (st) st.textContent = res.filter(function (r) { return !r.err; }).length + '/' + res.length + ' réponses · ' + Math.round((Date.now() - t0) / 1000) + ' s';
+    rendre();
+    /* analyse comparative */
+    var ok = res.filter(function (r) { return !r.err && r.texte.trim(); });
+    if (ok.length >= 2) {
+      try {
+        ANALYSE = await analyse(q, ok);
+        rendre();
+      } catch (e) { ANALYSE = ''; }
+    }
+    if (go) { go.disabled = false; go.textContent = '🧠 Délibérer'; }
+    EN_COURS = false;
+  }
+
+  function rendre() {
+    var l = document.getElementById('v528-l'); if (!l) return;
+    if (!RES.length) return;
+    var h = '<div class="cols">';
+    RES.forEach(function (r, i) {
+      h += '<div class="col"><h4>' + esc(court(r.modele)) + (r.err ? ' — échec' : ' <span class="ms">' + r.ms + ' ms</span>') + '</h4>'
+        + '<pre>' + esc(r.texte) + '</pre>'
+        + (r.err ? '' : '<button class="ui-btn" data-garde="' + i + '">→ garder dans le chat</button>')
+        + '</div>';
+    });
+    h += '</div>';
+    if (ANALYSE) {
+      h += '<div class="an"><h4>⚖️ Analyse comparative — convergences, divergences, à vérifier</h4><pre>' + esc(ANALYSE) + '</pre></div>';
+    } else {
+      h += '<div class="an"><h4>⚖️ Analyse comparative</h4><pre>en cours…</pre></div>';
+    }
+    l.innerHTML = h;
+  }
+
+  function garder(i) {
+    var r = RES[i]; if (!r || r.err) return;
+    var st = ETAT(); if (!st) return;
+    st.messages.push({ role: 'assistant', content: r.texte, ts: Date.now(), model: r.modele });
+    try { if (typeof window.renderMessages === 'function') window.renderMessages(); } catch (e) {}
+    try { if (typeof window.saveChat === 'function') window.saveChat(); } catch (e) {}
+    toast('Réponse de ' + court(r.modele) + ' ajoutée au chat', 'success');
+  }
+
+  async function ouvre() {
+    var p = panneau(); p.classList.add('open');
+    remplit();
+    try {
+      var inp = document.getElementById('user-input'), qt = document.getElementById('v528-q');
+      if (inp && inp.value.trim() && qt && !qt.value.trim()) qt.value = inp.value.trim();
+    } catch (e) {}
+  }
+  function fermer() { var p = document.getElementById('v528-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-conseil');
+      if (b && !b.__v528) { b.__v528 = true; b.addEventListener('click', ouvre); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v528Conseil = { ouvre: ouvre, fermer: fermer, delibere: delibere, promptJuge: promptJuge,
+    demande: demande, analyse: analyse, reponses: function () { return RES; }, analyseTexte: function () { return ANALYSE; },
+    modeles: modeles, remplit: remplit };
 })();
 </script>
 
