@@ -7765,6 +7765,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
     <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
     <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
+    <button class="hud-btn" id="open-themes" title="Index thématique unifié — thèmes croisés, sujets patristiques, parallèles coraniques, doctrines (465 entrées)">🗂️ THÈMES</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
@@ -56205,6 +56206,255 @@ window.continueTradApart = async function (msgId) {
     indexer: indexer, lancer: lancer, texteTableau: texteTableau,
     etat: function () { return { indexes: Object.keys(INDEXES), tailles: Object.keys(DOCS).reduce(function (o, k) { o[k] = DOCS[k].length; return o; }, {}) }; },
     corpus: CORPUS };
+})();
+</script>
+
+<script id="v531-themes-script">
+/* v531 — INDEX THÉMATIQUE UNIFIÉ (Axe 2 de la 3.0, lot B3).
+   Les corpus thématiques existaient mais SÉPARÉS : 45 thèmes croisés
+   Bible-Coran, 48 sujets patristiques (citations des Pères), 221 parallèles
+   biblique-coraniques, 151 doctrines. Aucun point d'entrée commun.
+
+   Ce module ADDITIF les réunit en UN index cherchable (465 entrées), avec :
+     • recherche insensible aux diacritiques sur titre, sous-titre et mots-clés ;
+     • fiche détaillée par type (thème -> note + versets ; sujet -> citations des
+       Pères ; parallèle -> Coran + versets en regard ; doctrine -> énoncé) ;
+     • LIENS CROISÉS : pour un thème, les autres entrées qui partagent ses
+       mots-clés (c'est ce qui fait l'« unifié »).
+   Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v531Themes) return;
+
+  var ITEMS = [], PRET = false, EN_COURS = false, STATS = null, SEL = null;
+
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function jetons(s) { return norm(s).split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 4; }); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  var TYPES = {
+    theme:     { nom: '🎯 Thème croisé',        couleur: 'var(--ui-accent,#e5c15a)' },
+    sujet:     { nom: '⛪ Sujet patristique',   couleur: 'var(--ui-info,#4f8ef7)' },
+    parallele: { nom: '🕌 Parallèle coranique', couleur: 'var(--ui-ok,#4a9d6a)' },
+    doctrine:  { nom: '📘 Doctrine',            couleur: 'var(--ui-warn,#d4a017)' }
+  };
+
+  async function charge() {
+    if (PRET) return STATS;
+    if (EN_COURS) { while (EN_COURS) await new Promise(function (r) { setTimeout(r, 120); }); return STATS; }
+    EN_COURS = true;
+    var n = { theme: 0, sujet: 0, parallele: 0, doctrine: 0 };
+    try {
+      var th = await (await fetch('tradition/themes.json')).json();
+      (th.themes || []).forEach(function (t) {
+        ITEMS.push({ type: 'theme', titre: t.label || '', sous: (t.note || '').slice(0, 120),
+          mots: (t.kw || []).join(' ') + ' ' + (t.bible || []).join(' '), data: t }); n.theme++;
+      });
+    } catch (e) {}
+    try {
+      var su = await (await fetch('tradition/ta_sujets.json')).json();
+      (su.topics || []).forEach(function (s) {
+        var aut = (s.qs || []).map(function (q) { return q.a || ''; }).join(' ');
+        ITEMS.push({ type: 'sujet', titre: s.t || '', sous: (aut || '').slice(0, 120),
+          mots: aut + ' ' + (s.qs || []).map(function (q) { return (q.w || '') + ' ' + (q.q || '').slice(0, 400); }).join(' '), data: s }); n.sujet++;
+      });
+    } catch (e) {}
+    try {
+      var pa = await (await fetch('tradition/paralleles.json')).json();
+      (pa.paralleles || []).forEach(function (p) {
+        ITEMS.push({ type: 'parallele', titre: 'Coran ' + (p.q || '') + (p.t ? ' — ' + p.t : ''),
+          sous: (p.n || '').slice(0, 120), mots: (p.refs || []).join(' ') + ' ' + (p.n || ''), data: p }); n.parallele++;
+      });
+    } catch (e) {}
+    try {
+      var doc = await (await fetch('tradition/doctrines.json')).json();
+      (doc.ds || []).forEach(function (d) {
+        ITEMS.push({ type: 'doctrine', titre: d.t || '', sous: (d.q || '').slice(0, 120), mots: d.q || '', data: d }); n.doctrine++;
+      });
+    } catch (e) {}
+    STATS = { theme: n.theme, sujet: n.sujet, parallele: n.parallele, doctrine: n.doctrine,
+              total: n.theme + n.sujet + n.parallele + n.doctrine };
+    PRET = true; EN_COURS = false;
+    return STATS;
+  }
+
+  /* ── recherche unifiée ── */
+  function cherche(q, limite) {
+    var mots = jetons(q);
+    if (!mots.length) return [];
+    var out = [];
+    for (var i = 0; i < ITEMS.length; i++) {
+      var it = ITEMS[i];
+      var hay = norm(it.titre + ' ' + it.sous + ' ' + it.mots);
+      var s = 0;
+      for (var k = 0; k < mots.length; k++) {
+        if (norm(it.titre).indexOf(mots[k]) >= 0) s += 3;
+        else if (hay.indexOf(mots[k]) >= 0) s += 1;
+      }
+      if (s > 0) out.push({ it: it, s: s, idx: i });
+    }
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out.slice(0, limite || 40).map(function (x) { return x.it; });
+  }
+  /* ── liens croisés : ce qui partage les mots-clés ── */
+  function lies(item, limite) {
+    if (!item) return [];
+    var ref = item.type === 'theme' ? (item.data.kw || []).map(norm) : jetons(item.titre);
+    var out = [];
+    for (var i = 0; i < ITEMS.length; i++) {
+      var it = ITEMS[i];
+      if (it === item || it.type === item.type && it.titre === item.titre) continue;
+      var hay = norm(it.titre + ' ' + it.mots);
+      var s = 0;
+      for (var k = 0; k < ref.length; k++) { if (ref[k].length >= 4 && hay.indexOf(ref[k]) >= 0) s++; }
+      if (s > 0) out.push({ it: it, s: s });
+    }
+    out.sort(function (a, b) { return b.s - a.s; });
+    return out.slice(0, limite || 6).map(function (x) { return x.it; });
+  }
+
+  /* ── fiche détaillée ── */
+  function fiche(item) {
+    if (!item) return '';
+    var d = item.data, h = '';
+    if (item.type === 'theme') {
+      h += '<div class="nt">' + esc(d.note || '') + '</div>';
+      (d.bible || []).forEach(function (r) {
+        var p = r.indexOf(' — '), ref = p >= 0 ? r.slice(0, p) : r, gl = p >= 0 ? r.slice(p + 3) : '';
+        h += '<div class="ex"><span class="rf" data-ref="' + esc(ref) + '">' + esc(ref) + '</span> — ' + esc(gl) + '</div>';
+      });
+    } else if (item.type === 'sujet') {
+      (d.qs || []).forEach(function (q) {
+        h += '<div class="ex"><b>' + esc(q.a || '') + '</b>' + (q.w ? ', <i>' + esc(q.w) + '</i>' : '')
+          + ' <span class="nt">' + esc(String(q.q || '').slice(0, 700)) + '</span>'
+          + (q.wu ? ' <a class="go" href="' + esc(q.wu) + '" target="_blank" rel="noopener">œuvre ↗</a>' : '') + '</div>';
+      });
+    } else if (item.type === 'parallele') {
+      h += '<div class="nt">' + esc(d.n || '') + '</div>';
+      (d.refs || []).forEach(function (r) {
+        var p = r.indexOf(' — '), ref = p >= 0 ? r.slice(0, p) : r;
+        h += '<div class="ex"><span class="rf" data-ref="' + esc(ref) + '">' + esc(ref) + '</span> — ' + esc(p >= 0 ? r.slice(p + 3) : '') + '</div>';
+      });
+    } else {
+      h += '<div class="nt">' + esc(d.q || '') + '</div>';
+    }
+    var rel = lies(item);
+    if (rel.length) {
+      h += '<div class="sec">🔗 Lié à</div>';
+      rel.forEach(function (x) {
+        h += '<div class="ex"><span class="tg">' + esc(TYPES[x.type].nom) + '</span> <span class="lk" data-ouvre="' + esc(x.titre) + '">' + esc(x.titre) + '</span></div>';
+      });
+    }
+    return h;
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v531-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v531-panel';
+    p.innerHTML = '<style>'
+      + '#v531-panel{position:fixed;inset:0;z-index:141000;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}'
+      + '#v531-panel.open{display:flex}'
+      + '#v531-panel .b{width:min(1040px,96vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v531-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v531-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v531-panel .hd .ms{font-size:.66rem;color:var(--ui-dim,#8a8896)}'
+      + '#v531-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v531-panel .cfg{padding:.55rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v531-panel input{width:100%;box-sizing:border-box;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.45rem .6rem;font-size:.8rem}'
+      + '#v531-panel .cols{display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.6fr);gap:.6rem;overflow:auto;padding:.7rem}'
+      + '#v531-panel .li{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.45rem .55rem;margin-bottom:.35rem;cursor:pointer}'
+      + '#v531-panel .li.sel{border-color:var(--ui-accent,#e5c15a)}'
+      + '#v531-panel .tg{font-size:.6rem;color:var(--ui-dim,#8a8896)}'
+      + '#v531-panel .tt{font-size:.78rem;color:var(--ui-ink,#e8e6e0);font-weight:600}'
+      + '#v531-panel .ds{font-size:.72rem;color:var(--ui-ink,#e8e6e0)}'
+      + '#v531-panel .nt{font-size:.74rem;color:var(--ui-dim,#8a8896);margin:.25rem 0;line-height:1.55}'
+      + '#v531-panel .ex{font-size:.74rem;color:var(--ui-ink,#e8e6e0);margin:.3rem 0;line-height:1.55}'
+      + '#v531-panel .rf{color:var(--ui-info,#4f8ef7);cursor:pointer;border-bottom:1px dotted currentColor}'
+      + '#v531-panel .lk{color:var(--ui-accent,#e5c15a);cursor:pointer;border-bottom:1px dotted currentColor}'
+      + '#v531-panel .go{font-size:.66rem;color:var(--ui-accent,#e5c15a)}'
+      + '#v531-panel .sec{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ui-accent,#e5c15a);margin:.7rem 0 .3rem;border-top:1px solid var(--ui-border,#2a2a3a);padding-top:.5rem}'
+      + '#v531-panel .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '#v531-panel .fh{font-size:.9rem;font-weight:600;color:var(--ui-accent,#e5c15a);margin-bottom:.2rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🗂️ Index thématique unifié</h3><span class="ms" id="v531-st"></span>'
+      + '<button class="x" id="v531-x">✕</button></div>'
+      + '<div class="cfg"><input type="text" id="v531-q" placeholder="Un thème, un mot, un auteur, une sourate…"></div>'
+      + '<div class="cols"><div id="v531-list"></div><div id="v531-detail"><div class="empty">Choisissez une entrée.</div></div></div>'
+      + '</div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v531-x').addEventListener('click', function () { p.classList.remove('open'); });
+    var tm = null;
+    p.querySelector('#v531-q').addEventListener('input', function () {
+      if (tm) clearTimeout(tm);
+      tm = setTimeout(function () { lancer(); }, 200);
+    });
+    p.querySelector('#v531-list').addEventListener('click', function (e) {
+      var li = e.target.closest ? e.target.closest('.li') : null;
+      if (li) { selectionne(+li.dataset.i); }
+    });
+    p.querySelector('#v531-detail').addEventListener('click', function (e) {
+      var r = e.target.closest ? e.target.closest('.rf') : null;
+      if (r) { if (window.__v506Synopse && window.__v506Synopse.ouvrir) { try { window.__v506Synopse.ouvrir(r.dataset.ref); } catch (er) {} } return; }
+      var l = e.target.closest ? e.target.closest('.lk') : null;
+      if (l) { var t = l.dataset.ouvre; var it = ITEMS.filter(function (x) { return x.titre === t; })[0]; if (it) selectionne(ITEMS.indexOf(it)); }
+    });
+    return p;
+  }
+  var COURANT = [];
+  function lancer() {
+    var l = document.getElementById('v531-list'); if (!l) return;
+    var q = document.getElementById('v531-q').value.trim();
+    COURANT = q ? cherche(q) : ITEMS.slice(0, 40);
+    var st = document.getElementById('v531-st');
+    if (st) st.textContent = q ? (COURANT.length + ' résultat(s)') : (STATS ? STATS.total + ' entrées' : '');
+    if (!COURANT.length) { l.innerHTML = '<div class="empty">Aucun résultat.</div>'; return; }
+    l.innerHTML = COURANT.map(function (it, i) {
+      return '<div class="li" data-i="' + i + '"><div class="tg">' + esc(TYPES[it.type].nom) + '</div>'
+        + '<div class="tt">' + esc(it.titre) + '</div></div>';
+    }).join('');
+  }
+  function selectionne(i) {
+    var it = COURANT[i]; if (!it) return;
+    SEL = it;
+    var l = document.getElementById('v531-list');
+    if (l) { var els = l.querySelectorAll('.li'); for (var k = 0; k < els.length; k++) els[k].classList.toggle('sel', k === i); }
+    var d = document.getElementById('v531-detail');
+    if (d) d.innerHTML = '<div class="fh">' + esc(it.titre) + '</div><div class="tg">' + esc(TYPES[it.type].nom) + '</div>' + fiche(it);
+  }
+
+  async function ouvre() {
+    panneau().classList.add('open');
+    var l = document.getElementById('v531-list');
+    if (l) l.innerHTML = '<div class="empty">Chargement de l\'index…</div>';
+    await charge();
+    lancer();
+  }
+  function fermer() { var p = document.getElementById('v531-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-themes');
+      if (b && !b.__v531) { b.__v531 = true; b.addEventListener('click', ouvre); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v531Themes = { charge: charge, cherche: cherche, lies: lies, fiche: fiche,
+    ouvre: ouvre, fermer: fermer, lancer: lancer, selectionne: selectionne,
+    pret: function () { return PRET; }, stats: function () { return STATS; },
+    items: function () { return ITEMS; }, types: TYPES };
 })();
 </script>
 
