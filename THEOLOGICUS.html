@@ -7763,6 +7763,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
     <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
+    <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
@@ -54602,10 +54603,14 @@ window.continueTradApart = async function (msgId) {
     return '';
   }
   function blocContexte(ps) {
-    var l = ['═══ PASSAGES PERTINENTS — corpus LOCAUX VÉRIFIÉS de l\'application ═══', ''];
+    var ed = '';
+    try { if (window.__v529Sources && window.__v529Sources.provenanceDe) ed = window.__v529Sources.provenanceDe('bible') || ''; } catch (e) {}
+    var l = ['═══ PASSAGES PERTINENTS — corpus LOCAUX VÉRIFIÉS de l\'application ═══'];
+    if (ed) l.push('Édition : ' + ed);
+    l.push('');
     for (var i = 0; i < ps.length; i++) l.push('[' + (i + 1) + '] ' + ps[i].ref + ' — « ' + ps[i].t + ' »');
     l.push('');
-    l.push('CONSIGNE : appuie-toi EN PRIORITÉ sur ces passages (ils proviennent des éditions embarquées dans l\'application, donc vérifiables). Cite leur référence exacte (Livre Chapitre:Verset). Si AUCUN de ces passages ne répond à la question, dis-le explicitement au lieu de conjecturer.');
+    l.push('CONSIGNE : appuie-toi EN PRIORITÉ sur ces passages (ils proviennent des éditions embarquées dans l\'application, donc vérifiables). Cite leur référence exacte (Livre Chapitre:Verset)' + (ed ? ' et, si tu cites le texte, NOMME l\'édition (« ' + ed + ' »)' : '') + '. Si AUCUN de ces passages ne répond à la question, dis-le explicitement au lieu de conjecturer.');
     return l.join('\n');
   }
 
@@ -55785,6 +55790,156 @@ window.continueTradApart = async function (msgId) {
   window.__v528Conseil = { ouvre: ouvre, fermer: fermer, delibere: delibere, promptJuge: promptJuge,
     demande: demande, analyse: analyse, reponses: function () { return RES; }, analyseTexte: function () { return ANALYSE; },
     modeles: modeles, remplit: remplit };
+})();
+</script>
+
+<script id="v529-sources-script">
+/* v529 — APPARAT & PROVENANCE DES SOURCES (Axe 2 de la 3.0, lot B1).
+   Constat : l'application embarque ~465 Mo de textes, mais NULLE PART elle ne
+   dit d'où ils viennent (édition, langue, datation, éditeur). Or c'est ce qui
+   distingue un outil d'étude sérieux d'une simple collection de fichiers.
+
+   Ce module ADDITIF publie un REGISTRE DE PROVENANCE honnête — il indique ce qui
+   est documenté ET ce qui ne l'est PAS (une traduction non sourcée est signalée
+   comme telle, jamais inventée) — et l'expose :
+     • panneau « ℹ️ SOURCES & ÉDITIONS » (crédits exportables) ;
+     • PROVENANCE injectée dans le bloc de passages du RAG (v523), pour que le
+       modèle puisse NOMMER l'édition qu'il cite.
+   Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v529Sources) return;
+
+  var SOURCES = [
+    { id: 'bible', nom: 'Bible — français', langue: 'français',
+      prov: 'Bible de Jérusalem, traduction de 1973', url: '', note: '66 livres, texte intégral hors ligne.' },
+    { id: 'biblelt', nom: 'Vulgate — latin', langue: 'latin',
+      prov: 'Vulgate Clémentine (édition de 1592)', url: '', note: '66 livres.' },
+    { id: 'biblehb', nom: 'Hébreu — Ancien Testament', langue: 'hébreu',
+      prov: 'BHS (Biblia Hebraica Stuttgartensia), texte vocalisé', url: '', note: 'Analyse mot à mot : translittération, numéro Strong, morphologie.' },
+    { id: 'biblegr', nom: 'Grec — Nouveau Testament', langue: 'grec',
+      prov: 'Nestle-Aland, texte critique', url: '', note: 'Analyse mot à mot : lemmes et morphologie.' },
+    { id: 'syriaque', nom: 'Peshitta — syriaque', langue: 'syriaque',
+      prov: 'Peshitta (traduction syriaque, IIe siècle)', url: '', note: 'Ancien et Nouveau Testament.' },
+    { id: 'quran', nom: 'Coran', langue: 'arabe + français',
+      prov: 'texte arabe et traduction française — la source de la traduction n\'est PAS documentée dans le corpus', url: '', note: '114 sourates.' },
+    { id: 'tafsir', nom: 'Tafsir (commentaire)', langue: 'anglais',
+      prov: 'commentaire classique (type Ibn Kathir) — édition non documentée dans le corpus', url: '', note: '114 sourates.' },
+    { id: 'denzinger', nom: 'Denzinger', langue: 'latin',
+      prov: 'Enchiridion symbolorum, 11e édition (Bannwart S.J., 1911) — chaque œuvre porte sa propre mention', url: 'https://archive.org/details/enchiridionsymbo01denz', note: '130 œuvres.' },
+    { id: 'valtorta', nom: 'Valtorta', langue: 'français',
+      prov: '« L\'Évangile tel qu\'il m\'a été révélé », édition CEV française', url: 'https://www.maria-valtorta.org', note: '693 épisodes — index de concordance ; les textes restent sous droits et renvoient à l\'éditeur.' },
+    { id: 'somme', nom: 'Somme théologique', langue: 'anglais',
+      prov: 'Somme théologique de Thomas d\'Aquin — traduction anglaise, édition non documentée dans le corpus', url: '', note: 'Parties, questions et articles.' },
+    { id: 'peres', nom: 'Pères de l\'Église', langue: 'français / anglais',
+      prov: 'citations patristiques — traditionapostolique.fr', url: 'https://traditionapostolique.fr', note: 'Classées par sujet.' },
+    { id: 'sefaria', nom: 'Talmud, Mishna, Philon', langue: 'anglais',
+      prov: 'sefaria.org', url: 'https://www.sefaria.org', note: 'Talmud de Babylone et de Jérusalem, Mishna, Philon.' },
+    { id: 'cph', nom: 'Articles d\'étude biblique', langue: 'anglais',
+      prov: 'christianpublishinghouse.co', url: 'https://christianpublishinghouse.co', note: '9 365 articles.' },
+    { id: 'beliefmap', nom: 'Arguments', langue: 'anglais',
+      prov: 'beliefmap.org', url: 'https://beliefmap.org', note: 'Arguments et contre-arguments.' },
+    { id: 'hcf', nom: 'Doctrines', langue: 'anglais',
+      prov: 'historicalchristian.faith', url: 'https://historicalchristian.faith', note: 'Doctrines chrétiennes.' },
+    { id: 'paralleles', nom: 'Parallèles biblique-coraniques', langue: 'français',
+      prov: 'mises en regard curées pour THEOLOGICUS (v190) — « ne présupposent ni dépendance ni accord doctrinal »', url: '', note: '221 parallèles.' },
+    { id: 'themes', nom: 'Thèmes croisés Bible-Coran', langue: 'français',
+      prov: 'thèmes curés pour THEOLOGICUS (v195)', url: '', note: '45 thèmes.' }
+  ];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function parId(id) {
+    for (var i = 0; i < SOURCES.length; i++) { if (SOURCES[i].id === id) return SOURCES[i]; }
+    return null;
+  }
+  function provenanceDe(id) { var s = parId(id); return s ? s.prov : ''; }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v529-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v529-panel';
+    p.innerHTML = '<style>'
+      + '#v529-panel{position:fixed;inset:0;z-index:140900;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+      + '#v529-panel.open{display:flex}'
+      + '#v529-panel .b{width:min(900px,95vw);max-height:86vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v529-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v529-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v529-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v529-panel .l{overflow:auto;padding:.7rem}'
+      + '#v529-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.55rem .65rem;margin-bottom:.45rem}'
+      + '#v529-panel .nm{font-size:.85rem;font-weight:600;color:var(--ui-ink,#e8e6e0)}'
+      + '#v529-panel .lg{font-size:.64rem;color:var(--ui-info,#4f8ef7);margin-left:.4rem}'
+      + '#v529-panel .pv{font-size:.78rem;color:var(--ui-ink,#e8e6e0);margin-top:.2rem}'
+      + '#v529-panel .nt{font-size:.7rem;color:var(--ui-dim,#8a8896);margin-top:.15rem}'
+      + '#v529-panel .un{color:var(--ui-warn,#d4a017)}'
+      + '#v529-panel .go{font-size:.68rem;color:var(--ui-accent,#e5c15a);margin-top:.2rem;display:inline-block}'
+      + '#v529-panel .ft{display:flex;justify-content:space-between;gap:.5rem;align-items:center;padding:.6rem .9rem;border-top:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v529-panel .ft .ms{font-size:.68rem;color:var(--ui-dim,#8a8896)}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>ℹ️ Sources &amp; éditions</h3>'
+      + '<button class="x" id="v529-x">✕</button></div>'
+      + '<div class="l" id="v529-l"></div>'
+      + '<div class="ft"><span class="ms">Ce qui n\'est pas documenté dans le corpus est signalé comme tel — jamais inventé.</span>'
+      + '<button class="ui-btn" id="v529-copier">📋 Copier les crédits</button></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v529-x').addEventListener('click', function () { p.classList.remove('open'); });
+    p.querySelector('#v529-copier').addEventListener('click', copier);
+    return p;
+  }
+  function rendre() {
+    var l = document.getElementById('v529-l'); if (!l) return;
+    l.innerHTML = SOURCES.map(function (s) {
+      var incertain = /n\'est PAS documentée|non documentée|non précisée/.test(s.prov);
+      return '<div class="it"><div class="nm">' + esc(s.nom) + '<span class="lg">' + esc(s.langue) + '</span></div>'
+        + '<div class="pv' + (incertain ? ' un' : '') + '">' + esc(s.prov) + '</div>'
+        + '<div class="nt">' + esc(s.note) + '</div>'
+        + (s.url ? '<a class="go" href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.url) + ' ↗</a>' : '')
+        + '</div>';
+    }).join('');
+  }
+  function texteCredits() {
+    var l = ['THEOLOGICUS — sources et éditions des corpus', ''];
+    SOURCES.forEach(function (s) {
+      l.push('• ' + s.nom + ' (' + s.langue + ')');
+      l.push('  ' + s.prov);
+      if (s.note) l.push('  ' + s.note);
+      if (s.url) l.push('  ' + s.url);
+      l.push('');
+    });
+    l.push('Les mentions « non documentée » signalent une source absente du corpus : elle n\'a pas été devinée.');
+    return l.join('\n');
+  }
+  function copier() {
+    var t = texteCredits();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(t).then(function () { toast('Crédits copiés', 'success'); },
+          function () { toast('Copie impossible', 'error'); });
+      } else { toast('Presse-papiers indisponible', 'error'); }
+    } catch (e) { toast('Copie impossible', 'error'); }
+  }
+  function ouvrir() { panneau().classList.add('open'); rendre(); }
+  function fermer() { var p = document.getElementById('v529-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-sources');
+      if (b && !b.__v529) { b.__v529 = true; b.addEventListener('click', ouvrir); }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v529Sources = { sources: SOURCES, provenanceDe: provenanceDe, parId: parId,
+    ouvrir: ouvrir, fermer: fermer, rendre: rendre, texteCredits: texteCredits, copier: copier };
 })();
 </script>
 
