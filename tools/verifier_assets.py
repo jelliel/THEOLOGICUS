@@ -181,10 +181,20 @@ def controle_bancs():
     Leçon vécue : un banc lançait Chromium par un chemin Windows EN DUR
     (`executablePath: path.join(PW, ...)`) → il échouait en CI alors que tout
     le reste passait. Le chemin ne doit apparaître que derrière une condition
-    sur PW_DIR."""
+    sur PW_DIR.
+
+    Leçon v534 : la CI ne lance que les bancs `_v4*` ET `_v5*`. Ne contrôler
+    que `_v4*` laissait donc les bancs `_v5*` — ceux qu'on écrit aujourd'hui —
+    sans garde-fou de portabilité : un chemin Windows en dur y aurait cassé la
+    CI sans que ce contrôle le voie. Les deux familles sont contrôlées.
+    """
     import glob
     erreurs, infos = [], []
-    bancs = sorted(glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', '_v4*', 'verify_*.js')))
+    motifs = ('_v4*', '_v5*')
+    bancs = []
+    for motif in motifs:
+        bancs += glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', motif, 'verify_*.js'))
+    bancs = sorted(bancs)
     rigides = []
     for f in bancs:
         src = io.open(f, encoding='utf-8').read()

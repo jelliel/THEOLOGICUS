@@ -7767,6 +7767,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
     <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
     <button class="hud-btn" id="open-themes" title="Index thématique unifié — thèmes croisés, sujets patristiques, parallèles coraniques, doctrines (465 entrées)">🗂️ THÈMES</button>
+    <button class="hud-btn" id="open-dossier" title="Dossier de passage — texte (5 versions + provenance), qui le cite, thèmes liés, vos notes, en un seul document">📚 DOSSIER</button>
     <button class="hud-btn" id="open-notes" title="Notes typées — classer vos notes d'étude (exégétique, historique, doctrinal, spirituel…) et les filtrer">🏷️ NOTES</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
@@ -47416,6 +47417,80 @@ window.continueTradApart = async function (msgId) {
     } catch(e){}
   }
 
+  /* ── MIROIR localStorage des conversations : FILET DE SÉCURITÉ BORNÉ ──
+     Le magasin CANONIQUE des conversations est IndexedDB (quota de l'ordre de
+     plusieurs centaines de Mo). Le miroir localStorage 'theologicus_chat_<id>'
+     ne sert qu'à loadChat EN CAS DE PANNE d'IndexedDB — c'est un filet, pas un
+     magasin. Or au PREMIER pull d'un appareil neuf (rev 0 → tout le magasin
+     partagé), on le remplissait avec TOUTES les conversations : mesuré 79 clés
+     / 5,1 Mo, soit la saturation du quota (~5 Mo). Toute écriture ultérieure de
+     l'utilisateur (notes, surlignages, favoris) échouait alors silencieusement.
+
+     On borne donc le miroir : plafond par conversation, budget total, écriture
+     tolérante au quota (on n'insiste pas), et élagage des miroirs hérités. */
+  var MIROIR_BUDGET  = 1500000;   /* ~1,5 Mo : laisse ≈3,5 Mo aux vraies données */
+  var MIROIR_MAX_CLE = 262144;    /* 256 Ko : au-delà, la conversation reste dans IDB seul */
+  var _miroirOctets = null;       /* total courant (calculé une fois, puis entretenu) */
+  var _miroirStop = false;        /* quota atteint : on cesse de mirer pour la session */
+
+  function miroirTotal(){
+    if (_miroirOctets !== null) return _miroirOctets;
+    var t = 0;
+    try {
+      for (var i = 0; i < localStorage.length; i++){
+        var kk = localStorage.key(i);
+        if (kk && kk.indexOf('theologicus_chat_') === 0) t += kk.length + String(_get(kk) || '').length;
+      }
+    } catch(e){}
+    return (_miroirOctets = t);
+  }
+  function miroirEcrit(cid, v){
+    if (_miroirStop) return false;
+    var cle = 'theologicus_chat_' + cid;
+    var taille = String(v).length;
+    if (taille > MIROIR_MAX_CLE) return false;                      /* trop grosse : IDB seul */
+    var prec = 0;
+    try { prec = String(_get(cle) || '').length; } catch(e){}
+    if (miroirTotal() - prec + taille > MIROIR_BUDGET) return false; /* budget atteint */
+    try {
+      _set(cle, v);
+      _miroirOctets = miroirTotal() - prec + taille;
+      return true;
+    } catch(e){ _miroirStop = true; return false; }                  /* quota : on n'insiste plus */
+  }
+  function miroirRetire(cid){
+    var cle = 'theologicus_chat_' + cid;
+    try {
+      var prec = String(_get(cle) || '').length;
+      if (prec){ _rem(cle); _miroirOctets = Math.max(0, miroirTotal() - prec); }
+    } catch(e){}
+  }
+  /* Élagage des miroirs hérités : si un profil déjà saturé par une version
+     antérieure dépasse le budget, on retire les conversations les PLUS ANCIENNES
+     (updated) jusqu'à repasser sous le budget — les plus récentes, donc les plus
+     utiles, restent disponibles en secours. */
+  function miroirElaguer(){
+    try {
+      var items = [];
+      for (var i = 0; i < localStorage.length; i++){
+        var kk = localStorage.key(i);
+        if (!kk || kk.indexOf('theologicus_chat_') !== 0) continue;
+        var vv = String(_get(kk) || '');
+        var up = 0;
+        try { var o = JSON.parse(vv); up = parseFloat(o && o.updated) || 0; } catch(e){}
+        items.push({ k: kk, n: kk.length + vv.length, up: up });
+      }
+      var tot = 0;
+      for (var j = 0; j < items.length; j++) tot += items[j].n;
+      if (tot <= MIROIR_BUDGET) return 0;
+      items.sort(function(a,b){ return (a.up || 0) - (b.up || 0); });   /* plus anciennes d'abord */
+      var n = 0;
+      for (var m = 0; m < items.length && tot > MIROIR_BUDGET; m++){ _rem(items[m].k); tot -= items[m].n; n++; }
+      _miroirOctets = null;
+      return n;
+    } catch(e){ return 0; }
+  }
+
   /* ── PULL : appliquer ce que le serveur a de plus récent ── */
   var _pulling = false;
   function pull(){
@@ -47444,8 +47519,8 @@ window.continueTradApart = async function (msgId) {
           if (k.indexOf('chat::') === 0){
             var cid = k.slice(6);
             try {
-              if (v === null){ delete _chatSnap[k]; db.delete('chats', cid); }
-              else { _chatSnap[k] = v; db.put('chats', JSON.parse(v)); _set('theologicus_chat_' + cid, v); }
+              if (v === null){ delete _chatSnap[k]; db.delete('chats', cid); miroirRetire(cid); }
+              else { _chatSnap[k] = v; db.put('chats', JSON.parse(v)); miroirEcrit(cid, v); }
             } catch(err){}
             changedChat = true;
           } else if (isSynced(k)){
@@ -47497,6 +47572,7 @@ window.continueTradApart = async function (msgId) {
 
   function boot(){
     patchDb();
+    miroirElaguer();   /* répare un localStorage saturé par une version antérieure */
     seed();
     setTimeout(pull, 800);
     setInterval(scanLocal, PUSH_MS);
@@ -47512,7 +47588,11 @@ window.continueTradApart = async function (msgId) {
     pushNow: function(){ scanLocal(); flush(); },
     setEnabled: function(on){ try { _set(ON_KEY, on ? '1' : '0'); } catch(e){} },
     enabled: enabled,
-    count: function(){ return Object.keys(TS).length; }
+    count: function(){ return Object.keys(TS).length; },
+    miroir: function(){
+      return { octets: miroirTotal(), budget: MIROIR_BUDGET, plafond: MIROIR_MAX_CLE, arrete: _miroirStop };
+    },
+    elaguer: miroirElaguer
   };
 })();
 </script>
@@ -56829,6 +56909,258 @@ window.continueTradApart = async function (msgId) {
     lancer: lancer, execute: execute, bouge: bouge,
     entrees: function () { return ENTREES; }, resultats: function () { return RES; },
     selection: function () { return SEL; } };
+})();
+</script>
+
+<script id="v536-dossier-script">
+/* v536 — DOSSIER DE PASSAGE (Axe 3 de la 3.0, lot C3).
+   Les outils existent mais SÉPARÉS : synopse (versions), graphe (qui le cite),
+   index thématique, notes typées, provenance. Pour étudier UN verset, il fallait
+   ouvrir quatre panneaux et recopier à la main.
+
+   Ce module ADDITIF compose un DOSSIER unique pour une référence :
+     1. le TEXTE dans les versions disponibles, avec leur PROVENANCE ;
+     2. QUI LE CITE (Valtorta, parallèles coraniques, thèmes) ;
+     3. les THÈMES liés au verset ;
+     4. VOS NOTES mentionnant ce passage (avec leur type) ;
+     5. les SOURCES & ÉDITIONS employées.
+   Le tout affiché ET exportable (Markdown) — utilisable tel quel dans un travail.
+   Il ne fait que LIRE ce que les autres modules exposent. Style : jetons --ui-*. */
+(function () {
+  'use strict';
+  if (window.__v536Dossier) return;
+
+  var VERSIONS = [
+    { nom: 'Français', globe: '__bibleBooks', url: function (b) { return 'bible/b' + b + '.js'; }, src: 'bible', nettoie: false },
+    { nom: 'Latin', globe: '__bibleLt', url: function (b) { return 'biblelt/b' + b + '.js'; }, src: 'biblelt', nettoie: false },
+    { nom: 'Grec', globe: '__bibleGr', url: function (b) { return 'biblegr/b' + b + '.js'; }, src: 'biblegr', nettoie: true },
+    { nom: 'Syriaque', globe: '__bibleSyr', url: function (b) { return 'syriaque/b' + b + '.js'; }, src: 'syriaque', nettoie: false },
+    { nom: 'Hébreu', globe: '__bibleHb', url: function (b) { return 'biblehb/b' + b + '.js'; }, src: 'biblehb', nettoie: true }
+  ];
+  var DERNIER = null;
+
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function parse(ref) {
+    try { return (window.__v446Refs && window.__v446Refs.parseRef) ? window.__v446Refs.parseRef(ref) : null; }
+    catch (e) { return null; }
+  }
+  function nettoieStrong(s) {
+    return String(s || '').split(/\s+/).map(function (t) { return t.split('|')[0]; }).filter(Boolean).join(' ');
+  }
+  function provenance(id) {
+    try { return (window.__v529Sources && window.__v529Sources.provenanceDe) ? (window.__v529Sources.provenanceDe(id) || '') : ''; }
+    catch (e) { return ''; }
+  }
+  function chargeLivre(v, b) {
+    var g = window[v.globe];
+    if (g && g[b]) return Promise.resolve(g[b]);
+    return new Promise(function (res) {
+      var sc = document.createElement('script');
+      sc.src = v.url(b);
+      sc.onload = function () { res(window[v.globe] ? window[v.globe][b] : null); };
+      sc.onerror = function () { res(null); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  /* ── 1) versions ── */
+  async function versions(r) {
+    var out = [];
+    for (var i = 0; i < VERSIONS.length; i++) {
+      var v = VERSIONS[i];
+      var bk = null;
+      try { bk = await chargeLivre(v, r.livre); } catch (e) { bk = null; }
+      var chap = bk && bk[String(r.ch)];
+      if (!chap) continue;
+      var txt = '';
+      for (var n = r.v1; n <= r.v2; n++) {
+        var t = chap[String(n)];
+        if (t == null) continue;
+        txt += (r.v1 !== r.v2 ? n + '. ' : '') + (v.nettoie ? nettoieStrong(t) : t) + ' ';
+      }
+      if (txt.trim()) out.push({ nom: v.nom, texte: txt.trim(), prov: provenance(v.src) });
+    }
+    return out;
+  }
+  /* ── 2) qui le cite ── */
+  async function citations(ref) {
+    try {
+      if (!(window.__v526Graphe && window.__v526Graphe.citePar)) return [];
+      await window.__v526Graphe.charge();
+      return window.__v526Graphe.citePar(ref) || [];
+    } catch (e) { return []; }
+  }
+  /* ── 3) thèmes liés ── */
+  async function themes(r) {
+    try {
+      var th = await (await fetch('tradition/themes.json')).json();
+      var cible = r.livre + '|' + r.ch + '|' + r.v1;
+      var out = [];
+      (th.themes || []).forEach(function (t) {
+        var hit = (t.bible || []).some(function (x) {
+          var ref = String(x).split(' — ')[0];
+          var p = parse(ref);
+          return p && (p.livre + '|' + p.ch + '|' + p.v1) === cible;
+        });
+        if (hit) out.push({ label: t.label, note: t.note || '' });
+      });
+      return out;
+    } catch (e) { return []; }
+  }
+  /* ── 4) vos notes sur ce passage ── */
+  function notes(r) {
+    try {
+      var a = JSON.parse(localStorage.getItem('theo_panel_notes_v1') || '[]');
+      if (!Array.isArray(a)) return [];
+      var cible = norm(r.nom + ' ' + r.ch + ':' + r.v1);
+      var court = norm(r.nom + ' ' + r.ch + ':' + r.v1).replace(/\s+/g, '');
+      return a.filter(function (n) {
+        var h = norm((n.anchor || '') + ' ' + (n.note || ''));
+        return h.indexOf(cible) >= 0 || h.replace(/\s+/g, '').indexOf(court) >= 0;
+      });
+    } catch (e) { return []; }
+  }
+  function typeNom(id) {
+    try {
+      var T = (window.__v533Notes && window.__v533Notes.TYPES) || [];
+      for (var i = 0; i < T.length; i++) { if (T[i].id === id) return T[i].nom; }
+    } catch (e) {}
+    return '';
+  }
+
+  /* ── composition ── */
+  async function compose(ref) {
+    var r = parse(ref);
+    if (!r) return null;
+    var d = { ref: ref, nom: r.nom, ch: r.ch, v1: r.v1, v2: r.v2, versions: [], citations: [], themes: [], notes: [] };
+    try { d.versions = await versions(r); } catch (e) {}
+    d.citations = await citations(ref);
+    d.themes = await themes(r);
+    d.notes = notes(r);
+    DERNIER = d;
+    return d;
+  }
+  function texte(d) {
+    if (!d) return '';
+    var l = ['# Dossier — ' + d.nom + ' ' + d.ch + ':' + d.v1 + (d.v2 !== d.v1 ? '-' + d.v2 : ''), ''];
+    l.push('## Texte (' + d.versions.length + ' version(s))');
+    d.versions.forEach(function (v) {
+      l.push('### ' + v.nom);
+      if (v.prov) l.push('*' + v.prov + '*');
+      l.push('');
+      l.push(v.texte);
+      l.push('');
+    });
+    if (d.citations.length) {
+      l.push('## Cité par (' + d.citations.length + ')');
+      d.citations.forEach(function (x) { l.push('- [' + x.type + '] ' + x.titre + (x.extrait ? ' — ' + x.extrait : '')); });
+      l.push('');
+    }
+    if (d.themes.length) {
+      l.push('## Thèmes liés');
+      d.themes.forEach(function (t) { l.push('- **' + t.label + '** — ' + t.note); });
+      l.push('');
+    }
+    if (d.notes.length) {
+      l.push('## Mes notes (' + d.notes.length + ')');
+      d.notes.forEach(function (n) {
+        var tn = typeNom(n.type);
+        l.push('- ' + (tn ? '[' + tn + '] ' : '') + (n.note || ''));
+      });
+      l.push('');
+    }
+    l.push('---');
+    l.push('THEOLOGICUS — dossier composé localement');
+    return l.join('\n');
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v536-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v536-panel';
+    p.innerHTML = '<style>'
+      + '#v536-panel{position:fixed;inset:0;z-index:141150;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}'
+      + '#v536-panel.open{display:flex}'
+      + '#v536-panel .b{width:min(880px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v536-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v536-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v536-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v536-panel .cfg{display:flex;gap:.4rem;padding:.55rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v536-panel input{flex:1;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.45rem .6rem;font-size:.8rem}'
+      + '#v536-panel pre{overflow:auto;margin:0;padding:.9rem;white-space:pre-wrap;font-family:var(--ui-mono,monospace);font-size:.76rem;line-height:1.6;color:var(--ui-ink,#e8e6e0)}'
+      + '#v536-panel .empty{padding:1.4rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>📚 Dossier de passage</h3>'
+      + '<button class="x" id="v536-x">✕</button></div>'
+      + '<div class="cfg"><input id="v536-ref" placeholder="Une référence (ex. Jean 3:16, Genèse 1:1)…">'
+      + '<button class="ui-btn" id="v536-go">Composer</button>'
+      + '<button class="ui-btn" id="v536-cop">📋 Copier</button>'
+      + '<button class="ui-btn" id="v536-dl">⬇️ .md</button></div>'
+      + '<div id="v536-out"><div class="empty">Entrez une référence, puis « Composer » : texte (5 versions + provenance), qui le cite, thèmes liés, vos notes.</div></div>'
+      + '</div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v536-x').addEventListener('click', function () { p.classList.remove('open'); });
+    p.querySelector('#v536-go').addEventListener('click', function () { var v = document.getElementById('v536-ref').value.trim(); if (v) ouvre(v); });
+    p.querySelector('#v536-ref').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); var v = e.target.value.trim(); if (v) ouvre(v); } });
+    p.querySelector('#v536-cop').addEventListener('click', function () {
+      try { navigator.clipboard.writeText(texte(DERNIER)); toast('Dossier copié', 'success'); } catch (e) { toast('Copie impossible', 'error'); }
+    });
+    p.querySelector('#v536-dl').addEventListener('click', function () {
+      try {
+        var nom = 'dossier_' + String(DERNIER ? DERNIER.ref : 'passage').replace(/[^0-9A-Za-zÀ-ÿ]+/g, '_') + '.md';
+        var url = URL.createObjectURL(new Blob([texte(DERNIER)], { type: 'text/markdown;charset=utf-8' }));
+        var a = document.createElement('a'); a.href = url; a.download = nom;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 1500);
+        toast('Dossier téléchargé', 'success');
+      } catch (e) { toast('Téléchargement impossible', 'error'); }
+    });
+    return p;
+  }
+  async function ouvre(ref) {
+    panneau().classList.add('open');
+    var inp = document.getElementById('v536-ref');
+    if (inp && ref) inp.value = ref;
+    var out = document.getElementById('v536-out');
+    if (out) out.innerHTML = '<div class="empty">Composition du dossier…</div>';
+    var d = await compose(ref);
+    if (!d) { if (out) out.innerHTML = '<div class="empty">Référence non reconnue.</div>'; return null; }
+    if (out) out.innerHTML = '<pre>' + esc(texte(d)) + '</pre>';
+    return d;
+  }
+  function fermer() { var p = document.getElementById('v536-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-dossier');
+      if (b && !b.__v536) {
+        b.__v536 = true;
+        b.addEventListener('click', function () {
+          var cur = '';
+          try { if (window.__v506Synopse && window.__v506Synopse.refPartageable) cur = window.__v506Synopse.refPartageable() || ''; } catch (e) {}
+          ouvre(cur || 'Genèse 1:1');
+        });
+      }
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v536Dossier = { ouvre: ouvre, fermer: fermer, compose: compose, texte: texte,
+    versions: versions, citations: citations, themes: themes, notes: notes,
+    dernier: function () { return DERNIER; } };
 })();
 </script>
 

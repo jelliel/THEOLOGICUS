@@ -107,12 +107,25 @@ async function assurerRelais() {
   ok("une recherche vide propose des actions", r8 >= 10, "n=" + r8);
 
   section("5. Raccourci Ctrl+Maj+P");
+  const t0 = Date.now();
   await page.keyboard.press('Control+Shift+P');
   await page.waitForFunction(() => { const p = document.getElementById('v535-panel'); return p && p.classList.contains('open'); }, { timeout: 10000 });
   ok("le raccourci ouvre la palette", true);
+  /* Le focus n'est PAS posé en même temps que la classe « open » : ouvrir() le
+     pose dans un setTimeout (30 ms) — convention de TOUS les panneaux de l'app
+     (v28 : 20 ms, v520 : 30 ms, v535 : 30 ms). Lire activeElement à l'instant
+     où la classe apparaît est une COURSE : mesuré, BUTTON à +0 ms et v535-q à
+     +30 ms. Le banc réussissait ou échouait selon la charge du thread principal
+     — ce qui ne dit rien du contrat. On attend donc la CONDITION réelle (le
+     champ focalisé), sous borne, et on mesure le délai. */
+  let focusOk = true;
+  try { await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'v535-q', { timeout: 3000 }); }
+  catch (e) { focusOk = false; }
+  const delaiFocus = Date.now() - t0;
   const ui = await page.evaluate(() => ({ items: document.querySelectorAll('#v535-panel .it').length, focus: document.activeElement && document.activeElement.id }));
   ok("la liste est peuplée", ui.items >= 10, "items=" + ui.items);
-  ok("le champ a le focus", ui.focus === 'v535-q', ui.focus);
+  ok("le champ reçoit le focus à l'ouverture", focusOk && ui.focus === 'v535-q', ui.focus + " en " + delaiFocus + " ms");
+  ok("le focus arrive dans un délai raisonnable (< 1,5 s)", focusOk && delaiFocus < 1500, delaiFocus + " ms");
 
   section("6. Navigation clavier");
   await page.keyboard.press('ArrowDown');
