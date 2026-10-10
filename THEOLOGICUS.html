@@ -41750,10 +41750,12 @@ window.continueTradApart = async function (msgId) {
   st.id = 'v159-css';
   st.textContent =
     '#v159-media-wrap{position:relative;flex:0 0 auto}' +
-    '#v159-media-panel{position:fixed;min-width:230px;padding:6px;display:none;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(79,142,247,.35);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.55);z-index:130000}' +
+    /* v519 — MIGRATION au design system : surfaces/rayon/ombre/police via les
+       jetons ; le lisere bleu du menu passe par --ui-info (color-mix). */
+    '#v159-media-panel{position:fixed;min-width:230px;padding:6px;display:none;flex-direction:column;background:var(--ui-panel,#101826);border:1px solid color-mix(in srgb, var(--ui-info,#4f8ef7) 35%, transparent);border-radius:var(--ui-radius,12px);box-shadow:var(--ui-shadow,0 16px 44px rgba(0,0,0,.55));z-index:130000}' +
     '#v159-media-panel.open{display:flex}' +
     '#v159-media-panel .hud-btn{display:block;width:100%;text-align:left;margin:2px 0;white-space:nowrap}' +
-    '#v159-media-panel .v159-lbl{font-size:9px;letter-spacing:2px;opacity:.5;padding:6px 8px 2px;font-family:var(--font-mono,monospace);text-transform:uppercase}';
+    '#v159-media-panel .v159-lbl{font-size:9px;letter-spacing:2px;opacity:.5;padding:6px 8px 2px;font-family:var(--ui-mono,var(--font-mono,monospace));text-transform:uppercase}';
   document.head.appendChild(st);
 
   var studio = document.getElementById('open-studio-modal');
