@@ -7768,6 +7768,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-diag" title="Diagnostic — état des corpus, du stockage, des clés IA et d'Ollama (Ctrl+Alt+D)">🩺 DIAGNOSTIC</button>
     <button class="hud-btn" id="open-rapid" title="Recherche instantanée classée — moteur BM25 tolérant aux fautes sur toute la Bible (Ctrl+Maj+K)">⚡ RAPIDE</button>
     <button class="hud-btn" id="open-corbeille" title="Corbeille — restaurer une conversation supprimée">🗑 CORBEILLE</button>
+    <button class="hud-btn" id="open-presets" title="Agents théologiques prêts — exégète, patristique, islamologue, canoniste…">🎓 AGENTS</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -55346,6 +55347,217 @@ window.continueTradApart = async function (msgId) {
 
   window.__v526Graphe = { charge: charge, citePar: citePar, ouvre: ouvre, fermer: function () { var p = document.getElementById('v526-panel'); if (p) p.classList.remove('open'); },
     pret: function () { return PRET; }, stats: function () { return STATS; }, sources: SOURCES };
+})();
+</script>
+
+<script id="v527-agents-script">
+/* v527 — AGENTS THÉOLOGIQUES PRÊTS (Axe 1 de la 3.0, lot A6).
+   Les agents existent (store `agents`, sélecteur #agent-select) mais l'utilisateur
+   doit les créer lui-même à partir d'une page blanche. Ce module ADDITIF
+   installe une BIBLIOTHÈQUE DE PRÉ-RÉGLÉS : huit agents théologiques complets
+   (rôle, instructions, contexte, style, interdits), prêts à activer.
+
+   Sécurité : les pré-réglés portent des identifiants FIXES (preset-*) ; on
+   n'écrase JAMAIS un agent existant, et on ne touche à aucun agent utilisateur.
+   Ils apparaissent dans le sélecteur habituel, comme n'importe quel agent. */
+(function () {
+  'use strict';
+  if (window.__v527Agents) return;
+
+  var MARQUE = 'theo_agents_presets_v1';
+
+  var PRESETS = [
+    { id: 'preset-exegete', name: 'Exégète', tags: ['exégèse', 'langues'],
+      desc: "Exégète biblique : analyse le texte pour lui-même avant toute interprétation.",
+      instructions: "Procède TOUJOURS dans cet ordre : (1) contexte littéraire et historique du passage ; (2) genre littéraire ; (3) structure du texte ; (4) mots-clés dans la langue source (hébreu, grec, araméen) avec leur sens et leurs parallèles ; (5) variantes textuelles notables ; (6) seulement ENSUITE, le sens. Distingue explicitement ce que DIT le texte de ce qu'on en DÉDUIT.",
+      primer: "Méthode exégétique historico-critique, sans présupposé confessionnel sur le résultat.",
+      style: 'detaille', forbidden: "Inventer une référence ou une leçon ; citer de mémoire sans vérifier ; confondre exégèse (ce que dit le texte) et théologie spéculative.", temp: 0.4 },
+
+    { id: 'preset-patristique', name: 'Patristique', tags: ['Pères', 'tradition'],
+      desc: "Spécialiste des Pères de l'Église et de la tradition ancienne.",
+      instructions: "Cite les Pères avec l'œuvre, le livre/chapitre et la datation. Situe chaque auteur (grec/latin, école, concile). Signale les DÉSACCORDS entre Pères au lieu de les lisser. Distingue nettement la tradition unanime des opinions personnelles d'un auteur.",
+      primer: "Patristique des Ier-VIIIe siècles : apostoliques, apologètes, alexandrins, cappadociens, antiochiens, latins.",
+      style: 'detaille', forbidden: "Attribuer à un Père une citation non vérifiée ; présenter une opinion isolée comme la doctrine commune.", temp: 0.4 },
+
+    { id: 'preset-langues', name: 'Hébraïsant & grec', tags: ['hébreu', 'grec', 'linguistique'],
+      desc: "Analyse linguistique des langues bibliques (hébreu, grec, araméen).",
+      instructions: "Donne les formes originales avec translittération, la racine, la morphologie (binyan/déclinaison/temps) et le champ sémantique. Compare les traductions courantes quand elles divergent. Signale les jeux de mots et les structures poétiques (parallélismes, chiasmes).",
+      primer: "Hébreu biblique (BHS), grec du Nouveau Testament (Nestle-Aland), araméen.",
+      style: 'detaille', forbidden: "Transcrire approximativement sans le dire ; inventer une racine ou une morphologie.", temp: 0.3 },
+
+    { id: 'preset-islam', name: 'Islamologue', tags: ['islam', 'comparatif'],
+      desc: "Étude comparative islamo-chrétienne, rigoureuse et sans syncrétisme.",
+      instructions: "Cite le Coran (sourate:verset) et le Tafsir en nommant l'édition ou le commentateur. Présente la position de chaque tradition POUR ELLE-MÊME avant de comparer. Ne présuppose NI dépendance NI accord doctrinal : les ressemblances peuvent être convergentes ou polémiques.",
+      primer: "Coran, tafsir classiques, hadiths, et corpus biblique en regard.",
+      style: 'detaille', forbidden: "Fusionner les deux traditions en une doctrine unique ; inventer un verset coranique ou un hadith.", temp: 0.4 },
+
+    { id: 'preset-canoniste', name: 'Canoniste', tags: ['droit', 'magistère'],
+      desc: "Droit canonique, magistère et documents conciliaires.",
+      instructions: "Cite le canon ou le paragraphe exact (CEC §, Denzinger DH, canon du CIC). Distingue droit universel et particulier, discipline et doctrine. Date toujours le document, en signalant les réformes ultérieures qui l'ont modifié.",
+      primer: "Code de droit canonique, Catéchisme de l'Église catholique, Denzinger-Hünermann, actes conciliaires.",
+      style: 'formel', forbidden: "Citer un numéro de canon ou de paragraphe non vérifié ; présenter une discipline passée comme en vigueur.", temp: 0.3 },
+
+    { id: 'preset-historien', name: 'Historien', tags: ['histoire', 'contexte'],
+      desc: "Historien du christianisme et des religions : sources, datations, contexte.",
+      instructions: "Distingue TOUJOURS source primaire, source secondaire et tradition. Donne les datations avec leur marge d'incertitude. Signale ce qui est établi, ce qui est débattu et ce qui relève de la légende, en expliquant pourquoi.",
+      primer: "Méthode historique : critique des sources, contexte social et politique, historiographie.",
+      style: 'detaille', forbidden: "Présenter une tradition comme un fait établi ; donner une date précise là où la recherche hésite.", temp: 0.4 },
+
+    { id: 'preset-apologete', name: 'Apologète', tags: ['objections', 'dialogue'],
+      desc: "Répond aux objections avec honnêteté, sans caricature.",
+      instructions: "Énonce d'abord l'objection dans sa forme LA PLUS FORTE (principe de charité), puis réponds. Sépare les arguments solides des arguments faibles, même quand ils vont dans ton sens. Nomme les points où la réponse est insuffisante.",
+      primer: "Dialogue inter-religieux et défense raisonnée de la foi, dans le respect de l'interlocuteur.",
+      style: 'detaille', forbidden: "Déformer la position adverse (homme de paille) ; présenter un argument faible comme décisif.", temp: 0.5 },
+
+    { id: 'preset-catechiste', name: 'Catéchiste', tags: ['pédagogie', 'transmission'],
+      desc: "Transmet avec des mots simples, sans trahir la doctrine.",
+      instructions: "Explique d'abord avec des mots accessibles et une image concrète, puis donne la formulation exacte de l'Église. Prévois une question de vérification à la fin. N'introduis pas plus de trois idées par réponse.",
+      primer: "Pédagogie catéchétique : partir de l'expérience, nommer simplement, ancrer dans le texte.",
+      style: 'pedagogique', forbidden: "Simplifier au point de rendre la doctrine fausse ; employer un jargon non expliqué.", temp: 0.6 }
+  ];
+
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function DB() { try { return (typeof db !== 'undefined' && db && db.conn && db.put) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
+  function now() { try { return (typeof window.now === 'function') ? window.now() : Date.now(); } catch (e) { return Date.now(); } }
+
+  /* ── installation des pré-réglés (JAMAIS destructif) ── */
+  async function seme() {
+    var d = DB();
+    if (!d) return { ok: false, err: 'base indisponible', poses: 0 };
+    var poses = 0;
+    for (var i = 0; i < PRESETS.length; i++) {
+      var p = PRESETS[i];
+      var existe = null;
+      try { existe = await d.get('agents', p.id); } catch (e) {}
+      if (existe) continue;                       /* on ne réécrit jamais */
+      var agent = {
+        id: p.id, name: p.name, desc: p.desc, instructions: p.instructions,
+        primer: p.primer, tags: p.tags.slice(), modelPref: '',
+        temperature: p.temp, style: p.style, forbidden: p.forbidden,
+        memPrio: 3, maxTokens: 4096, preset: true, created: now()
+      };
+      try { await d.put('agents', agent); poses++; } catch (e) {}
+    }
+    try { if (typeof window.loadAgents === 'function') await window.loadAgents(); } catch (e) {}
+    try { localStorage.setItem(MARQUE, '1'); } catch (e) {}
+    return { ok: true, poses: poses, total: PRESETS.length };
+  }
+
+  async function liste() {
+    var d = DB();
+    if (!d) return [];
+    var tous = [];
+    try { tous = await d.getAll('agents') || []; } catch (e) {}
+    var parId = {};
+    tous.forEach(function (a) { parId[a.id] = a; });
+    return PRESETS.map(function (p) {
+      var a = parId[p.id];
+      return { id: p.id, name: p.name, desc: p.desc, tags: p.tags, installe: !!a,
+               actif: !!(ETAT() && ETAT().agent && ETAT().agent.id === p.id) };
+    });
+  }
+
+  /* ── activation ── */
+  async function active(id) {
+    var d = DB(); if (!d) { toast('Base indisponible', 'error'); return false; }
+    var ag = null;
+    try { ag = await d.get('agents', id); } catch (e) {}
+    if (!ag) { var r = await seme(); try { ag = await d.get('agents', id); } catch (e) {} }
+    if (!ag) { toast('Agent introuvable', 'error'); return false; }
+    var st = ETAT(); if (!st) { toast('État indisponible', 'error'); return false; }
+    st.agent = ag;
+    try { var s = document.getElementById('agent-select'); if (s) s.value = id; } catch (e) {}
+    try { var sm = document.getElementById('agent-select-mob'); if (sm) sm.value = id; } catch (e) {}
+    /* le message système de la conversation doit refléter le nouvel agent */
+    try {
+      var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
+      if (sys && typeof window.buildSystemPrompt === 'function') {
+        sys.content = window.buildSystemPrompt();
+        if (typeof window.saveChat === 'function') await window.saveChat();
+        if (typeof window.renderMessages === 'function') window.renderMessages();
+      }
+    } catch (e) {}
+    toast('Agent « ' + ag.name + ' » activé', 'success');
+    rendre();
+    return true;
+  }
+
+  /* ── panneau ── */
+  function panneau() {
+    var p = document.getElementById('v527-panel');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v527-panel';
+    p.innerHTML = '<style>'
+      + '#v527-panel{position:fixed;inset:0;z-index:140800;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+      + '#v527-panel.open{display:flex}'
+      + '#v527-panel .b{width:min(860px,95vw);max-height:86vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v527-panel .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v527-panel .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}'
+      + '#v527-panel .hd .st{font-size:.68rem;color:var(--ui-dim,#8a8896)}'
+      + '#v527-panel .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer}'
+      + '#v527-panel .l{overflow:auto;padding:.6rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.5rem}'
+      + '#v527-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.55rem .65rem;display:flex;flex-direction:column;gap:.35rem}'
+      + '#v527-panel .it.actif{border-color:var(--ui-accent,#e5c15a)}'
+      + '#v527-panel .nm{font-size:.85rem;font-weight:600;color:var(--ui-ink,#e8e6e0)}'
+      + '#v527-panel .ds{font-size:.74rem;color:var(--ui-dim,#8a8896);line-height:1.5;flex:1}'
+      + '#v527-panel .tg{font-size:.62rem;color:var(--ui-info,#4f8ef7)}'
+      + '#v527-panel .ft{display:flex;justify-content:space-between;gap:.5rem;padding:.6rem .9rem;border-top:1px solid var(--ui-border,#2a2a3a)}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><h3>🎓 Agents théologiques prêts</h3><span class="st" id="v527-st"></span>'
+      + '<button class="x" id="v527-x">✕</button></div>'
+      + '<div class="l" id="v527-l"></div>'
+      + '<div class="ft"><span class="ds" style="font-size:.68rem">Ces agents s\'ajoutent au sélecteur habituel. Vos agents personnels ne sont jamais modifiés.</span>'
+      + '<button class="ui-btn" id="v527-installe">↻ (Ré)installer</button></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
+    p.querySelector('#v527-x').addEventListener('click', function () { p.classList.remove('open'); });
+    p.querySelector('#v527-installe').addEventListener('click', async function () {
+      var r = await seme(); toast(r.poses ? r.poses + ' agent(s) installé(s)' : 'Déjà installés', 'success'); rendre();
+    });
+    p.querySelector('#v527-l').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-act]') : null;
+      if (b) active(b.dataset.act);
+    });
+    return p;
+  }
+
+  async function rendre() {
+    var l = document.getElementById('v527-l'); if (!l) return;
+    var items = await liste();
+    var st = document.getElementById('v527-st');
+    if (st) st.textContent = items.filter(function (x) { return x.installe; }).length + ' / ' + items.length + ' installés';
+    l.innerHTML = items.map(function (x) {
+      return '<div class="it' + (x.actif ? ' actif' : '') + '">'
+        + '<div class="nm">' + esc(x.name) + (x.actif ? ' <span class="tg">● actif</span>' : '') + '</div>'
+        + '<div class="ds">' + esc(x.desc) + '</div>'
+        + '<div class="tg">' + esc((x.tags || []).join(' · ')) + '</div>'
+        + '<button class="ui-btn" data-act="' + esc(x.id) + '">' + (x.actif ? '✓ Activé' : 'Activer') + '</button>'
+        + '</div>';
+    }).join('');
+  }
+
+  async function ouvre() { panneau().classList.add('open'); await seme(); rendre(); }
+  function fermer() { var p = document.getElementById('v527-panel'); if (p) p.classList.remove('open'); }
+
+  function init() {
+    try {
+      var b = document.getElementById('open-presets');
+      if (b && !b.__v527) { b.__v527 = true; b.addEventListener('click', ouvre); }
+    } catch (e) {}
+    /* installation silencieuse au premier lancement */
+    try { if (localStorage.getItem(MARQUE) !== '1') seme(); } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1500);
+
+  window.__v527Agents = { presets: PRESETS, seme: seme, liste: liste, active: active, ouvre: ouvre, fermer: fermer, rendre: rendre };
 })();
 </script>
 
