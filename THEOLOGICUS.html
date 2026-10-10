@@ -53516,25 +53516,26 @@ window.continueTradApart = async function (msgId) {
     p = document.createElement('div');
     p.id = 'v507-diag';
     p.innerHTML = '<style>'
+      /* v513 — MIGRATION au design system : plus de couleurs codees en dur,
+         tout passe par les JETONS (var(--ui-*)). Les boutons utilisent le
+         composant .ui-btn. Aucun selecteur .d-* ne change (compatibilite). */
       + '#v507-diag{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);z-index:9850;display:none;align-items:center;justify-content:center;padding:1rem}'
       + '#v507-diag.open{display:flex}'
-      + '#v507-diag .b{position:relative;width:100%;max-width:640px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,#15151f,#0f0f16);border:1px solid rgba(201,169,97,.35);border-radius:16px;padding:1.1rem 1.2rem}'
-      + '#v507-diag h3{margin:0 0 .1rem;font-size:1.05rem;color:#e5c15a}'
-      + '#v507-diag .st{font-size:.68rem;color:#8a8896;margin-bottom:.7rem}'
-      + '#v507-diag h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:#8fa3b8;margin:.9rem 0 .35rem}'
-      + '#v507-diag .d-l{display:flex;gap:.5rem;align-items:baseline;font-size:.78rem;padding:.28rem .4rem;border-radius:6px}'
+      + '#v507-diag .b{position:relative;width:100%;max-width:640px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,var(--ui-panel,#15151f),var(--ui-bg,#0f0f16));border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,12px);padding:1.1rem 1.2rem}'
+      + '#v507-diag h3{margin:0 0 .1rem;font-size:1.05rem;color:var(--ui-accent,#e5c15a)}'
+      + '#v507-diag .st{font-size:.68rem;color:var(--ui-dim,#8a8896);margin-bottom:.7rem}'
+      + '#v507-diag h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ui-dim,#8fa3b8);margin:.9rem 0 .35rem}'
+      + '#v507-diag .d-l{display:flex;gap:.5rem;align-items:baseline;font-size:.78rem;padding:.28rem .4rem;border-radius:var(--ui-radius-sm,6px)}'
       + '#v507-diag .d-l.ko{background:rgba(200,90,74,.1)}'
       + '#v507-diag .d-ic{width:1.1em}'
-      + '#v507-diag .d-n{color:#e8e6e0;flex:0 0 44%}'
-      + '#v507-diag .d-d{color:#8a8896;font-size:.72rem}'
-      + '#v507-diag .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid #2a2a3a;color:#8a8896;border-radius:50%;width:30px;height:30px;cursor:pointer}'
-      + '#v507-diag .btns{margin-top:1rem;display:flex;gap:.5rem}'
-      + '#v507-diag .btns button{background:#1a1a28;color:#e8e6e0;border:1px solid #2a2a3a;border-radius:8px;padding:.45rem .9rem;font-size:.78rem;cursor:pointer}'
-      + '#v507-diag .btns button:hover{border-color:#e5c15a;color:#e5c15a}'
+      + '#v507-diag .d-n{color:var(--ui-ink,#e8e6e0);flex:0 0 44%}'
+      + '#v507-diag .d-d{color:var(--ui-dim,#8a8896);font-size:.72rem}'
+      + '#v507-diag .x{position:absolute;top:.8rem;right:.9rem;background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:30px;height:30px;cursor:pointer}'
+      + '#v507-diag .btns{margin-top:1rem}'
       + '</style>'
       + '<div class="b"><button class="x" id="v507-x">✕</button><h3>🩺 Diagnostic</h3>'
       + '<div class="st" id="v507-st">Sondes en cours…</div><div id="v507-c"></div>'
-      + '<div class="btns"><button id="v507-retest">↻ Re-tester</button><button id="v507-copy">📋 Copier le rapport</button></div></div>';
+      + '<div class="btns ui-row"><button id="v507-retest" class="ui-btn">↻ Re-tester</button><button id="v507-copy" class="ui-btn">📋 Copier le rapport</button></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
     p.querySelector('#v507-x').addEventListener('click', fermer);
@@ -53761,7 +53762,23 @@ window.continueTradApart = async function (msgId) {
   s.textContent = CSS;
   (document.head || document.documentElement).appendChild(s);
 
-  window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge'] };
+  /* v513 — MESURER l'adoption du design system (au lieu de la supposer) :
+     combien de jetons sont réellement définis et combien d'éléments du DOM
+     portent une classe ui-*. La migration des modules se lit dans ce chiffre. */
+  function audit() {
+    var sel = '.ui-btn,.ui-panel,.ui-card,.ui-badge,.ui-row';
+    var usages = 0;
+    try { usages = document.querySelectorAll(sel).length; } catch (e) {}
+    var jetons = 0, noms = ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3', '--ui-ok', '--ui-err', '--ui-warn'];
+    try {
+      var cs = getComputedStyle(document.documentElement);
+      noms.forEach(function (t) { if ((cs.getPropertyValue(t) || '').trim()) jetons++; });
+    } catch (e) {}
+    return { jetons: jetons, jetonsTotal: noms.length, usages: usages,
+             composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'] };
+  }
+
+  window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'], audit: audit };
 })();
 </script>
 </body>
