@@ -665,6 +665,10 @@ def main() -> int:
               f"— réutilisée (même origine, même configuration).")
     else:
         proxy_server.SERVE_DIR = base  # les fichiers statiques sont à côté de l'exe
+        # v538 — rétention : l'exe importe proxy_server, donc son bloc
+        # __main__ ne s'exécute PAS. On borne ici le magasin hérité, sinon la
+        # rétention ne s'appliquerait jamais dans l'application installée.
+        proxy_server._store_elaguer_demarrage()
         handler = partial(proxy_server.CORSProxyHandler, directory=base)
         # v2xx — 0.0.0.0 (toutes interfaces) au lieu de 127.0.0.1 : l'app est
         # ainsi joignable depuis un autre appareil du même réseau (LAN). Le port

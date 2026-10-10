@@ -100,7 +100,16 @@ const semer = (page, id, titre) => page.evaluate(([i, t]) => db.put('chats', { i
 
   section("2. Le panneau liste la conversation supprimée");
   await page.evaluate(() => window.__v521Corbeille.ouvrir());
-  await page.waitForFunction(() => { const p = document.getElementById('v521-panel'); return p && p.classList.contains('open'); }, { timeout: 10000 });
+  /* ⚠️ `rendre()` est ASYNCHRONE : il attend `orphelins()`, qui relit TOUTES les
+     conversations d'IndexedDB. Mesuré : avec 399 conversations (magasin partagé
+     d'une machine de développement) la liste apparaît à +261 ms ; avec une base
+     presque vide, à +2 ms. Lire le DOM à l'instant où la classe `open` apparaît
+     est donc une COURSE — verte en CI (base vide), rouge en local. On attend la
+     CONDITION RÉELLE : panneau ouvert ET conversation listée. */
+  await page.waitForFunction(() => {
+    const p = document.getElementById('v521-panel');
+    return p && p.classList.contains('open') && p.querySelectorAll('.it').length > 0;
+  }, { timeout: 15000 });
   const ui = await page.evaluate(() => ({
     items: document.querySelectorAll('#v521-panel .it').length,
     titre: (document.querySelector('#v521-panel .tt') || {}).textContent || '',
@@ -113,6 +122,7 @@ const semer = (page, id, titre) => page.evaluate(([i, t]) => db.put('chats', { i
   ok("le compteur du panneau est juste", /1 dans la corbeille/.test(ui.st), ui.st);
 
   section("3. « Restaurer » remet la conversation dans les Archives");
+  await page.waitForFunction(() => !!document.querySelector('#v521-panel [data-rest]'), { timeout: 10000 });
   await page.evaluate(() => document.querySelector('#v521-panel [data-rest]').click());
   await page.waitForTimeout(600);
   ok("elle est de retour dans les Archives", await inChats(page, 'test-trash-1'));
@@ -124,6 +134,8 @@ const semer = (page, id, titre) => page.evaluate(([i, t]) => db.put('chats', { i
   await page.evaluate(() => window.deleteArchiveChat('test-trash-1'));
   await page.waitForTimeout(400);
   ok("de nouveau dans la corbeille", (await trash(page)).length === 1);
+  /* même course que la section 2 : on attend le bouton, on ne le suppose pas */
+  await page.waitForFunction(() => !!document.querySelector('#v521-panel [data-purge]'), { timeout: 15000 });
   await page.evaluate(() => document.querySelector('#v521-panel [data-purge]').click());
   await page.waitForTimeout(400);
   const tr4 = await trash(page);

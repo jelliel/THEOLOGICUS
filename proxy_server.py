@@ -127,6 +127,18 @@ def _app_data_dir():
 # ════════════════════════════════════════════════════════════════════
 _STORE_LOCK = _threading.Lock()
 
+# v538 — RÉTENTION. Mesure du 2026-10-10 : 42,6 Mo / 690 clés, dont des
+# conversations de 250-650 Ko. Rien ne bornait ce fichier : il grossissait sans
+# fin, et un appareil neuf devait le télécharger EN ENTIER (42 Mo) avant de
+# pouvoir travailler. On le borne ici.
+#   • MAX_BYTES  : plafond de la somme des valeurs.
+#   • MIN_CHATS  : plancher de conversations gardées, même si le plafond est
+#                  dépassé par elles seules (on ne vide pas l'historique).
+# Surchargeables par l'environnement : indispensable pour PROUVER l'élagage dans
+# un banc sans avoir à écrire 24 Mo.
+STORE_MAX_BYTES = int(os.environ.get('THEO_STORE_MAX_BYTES') or (24 * 1024 * 1024))
+STORE_MIN_CHATS = int(os.environ.get('THEO_STORE_MIN_CHATS') or 60)
+
 
 def _store_path():
     return os.path.join(_app_data_dir(), 'theologicus_store.json')
@@ -142,7 +154,9 @@ def _store_read():
         keys = d.get('keys')
         if not isinstance(keys, dict):
             keys = {}
-        return {'rev': int(d.get('rev') or 0), 'keys': keys}
+        el = d.get('elagage')
+        return {'rev': int(d.get('rev') or 0), 'keys': keys,
+                'elagage': el if isinstance(el, dict) else {}}
     except Exception:
         return {'rev': 0, 'keys': {}}
 
@@ -154,6 +168,87 @@ def _store_write(d):
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(d, f, ensure_ascii=False)
     os.replace(tmp, p)
+
+
+def _store_elaguer_demarrage():
+    """v538 — Borne le magasin HÉRITÉ dès le lancement.
+
+    Mesure du 2026-10-10 : 42,6 Mo, dont des conversations de 250-650 Ko. Sans
+    cet appel, un magasin déjà trop gros ne se bornerait qu'au prochain POST —
+    c'est-à-dire seulement si un client écrit. On le fait donc au démarrage.
+    Et on l'ANNONCE : un élagage silencieux serait pris pour une perte de
+    données. Renvoie le nombre de conversations retirées.
+    """
+    try:
+        with _STORE_LOCK:
+            d = _store_read()
+            n, o = _store_elaguer(d)
+            if n:
+                _store_write(d)
+                print("  \033[33m[RÉTENTION]\033[0m %d ancienne(s) conversation(s) "
+                      "retirée(s) du magasin (%.1f Mo libérés) → %.1f Mo"
+                      % (n, o / 1048576.0, _store_taille(d['keys']) / 1048576.0))
+            return n
+    except Exception:
+        return 0
+
+
+def _store_taille(keys):
+    """Somme des longueurs (clé + valeur). O(nb de clés) : len() sur str est O(1)."""
+    try:
+        return sum(len(k) + len(str((v or {}).get('v') or '')) for k, v in keys.items())
+    except Exception:
+        return 0
+
+
+def _store_elaguer(d):
+    """v538 — Borne le magasin : retire les conversations les PLUS ANCIENNES
+    jusqu'à repasser sous STORE_MAX_BYTES. Renvoie (nb retiré, octets libérés).
+
+    Pourquoi SEULEMENT les clés ``chat::`` :
+      - ce sont elles qui pèsent (250-650 Ko mesurés) ;
+      - ce sont les seules dont la perte est *supportable* : la conversation vit
+        d'abord dans l'IndexedDB de l'appareil qui l'a créée, et le magasin n'est
+        qu'un relais de synchronisation ;
+      - les autres clés (surlignages, notes, favoris, panier, mémoire de
+        traduction) sont petites ET irremplaçables : elles ne sont JAMAIS élaguées.
+
+    Retirer une clé du magasin n'est PAS une suppression propagée : le pull côté
+    client ne parcourt que les clés PRÉSENTES. Un appareil qui ne l'a jamais reçue
+    l'ignorera simplement ; un appareil qui l'a déjà la garde.
+
+    L'élagage est COMPTÉ et cumulé dans ``d['elagage']`` : un élagage silencieux
+    ferait croire à une perte de données. Sans trace, on ne peut pas le voir.
+    """
+    keys = d.get('keys') or {}
+    total = _store_taille(keys)
+    if total <= STORE_MAX_BYTES:
+        return 0, 0
+    chats = [(k, v) for k, v in keys.items() if k.startswith('chat::')]
+    if len(chats) <= STORE_MIN_CHATS:
+        return 0, 0                      # plancher : on ne vide pas l'historique
+    # plus anciennes d'abord (ts absent ⇒ traité comme le plus ancien)
+    chats.sort(key=lambda kv: float((kv[1] or {}).get('ts') or 0))
+    n = 0
+    libere = 0
+    for k, v in chats:
+        if total <= STORE_MAX_BYTES or (len(chats) - n) <= STORE_MIN_CHATS:
+            break
+        taille = len(k) + len(str((v or {}).get('v') or ''))
+        keys.pop(k, None)
+        total -= taille
+        libere += taille
+        n += 1
+    if n:
+        st = d.get('elagage')
+        if not isinstance(st, dict):
+            st = {}
+        d['elagage'] = {
+            'n': int(st.get('n') or 0) + n,
+            'octets': int(st.get('octets') or 0) + libere,
+            'ts': int(time.time() * 1000),
+        }
+    return n, libere
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1991,7 +2086,11 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                         if int((v or {}).get('rev') or 0) > since}
             else:
                 keys = d['keys']
-            body = json.dumps({'rev': rev, 'keys': keys},
+            # v538 — on expose la taille du magasin et le cumul d'élagage : un
+            # élagage invisible serait indistinguable d'une perte de données.
+            body = json.dumps({'rev': rev, 'keys': keys,
+                               'octets': _store_taille(d['keys']),
+                               'elagage': d.get('elagage') or {}},
                               ensure_ascii=False).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -2510,12 +2609,22 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 # sinon les clients se croiraient désynchronisés à chaque cycle.
                 if changed:
                     d['rev'] = newrev
+                # v538 — RÉTENTION : on borne le magasin AVANT de l'écrire.
+                # On fait avancer la révision si l'élagage a retiré des clés :
+                # sinon un client incrémental ne verrait jamais la disparition.
+                n_elag, o_elag = _store_elaguer(d)
+                if n_elag:
+                    changed = True
+                    d['rev'] = newrev
                 _store_write(d)
                 rev = d['rev']
+                info = d.get('elagage') if isinstance(d.get('elagage'), dict) else {}
+                octets = _store_taille(d.get('keys') or {})
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'ok': True, 'rev': rev}).encode())
+            self.wfile.write(json.dumps({'ok': True, 'rev': rev,
+                                         'elagage': info, 'octets': octets}).encode())
         except Exception as e:
             try:
                 self.send_response(400)
@@ -2986,6 +3095,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    # v538 — rétention : borner un magasin hérité AVANT de servir quoi que ce soit.
+    _store_elaguer_demarrage()
     # v441 — MULTI-THREADS. HTTPServer est mono-thread : un long appel IA
     # (génération vidéo, traduction de masse, chat) BLOQUAIT toutes les
     # autres requêtes — y compris le rafraîchissement de la page — pendant

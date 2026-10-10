@@ -45,10 +45,29 @@ function ok(nom, cond, detail) {
   return !!cond;
 }
 function section(t) { console.log("\n" + t); }
+/* ⚠️ Retirer la classe UNE FOIS ne suffit pas : le démarrage est ASYNCHRONE et
+   l'app peut appeler `showWizard(2)` APRÈS notre passage (l. 21183 : une clé
+   existe mais `state.aiConfig` est incomplet — le cas exact du banc, qui pose
+   une clé). Mesuré : le wizard réapparaissait alors et interceptait le clic
+   (« #setup-wizard-overlay intercepts pointer events »). On installe donc un
+   neutralisant PERSISTANT : toute réapparition de `.active` est annulée. */
 async function masquerWizard(page) {
   await page.evaluate(() => {
-    const ov = document.getElementById('setup-wizard-overlay'); if (ov) ov.classList.remove('active');
     try { localStorage.setItem('theologicus_wizard_skipped', '1'); } catch (e) {}
+    const neutraliser = () => {
+      const ov = document.getElementById('setup-wizard-overlay');
+      if (!ov) return;
+      if (ov.classList.contains('active')) ov.classList.remove('active');
+      if (ov.style.display !== 'none') ov.style.display = 'none';
+    };
+    neutraliser();
+    try {
+      if (!window.__bancWizardNeutralise) {
+        window.__bancWizardNeutralise = true;
+        new MutationObserver(neutraliser).observe(document.documentElement,
+          { subtree: true, attributes: true, attributeFilter: ['class'] });
+      }
+    } catch (e) {}
   }).catch(() => {});
 }
 

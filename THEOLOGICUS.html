@@ -46265,7 +46265,9 @@ window.continueTradApart = async function (msgId) {
       +     '<button id="v189-sync-now">⟳ Synchroniser maintenant</button>'
       +     '<label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="v189-sync-on"' + (_syncOn ? ' checked' : '') + '> activée</label>'
       +     '<span id="v189-sync-st" style="font-size:11px;opacity:.7"></span>'
-      +   '</div></div>';
+      +   '</div>'
+      +   '<div id="v189-sync-srv" style="font-size:11px;opacity:.72;margin-top:6px;line-height:1.6"></div>'
+      + '</div>';
     body.querySelector('#v189-save').addEventListener('click', saveAll);
     body.querySelector('#v189-load').addEventListener('click', function(){ body.querySelector('#v189-file').click(); });
     body.querySelector('#v189-file').addEventListener('change', function(ev){
@@ -46278,12 +46280,32 @@ window.continueTradApart = async function (msgId) {
     /* v403 — contrôles de synchronisation serveur */
     var st = body.querySelector('#v189-sync-st');
     function setSt(txt){ if (st) st.textContent = txt; }
+    /* v538 — état du magasin PARTAGÉ : taille et élagage éventuel. On dit
+       aussi POURQUOI des conversations peuvent disparaître du magasin. */
+    var srv = body.querySelector('#v189-sync-srv');
+    function majServeur(){
+      if (!srv) return;
+      var e = (window.__theoSync && window.__theoSync.etatServeur) ? window.__theoSync.etatServeur() : null;
+      if (!e) { srv.textContent = 'Magasin serveur : état inconnu (aucune lecture encore).'; return; }
+      var ko = (e.octets === null) ? '?' : Math.round(e.octets / 1024);
+      var t = 'Magasin serveur : ' + ko + ' Ko';
+      var el = e.elagage || {};
+      if (el.n) {
+        t += ' · rétention : ' + el.n + ' ancienne(s) conversation(s) retirée(s) du magasin'
+           + ' (' + Math.round((el.octets || 0) / 1024) + ' Ko libérés).'
+           + ' Elles restent dans l\'appareil qui les a créées.';
+      } else {
+        t += ' · aucune conversation retirée par la rétention.';
+      }
+      srv.textContent = t;
+    }
+    majServeur();
     var sn = body.querySelector('#v189-sync-now');
     if (sn) sn.addEventListener('click', function(){
       if (!window.__theoSync) { setSt('indisponible'); return; }
       setSt('synchronisation…');
       try { window.__theoSync.pushNow(); window.__theoSync.pull(); } catch(e){}
-      setTimeout(function(){ setSt('✓ ' + (window.__theoSync ? window.__theoSync.count() : 0) + ' élément(s) suivi(s) · ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })); }, 1200);
+      setTimeout(function(){ setSt('✓ ' + (window.__theoSync ? window.__theoSync.count() : 0) + ' élément(s) suivi(s) · ' + new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' })); majServeur(); }, 1200);
     });
     var so = body.querySelector('#v189-sync-on');
     if (so) so.addEventListener('change', function(){
@@ -47493,6 +47515,11 @@ window.continueTradApart = async function (msgId) {
 
   /* ── PULL : appliquer ce que le serveur a de plus récent ── */
   var _pulling = false;
+  /* v538 — dernier état ANNONCÉ par le serveur (taille du magasin, cumul
+     d'élagage). On le garde pour pouvoir le MONTRER : le serveur borne le
+     magasin, et un élagage invisible serait indistinguable d'une perte de
+     données. */
+  var SERVEUR = null;
   function pull(){
     if (!enabled() || _pulling) return;
     _pulling = true;
@@ -47505,6 +47532,12 @@ window.continueTradApart = async function (msgId) {
       .then(function(store){
         _pulling = false;
         if (!store) return;
+        try {
+          SERVEUR = { octets: (typeof store.octets === 'number') ? store.octets : null,
+                      elagage: store.elagage || {},
+                      rev: (typeof store.rev === 'number') ? store.rev : _rev,
+                      vu: Date.now() };
+        } catch (e) {}
         if (typeof store.rev === 'number' && store.rev > _rev){ _rev = store.rev; revSave(); }
         if (!store.keys) return;
         var changedLocal = false, changedChat = false;
@@ -47588,6 +47621,7 @@ window.continueTradApart = async function (msgId) {
     pushNow: function(){ scanLocal(); flush(); },
     setEnabled: function(on){ try { _set(ON_KEY, on ? '1' : '0'); } catch(e){} },
     enabled: enabled,
+    etatServeur: function(){ return SERVEUR; },
     count: function(){ return Object.keys(TS).length; },
     miroir: function(){
       return { octets: miroirTotal(), budget: MIROIR_BUDGET, plafond: MIROIR_MAX_CLE, arrete: _miroirStop };
