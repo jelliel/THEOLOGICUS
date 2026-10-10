@@ -7766,6 +7766,7 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
     <button class="hud-btn" id="open-diag" title="Diagnostic — état des corpus, du stockage, des clés IA et d'Ollama (Ctrl+Alt+D)">🩺 DIAGNOSTIC</button>
+    <button class="hud-btn" id="open-rapid" title="Recherche instantanée classée — moteur BM25 tolérant aux fautes sur toute la Bible (Ctrl+Maj+K)">⚡ RAPIDE</button>
     <button class="hud-btn" id="open-homelie-modal" title="Rédiger une homélie ou une prédication structurée sur un passage ou un thème">📖 HOMÉLIE</button>
     <button class="hud-btn" id="open-lectio-modal" title="Lectio Divina guidée en 5 étapes sur un passage de votre choix">🧘 LECTIO</button>
     <button class="hud-btn" id="open-semsearch-modal" title="Retrouver une discussion passée par le sens, pas par mots-clés">🔎 CHERCHER</button>
@@ -53906,6 +53907,345 @@ window.continueTradApart = async function (msgId) {
   window.__v509Design = { tokens: ['--ui-accent', '--ui-ink', '--ui-panel', '--ui-border', '--ui-radius', '--ui-space-3', '--ui-info'], composants: ['ui-btn', 'ui-panel', 'ui-card', 'ui-badge', 'ui-row'], audit: audit };
 })();
 </script>
+<script id="v520-rapid-script">
+/* v520 — RECHERCHE INSTANTANÉE CLASSÉE (moteur BM25 + tolérance aux fautes).
+   Objectif : des résultats INSTANTANÉS et CLASSÉS sur le texte biblique, sans
+   jamais bloquer l'interface. L'index inversé est construit PAR TRANCHES
+   (time-sliced) : l'UI reste fluide pendant la construction. Module 100 %
+   ADDITIF — il ne modifie rien d'existant et réutilise __bibleBooks s'il est
+   déjà chargé. Il suit le design system (jetons --ui-*). */
+(function () {
+  'use strict';
+  if (window.__v520Rapid) return;
+
+  var NOMS = ['Genèse', 'Exode', 'Lévitique', 'Nombres', 'Deutéronome', 'Josué', 'Juges', 'Ruth',
+    '1 Samuel', '2 Samuel', '1 Rois', '2 Rois', '1 Chroniques', '2 Chroniques', 'Esdras', 'Néhémie', 'Esther',
+    'Job', 'Psaumes', 'Proverbes', 'Ecclésiaste', 'Cantique', 'Isaïe', 'Jérémie', 'Lamentations', 'Ézéchiel',
+    'Daniel', 'Osée', 'Joël', 'Amos', 'Abdias', 'Jonas', 'Michée', 'Nahum', 'Habacuc', 'Sophonie', 'Aggée',
+    'Zacharie', 'Malachie', 'Matthieu', 'Marc', 'Luc', 'Jean', 'Actes', 'Romains', '1 Corinthiens',
+    '2 Corinthiens', 'Galates', 'Éphésiens', 'Philippiens', 'Colossiens', '1 Thessaloniciens',
+    '2 Thessaloniciens', '1 Timothée', '2 Timothée', 'Tite', 'Philémon', 'Hébreux', 'Jacques', '1 Pierre',
+    '2 Pierre', '1 Jean', '2 Jean', '3 Jean', 'Jude', 'Apocalypse'];
+
+  /* ─────────────── utilitaires ─────────────── */
+  function norm(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function jetons(t) {
+    return norm(t).split(/[^a-z0-9\u0590-\u05ff\u0600-\u06ff]+/).filter(function (w) { return w.length >= 2; });
+  }
+
+  /* ─────────────── état du moteur ─────────────── */
+  var DOCS = [];            /* [{ n, c, v, t, len }] */
+  var INDEX = null;         /* Map mot -> [docId, tf, docId, tf, …] */
+  var DF = null;            /* Map mot -> nb de documents */
+  var PAR_LONGUEUR = null;  /* Map longueur -> [mots] (pour la tolérance aux fautes) */
+  var LONG_MOY = 1, PRET = false, EN_COURS = false, TPS_BUILD = 0, TPS_REQ = 0;
+  var K1 = 1.4, B = 0.72;
+
+  /* ─────────────── chargement du corpus (français) ─────────────── */
+  function extraire(livres) {
+    var out = [];
+    Object.keys(livres).forEach(function (n) {
+      var L = livres[n]; if (!L || typeof L !== 'object') return;
+      Object.keys(L).forEach(function (c) {
+        var ch = L[c]; if (!ch || typeof ch !== 'object') return;
+        Object.keys(ch).forEach(function (v) {
+          var t = ch[v]; if (typeof t !== 'string' || !t) return;
+          out.push({ n: +n, c: +c, v: +v, t: t });
+        });
+      });
+    });
+    out.sort(function (a, b) { return a.n - b.n || a.c - b.c || a.v - b.v; });
+    return out;
+  }
+  function chargerCorpus(cb, prog) {
+    if (window.__bibleBooks && Object.keys(window.__bibleBooks).length >= 60) {
+      DOCS = extraire(window.__bibleBooks); if (cb) cb(); return;
+    }
+    var livres = {}, restant = 66, faits = 0;
+    for (var n = 1; n <= 66; n++) {
+      (function (n) {
+        fetch('bible/b' + n + '.js').then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+          if (t) {
+            try {
+              var ancre = t.indexOf('||{})[');
+              var i = ancre >= 0 ? t.indexOf('=', ancre) : t.lastIndexOf('=');
+              livres[n] = JSON.parse(t.slice(i + 1).replace(/;\s*$/, ''));
+            } catch (e) {}
+          }
+        }).catch(function () {}).then(function () {
+          faits++; if (prog) prog(faits / 66);
+          if (--restant === 0) { DOCS = extraire(livres); if (cb) cb(); }
+        });
+      })(n);
+    }
+  }
+
+  /* ─────────────── construction de l'index PAR TRANCHES (non bloquant) ─────────────── */
+  function construire(cb, prog) {
+    if (EN_COURS || PRET) return;
+    EN_COURS = true;
+    var t0 = maintenant();
+    INDEX = new Map(); DF = new Map(); PAR_LONGUEUR = new Map(); LONG_MOY = 0;
+    var i = 0, total = DOCS.length, CHUNK = 800;
+    function tranche() {
+      var fin = Math.min(i + CHUNK, total);
+      for (; i < fin; i++) {
+        var d = DOCS[i], ws = jetons(d.t);
+        d.len = ws.length || 1; LONG_MOY += d.len;
+        for (var k = 0; k < ws.length; k++) {
+          var w = ws[k];
+          var arr = INDEX.get(w);
+          if (!arr) { arr = []; INDEX.set(w, arr); }
+          if (arr.length && arr[arr.length - 2] === i) arr[arr.length - 1]++;   /* tf, postings triés */
+          else arr.push(i, 1);
+          if (k === 0 || ws[k - 1] !== w) DF.set(w, (DF.get(w) || 0) + 1);      /* df : 1 fois par doc */
+        }
+      }
+      if (prog) prog(total ? i / total : 1);
+      if (i < total) { setTimeout(tranche, 0); return; }
+      LONG_MOY = LONG_MOY / Math.max(1, total);
+      INDEX.forEach(function (arr, w) {
+        var L = w.length, b = PAR_LONGUEUR.get(L);
+        if (!b) { b = []; PAR_LONGUEUR.set(L, b); }
+        b.push(w);
+      });
+      PRET = true; EN_COURS = false; TPS_BUILD = maintenant() - t0;
+      if (cb) cb(TPS_BUILD);
+    }
+    tranche();
+  }
+  function maintenant() { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); }
+
+  /* ─────────────── tolérance aux fautes (distance de Levenshtein <= 1) ─────────────── */
+  function dist1(a, b) {
+    if (a === b) return true;
+    var la = a.length, lb = b.length;
+    if (Math.abs(la - lb) > 1) return false;
+    if (la === lb) {
+      var diff = 0;
+      for (var i = 0; i < la; i++) { if (a.charAt(i) !== b.charAt(i)) { diff++; if (diff > 1) return false; } }
+      return true;
+    }
+    var s = la < lb ? a : b, l = la < lb ? b : a;   /* s = plus court */
+    var i2 = 0, j2 = 0, d2 = 0;
+    while (i2 < s.length && j2 < l.length) {
+      if (s.charAt(i2) !== l.charAt(j2)) { d2++; j2++; if (d2 > 1) return false; }
+      else { i2++; j2++; }
+    }
+    return d2 <= 1;
+  }
+  function proches(t) {
+    var res = [], L = t.length;
+    for (var d = -1; d <= 1 && res.length < 8; d++) {
+      var b = PAR_LONGUEUR.get(L + d); if (!b) continue;
+      for (var i = 0; i < b.length && res.length < 8; i++) { if (dist1(t, b[i])) res.push(b[i]); }
+    }
+    return res;
+  }
+
+  /* ─────────────── requête BM25 (classée) ─────────────── */
+  function requete(q) {
+    var out = [];
+    if (!PRET || !q) return out;
+    var termes = jetons(q);
+    if (!termes.length) return out;
+    var t0 = maintenant();
+    var N = DOCS.length, scores = new Map();
+    for (var ti = 0; ti < termes.length; ti++) {
+      var t = termes[ti], arr = INDEX.get(t);
+      if (!arr) { var pr = proches(t); if (pr.length) { t = pr[0]; arr = INDEX.get(t); } }
+      if (!arr) continue;
+      var df = DF.get(t) || 1;
+      var idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+      for (var k = 0; k < arr.length; k += 2) {
+        var di = arr[k], tf = arr[k + 1];
+        var dl = DOCS[di].len || 1;
+        var s = idf * (tf * (K1 + 1)) / (tf + K1 * (1 - B + B * dl / LONG_MOY));
+        scores.set(di, (scores.get(di) || 0) + s);
+      }
+    }
+    var list = [];
+    scores.forEach(function (s, di) { list.push([di, s]); });
+    list.sort(function (a, b) { return b[1] - a[1]; });
+    var top = list.slice(0, 40);
+    for (var i = 0; i < top.length; i++) {
+      var d = DOCS[top[i][0]];
+      out.push({ n: d.n, c: d.c, v: d.v, t: d.t, ref: NOMS[d.n - 1] + ' ' + d.c + ':' + d.v, score: top[i][1] });
+    }
+    TPS_REQ = maintenant() - t0;
+    return out;
+  }
+
+  /* ─────────────── surlignage insensible aux diacritiques ─────────────── */
+  function surligne(texte, termes) {
+    var orig = String(texte || '');
+    if (!termes.length) return esc(orig);
+    var nrm = '', map = [];
+    for (var i = 0; i < orig.length; i++) {
+      var c = norm(orig.charAt(i));
+      for (var j = 0; j < c.length; j++) { nrm += c.charAt(j); map.push(i); }
+    }
+    var bornes = [];
+    termes.forEach(function (t) {
+      var p = 0;
+      while ((p = nrm.indexOf(t, p)) >= 0) { bornes.push([p, p + t.length]); p += t.length; }
+    });
+    if (!bornes.length) return esc(orig);
+    bornes.sort(function (a, b) { return a[0] - b[0]; });
+    var merged = [];
+    bornes.forEach(function (b) {
+      var last = merged[merged.length - 1];
+      if (last && b[0] <= last[1]) last[1] = Math.max(last[1], b[1]);
+      else merged.push([b[0], b[1]]);
+    });
+    var html = '', cur = 0;
+    merged.forEach(function (b) {
+      var s = map[b[0]], e = map[b[1] - 1] + 1;
+      if (s > cur) html += esc(orig.slice(cur, s));
+      html += '<mark>' + esc(orig.slice(s, e)) + '</mark>';
+      cur = e;
+    });
+    if (cur < orig.length) html += esc(orig.slice(cur));
+    return html;
+  }
+
+  /* ─────────────── interface ─────────────── */
+  var SEL = 0, RES = [], DERNIERS_TERMES = [];
+
+  function panneau() {
+    var p = document.getElementById('v520-rapid');
+    if (p) return p;
+    p = document.createElement('div');
+    p.id = 'v520-rapid';
+    p.innerHTML = '<style>'
+      + '#v520-rapid{position:fixed;inset:0;z-index:140500;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.66);backdrop-filter:blur(4px)}'
+      + '#v520-rapid.open{display:flex}'
+      + '#v520-rapid .b{width:min(780px,95vw);max-height:82vh;margin-top:8vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid color-mix(in srgb, var(--ui-accent,#e5c15a) 40%, transparent);border-radius:var(--ui-radius,10px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6));overflow:hidden}'
+      + '#v520-rapid .hd{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}'
+      + '#v520-rapid .ic{font-size:1rem}'
+      + '#v520-rapid input{flex:1;min-width:0;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.5rem .7rem;font:13px var(--ui-mono,monospace);outline:none}'
+      + '#v520-rapid input:focus{border-color:var(--ui-accent,#e5c15a)}'
+      + '#v520-rapid .st{font-size:.68rem;color:var(--ui-dim,#8a8896);white-space:nowrap}'
+      + '#v520-rapid .x{background:none;border:1px solid var(--ui-border,#2a2a3a);color:var(--ui-dim,#8a8896);border-radius:50%;width:28px;height:28px;cursor:pointer;flex:0 0 auto}'
+      + '#v520-rapid .res{overflow:auto;padding:.4rem}'
+      + '#v520-rapid .r{padding:.5rem .6rem;border-radius:var(--ui-radius-sm,6px);cursor:pointer;border-left:3px solid transparent}'
+      + '#v520-rapid .r.sel{background:color-mix(in srgb, var(--ui-accent,#e5c15a) 14%, transparent);border-left-color:var(--ui-accent,#e5c15a)}'
+      + '#v520-rapid .r .rf{font-weight:700;color:var(--ui-accent,#e5c15a);font-size:.78rem}'
+      + '#v520-rapid .r .sc{float:right;font-size:.6rem;color:var(--ui-dim,#8a8896)}'
+      + '#v520-rapid .r .rt{font-size:.86rem;line-height:1.55;color:var(--ui-ink,#e8e6e0);margin-top:.15rem}'
+      + '#v520-rapid .r mark{background:rgba(201,169,97,.38);color:inherit;border-radius:3px;padding:0 1px}'
+      + '#v520-rapid .ft{display:flex;justify-content:space-between;gap:.5rem;padding:.45rem .9rem;border-top:1px solid var(--ui-border,#2a2a3a);font-size:.66rem;color:var(--ui-dim,#8a8896)}'
+      + '#v520-rapid .empty{padding:1.2rem;text-align:center;color:var(--ui-dim,#8a8896);font-size:.8rem}'
+      + '</style>'
+      + '<div class="b"><div class="hd"><span class="ic">⚡</span>'
+      + '<input id="v520-q" type="text" autocomplete="off" spellcheck="false" placeholder="Recherche instantanée — mot ou expression (tolère les fautes)…">'
+      + '<span class="st" id="v520-st">…</span><button class="x" id="v520-x" title="Fermer">✕</button></div>'
+      + '<div class="res" id="v520-res"></div>'
+      + '<div class="ft"><span id="v520-info"></span><span>↑ ↓ naviguer · Entrée ouvrir · Échap fermer</span></div></div>';
+    document.body.appendChild(p);
+    p.addEventListener('click', function (e) { if (e.target === p) fermer(); });
+    p.querySelector('#v520-x').addEventListener('click', fermer);
+    var inp = p.querySelector('#v520-q');
+    var tm = null;
+    inp.addEventListener('input', function () { if (tm) clearTimeout(tm); tm = setTimeout(function () { lancer(inp.value); }, 90); });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); bouge(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); bouge(-1); }
+      else if (e.key === 'Enter') { e.preventDefault(); ouvreSel(); }
+      else if (e.key === 'Escape') { e.preventDefault(); fermer(); }
+    });
+    p.querySelector('#v520-res').addEventListener('click', function (e) {
+      var r = e.target.closest ? e.target.closest('.r') : null; if (!r) return;
+      SEL = +r.dataset.i; ouvreSel();
+    });
+    return p;
+  }
+  function fermer() { var p = document.getElementById('v520-rapid'); if (p) p.classList.remove('open'); }
+  function statut(txt) { var s = document.getElementById('v520-st'); if (s) s.textContent = txt; }
+
+  function prete() {
+    return new Promise(function (res) {
+      if (PRET) return res();
+      chargerCorpus(function () {
+        statut('indexation… 0%');
+        construire(function () { majStatut(); res(); }, function (f) { statut('indexation… ' + Math.round(f * 100) + '%'); });
+      }, function (f) { statut('corpus… ' + Math.round(f * 100) + '%'); });
+    });
+  }
+  function majStatut() {
+    statut('⚡ ' + DOCS.length.toLocaleString('fr-FR') + ' versets · ' + (INDEX ? INDEX.size.toLocaleString('fr-FR') : 0) + ' mots');
+  }
+  function ouvrir() {
+    var p = panneau(); p.classList.add('open');
+    setTimeout(function () { var i = document.getElementById('v520-q'); if (i) i.focus(); }, 30);
+    prete().then(function () { majStatut(); var i = document.getElementById('v520-q'); if (i && i.value) lancer(i.value); });
+  }
+
+  function bouge(d) {
+    if (!RES.length) return;
+    SEL = Math.max(0, Math.min(RES.length - 1, SEL + d));
+    majSelection();
+  }
+  function majSelection() {
+    var c = document.getElementById('v520-res'); if (!c) return;
+    var els = c.querySelectorAll('.r');
+    for (var i = 0; i < els.length; i++) els[i].classList.toggle('sel', i === SEL);
+    if (els[SEL] && els[SEL].scrollIntoView) els[SEL].scrollIntoView({ block: 'nearest' });
+  }
+  function ouvreSel() {
+    var r = RES[SEL]; if (!r) return;
+    fermer();
+    var ref = r.ref;
+    if (window.__v506Synopse && window.__v506Synopse.ouvrir) { try { window.__v506Synopse.ouvrir(ref); return; } catch (e) {} }
+    if (window.__v446Refs && window.__v446Refs.popupBible) { try { window.__v446Refs.popupBible(ref, window.innerWidth / 2, 140); } catch (e) {} }
+  }
+  function lancer(q) {
+    var c = document.getElementById('v520-res'); if (!c) return;
+    if (!PRET) { c.innerHTML = '<div class="empty">Indexation en cours…</div>'; return; }
+    if (!q || !q.trim()) { RES = []; c.innerHTML = '<div class="empty">Tapez au moins deux lettres.</div>'; info(''); return; }
+    RES = requete(q); DERNIERS_TERMES = jetons(q); SEL = 0;
+    if (!RES.length) { c.innerHTML = '<div class="empty">Aucun verset ne contient « ' + esc(q) + ' ».</div>'; info('0 résultat'); return; }
+    var h = '';
+    for (var i = 0; i < RES.length; i++) {
+      h += '<div class="r' + (i === 0 ? ' sel' : '') + '" data-i="' + i + '">'
+        + '<span class="sc">' + RES[i].score.toFixed(1) + '</span>'
+        + '<div class="rf">📖 ' + esc(RES[i].ref) + '</div>'
+        + '<div class="rt">' + surligne(RES[i].t, DERNIERS_TERMES) + '</div></div>';
+    }
+    c.innerHTML = h;
+    info(RES.length + ' résultat(s) · ' + TPS_REQ.toFixed(1) + ' ms');
+  }
+  function info(txt) { var e = document.getElementById('v520-info'); if (e) e.textContent = txt; }
+
+  /* ─────────────── entrée (bouton HUD + raccourci) ─────────────── */
+  function initBouton() {
+    var b = document.getElementById('open-rapid');
+    if (b) b.addEventListener('click', ouvrir);
+    window.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); ouvrir(); }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initBouton);
+  else initBouton();
+
+  window.__v520Rapid = {
+    ouvrir: ouvrir, fermer: fermer, requete: requete, lancer: lancer, surligne: surligne,
+    prete: prete, construire: construire, chargerCorpus: chargerCorpus,
+    etat: function () {
+      return { pret: PRET, enCours: EN_COURS, docs: DOCS.length, mots: INDEX ? INDEX.size : 0,
+               msConstruction: TPS_BUILD, msRequete: TPS_REQ, longMoy: LONG_MOY };
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
