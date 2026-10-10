@@ -104,6 +104,17 @@ async function assurerRelais() {
   // pré-chauffer l'index du RAG (les appels du conseil sont ancrés : v523)
   await page.evaluate(() => window.__v520Rapid.prete());
   await page.waitForFunction(() => window.__v520Rapid.etat().pret === true, { timeout: 120000 });
+  // ENVIRONNEMENT COHERENT : resolveModelConfig retombe sur Agnes quand aucune cle
+  // Mistral n'est configuree (comportement VOULU de l'app) -> les trois modeles
+  // seraient alors tous « agnes-2.5-flash ». On pose donc une cle Mistral pour que
+  // le conseil porte bien sur trois fournisseurs/modeles distincts.
+  await page.evaluate(() => {
+    try {
+      state.apiKey = 'sk-test-mistral';
+      state.keys = state.keys || {};
+      state.keys.mistral = 'sk-test-mistral';
+    } catch (e) {}
+  });
   corps.length = 0;
   await page.evaluate(([m1, m2, m3]) => window.__v528Conseil.delibere('Qui est Dieu selon la Bible ?', [m1, m2, m3]), [cfg.m1, cfg.m2, cfg.m3]);
   await page.waitForTimeout(800);

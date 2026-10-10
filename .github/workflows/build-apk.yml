@@ -45,7 +45,8 @@ on:
       # banc qui ne touche QUE le fichier de banc ne déclenchait AUCUN run
       # (le dépôt et la release divergeaient en silence — exactement le piège
       # décrit plus haut). On déclenche donc la CI sur les bancs eux-mêmes.
-      - '.workbuddy-ai/artifacts/_v*/verify_*.js'   # v533 : _v5* inclus — sinon un banc v5* seul ne declenchait RIEN
+      - '.workbuddy-ai/artifacts/_v4*/verify_*.js'
+      - '.workbuddy-ai/artifacts/_v5*/verify_*.js'   # v534 : _v5* inclus — un banc v5* seul ne declenchait RIEN ; _v1xx EXCLU (bancs Windows non portables)
       # --- ajoutez ici tout nouveau fichier dont depend l'application ---
       # La documentation et les journaux de memoire (.workbuddy-ai/** hors
       # bancs) restent volontairement DEHORS : un commit de notes ne doit pas
@@ -111,7 +112,7 @@ jobs:
           #   _v457 : voie ffmpeg.wasm abandonnée (Worker cross-origin, cœur 32 Mo)
           #   _v441 : exige un serveur Ollama local, absent en CI
           echecs=0; ignores=0; ok=0
-          for b in $(ls .workbuddy-ai/artifacts/_v*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
+          for b in $(ls .workbuddy-ai/artifacts/_v4*/verify_*.js .workbuddy-ai/artifacts/_v5*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
             echo "───── $b"
             sortie=$(mktemp)
             # 300 s max par banc : un banc qui se bloque (attente réseau,
