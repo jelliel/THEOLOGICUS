@@ -86,6 +86,13 @@ async function assurerRelais() {
   section("1. Ouverture de la synopse (Genèse 1:1)");
   await page.evaluate(() => window.__v506Synopse.ouvrir("Genèse 1:1"));
   await page.waitForFunction(() => { const p = document.getElementById('v506-syn'); return p && p.classList.contains('open') && p.querySelectorAll('#v506-c .v').length > 0; }, { timeout: 30000 });
+  /* ⚠️ Les versions se chargent en ASYNCHRONE (chaque corpus est chargé à la
+     demande : fr, la, syr, hb). Attendre « au moins une » ne suffit donc pas :
+     sous charge machine, mesuré, l'export ne contenait que 3 puis 2 versions sur
+     4 — le banc rougissait alors que le produit est correct (15/15 en relance
+     isolée). On attend les 4 avant d'exiger les 4, avec une expiration pour ne
+     pas masquer une vraie panne de chargement. */
+  await page.waitForFunction(() => document.querySelectorAll('#v506-c .v').length >= 4, { timeout: 30000 }).catch(() => {});
   const btns = await page.evaluate(() => {
     const p = document.getElementById('v506-syn');
     return ['v506-copy', 'v506-export'].map(id => {

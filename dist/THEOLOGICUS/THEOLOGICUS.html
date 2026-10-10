@@ -57521,6 +57521,164 @@ window.continueTradApart = async function (msgId) {
 })();
 </script>
 
+<script id="v539-a11y-panneaux-script">
+/* v539 — CONTRAT D'ACCESSIBILITÉ COMMUN AUX PANNEAUX (Axe 3, lot C4).
+   Constat : le banc v508 a établi le contrat — role=dialog, aria-modal,
+   aria-label, piège à tabulation, Échap qui ferme, focus RESTITUÉ — mais
+   SEULEMENT pour deux panneaux (recherche globale, diagnostic). Les panneaux
+   écrits depuis (palette, dossier, sources, concordance, thèmes, notes,
+   corbeille) n'en bénéficiaient pas.
+
+   Module ADDITIF : il n'entre dans aucun module de panneau. Il les ÉQUIPE de
+   l'extérieur, en guettant leur apparition dans <body> (ils sont tous créés à la
+   demande par `document.body.appendChild`). Rien n'est donc à modifier dans les
+   modules existants, et un panneau futur n'a qu'à s'inscrire dans la table.
+
+   Ce qui est posé :
+     • role="dialog" + aria-modal="true" + aria-label (le titre du panneau s'il
+       en a un, sinon le libellé de la table) ;
+     • piège à tabulation : Tab sur le dernier élément revient au premier (et
+       Maj+Tab sur le premier va au dernier) — le focus ne sort pas d'une modale ;
+     • Échap ferme (retirer la classe `open` est idempotent : les gestionnaires
+       déjà en place continuent de fonctionner) ;
+     • le focus d'origine est MÉMORISÉ à l'ouverture et RESTITUÉ à la fermeture ;
+     • si le panneau n'a posé aucun focus lui-même, on place le focus sur son
+       premier élément focusable (sans écraser le sien : les modules posent
+       souvent leur focus dans un setTimeout, on attend donc 120 ms).
+*/
+(function () {
+  'use strict';
+  if (window.__v539A11y) return;
+
+  /* Panneaux équipés : id -> libellé de repli pour aria-label. */
+  var PANNEAUX = {
+    'v521-panel': 'Corbeille des conversations',
+    'v529-panel': 'Édition et provenance des sources',
+    'v530-panel': 'Concordance',
+    'v531-panel': 'Index thématique',
+    'v533-panel': 'Notes d’étude',
+    'v535-panel': 'Palette de commandes',
+    'v536-panel': 'Dossier de passage'
+  };
+  var MARQUE = '__v539a11y';
+  var OUVERT = {};        /* id -> élément qui avait le focus AVANT l'ouverture */
+
+  function focusables(el) {
+    try {
+      var t = el.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),'
+        + 'select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])');
+      return Array.prototype.filter.call(t, function (n) {
+        return (n.getClientRects && n.getClientRects().length > 0);
+      });
+    } catch (e) { return []; }
+  }
+  function libelle(el, id) {
+    try {
+      var t = el.querySelector('h3,h2,h1');
+      var s = t && (t.textContent || '').replace(/\s+/g, ' ').trim();
+      if (s) return s;
+    } catch (e) {}
+    return PANNEAUX[id] || 'Panneau';
+  }
+  function ouvert(el) { try { return el.classList.contains('open'); } catch (e) { return false; } }
+  function fermer(el) { try { el.classList.remove('open'); } catch (e) {} }
+
+  function equip(el, id) {
+    if (!el || el[MARQUE]) return false;
+    el[MARQUE] = true;
+    try {
+      if (!el.getAttribute('role')) el.setAttribute('role', 'dialog');
+      if (!el.getAttribute('aria-modal')) el.setAttribute('aria-modal', 'true');
+      if (!el.getAttribute('aria-label')) el.setAttribute('aria-label', libelle(el, id));
+    } catch (e) {}
+
+    /* Échap ferme. On ne fait PAS stopPropagation : la fermeture est idempotente
+       et les gestionnaires déjà installés par les modules doivent continuer de
+       s'exécuter. */
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && ouvert(el)) fermer(el);
+    });
+    /* Piège à tabulation. */
+    el.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab' || !ouvert(el)) return;
+      var f = focusables(el);
+      if (!f.length) return;
+      var premier = f[0], dernier = f[f.length - 1], actif = document.activeElement;
+      var dedans = el.contains(actif);
+      if (e.shiftKey) {
+        if (!dedans || actif === premier) { e.preventDefault(); try { dernier.focus(); } catch (er) {} }
+      } else {
+        if (!dedans || actif === dernier) { e.preventDefault(); try { premier.focus(); } catch (er) {} }
+      }
+    });
+
+    /* Ouverture / fermeture : mémoriser puis RESTITUER le focus.
+       ⚠️ Le panneau est presque toujours CRÉÉ ET OUVERT dans le MÊME temps
+       (`ouvrir()` fait `appendChild` puis `classList.add('open')`). Un
+       observateur de classe posé à ce moment-là arrive donc APRÈS la
+       transition et ne verrait JAMAIS la première ouverture : mesuré, le focus
+       restait sur le bouton du HUD et n'était jamais restitué. On évalue donc
+       l'état COURANT tout de suite, en plus de l'observer. */
+    var appliquerEtat = function () {
+      if (ouvert(el)) {
+        if (OUVERT[id]) return;
+        OUVERT[id] = document.activeElement;
+        setTimeout(function () {
+          if (!ouvert(el)) return;
+          if (el.contains(document.activeElement)) return;   /* le module a déjà posé son focus */
+          var f = focusables(el);
+          if (f.length) { try { f[0].focus(); } catch (er) {} }
+        }, 120);
+      } else if (OUVERT[id]) {
+        var prec = OUVERT[id];
+        delete OUVERT[id];
+        try { if (prec && prec.focus && document.contains(prec)) prec.focus(); } catch (er) {}
+      }
+    };
+    try {
+      new MutationObserver(appliquerEtat).observe(el, { attributes: true, attributeFilter: ['class'] });
+    } catch (e) {}
+    appliquerEtat();
+    return true;
+  }
+
+  function equiperTous() {
+    var n = 0;
+    for (var id in PANNEAUX) {
+      if (!Object.prototype.hasOwnProperty.call(PANNEAUX, id)) continue;
+      var el = document.getElementById(id);
+      if (el && equip(el, id)) n++;
+    }
+    return n;
+  }
+
+  /* Les panneaux sont créés À LA DEMANDE et ajoutés directement à <body> : on
+     guette leur apparition plutôt que d'entrer dans chaque module. */
+  function guette() {
+    try {
+      new MutationObserver(function (muts) {
+        for (var i = 0; i < muts.length; i++) {
+          var adds = muts[i].addedNodes || [];
+          for (var j = 0; j < adds.length; j++) {
+            var n = adds[j];
+            if (n && n.nodeType === 1 && n.id && PANNEAUX[n.id]) equip(n, n.id);
+          }
+        }
+      }).observe(document.body, { childList: true });
+    } catch (e) {}
+  }
+
+  function init() { equiperTous(); guette(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  window.__v539A11y = {
+    panneaux: PANNEAUX, equip: equip, equiperTous: equiperTous,
+    focusables: focusables, ouverts: function () { return Object.keys(OUVERT); }
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>

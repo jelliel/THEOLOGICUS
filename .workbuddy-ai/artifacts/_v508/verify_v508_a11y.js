@@ -91,6 +91,26 @@ async function assurerRelais() {
   ok("le focus entre dans le panneau", a.focusDedans, "actif=" + a.actif);
 
   section("2. Piège à tabulation");
+  /* PRÉCONDITION, rendue EXPLICITE. Le piège de v508 ne s'applique qu'au
+     panneau qu'il considère ACTIF (`window.__v508A11y.actif()`), et il ne
+     change d'actif que sur un CHANGEMENT de classe `open`. Si un autre panneau
+     inscrit (synopse, diagnostic) est resté ouvert, ou si v180 était déjà
+     ouvert, `actif` ne vaut pas `v180-gs` : le piège ne s'applique pas et le
+     banc accuse l'application à tort (vécu en CI : « attendu=v180-close
+     obtenu=v180-qin », vert en relance locale). On force donc un vrai
+     changement d'état, et on VÉRIFIE la précondition avant de conclure. */
+  await page.evaluate(() => {
+    ['v506-syn', 'v507-diag'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('open');
+    });
+    const gs = document.getElementById('v180-gs');
+    if (gs) { gs.classList.remove('open'); void gs.offsetWidth; gs.classList.add('open'); }
+  });
+  await page.waitForTimeout(300);
+  const actifV508 = await page.evaluate(() => window.__v508A11y ? window.__v508A11y.actif() : null);
+  ok("le piège considère bien v180-gs comme ACTIF (précondition)", actifV508 === 'v180-gs', "actif=" + actifV508);
+
   const piege = await page.evaluate(() => {
     const p = document.getElementById('v180-gs');
     const sel = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -107,9 +127,20 @@ async function assurerRelais() {
   });
   await page.keyboard.press('Tab');
   await page.waitForTimeout(120);
-  const apresTab = await page.evaluate(() => document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '');
+  const apresTab = await page.evaluate(() => {
+    const p = document.getElementById('v180-gs');
+    const sel = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const f = Array.prototype.filter.call(p.querySelectorAll(sel), x => x.offsetParent !== null);
+    return {
+      actif: document.activeElement ? (document.activeElement.id || document.activeElement.tagName) : '',
+      premier: f[0] ? (f[0].id || f[0].tagName) : '',
+      dedans: p.contains(document.activeElement)
+    };
+  });
   ok("le panneau a plusieurs éléments focusables", piege.n >= 2, "n=" + piege.n);
-  ok("Tab sur le dernier ramène au premier (piège actif)", apresTab === boucle, "attendu=" + boucle + " obtenu=" + apresTab);
+  ok("Tab sur le dernier ramène au premier (piège actif)", apresTab.actif === boucle,
+    "attendu=" + boucle + " obtenu=" + apresTab.actif
+    + " (premier maintenant=" + apresTab.premier + ", focus dedans=" + apresTab.dedans + ")");
 
   section("3. Échap ferme + focus restitué");
   await page.keyboard.press('Escape');
