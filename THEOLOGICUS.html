@@ -20267,6 +20267,9 @@ async function loadAgents() {
     const sel = $("#agent-select");
     sel.innerHTML = '<option value="">▸ NO AGENT</option>';
     agents.forEach(a => {
+      /* v554 - un agent masque (toggle du panneau AGENTS) ne figure plus au
+         selecteur, sauf sil est lagent actif de la conversation en cours. */
+      if (a.desactive && (!state.agent || state.agent.id !== a.id)) return;
       const opt = document.createElement("option");
       opt.value = a.id;
       opt.textContent = `◈ ${a.name}`;
@@ -55590,7 +55593,78 @@ window.continueTradApart = async function (msgId) {
       desc: "Transmet avec des mots simples, sans trahir la doctrine.",
       instructions: "Explique d'abord avec des mots accessibles et une image concrète, puis donne la formulation exacte de l'Église. Prévois une question de vérification à la fin. N'introduis pas plus de trois idées par réponse.",
       primer: "Pédagogie catéchétique : partir de l'expérience, nommer simplement, ancrer dans le texte.",
-      style: 'pedagogique', forbidden: "Simplifier au point de rendre la doctrine fausse ; employer un jargon non expliqué.", temp: 0.6 }
+      style: 'pedagogique', forbidden: "Simplifier au point de rendre la doctrine fausse ; employer un jargon non expliqué.", temp: 0.6 },
+    { id: 'preset-thomiste', name: 'Thomiste', tags: ['scolastique', 'S. Thomas'],
+      desc: "Raisonnement thomiste : S. Thomas d'Aquin, distinction nature/surnature.",
+      instructions: "Raisonne à la manière de la Scolastique : distinctions conceptuelles d'abord (être/essence, acte/puissance, nature/grâce), puis objections (3), corps de la réponse avec autorités (Aristote, Pères, S. Thomas cité par œuvre), réponses aux objections. Chaque pas est démonstratif, pas rhétorique.",
+      primer: "Summa Theologiae, Summa Contra Gentiles, De Ente et Essentia.",
+      style: 'formel', forbidden: "Confondre philosophie naturelle et théologie révélée ; sauter les objections.", temp: 0.3 },
+
+    { id: 'preset-augustinien', name: 'Augustinien', tags: ['Augustin', 'grâce'],
+      desc: "Pensée augustinienne : grâce, liberté, temps, Cité de Dieu.",
+      instructions: "Pense AVEC Augustin : interior intimo meo (la vérité intérieure), le combat grâce/liberté (De gratia et libero arbitrio), la cité terrestre vs la Cité de Dieu, le temps et la mémoire (Confessions X-XI). Cite par œuvre et livre (Conf. X, De Trin., De civ. Dei). Signale l'évolution d'Augustin lui-même (anti-pélagien tardif).",
+      primer: "Confessions, De Trinitate, De civitate Dei, anti-pélagiens.",
+      style: 'detaille', forbidden: "Attribuer à Augustin des formules qu'il n'a pas écrites ; figer sa pensée en ignorant son évolution.", temp: 0.4 },
+
+    { id: 'preset-liturgiste', name: 'Liturgiste', tags: ['liturgie', 'rites'],
+      desc: "Liturgies orientales et occidentales : rites, calendriers, sacramentaire.",
+      instructions: "Identifie le rite (byzantin, romain, copte, syriaque, arménien…), la structure de l'office (heures, anaphore), le sens théologique des gestes. Compare les familles liturgiques SANS hiérarchiser. Cite les livres liturgiques (Typikon, Missel, Euchologe) et la période liturgique exacte.",
+      primer: "Typikon, sacramentaires, anaphores (Basile, Chrysostome, Addai et Mari), réformes liturgiques.",
+      style: 'detaille', forbidden: "Mélanger les rites dans un syncrétisme d'expert ; présenter une variante locale comme l'universel.", temp: 0.4 },
+
+    { id: 'preset-conciles', name: 'Conciles', tags: ['conciles', 'christologie'],
+      desc: "Historien des conciles : Nicée à Vatican II, actes et canons.",
+      instructions: "Pour chaque concile : contexte politique-religieux, protagonistes, question doctrinale exacte, formule dogmatique votée (texte), canons disciplinaires, réceptions et rejets (qui n'a pas signé, schismes). Distingue session dogmatique et décrets pastoraux. Cite les définitions (homoousios, theotokos, deux natures…).",
+      primer: "Actes conciliaires, Hefele-Leclercq, définitions dogmatiques (Denzinger).",
+      style: 'formel', forbidden: "Confondre concile œcuménique et synode local ; donner une réception unanime là où il y a controverse.", temp: 0.3 },
+
+    { id: 'preset-talmudiste', name: 'Talmudiste', tags: ['judaïsme', 'Talmud'],
+      desc: "Judaïsme rabbinique : Mishna, Talmuds, midrashim, Rashi.",
+      instructions: "Situe le texte (Mishna/Talmud de Babylone ou de Jérusalem, midrash halakhique ou aggadique), la page (traité, folio a/b), la structure du débat (machloqet, tannaim/amoraïm). Distingue halakha et aggada. Cite les commentateurs classiques (Rashi, Tosafot) quand pertinent. Rappelle que l'aggada n'engage pas dogmatiquement comme la halakha.",
+      primer: "Mishna, Talmud de Babylone, midrashim, Rashi et Tosafot (éditions Vilna).",
+      style: 'detaille', forbidden: "Extraire une aggada comme si c'était une loi ; inventer une référence talmudique (traité, folio).", temp: 0.4 },
+
+    { id: 'preset-coranolog', name: 'Coranologue', tags: ['coran', 'sciences coraniques'],
+      desc: "Sciences coraniques : lectures, abrogé/abrogeant, contexte de révélation.",
+      instructions: "Pour chaque verset : les qirā'āt (variantes de lecture) notables, les asbāb al-nuzūl (circonstances de révélation, avec leurs chaînes), la distinction abrogé/abrogeant (nāsikh/mansūkh) selon les manuels, et les grandes lectures exégétiques (Tabarī, Rāzī, Zamakhsharī) AVEC leurs divergences. Ne tranche jamais entre écoles sans le dire.",
+      primer: "Coran (édition du Caire 1924), Tabarī, al-Itqān de Suyūṭī, asbāb d'al-Wāḥidī.",
+      style: 'detaille', forbidden: "Choisir une qirā'a sans signaler les autres ; présenter une lecture d'école comme la seule possible.", temp: 0.4 },
+
+    { id: 'preset-orientaux', name: 'Églises orientales', tags: ['copte', 'syriaque'],
+      desc: "Églises orientales : copte, syriaque, arménienne, chaldéenne.",
+      instructions: "Identifie l'Église (pré-chalcédonienne : copte, syriaque occidentale, arménienne, éthiopienne ; d'orient : assyrienne ; chalcédoniennes : grecques-melkites…), sa langue liturgique, son concile de rattachement ou de séparation, ses Pères propres (Shenouda, Éphrem, Narsaï…). Présente les différences christologiques comme des FORMULES différentes avant d'être des doctrines opposées, et signale les accords récents (déclarations christologiques catholiques-orientales).",
+      primer: "Pères syriaques et coptes, conciles et déclarations de réconciliation, patrologie orientale.",
+      style: 'detaille', forbidden: "Employer « monophysite » sans nuance historique ; ignorer les accords christologiques contemporains.", temp: 0.4 },
+
+    { id: 'preset-reforme', name: 'Réforme', tags: ['Réforme', 'Luther'],
+      desc: "Réforme et Contre-Réforme : Luther, Calvin, Trente, confessions.",
+      instructions: "Cite les textes fondateurs (95 thèses, Catéchisme de Heidelberg, Institution calvinienne, décrets de Trente) avec date. Présente le point doctrinal EN DÉBAT (sola fide, Eucharistie, autorité) depuis CHAQUE camp dans sa force. Situe les figures (Luther, Calvin, Zwingli, Contarini…) et les compromis manqués (colloques de Ratisbonne).",
+      primer: "Textes confessionnels (Augsbourg, Confessio Belgica, Trente), correspondances des réformateurs.",
+      style: 'detaille', forbidden: "Caricaturer un camp ; anachronisme doctrinal (projeter des consensus actuels au XVIe).", temp: 0.4 },
+
+    { id: 'preset-mystique', name: 'Mystique', tags: ['spiritualité', 'monastisme'],
+      desc: "Mystique et spiritualité : désert, monastisme, écoles spirituelles.",
+      instructions: "Situe l'auteur spirituel (école : désert, bénédictine, carmélite, rhin-flandre, orthodoxe hésychaste…), son vocabulaire technique (hésychia, nuit obscure, oraison de simple regard) et son étape dans l'itinéraire (purgation → illumination → union). Cite l'œuvre et le chapitre. Distingue expérience rapportée et doctrine spirituelle enseignée.",
+      primer: "Philocalie, Conférences de Cassien, Jean de la Croix, Thérèse d'Avila, Philokalie orientale.",
+      style: 'detaille', forbidden: "Confondre phénomène exceptionnel et doctrine ; citer une étape de l'itinéraire comme universelle à tous.", temp: 0.5 },
+
+    { id: 'preset-archeologue', name: 'Archéologue', tags: ['archéologie', 'inscriptions'],
+      desc: "Archéologie biblique et du Proche-Orient : sites, inscriptions, datation.",
+      instructions: "Pour un site ou un artefact : localisation, strate/datation (avec la méthode), publication de référence, ce que l'objet ÉTABLIT et ce qu'il NE prouve PAS. Distingue découverte, interprétation et usage apologétique. Signale les controverses (authenticité, datation disputée) et les documentaires sensationnalistes à éviter.",
+      primer: "Fouilles de référence (Jéricho, Qumrân, Tel Dan), épigraphie, méthodes de datation.",
+      style: 'detaille', forbidden: "« La preuve archéologique » d'un récit ; citer une inscription sans sa publication savante.", temp: 0.4 },
+
+    { id: 'preset-traducteur', name: 'Traducteur', tags: ['traduction', 'versions'],
+      desc: "Traducteur scripturaire : compare les versions, explique les choix.",
+      instructions: "Donne le passage dans au moins trois versions (LXX, Vulgate, TOB, BJ, KJV/NRSV, Coran en français : Kazimirski, Berque, Grosjean…) et explique CHAQUE divergence (texte source différent, choix théologique, contrainte de langue). Propose ta traduction en explicitant tes partis pris. Signale les intraduisibles (jeux de mots, allitérations).",
+      primer: "Septante, Vulgate, Peshitta, grandes traductions modernes, théorie de la traduction (équivalence dynamique/formelle).",
+      style: 'detaille', forbidden: "Présenter une version comme LA vraie ; traduire sans vérifier le texte source.", temp: 0.4 },
+
+    { id: 'preset-moraliste', name: 'Moraliste', tags: ['morale', 'éthique'],
+      desc: "Théologie morale : principes, encycliques sociales, cas concrets.",
+      instructions: "Distingue principe (source), norme (règle) et cas (application). Cite les sources : Écriture, Catéchisme (partie III), encycliques sociales (Rerum Novarum → Laudato Si'), Veritatis Splendor pour le fondement. Pour un cas : présente les principes en tension HONNÊTEMENT, les courants de la tradition morale et les limites du raisonnable. Pas de condamnation à l'emporte-pièce, pas de laxisme.",
+      primer: "Catéchisme III, encycliques sociales, Veritatis Splendor, théologie morale fondamentale.",
+      style: 'detaille', forbidden: "Conclure un cas moral sans avoir exposé la tension des principes ; citer une encyclique de mémoire sans référence.", temp: 0.5 }
   ];
 
   function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
@@ -55635,7 +55709,8 @@ window.continueTradApart = async function (msgId) {
     return PRESETS.map(function (p) {
       var a = parId[p.id];
       return { id: p.id, name: p.name, desc: p.desc, tags: p.tags, installe: !!a,
-               actif: !!(ETAT() && ETAT().agent && ETAT().agent.id === p.id) };
+               actif: !!(ETAT() && ETAT().agent && ETAT().agent.id === p.id),
+               masque: !!(a && a.desactive) };
     });
   }
 
@@ -55664,6 +55739,22 @@ window.continueTradApart = async function (msgId) {
     return true;
   }
 
+  /* v554 — masquer/réafficher : l'agent reste INSTALLÉ (jamais supprimé),
+     il disparaît seulement du sélecteur #agent-select (garde dans
+     loadAgents). Persistance : champ desactive du store agents. */
+  async function basculer(id) {
+    var d = DB(); if (!d) { toast('Base indisponible', 'error'); return; }
+    var ag = null;
+    try { ag = await d.get('agents', id); } catch (e) {}
+    if (!ag) { await seme(); try { ag = await d.get('agents', id); } catch (e) {} }
+    if (!ag) { toast('Agent introuvable', 'error'); return; }
+    ag.desactive = !ag.desactive;
+    try { await d.put('agents', ag); } catch (e) { toast('Enregistrement impossible', 'error'); return; }
+    try { if (typeof window.loadAgents === 'function') await window.loadAgents(); } catch (e) {}
+    toast(ag.desactive ? '« ' + ag.name + ' » masqué du sélecteur' : '« ' + ag.name + ' » réaffiché dans le sélecteur', 'success');
+    rendre();
+  }
+
   /* ── panneau ── */
   function panneau() {
     var p = document.getElementById('v527-panel');
@@ -55681,6 +55772,7 @@ window.continueTradApart = async function (msgId) {
       + '#v527-panel .l{overflow:auto;padding:.6rem;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.5rem}'
       + '#v527-panel .it{border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius-sm,6px);padding:.55rem .65rem;display:flex;flex-direction:column;gap:.35rem}'
       + '#v527-panel .it.actif{border-color:var(--ui-accent,#e5c15a)}'
+      + '#v527-panel .it.masque{opacity:.62}'
       + '#v527-panel .nm{font-size:.85rem;font-weight:600;color:var(--ui-ink,#e8e6e0)}'
       + '#v527-panel .ds{font-size:.74rem;color:var(--ui-dim,#8a8896);line-height:1.5;flex:1}'
       + '#v527-panel .tg{font-size:.62rem;color:var(--ui-info,#4f8ef7)}'
@@ -55698,8 +55790,10 @@ window.continueTradApart = async function (msgId) {
       var r = await seme(); toast(r.poses ? r.poses + ' agent(s) installé(s)' : 'Déjà installés', 'success'); rendre();
     });
     p.querySelector('#v527-l').addEventListener('click', function (e) {
-      var b = e.target.closest ? e.target.closest('[data-act]') : null;
-      if (b) active(b.dataset.act);
+      var t = e.target.closest ? e.target.closest('[data-act],[data-toggle]') : null;
+      if (!t) return;
+      if (t.dataset.toggle) { basculer(t.dataset.toggle); return; }
+      active(t.dataset.act);
     });
     return p;
   }
@@ -55710,11 +55804,14 @@ window.continueTradApart = async function (msgId) {
     var st = document.getElementById('v527-st');
     if (st) st.textContent = items.filter(function (x) { return x.installe; }).length + ' / ' + items.length + ' installés';
     l.innerHTML = items.map(function (x) {
-      return '<div class="it' + (x.actif ? ' actif' : '') + '">'
-        + '<div class="nm">' + esc(x.name) + (x.actif ? ' <span class="tg">● actif</span>' : '') + '</div>'
+      return '<div class="it' + (x.actif ? ' actif' : '') + (x.masque ? ' masque' : '') + '">'
+        + '<div class="nm">' + esc(x.name) + (x.actif ? ' <span class="tg">● actif</span>' : '') + (x.masque ? ' <span class="tg">◌ masqué</span>' : '') + '</div>'
         + '<div class="ds">' + esc(x.desc) + '</div>'
         + '<div class="tg">' + esc((x.tags || []).join(' · ')) + '</div>'
+        + '<div style="display:flex;gap:.4rem;flex-wrap:wrap">'
         + '<button class="ui-btn" data-act="' + esc(x.id) + '">' + (x.actif ? '✓ Activé' : 'Activer') + '</button>'
+        + '<button class="ui-btn" data-toggle="' + esc(x.id) + '">' + (x.masque ? '👁 Réafficher' : '👁 Masquer') + '</button>'
+        + '</div>'
         + '</div>';
     }).join('');
   }
