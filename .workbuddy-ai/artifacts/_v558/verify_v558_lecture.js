@@ -12,8 +12,9 @@
         avec label + open ; re-clic → pas de doublon.
      5. Cycle complet : le favori ⭐ s'ouvre depuis l'onglet ⭐ de la
         feuille d'étude (panneau Coran ré-ouvert).
-     6. v193 ✨ IA SANS clé : clic → AUCUN fetch (enregistreur), bouton
-        intact (garde « IA non configurée »).
+     6. v193 ✨ IA : SANS clé (magasin isolé) → garde, zéro réseau ; AVEC clé
+        semée + fetch INTERCEPTÉ → l'appel part vers chat/completions
+        (wiring prouvé sans aucune requête réelle), échec → bouton intact.
      7. v193 ✨ IA avec CACHE semé (djb2 recalculé sur le sn réel du DOM) :
         rendu immédiat de la traduction (✨ div) sans fetch.
      8. Bible : contrôles + favori ('Bible Jean 3:16').
@@ -31,7 +32,15 @@ function ok(label, cond, detail) {
 
 (async () => {
   const port = await H.pickFreePort();
-  const relais = await H.spawnRelay({ port });
+  /* v558-CI — magasin ISOLÉ (comme _v536/_v538) : sans localAppData, le relais
+     sert le vrai magasin %LOCALAPPDATA% — sur la machine de dev, la config
+     modèle RÉELLE (clé Mistral) fuyait dans le banc et le clic ✨ partait en
+     vrai appel authentifié ! En CI le magasin est vide → comportement opposé.
+     Un banc doit TOUJOURS isoler le magasin pour être déterministe. */
+  const os = require('os'), pathM = require('path'), fsM = require('fs');
+  const STORE_DIR = pathM.join(os.tmpdir(), 'theo_v558_store_' + Date.now());
+  try { fsM.mkdirSync(STORE_DIR, { recursive: true }); } catch (e) {}
+  const relais = await H.spawnRelay({ port, localAppData: STORE_DIR });
   const BASE = 'http://127.0.0.1:' + port + '/THEOLOGICUS.html';
   const browser = await H.launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -173,32 +182,52 @@ function ok(label, cond, detail) {
   await page.evaluate(() => { const p = document.getElementById('v189-pan'); if (p) p.classList.remove('open'); });
 
   /* ── 6. ✨ IA : wiring réseau réel + récupération d'échec ── */
-  section('6. v193 : ✨ IA — appel via l\'endpoint standard + récupération d\'échec');
+  section('6. v193 : ✨ IA — sans clé (garde) puis avec clé semée (wiring)');
   const ai = await page.evaluate(() => {
     const btns = document.querySelectorAll('#v183-body .v193-ai');
     return { n: btns.length };
   });
   ok('des boutons ✨ IA sont injectés sur les textes longs (≥ 400 car)', ai.n >= 1, 'n=' + ai.n);
-  const appel = await page.evaluate(() => {
+  /* a) magasin isolé = AUCUNE clé configurée → garde, zéro réseau */
+  const sansCle = await page.evaluate(() => {
     window.__fetchUrls = [];
     const vraiFetch = window.fetch;
     window.fetch = function (u) { window.__fetchUrls.push(String(u)); return vraiFetch.apply(this, arguments); };
-    const b = document.querySelector('#v183-body .v193-ai');
-    b.click();
-    return new Promise(res => setTimeout(() => res({
-      urls: window.__fetchUrls.slice(),
-      boutonIntact: !!document.querySelector('#v183-body .v193-ai')
-    }), 900));
+    document.querySelector('#v183-body .v193-ai').click();
+    return new Promise(res => setTimeout(() => {
+      const llm = window.__fetchUrls.filter(u => /chat\/completions|responses/i.test(u));
+      res({ llm: llm.length, urls: window.__fetchUrls.slice(),
+            boutonIntact: !!document.querySelector('#v183-body .v193-ai') });
+    }, 600));
   });
-  /* DÉCOUVERTE v558 : l'app embarque une config modèle PAR DÉFAUT avec clé
-     (PROVIDERS) — le clic tente donc réellement l'appel via /proxy/…/chat/
-     completions. Le contrat testé : l'appel part par l'endpoint standard de
-     l'app, et un échec réseau laisse le bouton intact (aucune corruption). */
-  const llmAppele = appel.urls.filter(u => /chat\/completions|responses/i.test(u));
-  ok('✨ IA tente l\'appel par l\'endpoint LLM standard de l\'app (wiring)',
-     llmAppele.length >= 1, llmAppele[0] || JSON.stringify(appel.urls.slice(0, 2)));
-  ok('échec/réponse sans traduction : le bouton ✨ reste intact (aucune corruption DOM)',
-     appel.boutonIntact);
+  ok('sans clé (magasin isolé) : AUCUNE requête LLM (garde « non configurée »)',
+     sansCle.llm === 0, 'urls=' + JSON.stringify(sansCle.urls.slice(0, 3)));
+  ok('le bouton ✨ reste intact (pas de remplacement)', sansCle.boutonIntact);
+  /* b) clé factice semée + fetch INTERCEPTÉ (rejet immédiat — zéro réseau) :
+     l'appel doit partir vers l'endpoint standard chat/completions. */
+  const avecCle = await page.evaluate(() => {
+    const st = (typeof state !== 'undefined') ? state : window.state;
+    /* forme PRÉFIXÉE exigée par _providerModelId (« provider:model ») — un nom
+       nu renvoie null et retombe dans la garde. Clé du fournisseur semée. */
+    st.keys = st.keys || {};
+    st.keys.agnes = 'banc-cle-factice';
+    st.model = 'agnes:agnes-2.5-flash';
+    window.__fetchUrls = [];
+    window.fetch = function (u, o) {
+      window.__fetchUrls.push(String(u) + '|' + ((o && o.method) || 'GET'));
+      return Promise.reject(new Error('banc — réseau volontairement coupé'));
+    };
+    const btn = Array.from(document.querySelectorAll('#v183-body .v193-ai'))
+      .find(x => !x.dataset.busy) || document.querySelector('#v183-body .v193-ai');
+    btn.click();
+    return new Promise(res => setTimeout(() => {
+      const llm = window.__fetchUrls.filter(u => /chat\/completions/.test(u));
+      res({ llmUrl: llm[0] || '', boutonIntact: !!document.querySelector('#v183-body .v193-ai') });
+    }, 500));
+  });
+  ok('avec clé semée : l\'appel part vers chat/completions (wiring prouvé, réseau coupé)',
+     /chat\/completions/.test(avecCle.llmUrl), avecCle.llmUrl || '(aucun)');
+  ok('l\'échec réseau intercepté laisse le bouton ✨ intact', avecCle.boutonIntact);
 
   /* ── 7. ✨ IA avec cache : rendu immédiat sans réseau ── */
   section('7. v193 : ✨ IA avec cache semé — traduction instantanée sans fetch');
