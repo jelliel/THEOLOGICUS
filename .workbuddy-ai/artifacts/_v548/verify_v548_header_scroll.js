@@ -37,11 +37,10 @@ function ok(nom, cond, detail) {
 }
 function section(t) { console.log('\n' + t); }
 
-/* répartition par conception (v6 / v155 / v159) */
+/* répartition par conception (v6 / v155 / v159 / v550) */
 const MODALES_BARRE = [
-  'open-palette', 'open-sources', 'open-concordance', 'open-themes',
-  'open-dossier', 'open-notes', 'open-ta-sujets', 'open-gsearch',
-  'open-diag', 'open-rapid', 'open-corbeille', 'open-presets'
+  'open-palette', 'open-gsearch', 'open-diag', 'open-rapid',
+  'open-corbeille', 'open-presets'
 ];
 const MODALES_MENU_V6 = [
   'open-api-modal', 'open-agent-modal', 'open-data-modal',
@@ -53,7 +52,14 @@ const MODALES_ATELIER = [
   'open-homelie-modal', 'open-lectio-modal', 'open-semsearch-modal'
 ];
 const MODALES_MEDIA = ['open-studio-modal', 'open-aivideo-modal'];
-const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALES_MEDIA);
+/* v550 — retirées du header À LA DEMANDE : déjà accessibles via la PALETTE
+   (v535 indexe tous les button.hud-btn du document et lance par el.click(),
+   même sur des boutons cachés). Conteneur caché #v550-modales-palette. */
+const MODALES_CACHEES = [
+  'open-conseil', 'open-sources', 'open-concordance', 'open-themes',
+  'open-dossier', 'open-notes', 'open-ta-sujets'
+];
+const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALES_MEDIA, MODALES_CACHEES);
 
 (async () => {
   console.log('='.repeat(72));
@@ -107,12 +113,13 @@ const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALE
      etat ? ('scrollWidth=' + etat.scrollWidth + ' clientWidth=' + etat.clientWidth) : '-');
   ok('le module v548-header-scroll est actif sur la barre', etat && etat.moduleActif);
 
-  section('3. Aucune modale perdue : chacune existe dans l\'un des 4 foyers');
+  section('3. Aucune modale perdue : chacune existe dans l\'un des 5 foyers');
   const foyerDe = await page.evaluate((ids) => {
     const bar = document.querySelector('.header-controls');
     const menu = document.getElementById('v6-more-menu');
     const at = document.getElementById('v155-atelier-panel');
     const md = document.getElementById('v159-media-panel');
+    const ca = document.getElementById('v550-modales-palette');
     const out = {};
     for (const id of ids) {
       const e = document.getElementById(id);
@@ -120,7 +127,8 @@ const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALE
         : (bar && bar.contains(e)) ? 'BARRE'
         : (menu && menu.contains(e)) ? 'MENU-V6'
         : (at && at.contains(e)) ? 'ATELIER'
-        : (md && md.contains(e)) ? 'MEDIA' : 'AUTRE';
+        : (md && md.contains(e)) ? 'MEDIA'
+        : (ca && ca.contains(e)) ? 'CACHEES' : 'AUTRE';
     }
     return out;
   }, TOUTES);
@@ -130,10 +138,21 @@ const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALE
      (absents.length ? 'ABSENTS : ' + absents.join(', ') + ' ' : '') + (egares.length ? 'ÉGARÉS : ' + egares.join(', ') : 'répartition intacte'));
   const parFoyer = {};
   TOUTES.forEach(id => { parFoyer[foyerDe[id]] = (parFoyer[foyerDe[id]] || 0) + 1; });
-  ok('répartition conforme (12 barre / 8 menu-v6 / 6 atelier / 2 média)',
+  ok('répartition conforme (6 barre / 8 menu-v6 / 6 atelier / 2 média / 7 cachées-palette)',
      parFoyer['BARRE'] === MODALES_BARRE.length && parFoyer['MENU-V6'] === MODALES_MENU_V6.length &&
-     parFoyer['ATELIER'] === MODALES_ATELIER.length && parFoyer['MEDIA'] === MODALES_MEDIA.length,
+     parFoyer['ATELIER'] === MODALES_ATELIER.length && parFoyer['MEDIA'] === MODALES_MEDIA.length &&
+     parFoyer['CACHEES'] === MODALES_CACHEES.length,
      JSON.stringify(parFoyer));
+  const cacheesHorsVue = await page.evaluate((ids) => {
+    return ids.every(id => {
+      const e = document.getElementById(id);
+      if (!e) return false;
+      const r = e.getBoundingClientRect();
+      const container = document.getElementById('v550-modales-palette');
+      return container.contains(e) && getComputedStyle(container).display === 'none';
+    });
+  }, MODALES_CACHEES);
+  ok('les 7 modales retirées sont hors du header ET hors de la vue', cacheesHorsVue);
 
   section('4. ⭐ Barre : chaque contrôle atterrit dans la zone visible');
   /* scrollIntoViewIfNeeded = le mécanisme exact d'un clic Playwright. */
@@ -265,7 +284,74 @@ const TOUTES = [].concat(MODALES_BARRE, MODALES_MENU_V6, MODALES_ATELIER, MODALE
      !media.erreur && media.ratees && media.ratees.length === 0,
      media.erreur || (media.ratees && media.ratees.length ? 'invisibles : ' + media.ratees.join(', ') : (MODALES_MEDIA.length + ' visibles')));
 
-  section('7. Propreté');
+  section('7. Les 7 modales cachées restent lancables depuis la PALETTE (v550)');
+  /* v535 indexe TOUS les button.hud-btn du document (même cachés) et exécute
+     par el.click(). On prouve l'indexation pour les 7, puis un lancement
+     réel de bout en bout (CONSEIL → #v528-panel ouvert). */
+  const MOTS = {
+    'open-conseil': ['conseil', 'CONSEIL'],
+    'open-sources': ['sources', 'SOURCES'],
+    'open-concordance': ['concordance', 'CONCORDANCE'],
+    'open-themes': ['themes', 'THÈMES'],
+    'open-dossier': ['dossier', 'DOSSIER'],
+    'open-notes': ['notes', 'NOTES'],
+    'open-ta-sujets': ['sujets', 'SUJETS']
+  };
+  let nonIndexees = [];
+  for (const id of MODALES_CACHEES) {
+    const [mot, label] = MOTS[id];
+    const labels = await page.evaluate((mot) => {
+      const bp = document.getElementById('open-palette');
+      if (!bp) return null;
+      bp.click();                                  /* ouvre + recharge l'index */
+      const p = document.getElementById('v535-panel');
+      if (!p || !p.classList.contains('open')) return null;
+      const inp = document.getElementById('v535-q');
+      inp.value = mot;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      const out = Array.from(document.querySelectorAll('#v535-l .it .lb')).map(e => e.textContent);
+      p.classList.remove('open');                  /* refermer pour le suivant */
+      return out;
+    }, mot);
+    if (!labels || !labels.some(t => t.indexOf(label) !== -1)) nonIndexees.push(id);
+  }
+  ok('la PALETTE indexe et retrouve les 7 modales retirées du header',
+     nonIndexees.length === 0,
+     nonIndexees.length ? 'introuvables : ' + nonIndexees.join(', ') : '7/7 cherchables');
+
+  /* lancement réel de bout en bout : PALETTE → CONSEIL */
+  const conseil = await (async () => {
+    await page.evaluate(() => document.getElementById('open-palette').click());
+    await page.waitForTimeout(150);
+    await page.evaluate(() => {
+      const inp = document.getElementById('v535-q');
+      inp.value = 'conseil';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const ok_it = await page.evaluate(() => {
+      const items = Array.from(document.querySelectorAll('#v535-l .it'));
+      const cible = items.find(i => i.textContent.indexOf('CONSEIL') !== -1);
+      if (!cible) return false;
+      cible.click();                               /* → execute() : fermer + el.click() différé */
+      return true;
+    });
+    if (!ok_it) return { erreur: 'entrée CONSEIL absente des résultats' };
+    await page.waitForTimeout(400);
+    return await page.evaluate(() => {
+      const pal = document.getElementById('v535-panel');
+      const pan = document.getElementById('v528-panel');
+      return { paletteFermee: !pal.classList.contains('open'),
+               conseilOuvert: !!pan && pan.classList.contains('open') &&
+                              getComputedStyle(pan).display !== 'none' };
+    });
+  })();
+  ok('PALETTE → CONSEIL : la commande cachée s\'exécute (#v528-panel ouvert)',
+     !conseil.erreur && conseil.paletteFermee && conseil.conseilOuvert,
+     conseil.erreur || ('paletteFermee=' + conseil.paletteFermee + ' conseilOuvert=' + conseil.conseilOuvert));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
+  section('8. Propreté');
   ok('aucune erreur JavaScript', erreurs.length === 0, erreurs.slice(0, 3).join(' | '));
 
   await browser.close();

@@ -7775,14 +7775,7 @@ window.__ensureTafsirSurah = function(p){
     <select class="hud-select" id="model-select"></select>
     <button class="hud-btn" id="open-gauge-modal" title="Jauge des modèles — tester disponibilité, latence et quota de chaque modèle">📉 JAUGE</button>
     <button class="hud-btn" id="open-duel-modal" title="Duel de modèles — la même question posée à deux modèles, réponses en parallèle">⚖️ DUEL</button>
-    <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
-    <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
-    <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
-    <button class="hud-btn" id="open-themes" title="Index thématique unifié — thèmes croisés, sujets patristiques, parallèles coraniques, doctrines (465 entrées)">🗂️ THÈMES</button>
-    <button class="hud-btn" id="open-dossier" title="Dossier de passage — texte (5 versions + provenance), qui le cite, thèmes liés, vos notes, en un seul document">📚 DOSSIER</button>
-    <button class="hud-btn" id="open-notes" title="Notes typées — classer vos notes d'étude (exégétique, historique, doctrinal, spirituel…) et les filtrer">🏷️ NOTES</button>
     <button class="hud-btn" id="open-trad-modal" title="Vue comparative — la même question selon cinq traditions (catholique, orthodoxe, protestant, islam, judaïsme)">🌍 TRADITIONS</button>
-    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
     <button class="hud-btn" id="open-gsearch" title="Recherche globale — une seule requête dans TOUTES les bibliothèques hors-ligne : Pères, Doctrines, Arguments, Articles, commentaires Sefaria, Talmud, Mishna, Philon (Ctrl+K)">🔎 BIBLIOTHÈQUES</button>
     <button class="hud-btn" id="open-diag" title="Diagnostic — état des corpus, du stockage, des clés IA et d'Ollama (Ctrl+Alt+D)">🩺 DIAGNOSTIC</button>
     <button class="hud-btn" id="open-rapid" title="Recherche instantanée classée — moteur BM25 tolérant aux fautes sur toute la Bible (Ctrl+Maj+K)">⚡ RAPIDE</button>
@@ -7815,6 +7808,21 @@ window.__ensureTafsirSurah = function(p){
     <button class="hud-btn" id="open-settings-modal">⚙ PARAMÈTRES</button>
     </div>
     </header>
+
+    <!-- v550 - modales DEPLACEES du header (demande utilisateur) : CONSEIL,
+         SOURCES, CONCORDANCE, THEMES, DOSSIER, NOTES, SUJETS existent aussi
+         dans la PALETTE (v535 indexe tous les button.hud-btn du document et
+         les lance par el.click(), meme caches). Conteneur display:none :
+         hors du header, hors de la vue, mais vivant dans le DOM. -->
+    <div id="v550-modales-palette" style="display:none">
+    <button class="hud-btn" id="open-conseil" title="Conseil de modèles — trois modèles répondent en parallèle, un quatrième compare convergences et divergences">🧠 CONSEIL</button>
+    <button class="hud-btn" id="open-sources" title="Sources &amp; éditions — provenance de chaque corpus (édition, langue, datation)">ℹ️ SOURCES</button>
+    <button class="hud-btn" id="open-concordance" title="Concordance — combien de fois un mot apparaît-il dans chaque corpus ?">🔢 CONCORDANCE</button>
+    <button class="hud-btn" id="open-themes" title="Index thématique unifié — thèmes croisés, sujets patristiques, parallèles coraniques, doctrines (465 entrées)">🗂️ THÈMES</button>
+    <button class="hud-btn" id="open-dossier" title="Dossier de passage — texte (5 versions + provenance), qui le cite, thèmes liés, vos notes, en un seul document">📚 DOSSIER</button>
+    <button class="hud-btn" id="open-notes" title="Notes typées — classer vos notes d'étude (exégétique, historique, doctrinal, spirituel…) et les filtrer">🏷️ NOTES</button>
+    <button class="hud-btn" id="open-ta-sujets" title="Citations des Pères par sujet (traditionapostolique.fr) + Doctrines (historicalchristian.faith) + Arguments (beliefmap.org) + 9 365 articles d'étude biblique (christianpublishinghouse.co) + Bibliothèque : Talmud de Babylone & de Jérusalem, Mishna et Philon en anglais (sefaria.org) — consultables hors-ligne">📚 SUJETS</button>
+    </div>
 
 
 
