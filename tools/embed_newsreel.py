@@ -68,7 +68,7 @@ def injecte(p_chemin: str, b64: str, contenu: bytes, seul_verif: bool) -> bool:
     balise = _balise(b64)
     idx = nu.rfind(b"</body>")
     if idx != -1:
-        nu = nu[:idx] + balise + b"\n" + nu[idx:]
+        nu = nu[:idx] + balise + b"\r\n" + nu[idx:]
     else:
         nu = nu + balise
     open(p_chemin, "wb").write(nu)

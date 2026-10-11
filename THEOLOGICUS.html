@@ -46665,8 +46665,18 @@ window.continueTradApart = async function (msgId) {
     else if (e.open.kind === 'bible' && window.__v167OpenPanel) window.__v167OpenPanel(e.open.ref);
     else toast('Ouvrir : panneau indisponible', 'info');
   }
-  window.__v193ToggleFav = function(){
-    var box = document.querySelector('#v183-box, #v167-box');
+  window.__v193ToggleFav = function(origine){
+    /* v558 — CORRECTION : l'étoile cliquée désigne SON panneau. Avant,
+       querySelector('#v183-box, #v167-box') renvoyait toujours le premier
+       panneau PRÉSENT dans le DOM (le Coran dès qu'il avait été ouvert une
+       fois), donc épingler depuis la Bible épinglait le passage coran. */
+    var box = null;
+    if (origine && origine.closest) {
+      var patOrig = origine.closest('#v183-pat, #v167-pat');
+      box = patOrig && patOrig.querySelector('#v183-box, #v167-box');
+    }
+    if (!box) box = document.querySelector('#v183-pat.open #v183-box, #v167-pat.open #v167-box')
+                       || document.querySelector('#v183-box, #v167-box');
     var pat = box ? box.closest('#v183-pat, #v167-pat') : null;
     var key = pat && pat.dataset && pat.dataset.markKey;
     if (!key) { toast('⭐ Rien à épingler ici', 'info'); return; }
@@ -46717,7 +46727,7 @@ window.continueTradApart = async function (msgId) {
     var t = e.target.closest ? e.target.closest('.v191-ctrl button') : null;
     if (!t) return;
     if (t.dataset.fs) { bumpFs(t.dataset.fs === '+' ? 1 : -1); return; }
-    if (t.classList.contains('v192-fav')) { window.__v193ToggleFav(); return; }
+    if (t.classList.contains('v192-fav')) { window.__v193ToggleFav(t); return; }
   });
 
   /* ── wrappers d'ouverture : historique + injection des contrôles ── */
