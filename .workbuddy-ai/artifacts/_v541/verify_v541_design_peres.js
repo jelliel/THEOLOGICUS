@@ -5,11 +5,12 @@
 // (jetons --ui-* + ui-btn). Réutilise l'outillage partagé tools/bench_common.js
 // (Axe 4, lot R1) : port libre, arrêt du relais par PID, isolation standard.
 //
-// ⚠️ Le contenu (extraits de Pères) dépend de l'index précalculé
-// (v167_fathers_idx) + corpus fathers/*.js même origine. Dans un profil neuf
-// isolé l'index n'est pas encore construit → les extraits ne s'affichent pas ;
-// l'assertion de contenu est donc TOLÉRANTE et TRANSPARENTE (on rapporte
-// index chargé / extraits), cf. lot R1a (amorcer/attendre le corpus).
+// R1a (vérifiabilité honnête) : le contenu (extraits de Pères) dépend de
+// l'index précalculé (v167_fathers_idx). Dans un profil isolé neuf l'index
+// n'est PAS construit (scan asynchrone de ~120 œuvres trop lent pour le banc),
+// donc on AMORCE le cache IndexedDB (app_config / v167_fathers_idx) AVANT
+// d'ouvrir le panneau — l'assertion de contenu devient alors HONNÊTE
+// (extraits > 0 prouve que l'index est lu et rendu), sans dépendre du corpus.
 //
 // Usage : node verify_v541_design_peres.js
 
@@ -56,6 +57,38 @@ function section(t) { console.log('\n' + t); }
   await page.waitForTimeout(1200);
   ok("l'API d'ouverture des Pères existe", await page.evaluate(() => typeof window.__v167OpenPanel === 'function'));
 
+  section('0.5 Amorçage de l\'index des Pères (R1a)');
+  // Le panneau lit l'index précalculé (app_config / v167_fathers_idx). En
+  // profil isolé neuf cet index n'existe pas (le scan asynchrone de ~120
+  // œuvres est trop lent pour le banc) → on l'amorce directement dans
+  // IndexedDB AVANT d'ouvrir le panneau, afin que l'assertion de contenu
+  // soit HONNÊTE (extraits > 0 prouve la lecture+rendu de l'index).
+  // Clé d'index = "b:c:v" (Segond v167 : Jn = 43) → "43:3:16".
+  const amorce = await page.evaluate(() => new Promise((resolve, reject) => {
+    const rec = {
+      id: 'v167_fathers_idx', v: 1671,
+      idx: { '43:3:16': [
+        { w: 'f0409', h: 0, st: 'Commentaire sur Jean', sn: 'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. (John 3:16)' },
+        { w: 'f0301', h: 1, st: 'Homélie sur le prologue', sn: 'And as Moses lifted up the serpent in the wilderness, even so must the Son of man be lifted up. (John 3:14)' }
+      ] }
+    };
+    let c = null;
+    const req = indexedDB.open('THEOLOGICUS_AI_DB', 5);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('app_config')) d.createObjectStore('app_config', { keyPath: 'id' });
+    };
+    req.onsuccess = e => {
+      c = e.target.result;
+      const tx = c.transaction('app_config', 'readwrite');
+      tx.objectStore('app_config').put(rec);
+      tx.oncomplete = () => { try { c.close(); } catch (_) {} resolve('amorcé'); };
+      tx.onerror = () => { try { c.close(); } catch (_) {} reject(tx.error); };
+    };
+    req.onerror = () => { try { c && c.close(); } catch (_) {} reject(req.error); };
+  }));
+  ok("l'index des Pères est amorcé en cache", amorce === 'amorcé', amorce);
+
   section('1. CARACTÉRISATION : le panneau fonctionne');
   const usagesAvant = await page.evaluate(() => window.__v509Design ? window.__v509Design.audit().usages : -1);
   await page.evaluate(() => window.__v167OpenPanel('Jn 3:16'));
@@ -63,20 +96,26 @@ function section(t) { console.log('\n' + t); }
     const p = document.getElementById('v167-pat');
     return p && p.classList.contains('open');
   }, { timeout: 20000 });
-  await page.waitForFunction(() => document.querySelectorAll('#v167-body .v167-item').length > 0 || (document.getElementById('v167-body') && document.getElementById('v167-body').childElementCount > 0) || (document.getElementById('v167-status') && document.getElementById('v167-status').textContent.length > 0), { timeout: 30000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelectorAll('#v167-body .v167-item').length > 0 || (document.getElementById('v167-status') && document.getElementById('v167-status').textContent.length > 0), { timeout: 30000 }).catch(() => {});
   const car = await page.evaluate(() => ({
     titre: (document.getElementById('v167-title') || {}).textContent || '',
+    peres: document.querySelectorAll('#v167-body > .v167-item').length,
     items: document.querySelectorAll('#v167-body .v167-item').length,
-    enfants: document.getElementById('v167-body') ? document.getElementById('v167-body').childElementCount : 0,
+    groupes: Array.from(document.querySelectorAll('#v167-body > .v167-grp')).map(e => e.textContent).join(' | '),
     statut: (document.getElementById('v167-status') || {}).textContent || '',
     indexCharge: window.__fathersIndex ? Object.keys(window.__fathersIndex).length : 0,
     close: !!document.getElementById('v167-close')
   }));
   ok("le titre annonce les Pères", /Pères/.test(car.titre), car.titre);
   ok("le bouton de fermeture existe", car.close);
-  ok("le panneau a ouvert et rendu un état", car.items > 0 || car.enfants > 0 || car.statut.length > 0,
-     'extraits=' + car.items + ' enfants=' + car.enfants + ' statut=' + car.statut.length + ' | index Pères chargé=' + car.indexCharge);
-  if (car.items === 0) console.log('  ⚠️  contenu non vérifié (index Pères non construit en profil isolé) — voir lot R1a.');
+  ok("le panneau a ouvert et rendu un état", car.items > 0 || car.statut.length > 0,
+     'extraits=' + car.items + ' (dont Pères=' + car.peres + ') statut=' + car.statut.length + ' | index Pères chargé=' + car.indexCharge);
+  // R1a — assertion HONNÊTE : avec l'index des Pères amorcé en cache, le
+  // panneau doit rendre les extraits PATRISTIQUES (enfants directs de
+  // #v167-body, distincts des corpora auxiliaires TA/HCF/SEF). Si peres===0,
+  // c'est un vrai échec (index non lu/rendu), plus une tolérance de profil.
+  ok("les extraits PATRISTIQUES sont rendus (index lu)", car.peres > 0,
+     'Pères=' + car.peres + ' groupes=' + car.groupes);
 
   section('2. MIGRATION : le chrome utilise les jetons --ui-*');
   const tok = await page.evaluate(() => {
@@ -116,11 +155,10 @@ function section(t) { console.log('\n' + t); }
   section('3. La migration n\'a RIEN cassé');
   const apres = await page.evaluate(() => ({
     titre: (document.getElementById('v167-title') || {}).textContent || '',
-    items: document.querySelectorAll('#v167-body .v167-item').length,
-    enfants: document.getElementById('v167-body') ? document.getElementById('v167-body').childElementCount : 0
+    peres: document.querySelectorAll('#v167-body > .v167-item').length
   }));
   ok('le titre est intact', /Pères/.test(apres.titre), apres.titre);
-  ok('le contenu est intact', apres.items === car.items && apres.enfants === car.enfants, car.items + '/' + car.enfants + ' -> ' + apres.items + '/' + apres.enfants);
+  ok('le contenu patristique est intact', apres.peres === car.peres, car.peres + ' -> ' + apres.peres);
   await page.evaluate(() => document.getElementById('v167-close').click());
   await page.waitForTimeout(300);
   ok('le panneau se ferme toujours', await page.evaluate(() => !document.getElementById('v167-pat').classList.contains('open')));
