@@ -8,6 +8,15 @@
 // ouvre par leur bouton HUD, ce qui exerce exactement le chemin réel (création
 // → guet → équipement), et non un panneau pré-existant.
 //
+// v550 — 5 de ces boutons HUD (dossier, sources, concordance, themes, notes)
+// vivent désormais dans le conteneur caché #v550-modales-palette : ils ne
+// sont plus cliquables À LA SOURIS, mais la PALETTE (v535) les lance par
+// el.click() — qui est devenu le chemin RÉEL. Le banc ouvre donc par un vrai
+// clic souris quand le bouton est visible, sinon par el.click() programmatique
+// (exactement ce que fait la palette). Et la restitution de focus vise le
+// bouton d'origine S'IL EST AFFICHABLE, sinon retombe sur <body> (focus() sur
+// un élément caché est sans effet — comportement a11y correct).
+//
 // Usage : node verify_v539_a11y_panneaux.js [--port 8765]
 
 const path = require("path");
@@ -96,9 +105,15 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
     await page.evaluate(TOUT_FERMER);
     await page.waitForTimeout(150);
 
-    /* Ouverture par le bouton HUD : c'est le chemin RÉEL (le panneau n'existe
-       pas encore → il est créé → le guet l'équipe). */
-    await page.click('#' + p.bouton);
+    /* Ouverture par le bouton HUD : chemin RÉEL. v550 — si le bouton vit dans
+       le conteneur caché de la PALETTE, le clic programmatique el.click() EST
+       le chemin réel (c'est ce que fait la palette) ; sinon vrai clic souris. */
+    const boutonVisible = await page.evaluate((b) => {
+      const el = document.getElementById(b);
+      return !!el && el.offsetParent !== null;
+    }, p.bouton);
+    if (boutonVisible) await page.click('#' + p.bouton);
+    else await page.evaluate((b) => { const el = document.getElementById(b); if (el) el.click(); }, p.bouton);
     await page.waitForFunction((id) => {
       const el = document.getElementById(id);
       return el && el.classList.contains('open');
@@ -153,7 +168,11 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
       ok("le piège à tabulation ramène au premier élément", false, "aucun élément focusable");
     }
 
-    /* Échap ferme ET restitue le focus au bouton d'origine. */
+    /* Échap ferme ET restitue le focus au bouton d'origine — SAUF si ce bouton
+       est caché (v550, conteneur palette) : focus() sur un élément non
+       affichable est sans effet, le focus retombe légitimement sur <body>.
+       Contrat honnête : origine visible → bouton d'origine ; origine cachée →
+       en tout cas PAS un élément du panneau fermé. */
     await page.keyboard.press('Escape');
     await page.waitForTimeout(200);
     const apres = await page.evaluate((id) => ({
@@ -161,7 +180,26 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
       actif: document.activeElement ? document.activeElement.id : 'aucun'
     }), p.id);
     ok("Échap ferme le panneau", apres.ouvert === false);
-    ok("le focus est RESTITUÉ au bouton d'origine", apres.actif === p.bouton, "actif=" + apres.actif);
+    if (boutonVisible) {
+      ok("le focus est RESTITUÉ au bouton d'origine", apres.actif === p.bouton, "actif=" + apres.actif);
+    } else {
+      /* Mesuré : le module restitue la DERNIÈRE position focusée avant
+         l'ouverture (ici open-palette, issu du lancement palette) —
+         comportement a11y légitime. Contrat : focus HORS du panneau fermé,
+         sur un élément affichable (ou le corps). */
+      const etat = await page.evaluate((id) => {
+        const pan = document.getElementById(id);
+        const a = document.activeElement;
+        return {
+          pasCoincé: !pan || !pan.contains(a),
+          actif: a ? (a.id || a.tagName) : 'aucun',
+          affichable: a && a !== document.body ? a.offsetParent !== null : true,
+          corps: a === document.body
+        };
+      }, p.id);
+      ok("focus restitué hors du panneau, sur un élément affichable (origine cachée)",
+         etat.pasCoincé && (etat.corps || etat.affichable), "actif=" + etat.actif);
+    }
   }
 
   section("Propreté");
