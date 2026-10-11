@@ -1,6 +1,6 @@
 // Banc v527 — AGENTS THÉOLOGIQUES PRÊTS.
 //
-// Vérifie que : les 8 pré-réglés s'installent (idempotent, JAMAIS destructif),
+// Vérifie que : les pré-réglés s'installent (idempotent, JAMAIS destructif) —
 // apparaissent dans le sélecteur d'agents existant, et qu'en activer un change
 // RÉELLEMENT le prompt système envoyé au modèle.
 //
@@ -60,15 +60,20 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   await masquerWizard(page);
   await page.waitForTimeout(1500);
   ok("le module v527 est chargé", await page.evaluate(() => !!window.__v527Agents));
+  /* v554 — la bibliothèque est passée de 8 à 20 pré-réglés : les comptes de
+     ce banc sont DYNAMIQUES (N = taille de la bibliothèque exposée), pour
+     que les additions futures ne cassent plus le banc. */
+  const N = await page.evaluate(() => window.__v527Agents.presets.length);
+  ok(N + " pré-réglés sont définis (>= 8)", N >= 8, "N=" + N);
   ok("le bouton « 🎓 AGENTS » est présent", await page.evaluate(() => !!document.getElementById('open-presets')));
-  ok("8 pré-réglés sont définis", await page.evaluate(() => window.__v527Agents.presets.length) === 8);
+
 
   section("1. Installation des pré-réglés");
   const s1 = await page.evaluate(() => window.__v527Agents.seme());
   // L'installation est aussi faite SILENCIEUSEMENT au premier chargement :
   // on vérifie donc la PRÉSENCE en base, pas le nombre posé par cet appel.
   const enBase = await page.evaluate(() => db.getAll('agents').then(a => a.filter(x => /^preset-/.test(x.id)).length));
-  ok("les 8 pré-réglés sont présents en base", s1.ok && enBase === 8, "poses=" + s1.poses + " enBase=" + enBase);
+  ok("les " + N + " pré-réglés sont présents en base", s1.ok && enBase === N, "poses=" + s1.poses + " enBase=" + enBase);
   const s2 = await page.evaluate(() => window.__v527Agents.seme());
   ok("une seconde installation ne fait RIEN (idempotent)", s2.poses === 0, "poses=" + s2.poses);
 
@@ -77,7 +82,7 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
     const s = document.getElementById('agent-select');
     return Array.from(s.options).map(o => o.value).filter(v => /^preset-/.test(v));
   });
-  ok("le sélecteur contient les 8 pré-réglés", sel.length === 8, "n=" + sel.length + " -> " + sel.join(", "));
+  ok("le sélecteur contient les " + N + " pré-réglés", sel.length === N, "n=" + sel.length + " -> " + sel.join(", "));
 
   section("3. Activation : le prompt système CHANGE réellement");
   const avant = await page.evaluate(() => buildSystemPrompt());
@@ -100,14 +105,14 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   section("5. Le panneau liste et active");
   await page.evaluate(() => window.__v527Agents.ouvre());
   await page.waitForFunction(() => { const p = document.getElementById('v527-panel'); return p && p.classList.contains('open'); }, { timeout: 15000 });
-  await page.waitForFunction(() => document.querySelectorAll('#v527-panel .it').length === 8, { timeout: 15000 });
+  await page.waitForFunction((n) => document.querySelectorAll('#v527-panel .it').length === n, N, { timeout: 15000 });
   const ui = await page.evaluate(() => ({
     items: document.querySelectorAll('#v527-panel .it').length,
     actif: document.querySelectorAll('#v527-panel .it.actif').length,
     st: document.getElementById('v527-st').textContent,
   }));
-  ok("les 8 agents sont listés", ui.items === 8, "items=" + ui.items);
-  ok("le compteur indique les installés", /8 \/ 8/.test(ui.st), ui.st);
+  ok("les " + N + " agents sont listés", ui.items === N, "items=" + ui.items);
+  ok("le compteur indique les installés", ui.st.indexOf(N + " / " + N) !== -1, ui.st);
   ok("l'agent actif est mis en évidence", ui.actif === 1, "actifs=" + ui.actif);
   await page.evaluate(() => { const b = document.querySelector('#v527-panel [data-act="preset-catechiste"]'); if (b) b.click(); });
   await page.waitForTimeout(500);
@@ -119,7 +124,7 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   const perso = await page.evaluate(() => db.get('agents', 'mon-agent-perso').then(a => a && a.instructions));
   ok("l'agent utilisateur est intact", perso === 'Ne pas toucher', String(perso));
   const nb = await page.evaluate(() => db.getAll('agents').then(a => a.length));
-  ok("le nombre total d'agents est 8 pré-réglés + 1 perso", nb === 9, "total=" + nb);
+  ok("le nombre total d'agents est " + N + " pré-réglés + 1 perso", nb === N + 1, "total=" + nb);
 
   section("7. Propreté");
   ok("aucune erreur JavaScript", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
