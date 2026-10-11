@@ -820,6 +820,7 @@
         <video id="vm-video" controls playsinline></video>
         <div class="vm-info" id="vm-info"></div>
         <button type="button" class="vm-download" id="vm-download">⬇️ Télécharger cette vidéo</button>
+        <button type="button" class="vm-download" id="vm-publish" style="background:#fe2c55;">📱 Publier</button>
     </div>
 </div>
 
@@ -1858,12 +1859,15 @@ function renderGallery() {
             '<div class="vc-actions">' +
                 '<button class="vc-btn" data-vc-preview="' + v.id + '">🔍 Voir</button>' +
                 '<button class="vc-btn" data-vc-download="' + v.id + '">⬇️ DL</button>' +
+                '<button class="vc-btn pub" data-vc-publish="' + v.id + '" title="Préparer la publication (TikTok / Facebook)">📱 Publier</button>' +
                 '<button class="vc-btn delete" data-vc-delete="' + v.id + '">✕</button>' +
             '</div></div>';
     }).join('') + '</div>';
     body.querySelectorAll('[data-video-click]').forEach(el => el.addEventListener('click', () => openVideoModal(el.dataset.videoClick)));
     body.querySelectorAll('[data-vc-preview]').forEach(el => el.addEventListener('click', () => openVideoModal(el.dataset.vcPreview)));
     body.querySelectorAll('[data-vc-download]').forEach(el => el.addEventListener('click', () => downloadVideoEntry(el.dataset.vcDownload)));
+    /* v556 — publier : dialogue de THEOLOGICUS si embarqué, repli autonome sinon */
+    body.querySelectorAll('[data-vc-publish]').forEach(el => el.addEventListener('click', () => publierVideo(el.dataset.vcPublish)));
     body.querySelectorAll('[data-vc-delete]').forEach(el => el.addEventListener('click', () => { if (confirm('Supprimer cette vidéo ?')) removeVideoFromGallery(el.dataset.vcDelete); }));
 }
 /* ── v126m — Dossier de destination choisi par popup ───────────────────
@@ -2028,8 +2032,29 @@ function openVideoModal(id) {
     info.innerHTML = '<strong>' + escapeHtml(v.label) + '</strong><br>' + '<span style="font-size:0.7rem;opacity:0.7;">' + (v.size ? formatBytes(v.size) : '—') + ' · ' + dateStr + '</span>' + extra +
         (v.prompt ? '<div style="font-size:0.68rem;opacity:0.75;margin-top:0.45rem;max-width:520px;text-align:left;max-height:120px;overflow:auto;border-top:1px solid var(--border);padding-top:0.4rem;">📝 ' + escapeHtml(v.prompt) + '</div>' : '');
     dlBtn.onclick = () => downloadVideoEntry(v.id);
+    const pubBtn = document.getElementById('vm-publish');
+    if (pubBtn) pubBtn.onclick = () => publierVideo(v.id);
     modal.classList.add('open'); document.body.style.overflow = 'hidden';
     video.play().catch(() => {});
+}
+/* v556 — publier une vidéo : passe la main au dialogue de THEOLOGICUS
+   (même origine : iframe normale ET repli srcdoc), sinon repli autonome
+   (téléchargement + ouverture de la page de mise en ligne TikTok). */
+function publierVideo(id) {
+    const v = loadGallery().find(x => x.id === id); if (!v) return;
+    const p = window.parent;
+    if (p && p !== window && p.__v556Publier) {
+        try {
+            p.__v556Publier.open({ mode: 'video', plateforme: 'tiktok',
+                titre: 'Publier la vidéo — ' + (v.label || 'IA'),
+                texte: (v.prompt || v.label || '').slice(0, 400),
+                videoId: v.id, videoLabel: v.label || 'vidéo IA', srcWin: window });
+            return;
+        } catch (e) {}
+    }
+    downloadVideoEntry(id, false);
+    window.open('https://www.tiktok.com/upload', '_blank');
+    showToast('📱 Vidéo préparée : téléchargement lancé + TikTok ouvert', 'success', 3000);
 }
 function closeVideoModal() {
     const modal = document.getElementById('video-modal'); const video = document.getElementById('vm-video');
