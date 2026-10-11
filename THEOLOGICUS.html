@@ -45654,8 +45654,8 @@ window.continueTradApart = async function (msgId) {
     '.v183-cnt{font-size:10px;color:#f5c542;opacity:.75;font-weight:700}' +
     '#v183-pat{position:fixed;inset:0;z-index:130000;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.62);backdrop-filter:blur(4px)}' +
     '#v183-pat.open{display:flex}' +
-    '#v183-box{width:min(700px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--bg-panel,#101826);border:1px solid rgba(245,197,66,.4);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);overflow:hidden}' +
-    '#v183-head{padding:12px 16px;font-weight:900;color:#f5c542;border-bottom:1px solid rgba(245,197,66,.25);display:flex;justify-content:space-between;align-items:center;gap:8px}' +
+    '#v183-box{width:min(700px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--ui-panel,#101826);border:1px solid var(--ui-border,#2a2a3a);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);overflow:hidden}' +
+    '#v183-head{padding:12px 16px;font-weight:900;color:var(--ui-accent,#f5c542);border-bottom:1px solid rgba(245,197,66,.25);display:flex;justify-content:space-between;align-items:center;gap:8px}' +
     '#v183-close{background:none;border:none;color:#f5c542;font-size:16px;cursor:pointer;padding:2px 6px}' +
     '#v183-cite{background:rgba(245,197,66,.14);color:#f5c542;border:1px solid rgba(245,197,66,.5);border-radius:6px;font-size:11px;font-weight:800;padding:3px 9px;cursor:pointer;font-family:Consolas,Monaco,monospace}' +
     '#v183-cite:hover{filter:brightness(1.35)}' +
@@ -45874,7 +45874,7 @@ window.continueTradApart = async function (msgId) {
     if (!p) {
       p = document.createElement('div');
       p.id = 'v183-pat';
-      p.innerHTML = '<div id="v183-box"><div id="v183-head"><span id="v183-title">📖 Coran</span><span style="display:flex;gap:6px;align-items:center"><button id="v183-cite" title="Insérer la citation dans le champ de message">📋 Citer</button><button id="v183-close" aria-label="Fermer">✕</button></span></div><div id="v183-status"></div><div id="v183-body"></div></div>';
+      p.innerHTML = '<div id="v183-box" class="ui-panel"><div id="v183-head"><span id="v183-title">📖 Coran</span><span style="display:flex;gap:6px;align-items:center"><button id="v183-cite" class="ui-btn" title="Insérer la citation dans le champ de message">📋 Citer</button><button id="v183-close" class="ui-btn" aria-label="Fermer">✕</button></span></div><div id="v183-status"></div><div id="v183-body"></div></div>';
       document.body.appendChild(p);
       p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
       p.querySelector('#v183-close').addEventListener('click', function () { p.classList.remove('open'); });
