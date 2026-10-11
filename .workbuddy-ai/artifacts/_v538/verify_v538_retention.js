@@ -21,18 +21,10 @@ const path = require("path");
 const os = require("os");
 const fs = require("fs");
 const { spawn, execSync } = require("child_process");
+const H = require('../../../tools/bench_common.js');
 
 for (const k of ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy", "FTP_PROXY", "ftp_proxy"]) delete process.env[k];
 process.env.NO_PROXY = "*"; process.env.no_proxy = "*";
-
-function tuerPort(port) {
-  try {
-    const out = execSync(`netstat -ano | findstr :${port}`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
-    const pids = new Set();
-    out.split("\n").forEach(l => { const m = l.match(new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`)); if (m) pids.add(m[1]); });
-    pids.forEach(p => { try { execSync(`taskkill /PID ${p} /F`, { stdio: "ignore" }); } catch (e) {} });
-  } catch (e) {}
-}
 
 const PORT = process.argv.includes("--port") ? parseInt(process.argv[process.argv.indexOf("--port") + 1], 10) : 8765;
 const RACINE = path.resolve(__dirname, "..", "..", "..");
@@ -51,23 +43,6 @@ function ok(nom, cond, detail) { resultats.push([!!cond, nom, detail === undefin
 function section(t) { console.log("\n" + t); }
 
 let relais = null;
-async function relaisVit() { try { const r = await fetch(`http://127.0.0.1:${PORT}/__theologicus_ping`, { signal: AbortSignal.timeout(3000) }); return r.status === 200; } catch (e) { return false; } }
-
-async function assurerRelais() {
-  tuerPort(PORT); await new Promise(r => setTimeout(r, 1500));
-  try { fs.mkdirSync(STORE_DIR, { recursive: true }); } catch (e) {}
-  console.log("  … relais isolé (port " + PORT + ", plafond " + (PLAFOND / 1048576) + " Mo, plancher " + PLANCHER + ")");
-  relais = spawn(PY, ["-u", "proxy_server.py"], {
-    cwd: RACINE, stdio: "ignore", windowsHide: true,
-    env: Object.assign({}, process.env, {
-      LOCALAPPDATA: STORE_DIR,
-      THEO_STORE_MAX_BYTES: String(PLAFOND),
-      THEO_STORE_MIN_CHATS: String(PLANCHER)
-    })
-  });
-  for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 500)); if (await relaisVit()) return true; if (relais.exitCode !== null) return false; }
-  return false;
-}
 
 async function getStore(since) {
   const r = await fetch(EP + (since !== undefined ? ('?since=' + since) : ''), { headers: { 'Cache-Control': 'no-store' } });
@@ -84,7 +59,9 @@ const chatVal = (i) => JSON.stringify({ id: 'ret-' + i, title: 'Conversation ' +
   console.log("BANC v538 — RÉTENTION DU MAGASIN PARTAGÉ");
   console.log(EP);
   console.log("=".repeat(72));
-  if (!await assurerRelais()) { console.log("\nRelais injoignable."); process.exit(2); }
+  try { fs.mkdirSync(STORE_DIR, { recursive: true }); } catch (e) {}
+  relais = await H.spawnRelay({ port: PORT, localAppData: STORE_DIR, storeMaxBytes: PLAFOND, storeMinChats: PLANCHER });
+  if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais injoignable."); process.exit(2); }
 
   section("0. Magasin vide au départ");
   let st = await getStore();
@@ -191,8 +168,8 @@ const chatVal = (i) => JSON.stringify({ id: 'ret-' + i, title: 'Conversation ' +
   /* C'est le cas réel de l'utilisateur : son magasin faisait 42,6 Mo AVANT le
      correctif. Sans rétention au démarrage, il ne maigrirait qu'au prochain
      POST — donc seulement si un client écrit. */
-  if (relais) { relais.kill(); relais = null; }
-  tuerPort(PORT); await new Promise(r => setTimeout(r, 1500));
+  if (relais) { H.killRelay(relais); relais = null; }
+  await new Promise(r => setTimeout(r, 1500));
   const dir = path.join(STORE_DIR, 'THEOLOGICUS');
   fs.mkdirSync(dir, { recursive: true });
   const gros = { rev: 99, keys: {} };
@@ -204,7 +181,8 @@ const chatVal = (i) => JSON.stringify({ id: 'ret-' + i, title: 'Conversation ' +
   ok("un magasin hérité TROP GROS a été posé (" + avantKo + " Ko pour un plafond de " + Math.round(PLAFOND / 1024) + " Ko)",
     avantKo > PLAFOND / 1024, avantKo + " Ko");
 
-  if (!await assurerRelais()) {
+  relais = await H.spawnRelay({ port: PORT, localAppData: STORE_DIR, storeMaxBytes: PLAFOND, storeMinChats: PLANCHER });
+  if (!relais.child || relais.child.exitCode !== null) {
     ok("le relais redémarre", false);
   } else {
     const st2 = await getStore();
@@ -225,7 +203,7 @@ const chatVal = (i) => JSON.stringify({ id: 'ret-' + i, title: 'Conversation ' +
     } catch (e) { return false; }
   })());
 
-  if (relais) relais.kill();
+  if (relais) H.killRelay(relais);
   try { fs.rmSync(STORE_DIR, { recursive: true, force: true }); } catch (e) {}
 
   const total = resultats.length;
@@ -235,4 +213,4 @@ const chatVal = (i) => JSON.stringify({ id: 'ret-' + i, title: 'Conversation ' +
   if (bons !== total) { console.log("\nÉchecs :"); resultats.filter(r => !r[0]).forEach(r => console.log(`  - ${r[1]}  (${r[2]})`)); }
   console.log("=".repeat(72));
   process.exit(bons === total ? 0 : 1);
-})().catch(e => { console.error("\n[EXCEPTION] " + (e && e.stack || e)); if (relais) relais.kill(); process.exit(3); });
+})().catch(e => { console.error("\n[EXCEPTION] " + (e && e.stack || e)); if (relais) H.killRelay(relais); process.exit(3); });

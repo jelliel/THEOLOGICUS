@@ -14,18 +14,10 @@ const path = require("path");
 const { spawn, execSync } = require("child_process");
 const PW = process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright";
 const { chromium } = require("playwright");
+const H = require('../../../tools/bench_common.js');
 
 for (const k of ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy", "FTP_PROXY", "ftp_proxy"]) delete process.env[k];
 process.env.NO_PROXY = "*"; process.env.no_proxy = "*";
-
-function tuerPort(port) {
-  try {
-    const out = execSync(`netstat -ano | findstr :${port}`, { stdio: ["ignore", "pipe", "ignore"] }).toString();
-    const pids = new Set();
-    out.split("\n").forEach(l => { const m = l.match(new RegExp(`:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)`)); if (m) pids.add(m[1]); });
-    pids.forEach(p => { try { execSync(`taskkill /PID ${p} /F`, { stdio: "ignore" }); } catch (e) {} });
-  } catch (e) {}
-}
 
 const PORT = process.argv.includes("--port") ? parseInt(process.argv[process.argv.indexOf("--port") + 1], 10) : 8765;
 const BASE = `http://127.0.0.1:${PORT}/THEOLOGICUS.html`;
@@ -49,14 +41,6 @@ function ok(nom, cond, detail) { resultats.push([!!cond, nom, detail === undefin
 function section(t) { console.log("\n" + t); }
 
 let relais = null;
-async function relaisVit() { try { const r = await fetch(`http://127.0.0.1:${PORT}/__theologicus_ping`, { signal: AbortSignal.timeout(3000) }); return r.status === 200; } catch (e) { return false; } }
-async function assurerRelais() {
-  tuerPort(PORT); await new Promise(r => setTimeout(r, 1500));
-  console.log("  … lancement de proxy_server.py (port " + PORT + ")");
-  relais = spawn(PY, ["-u", "proxy_server.py"], { cwd: RACINE, stdio: "ignore", windowsHide: true });
-  for (let i = 0; i < 60; i++) { await new Promise(r => setTimeout(r, 500)); if (await relaisVit()) return true; if (relais.exitCode !== null) return false; }
-  return false;
-}
 
 /* Ferme tout panneau resté ouvert (isolation entre les cas). */
 const TOUT_FERMER = () => {
@@ -69,7 +53,8 @@ const TOUT_FERMER = () => {
   console.log("BANC v539 — ACCESSIBILITÉ DES PANNEAUX");
   console.log(BASE);
   console.log("=".repeat(72));
-  if (!await assurerRelais()) { console.log("\nRelais injoignable."); process.exit(2); }
+relais = await H.spawnRelay({ port: PORT });
+if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais injoignable."); process.exit(2); }
 
   const optionsNav = Object.assign({ args: ["--no-sandbox", "--no-proxy-server"] },
     process.env.PW_DIR ? { executablePath: path.join(PW, "chromium-1234", "chrome-win64", "chrome.exe") } : {});
@@ -183,7 +168,7 @@ const TOUT_FERMER = () => {
   ok("aucune erreur JavaScript", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
 
   await browser.close();
-  if (relais) relais.kill();
+  if (relais) H.killRelay(relais);
 
   const total = resultats.length;
   const bons = resultats.filter(r => r[0]).length;
@@ -192,4 +177,4 @@ const TOUT_FERMER = () => {
   if (bons !== total) { console.log("\nÉchecs :"); resultats.filter(r => !r[0]).forEach(r => console.log(`  - ${r[1]}  (${r[2]})`)); }
   console.log("=".repeat(72));
   process.exit(bons === total ? 0 : 1);
-})().catch(e => { console.error("\n[EXCEPTION] " + (e && e.stack || e)); if (relais) relais.kill(); process.exit(3); });
+})().catch(e => { console.error("\n[EXCEPTION] " + (e && e.stack || e)); if (relais) H.killRelay(relais); process.exit(3); });
