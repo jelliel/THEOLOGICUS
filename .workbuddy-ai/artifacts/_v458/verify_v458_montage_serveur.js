@@ -4,7 +4,17 @@
         le ffmpeg local (durée attendue ≈ 2 s) ;
      2. dans le navigateur, servi PAR ce serveur (comme l'app réelle),
         `assembler()` doit passer par /montage et rendre une vidéo.
-   Aucune doublure : le vrai serveur, le vrai ffmpeg, de vrais fichiers. */
+   Aucune doublure : le vrai serveur, le vrai ffmpeg, de vrais fichiers.
+
+   🔴 PLATEFORME : ce banc est un test de bout en bout du PC de dev
+   (« ffmpeg du PC ») — il spawn proxy_server.py avec un binaire Python et
+   des chemins pensés pour la machine Windows du développeur. En CI Linux
+   (GitHub Actions ubuntu) l'environnement diffère (le repo est checkouté
+   ailleurs, ffmpeg système vs PC, etc.) et le banc peut ne pas aboutir.
+   On se déclare donc Windows-only et on sort avec le code 77 (IGNORÉ en CI)
+   sur toute autre plateforme. Le serveur proxy_server.py lui-même est
+   multiplateforme (stdlib pur) ; seul ce banc d'intégration est borné à
+   Windows. Les autres bancs (_v455, etc.) vérifient les unités en CI. */
 const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
 const { spawn, execFileSync, execSync } = require('child_process');
@@ -16,6 +26,13 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 
 (async () => {
+  // ── 0. plateforme : ce banc d'intégration est Windows-only (« du PC ») ──
+  if (process.platform !== 'win32') {
+    console.log('IGNORÉ : banc d\'intégration Windows-only (ffmpeg du PC).');
+    console.log('RESULTAT : 0/12 (ignoré — plateforme ' + process.platform + ')');
+    process.exit(77);   /* code « prérequis absent » du job bancs CI */
+  }
+
   // ── 1. instance de test du serveur (copie avec un autre port) ──
   const src = fs.readFileSync(path.join(ROOT, 'proxy_server.py'), 'utf8');
   const copie = path.join(ROOT, '_montage_test_serveur.py');   /* à la RACINE : le serveur sert le dossier de son script */
