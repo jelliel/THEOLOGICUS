@@ -36939,7 +36939,14 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
      vers corpus.quran.com.
      ================================================================== */
   (function () {
-    var SIG = /[\u06d6-\u06ed\u08e2]/;
+    /* v560 — CORRECTION (gloses décalées) : le test SIG.test(t) survolait
+     AUSSI les mots contenant un petit wāw/yā (ۥ U+06E5, ۦ U+06E6 — dans la
+     plage U+06D6-06ED) : « تَأْخُذُهُۥ », « نَوْمٌۭ »… étaient skippés comme
+     des signes → mots non indexés → gloses décalées dès le premier petit
+     wāw du verset (mesuré 2:255 : 41 mots indexés au lieu de 50). Un
+     signe coranique est un token COMPOSÉ UNIQUEMENT de signes — un mot
+     contenant des lettres (même petites) reste un mot. */
+  var SIG = /^[\u06d6-\u06ed\u08e2]+$/;
     var promesses = {};
 
     function charger(dossier, global, p) {
@@ -37098,8 +37105,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
         var rt = (window.__quranRoots && window.__quranRoots[s] && window.__quranRoots[s][v]) || null;
         var g = (wbw && wbw[i]) || [];
         var r = (rt && rt[i]) || [];
+        /* v560 — le mot arabe seul : textContent du span inclurait la
+           translittération .qw-t ajoutée par v412 (fiche : « ٱللَّهُal-lahu »). */
+        var _mh = mot.querySelector('.qw-h');
         afficher(mot, {
-          mot: mot.textContent || '',
+          mot: (_mh || mot).textContent || '',
           translit: g[1] || '',
           glose: g[0] || '',
           gloseFr: g[2] || '',
