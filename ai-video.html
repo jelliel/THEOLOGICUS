@@ -4517,5 +4517,236 @@ async function enrichWithMistral(btn, textareaId) {
   window.__v498NewsReel = { ouvrir: ouvrirNewsReel, fermer: fermerNewsReel, repli: repliNewsReel };
 })();
 </script>
+<script id="v562-jauge">
+/* ═══════════════════════════════════════════════════════════════════════
+   v562 — JAUGE DE COMPATIBILITÉ des modèles personnalisés (demande :
+   « utiliser les custom modèles comme générateur vidéo si compatibilité,
+   et une jauge pour vérifier la compatibilité »).
+
+   La chaîne vidéo personnalisée EXISTE déjà (cm-video + adaptateurs
+   agnes/openai + cm-video-choice → createVideoTask/pollUntilDone). Ce qui
+   manquait : VÉRIFIER la compatibilité AVANT de lancer. La jauge sonde
+   4 niveaux, avec des requêtes VOLONTAIREMENT incomplètes (prompt vide —
+   même technique que « file » v500) : le fournisseur répond 400/422 sans
+   rien générer, donc SANS consommer :
+
+     1. ENDPOINT — GET {base}/models : 200 = joignable + clé acceptée ;
+        401/403 = clé refusée ; 0 = réseau.
+     2. MODÈLE — l'ID est-il listé dans /models ? (absent = avertissement,
+        pas une interdiction : certains endpoints ne listent pas tout.)
+     3. IMAGE — POST /images/generations {model, prompt:''} : 200/400/422
+        = endpoint image présent ; 404 = absent.
+     4. VIDÉO — POST /videos {model, prompt:''} : 200/201/400/422 =
+        endpoint vidéo présent ; 503+queue = présent mais saturé ;
+        404 = PAS de vidéo ici.
+
+   Verdict + bouton « 🎥 Activer pour la vidéo » (coche cm-video,
+   enregistre via le chemin réel cmSave(), sélectionne dans
+   cm-video-choice → startGeneration l'utilisera tel quel). ═════════ */
+(function () {
+  'use strict';
+  if (window.__v562Jauge) return;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>').replace(/"/g, '"');
+  }
+
+  async function sonde(url, key, corps) {
+    try {
+      const opts = corps
+        ? { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(corps) }
+        : { method: 'GET', headers: { 'Authorization': 'Bearer ' + key } };
+      const res = await fetch(url, opts);
+      let t = '';
+      try { t = (await res.clone().text()).slice(0, 400); } catch (e) {}
+      return { code: res.status, texte: t };
+    } catch (e) { return { code: 0, texte: String(e && e.message || e) }; }
+  }
+
+  async function mesurer(opts) {
+    opts = opts || {};
+    const endpoint = String(opts.endpoint || '').trim().replace(/\/+$/, '');
+    const key = opts.apiKey || '';
+    const modelId = opts.modelId || '';
+    const base = _viaRelais(endpoint);
+    const res = { endpoint: 'ko', modele: 'inconnu', image: 'inconnu', video: 'inconnu', score: 0, detail: [] };
+    if (!endpoint) { res.detail.push(['ko', 'Aucun endpoint renseigné']); return res; }
+
+    /* 1. ENDPOINT */
+    const m = await sonde(base + '/models', key);
+    if (m.code === 200) {
+      res.endpoint = 'ok'; res.score++;
+      res.detail.push(['ok', 'Endpoint joignable, clé acceptée (GET /models → 200)']);
+      let liste = null;
+      try { const j = JSON.parse(m.texte); liste = (j && j.data) || j || []; } catch (e) {}
+      if (modelId && Array.isArray(liste)) {
+        if (liste.some(function (x) { return x && x.id === modelId; })) {
+          res.modele = 'ok'; res.score++;
+          res.detail.push(['ok', 'Modèle « ' + modelId + ' » listé dans /models']);
+        } else {
+          res.modele = 'absent';
+          res.detail.push(['warn', 'Modèle « ' + modelId + ' » absent de /models — peut quand même fonctionner']);
+        }
+      }
+    } else if (m.code === 401 || m.code === 403) {
+      res.endpoint = 'cle'; res.detail.push(['ko', 'Endpoint joignable mais CLÉ REFUSÉE (HTTP ' + m.code + ')']);
+    } else if (m.code === 0) {
+      res.endpoint = 'ko'; res.detail.push(['ko', 'Endpoint injoignable (réseau) — ' + m.texte.slice(0, 90)]);
+    } else {
+      res.endpoint = 'ko'; res.detail.push(['ko', 'GET /models → HTTP ' + m.code]);
+    }
+
+    /* 2. IMAGE — requête volontairement incomplète : rien ne se génère */
+    const img = await sonde(base + '/images/generations', key, { model: modelId, prompt: '' });
+    if (img.code === 200 || img.code === 400 || img.code === 422) {
+      res.image = 'ok'; res.score++;
+      res.detail.push(['ok', 'Images : endpoint présent (HTTP ' + img.code + ' sur requête vide — rien généré)']);
+    } else if (img.code === 404) {
+      res.image = 'non'; res.detail.push(['warn', 'Images : pas de /images/generations (404)']);
+    } else if (img.code === 401 || img.code === 403) {
+      res.image = 'cle'; res.detail.push(['warn', 'Images : clé refusée (HTTP ' + img.code + ')']);
+    } else {
+      res.detail.push(['warn', 'Images : HTTP ' + img.code + ' — indéterminé']);
+    }
+
+    /* 3. VIDÉO — même technique que « file » (v500) */
+    const vid = await sonde(base + '/videos', key, { model: modelId, prompt: '' });
+    if (vid.code === 200 || vid.code === 201 || vid.code === 400 || vid.code === 422) {
+      res.video = 'ok'; res.score++;
+      res.detail.push(['ok', 'Vidéo : endpoint /videos présent (HTTP ' + vid.code + ' sur requête vide)']);
+    } else if (vid.code === 503 && /queue_full|queue is full|satur/i.test(vid.texte)) {
+      res.video = 'sature'; res.score++;
+      res.detail.push(['warn', 'Vidéo : endpoint présent mais file SATURÉE (503)']);
+    } else if (vid.code === 404) {
+      res.video = 'non'; res.detail.push(['ko', 'Vidéo : pas de /videos (404) — ce endpoint ne génère pas de vidéo']);
+    } else if (vid.code === 401 || vid.code === 403) {
+      res.video = 'cle'; res.detail.push(['warn', 'Vidéo : clé refusée (HTTP ' + vid.code + ')']);
+    } else {
+      res.detail.push(['warn', 'Vidéo : HTTP ' + vid.code + ' — indéterminé']);
+    }
+    return res;
+  }
+
+  function verdict(res) {
+    if (res.video === 'ok' || res.video === 'sature')
+      return { ok: true, txt: '🎥 VIDÉO COMPATIBLE — « 🎥 Activer pour la vidéo » coche, enregistre et sélectionne ce modèle.' };
+    if (res.endpoint === 'cle')
+      return { ok: false, txt: '🔑 Clé refusée — corrigez la clé puis re-mesurez.' };
+    if (res.endpoint !== 'ok')
+      return { ok: false, txt: '✗ Endpoint injoignable — vérifiez l\'URL (…/v1) et le réseau.' };
+    if (res.image === 'ok')
+      return { ok: false, txt: '🖼️ IMAGE seulement — ce endpoint génère des images, pas de vidéo (utilisez-le en mode image).' };
+    return { ok: false, txt: 'Endpoint joignable — compatibilité vidéo indéterminée.' };
+  }
+
+  function seg(nom, etat) {
+    const c = etat === 'ok' ? '#4a9e6a' : (etat === 'sature' || etat === 'cle') ? '#e8a33d'
+      : (etat === 'absent' || etat === 'non') ? '#c0392b' : '#5a6b7d';
+    return '<div style="flex:1;text-align:center">' +
+      '<div style="height:10px;border-radius:5px;background:' + c + '"></div>' +
+      '<div style="font-size:9.5px;color:#8fa3b8;margin-top:3px">' + nom + '</div></div>';
+  }
+
+  function rendre(res) {
+    const pct = Math.round(res.score / 4 * 100);
+    const v = verdict(res);
+    const couleur = v.ok ? '#4a9e6a' : pct >= 50 ? '#e8a33d' : '#c0392b';
+    return '<div style="display:flex;gap:4px">' +
+      seg('Endpoint', res.endpoint) + seg('Modèle', res.modele) +
+      seg('Image', res.image) + seg('Vidéo', res.video) + '</div>' +
+      '<div style="height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:8px">' +
+      '<div style="height:6px;border-radius:3px;width:' + pct + '%;background:' + couleur + '"></div></div>' +
+      '<div style="font-size:11px;margin-top:6px;font-weight:700">' + res.score + '/4 — ' + esc(v.txt) + '</div>' +
+      '<div style="font-size:10.5px;color:#8fa3b8;margin-top:4px;line-height:1.5">' +
+      res.detail.map(function (d) {
+        return (d[0] === 'ok' ? '✅ ' : d[0] === 'warn' ? '⚠️ ' : '✗ ') + esc(d[1]);
+      }).join('<br>') + '</div>' +
+      (v.ok ? '<button type="button" class="add-model-btn" id="cm-jauge-activer" style="margin-top:8px">🎥 Activer pour la vidéo</button>' : '');
+  }
+
+  function activerVideo(ep, k, m) {
+    try {
+      document.getElementById('cm-endpoint').value = ep || '';
+      document.getElementById('cm-key').value = k || '';
+      document.getElementById('cm-model-input').value = m || '';
+      document.getElementById('cm-video').checked = true;
+      cmSave();   /* chemin réel d'enregistrement (idempotent endpoint+model) */
+      const st = (typeof state !== 'undefined') ? state : window.state;
+      const c = (st.customModels || []).find(function (x) {
+        return String(x.endpoint || '').replace(/\/+$/, '') === String(ep || '').trim().replace(/\/+$/, '') && x.id === m;
+      });
+      if (c) st.cmVideoChoice = c.uid;
+      cmRender();
+      if (window.showToast) showToast('🎥 Modèle vidéo personnalisé actif', 'success');
+      if (window.logInfo) logInfo('🎥 Vidéo personnalisée active : <code>' + esc(m) + '</code> — elle sera utilisée par la génération.');
+    } catch (e) {
+      if (window.logError) logError('Activation vidéo : ' + esc(String(e && e.message || e)));
+    }
+  }
+
+  async function mesurerDepuisFormulaire() {
+    const ep = (document.getElementById('cm-endpoint') || {}).value || '';
+    const k = (document.getElementById('cm-key') || {}).value || '';
+    const m = (document.getElementById('cm-model-input') || {}).value || '';
+    const box = document.getElementById('cm-jauge-res');
+    if (box) box.innerHTML = '<div style="color:#8fa3b8;font-size:11px">📏 Mesure en cours… 4 sondes, requêtes volontairement incomplètes (rien n\'est généré, rien n\'est consommé).</div>';
+    try {
+      const r = await mesurer({ endpoint: ep, apiKey: k, modelId: m });
+      if (box) box.innerHTML = rendre(r);
+      const act = document.getElementById('cm-jauge-activer');
+      if (act) act.addEventListener('click', function () { activerVideo(ep, k, m); });
+      try { box.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+    } catch (e) {
+      if (box) box.innerHTML = '<div style="color:#c0392b;font-size:11px">Mesure impossible : ' + esc(String(e && e.message || e)) + '</div>';
+    }
+  }
+
+  /* pastille 📏 sur chaque carte enregistrée : remplit le formulaire puis mesure */
+  function boutonsJaugeCartes() {
+    const grid = document.getElementById('cm-grid'); if (!grid) return;
+    grid.querySelectorAll('[data-cm-uid]').forEach(function (carte) {
+      if (carte.querySelector('[data-cm-jauge]')) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'model-action-btn'; b.textContent = '📏';
+      b.title = 'Mesurer la compatibilité (endpoint, modèle, image, vidéo)';
+      b.setAttribute('data-cm-jauge', carte.getAttribute('data-cm-uid'));
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        cmEdit(b.getAttribute('data-cm-jauge'));
+        setTimeout(function () { const g = document.getElementById('cm-jauge-btn'); if (g) g.click(); }, 30);
+      });
+      const zone = carte.querySelector('.cm-card-actions');
+      if (zone) zone.appendChild(b);
+    });
+  }
+
+  function installer() {
+    const form = document.querySelector('.cm-form');
+    if (form && !document.getElementById('cm-jauge')) {
+      const bloc = document.createElement('div');
+      bloc.id = 'cm-jauge';
+      bloc.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px solid var(--border)';
+      bloc.innerHTML =
+        '<button type="button" class="api-btn extra" id="cm-jauge-btn">📏 Mesurer la compatibilité vidéo/image</button>' +
+        '<div id="cm-jauge-res" style="margin-top:8px"></div>';
+      form.appendChild(bloc);
+      document.getElementById('cm-jauge-btn').addEventListener('click', mesurerDepuisFormulaire);
+    }
+    if (typeof cmRender === 'function' && !cmRender.__v562) {
+      const _r = cmRender;
+      cmRender = function () { _r(); boutonsJaugeCartes(); };
+      cmRender.__v562 = true;
+      boutonsJaugeCartes();   /* cartes déjà rendues avant ce module */
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installer);
+  else installer();
+
+  window.__v562Jauge = { mesurer: mesurer, rendre: rendre, verdict: verdict, activerVideo: activerVideo };
+})();
+
+</script>
 </body>
 </html>
