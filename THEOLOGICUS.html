@@ -2110,9 +2110,21 @@ input[type="checkbox"]:active{ transform:scale(.88); }
   gap: 8px;
   flex: 1;
   flex-wrap: nowrap;
-  overflow: hidden;
+  /* v548 — 28 commandes ne tiennent pas dans une fenetre normale :
+     overflow:hidden rognait la fin de rangee (RAPIDE, CORBEILLE, AGENTS,
+     HOMELIE, LECTIO, CHERCHER, HERMES, CLEAR, ANNOT., NEW, ARCHIVES,
+     STUDIO VIDEO, AI VIDEO) et rendait ces modales inatteignables.
+     La rangee defile desormais (barre fine) ; la molette suit (v548). */
+  overflow-x: auto;
+  overflow-y: hidden;
   min-width: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(79,142,247,.35) transparent;
 }
+.header-controls::-webkit-scrollbar { height: 6px; }
+.header-controls::-webkit-scrollbar-track { background: transparent; }
+.header-controls::-webkit-scrollbar-thumb { background: rgba(79,142,247,.30); border-radius: 3px; }
+.header-controls::-webkit-scrollbar-thumb:hover { background: rgba(79,142,247,.55); }
 
 .header-right {
   display: flex;
@@ -57676,6 +57688,33 @@ window.continueTradApart = async function (msgId) {
     panneaux: PANNEAUX, equip: equip, equiperTous: equiperTous,
     focusables: focusables, ouverts: function () { return Object.keys(OUVERT); }
   };
+})();
+</script>
+
+<script id="v548-header-scroll">
+/* ═══ v548 — BARRE DE COMMANDES DU HEADER : DÉFILER AU LIEU DE ROGNER ═══
+   Le CSS (même version) laisse .header-controls défiler horizontalement
+   (overflow-x:auto) au lieu de rogner : les 28 commandes ne tiennent pas
+   dans une fenêtre normale et la fin de rangée — modales RAPIDE, CORBEILLE,
+   AGENTS, HOMÉLIE, LECTIO, CHERCHER, HERMES, CLEAR, ANNOT., NEW, ARCHIVES,
+   STUDIO VIDÉO, AI VIDEO — était inatteignable à la souris. Ce module ajoute
+   la molette : rouler sur la barre fait défiler la rangée, sans voler le
+   geste vertical quand la rangée ne déborde pas. Tab fonctionne nativement
+   (le navigateur défile vers le bouton focalisé). */
+(function(){
+  'use strict';
+  if (window.__v548) return; window.__v548 = true;
+  var bar = document.querySelector('.header-controls');
+  if (!bar) return;
+  bar.addEventListener('wheel', function (e) {
+    if (bar.scrollWidth <= bar.clientWidth + 1) return;   /* pas de débordement : geste normal */
+    var d = (e.deltaY || 0) + (e.deltaX || 0);
+    if (!d) return;
+    var avant = bar.scrollLeft;
+    bar.scrollLeft += d;
+    if (bar.scrollLeft !== avant) e.preventDefault();     /* le geste a servi la barre */
+  }, { passive: false });
+  window.__v548HeaderScroll = { barre: bar };
 })();
 </script>
 
