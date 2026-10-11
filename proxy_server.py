@@ -22,7 +22,9 @@ try:
 except Exception:
     pass
 
-PORT = 8765
+# v542 — overridable via THEO_BENCH_PORT pour des bancs lancés en parallèle
+# (évite la collision sur le port 8765 partagé). Défaut inchangé.
+PORT = int(os.environ.get('THEO_BENCH_PORT') or 8765)
 # v486 — relais FreeLLMAPI : la cible (hôte:port) est PORTÉE PAR L'URL
 # (/fla/<host>:<port>/…), plus en dur. Cela autorise un routeur sur un port
 # personnalisé (zéro config côté app) tout en GARDANT l'anti-SSRF : le
