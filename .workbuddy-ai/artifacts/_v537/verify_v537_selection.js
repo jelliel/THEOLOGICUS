@@ -226,11 +226,17 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   ok("exactement " + N + " sélectionnées", (await page.evaluate(() => window.__v537Selection.nb())) === N,
     "n=" + (await page.evaluate(() => window.__v537Selection.nb())));
   await page.evaluate(H.clicSupprimer);
-  /* suppression ASYNCHRONE : on attend la disparition effective, pas un délai */
-  await page.waitForFunction(async (ids) => {
-    const tous = (await db.getAll('chats')).map(c => c.id);
-    return ids.every(i => tous.indexOf(i) < 0);
-  }, SEMES, { timeout: 30000 }).catch(() => {});
+  /* suppression ASYNCHRONE : on attend la disparition effective. ⚠️ PAS de
+     prédicat ASYNC dans waitForFunction : Playwright y RÉSOUT dès la première
+     promesse tenue, MÊME FAUSSE (défaut mesuré par la sonde v571 — le wait
+     rendait la main au milieu de la boucle de suppression et les assertions
+     couraient contre elle). On interroge la base depuis Node, avec échéance. */
+  const echeance = Date.now() + 30000;
+  while (Date.now() < echeance) {
+    const enBaseNow = await page.evaluate(H.enBase);
+    if (SEMES.every(i => enBaseNow.indexOf(i) < 0)) break;
+    await page.waitForTimeout(150);
+  }
   const enBase = await page.evaluate(H.enBase);
   const corb = await page.evaluate(H.corbeille);
   ok("les " + N + " conversations ont quitté les Archives", SEMES.every(i => enBase.indexOf(i) < 0),
