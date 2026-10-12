@@ -59192,6 +59192,7 @@ window.continueTradApart = async function (msgId) {
     const cfg = cfgTranscription();
     if (!cfg) return null;
     const essais = [cfg.model, cfg.alt].filter(Boolean);
+    const diag = [];
     for (let i = 0; i < essais.length; i++) {
       try {
         const res = await fetch(cfg.base + "/chat/completions", {
@@ -59210,12 +59211,14 @@ window.continueTradApart = async function (msgId) {
             max_tokens: 1000
           })
         });
-        if (!res.ok) continue;
+        if (!res.ok) { diag.push(essais[i] + " → HTTP " + res.status); continue; }
         const d = await res.json();
         const t = String((d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "").trim();
-        if (t) return t;
-      } catch (e) {}
+        if (t) { window.__v571DicteeDiag = ""; return t; }
+        diag.push(essais[i] + " → réponse vide");
+      } catch (e) { diag.push(essais[i] + " → réseau : " + String(e && e.message || e).slice(0, 70)); }
     }
+    window.__v571DicteeDiag = diag.join(" | ");
     return null;
   }
 
@@ -59298,7 +59301,7 @@ window.continueTradApart = async function (msgId) {
       if (texte && window.__v564Adeodat && typeof window.__v564Adeodat.envoyer === "function") {
         window.__v564Adeodat.envoyer(texte);   /* envoyer suspend la dictée (microPause) */
       } else if (!texte) {
-        toast("🎙️ Transcription impossible — vérifiez la clé du modèle audio (PARAMÈTRES)", "error");
+        toast("🎙️ Transcription impossible — " + String(window.__v571DicteeDiag || "aucun modèle audio joignable (📉 Jauge d'Adeodat)").slice(0, 130), "error");
       }
     } catch (e) {
       toast("🎙️ Dictée interrompue : " + String(e && e.message || e).slice(0, 60), "warn");
@@ -59346,6 +59349,337 @@ window.continueTradApart = async function (msgId) {
     dicteeSuspendre: dicteeSuspendre, dicteeRelancer: dicteeRelancer,
     cfgTranscription: cfgTranscription, encoderWav: encoderWav
   };
+})();
+
+</script>
+<script id="v572-adeodat-jauge">
+/* ═══════════════════════════════════════════════════════════════════════
+   v572 — JAUGE DES MODÈLES D\'ADEODAT (demande : « le même système de
+   jaugeage (Jauge des modèles) ») — le même principe que la jauge v151 du
+   chat : liste complète de la base de modèles + modèles personnalisés,
+   sonde MINIMALE par modèle (1 token, requête réelle via apiEndpoint),
+   🟢 disponible · 🟠 limité · 🔴 erreur · ⚪ sans clé, latence mesurée,
+   tri, et CLIC = choisir comme CERVEAU d\'Adeodat (theo_adeodat_modele,
+   PAS le modèle actif du chat).
+   + SECTION 🎙️ DICTÉE : sonde de TRANSCRIPTION réelle (mini WAV 0,3 s)
+   sur chaque modèle audio disponible (personnalisé Audio, Mistral Voxtral,
+   Agnes) — diagnostique précisément « Transcription impossible » (v571). */
+(function () {
+  "use strict";
+  if (window.__v572JaugeAdeodat) return;
+
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k || "info"); } catch (e) {} }
+  function cle(k) { try { return (typeof cleanApiKey === "function") ? cleanApiKey(k || "") : String(k || "").replace(/[\r\n\s]+/g, ""); } catch (e) { return String(k || ""); } }
+  function ST() { try { return (typeof state !== "undefined") ? state : window.state; } catch (e) { return window.state; } }
+
+  /* ── classification : même sémantique que la jauge v151 ── */
+  function classify(st, msg) {
+    if (st >= 200 && st < 300) return { kind: 0, ico: "🟢", lbl: "Disponible" };
+    if (st === 401 || st === 403) return { kind: 2, ico: "🔴", lbl: "Clé API invalide ou absente" };
+    if (st === 402) return { kind: 2, ico: "🔴", lbl: "Quota épuisé — crédits du compte terminés" };
+    if (st === 429) return { kind: 1, ico: "🟠", lbl: "Limite de débit — modèle joignable, patienter" };
+    if (st === 404) return { kind: 2, ico: "🔴", lbl: "Modèle inconnu / obsolète (id retiré du fournisseur)" };
+    if (st === 400) return { kind: 2, ico: "🔴", lbl: /model/i.test(msg) ? "Modèle inconnu pour ce fournisseur" : "Requête refusée" };
+    if (st >= 500) return { kind: 1, ico: "🟠", lbl: "Service dégradé (HTTP " + st + ")" };
+    return { kind: 2, ico: "🔴", lbl: "Erreur HTTP " + st };
+  }
+
+  /* ── sonde minimale d\'un modèle (identique à probeOne v151) ── */
+  async function probeOne(value) {
+    var cfg;
+    try { cfg = (typeof resolveModelConfig === "function") ? resolveModelConfig(value) : null; } catch (e) {
+      return { kind: 2, ico: "🔴", lbl: "Config illisible", ms: 0, det: String((e && e.message) || e) };
+    }
+    if (!cfg || !cle(cfg.apiKey || "")) {
+      return { kind: 3, ico: "⚪", lbl: "Pas de clé configurée pour ce fournisseur", ms: 0, det: "" };
+    }
+    var fmt = cfg.format || "chat-completions";
+    var init;
+    if (fmt === "anthropic") {
+      init = { method: "POST", headers: (typeof anthropicHeaders === "function") ? anthropicHeaders(cfg) : { "x-api-key": cfg.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }, body: JSON.stringify({ model: cfg.model, max_tokens: 1, messages: [{ role: "user", content: "ok" }] }) };
+    } else {
+      init = { method: "POST", headers: { "Authorization": "Bearer " + cfg.apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ model: cfg.model, messages: [{ role: "user", content: "ok" }], max_tokens: 1, temperature: 0 }) };
+    }
+    var t0 = performance.now();
+    try {
+      var res = await fetch((typeof apiEndpoint === "function" ? apiEndpoint(cfg.endpoint) : cfg.endpoint), init);
+      var ms = Math.round(performance.now() - t0);
+      var st = res.status;
+      if (st >= 200 && st < 300) {
+        try { await res.text(); } catch (e) {}
+        return { kind: 0, ico: "🟢", lbl: "Disponible", ms: ms, det: "" };
+      }
+      var msg = "";
+      try {
+        var txt = await res.text();
+        try { var j = JSON.parse(txt); msg = (j && j.error && (j.error.message || (typeof j.error === "string" ? j.error : ""))) || j.message || txt; }
+        catch (e2) { msg = txt; }
+      } catch (e3) {}
+      msg = String(msg || "").replace(/\s+/g, " ").trim().slice(0, 160);
+      var c = classify(st, msg);
+      c.ms = ms; c.det = c.det || msg;
+      return c;
+    } catch (e) {
+      return { kind: 2, ico: "🔴", lbl: "Injoignable (réseau / serveur local)", ms: Math.round(performance.now() - t0), det: String((e && e.message) || e).slice(0, 120) };
+    }
+  }
+
+  /* ── section 🎙️ DICTÉE : sonde de TRANSCRIPTION (mini WAV 0,3 s) ── */
+  function wavProbe() {
+    try {
+      const rate = 16000, n = 4800, buf = new Float32Array(n);
+      for (let i = 0; i < n; i++) buf[i] = 0.04 * Math.sin(2 * Math.PI * 440 * i / rate);
+      const ab = (window.__v571Adeodat && window.__v571Adeodat.encoderWav) ? window.__v571Adeodat.encoderWav([buf], rate) : null;
+      if (!ab) return null;
+      let bin = ""; const oct = new Uint8Array(ab); const PAS = 0x8000;
+      for (let i = 0; i < oct.length; i += PAS) bin += String.fromCharCode.apply(null, oct.subarray(i, i + PAS));
+      return "data:audio/wav;base64," + btoa(bin);
+    } catch (e) { return null; }
+  }
+
+  function candidatsDictee() {
+    const st = ST() || {}, out = [];
+    (st.customModels || []).forEach(function (cm) {
+      if (cm.audio && cm.baseUrl && cle(cm.apiKey)) out.push({ label: "⭐ " + (cm.name || cm.model || "perso"), base: String(cm.baseUrl).replace(/\/+$/, ""), key: cle(cm.apiKey), model: cm.model || "whisper-1" });
+    });
+    const mk = cle((st.keys && st.keys.mistral) || st.apiKey || "");
+    if (mk) out.push({ label: "Mistral · Voxtral", base: "https://api.mistral.ai/v1", key: mk, model: "voxtral-small-2507", alt: "voxtral-mini-2507" });
+    const ak = cle((st.keys && st.keys.agnes) || "");
+    if (ak) out.push({ label: "Agnes · Voxtral", base: "https://apihub.agnes-ai.com/v1", key: ak, model: "voxtral-small-2507", alt: "voxtral-mini-2507" });
+    return out;
+  }
+
+  async function probeDictee(c) {
+    const wav = wavProbe();
+    if (!wav) return { kind: 2, ico: "🔴", lbl: "Générateur WAV indisponible", ms: 0, det: "" };
+    const essais = [c.model, c.alt].filter(Boolean);
+    let dernier = "";
+    for (let i = 0; i < essais.length; i++) {
+      const t0 = performance.now();
+      try {
+        const res = await fetch(c.base + "/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + c.key, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: essais[i], messages: [{ role: "user", content: [
+            { type: "audio_url", audio_url: wav },
+            { type: "text", text: "Décris cet audio en un mot." }
+          ] }], max_tokens: 8, temperature: 0 })
+        });
+        const ms = Math.round(performance.now() - t0);
+        if (res.ok) return { kind: 0, ico: "🟢", lbl: "Dictée opérationnelle (" + essais[i] + ")", ms: ms, det: "" };
+        let msg = "";
+        try { const txt = await res.text(); try { const j = JSON.parse(txt); msg = (j && j.error && (j.error.message || (typeof j.error === "string" ? j.error : ""))) || j.message || txt; } catch (e2) { msg = txt; } } catch (e3) {}
+        msg = String(msg || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        const cl = classify(res.status, msg);
+        dernier = cl.lbl + (msg ? " — " + msg : "") + " [" + essais[i] + "]";
+      } catch (e) { dernier = "réseau : " + String(e && e.message || e).slice(0, 90); }
+    }
+    return { kind: 2, ico: "🔴", lbl: "Transcription refusée", ms: 0, det: dernier };
+  }
+
+  /* ── liste : la MÊME base que le sélecteur de cerveau ── */
+  function buildList() {
+    const out = [], vus = {};
+    try {
+      if (typeof _tousModelesSelectionnables === "function") {
+        _tousModelesSelectionnables().forEach(function (m) { if (!vus[m.value]) { vus[m.value] = 1; out.push({ value: m.value, label: m.label, grp: m.groupe }); } });
+      }
+    } catch (e) {}
+    const st = ST() || {};
+    (st.customModels || []).forEach(function (cm) {
+      if (!vus[cm.uid]) { vus[cm.uid] = 1; out.push({ value: cm.uid, label: cm.name || cm.model || "Modèle perso", grp: "Personnalisé" }); }
+    });
+    return out;
+  }
+
+  /* ── choisir comme CERVEAU d\'Adeodat (PAS le modèle actif du chat) ── */
+  function choisirCerveau(m, el) {
+    try {
+      if (el.__kind === 3) { toast("Pas de clé configurée pour " + (m.label || "ce modèle"), "error"); return; }
+      if (el.__kind === 2) { toast("Modèle en erreur — choisissez une ligne 🟢 ou 🟠", "error"); return; }
+      try { localStorage.setItem("theo_adeodat_modele", m.value); } catch (e1) {}
+      const sel = document.getElementById("adeodat-modele");
+      if (sel) { sel.value = m.value; if (sel.value !== m.value) sel.value = ""; }
+      document.querySelectorAll("#aj-list .aj-row").forEach(function (r) { r.classList.remove("tj-act"); });
+      el.classList.add("tj-act");
+      toast("🧠 Cerveau d\'Adeodat : " + (m.label || m.value), "success");
+    } catch (e) {}
+  }
+
+  /* ── modal (même look que #tj-modal) ── */
+  var construit = false, enCours = false;
+  function build() {
+    if (construit) return;
+    construit = true;
+    const st = document.createElement("style");
+    st.id = "aj-style";
+    st.textContent =
+      "#aj-modal{position:fixed;inset:0;z-index:139200;background:rgba(4,8,14,.72);display:none;align-items:center;justify-content:center}"
+      + "#aj-modal.open{display:flex}"
+      + "#aj-box{width:min(560px,94vw);max-height:86vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:var(--ui-radius,12px);box-shadow:var(--ui-shadow,0 18px 60px rgba(0,0,0,.6))}"
+      + "#aj-head{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a);font-weight:700;color:var(--ui-accent,#e5c15a)}"
+      + "#aj-sum{font-weight:400;font-size:.72rem;color:var(--ui-dim,#8a8896);margin-left:.4rem;flex:1}"
+      + "#aj-head button{background:none;border:1px solid var(--ui-border,#2a2a3a);border-radius:6px;color:inherit;cursor:pointer;padding:.15rem .45rem}"
+      + "#aj-list{overflow-y:auto;padding:.5rem .6rem;flex:1}"
+      + ".aj-row{display:flex;align-items:center;gap:.5rem;padding:.3rem .4rem;border-radius:6px;cursor:pointer}"
+      + ".aj-row:hover{background:rgba(255,255,255,.05)}"
+      + ".aj-row.tj-act{outline:1px solid var(--ui-accent,#e5c15a)}"
+      + ".aj-row .tj-ico{width:1.4rem;text-align:center}"
+      + ".aj-row .tj-nm{flex:1;min-width:0;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+      + ".aj-row .tj-grp{font-size:.62rem;color:var(--ui-dim,#8a8896);margin-left:.35rem}"
+      + ".aj-row .tj-ms{font-size:.68rem;color:var(--ui-dim,#8a8896)}"
+      + ".aj-det{font-size:.68rem;color:var(--ui-dim,#8a8896);padding:0 .4rem .35rem 1.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+      + "#aj-dictee{border-top:1px solid var(--ui-border,#2a2a3a);padding:.5rem .6rem .7rem;overflow-y:auto}"
+      + "#aj-dictee h4{margin:.2rem 0 .4rem;font-size:.72rem;color:var(--ui-accent,#e5c15a)}"
+      + "#aj-foot{padding:.45rem .8rem;border-top:1px solid var(--ui-border,#2a2a3a);font-size:.66rem;color:var(--ui-dim,#8a8896)}";
+    document.head.appendChild(st);
+    const md = document.createElement("div");
+    md.id = "aj-modal";
+    md.innerHTML =
+      '<div id="aj-box">' +
+        '<div id="aj-head">📉 Jauge des modèles — Adeodat<span id="aj-sum">…</span>' +
+          '<button id="aj-retest" title="Re-tester">↻</button>' +
+          '<button id="aj-close" title="Fermer">✕</button></div>' +
+        '<div id="aj-list"></div>' +
+        '<div id="aj-dictee"><h4>🎙️ Dictée — modèles audio disponibles</h4><div id="aj-dic-list"></div></div>' +
+        '<div id="aj-foot">Chaque modèle reçoit une requête minimale. 🟢 disponible · 🟠 limité · 🔴 erreur · ⚪ sans clé. Cliquez une ligne 🟢 pour en faire le CERVEAU d\'Adeodat (le chat principal n\'est pas modifié). La section 🎙️ teste la TRANSCRIPTION réelle utilisée par la dictée.</div>' +
+      "</div>";
+    document.body.appendChild(md);
+    md.addEventListener("click", function (e) { if (e.target === md) md.classList.remove("open"); });
+    document.getElementById("aj-close").addEventListener("click", function () { md.classList.remove("open"); });
+    document.getElementById("aj-retest").addEventListener("click", function () { runAll(); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape") md.classList.remove("open"); });
+  }
+
+  function mkRow(m) {
+    const el = document.createElement("div");
+    el.className = "aj-row aj-pend";
+    el.innerHTML = '<span class="tj-ico">⏳</span><span class="tj-nm"></span><span class="tj-ms">…</span>';
+    el.querySelector(".tj-nm").textContent = m.label;
+    if (m.grp) {
+      const g = document.createElement("span");
+      g.className = "tj-grp"; g.textContent = m.grp;
+      el.querySelector(".tj-nm").appendChild(g);
+    }
+    el.addEventListener("click", function () { choisirCerveau(m, el); });
+    return el;
+  }
+
+  function fillRow(el, m, r) {
+    el.classList.remove("aj-pend");
+    el.__kind = r.kind;
+    el.querySelector(".tj-ico").textContent = r.ico;
+    el.querySelector(".tj-ms").textContent = r.kind === 0 ? (r.ms + " ms") : (r.ms ? r.ms + " ms" : "");
+    if (m.value === (window.__v571Adeodat && window.__v571Adeodat.modeleChoisi ? window.__v571Adeodat.modeleChoisi() : "")) el.classList.add("tj-act");
+    const anc = el.querySelector(".aj-det");
+    if (anc) anc.remove();
+    const txt = (r.kind === 0) ? "" : ((r.lbl || "") + (r.det ? (r.lbl ? " — " : "") + r.det : ""));
+    if (txt) {
+      const d = document.createElement("div");
+      d.className = "aj-det"; d.textContent = txt; d.title = txt;
+      el.appendChild(d);
+    }
+  }
+
+  function mkDicRow(c) {
+    const el = document.createElement("div");
+    el.className = "aj-row aj-pend";
+    el.style.cursor = "default";
+    el.innerHTML = '<span class="tj-ico">⏳</span><span class="tj-nm"></span><span class="tj-ms"></span>';
+    el.querySelector(".tj-nm").textContent = c.label;
+    return el;
+  }
+
+  function fillDicRow(el, c, r) {
+    el.classList.remove("aj-pend");
+    el.querySelector(".tj-ico").textContent = r.ico;
+    el.querySelector(".tj-ms").textContent = r.kind === 0 ? (r.ms + " ms") : "";
+    const anc = el.querySelector(".aj-det");
+    if (anc) anc.remove();
+    const txt = (r.kind === 0) ? r.lbl : (r.lbl + (r.det ? " — " + r.det : ""));
+    const d = document.createElement("div");
+    d.className = "aj-det"; d.textContent = txt; d.title = txt;
+    el.appendChild(d);
+  }
+
+  async function runAll() {
+    if (enCours) return;
+    enCours = true;
+    build();
+    const liste = document.getElementById("aj-list");
+    const dic = document.getElementById("aj-dic-list");
+    if (!liste || !dic) { enCours = false; return; }
+    const list = buildList();
+    liste.innerHTML = ""; dic.innerHTML = "";
+    const rows = {};
+    list.forEach(function (m) { rows[m.value] = mkRow(m); liste.appendChild(rows[m.value]); });
+    const N = list.length, fait = { n: 0 }, counts = [0, 0, 0, 0];
+    const majSum = function () {
+      const s = document.getElementById("aj-sum");
+      if (s) s.textContent = fait.n + "/" + N + " testés — 🟢 " + counts[0] + " · 🟠 " + counts[1] + " · 🔴 " + counts[2] + " · ⚪ " + counts[3];
+    };
+    majSum();
+    let i = 0;
+    async function worker() {
+      while (i < N) {
+        const m = list[i++];
+        const r = await probeOne(m.value);
+        fait.n++; counts[r.kind === undefined ? 3 : r.kind]++;
+        fillRow(rows[m.value], m, r);
+        majSum();
+      }
+    }
+    try {
+      const P = Math.min(4, N), ps = [];
+      for (let k = 0; k < P; k++) ps.push(worker());
+      await Promise.all(ps);
+      /* section dictée, séquentielle */
+      const cands = candidatsDictee();
+      const dicRows = [];
+      cands.forEach(function (c) { const el = mkDicRow(c); dicRows.push({ c: c, el: el }); dic.appendChild(el); });
+      if (!cands.length) {
+        const d = document.createElement("div");
+        d.className = "aj-det";
+        d.textContent = "Aucun modèle audio disponible — configurez une clé Mistral (Voxtral) ou un modèle personnalisé « Audio » pour la dictée.";
+        dic.appendChild(d);
+      }
+      for (let k = 0; k < dicRows.length; k++) {
+        const r = await probeDictee(dicRows[k].c);
+        fillDicRow(dicRows[k].el, dicRows[k].c, r);
+      }
+    } catch (e) {}
+    enCours = false;
+  }
+
+  function ouvrir() {
+    build();
+    document.getElementById("aj-modal").classList.add("open");
+    runAll();
+  }
+
+  /* ── bouton 📉 dans la rangée du sélecteur de cerveau ── */
+  function installerUI() {
+    const rang = document.getElementById("adeodat-modele") ? document.getElementById("adeodat-modele").parentNode : null;
+    if (!rang || document.getElementById("adeodat-jauge-btn")) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = "adeodat-jauge-btn";
+    b.title = "Jauge des modèles — tester disponibilité et latence (cerveau + dictée)";
+    b.style.cssText = "background:none;border:1px solid var(--ui-border,#2a2a3a);border-radius:6px;color:inherit;cursor:pointer;padding:.25rem .4rem;font-size:.75rem";
+    b.textContent = "📉";
+    b.addEventListener("click", ouvrir);
+    rang.appendChild(b);
+  }
+  function init() { installerUI(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  setTimeout(init, 1500);
+  try {
+    const obs = new MutationObserver(function () { installerUI(); });
+    obs.observe(document.body, { childList: true });
+  } catch (e) {}
+
+  window.__v572JaugeAdeodat = { ouvrir: ouvrir, probeOne: probeOne, probeDictee: probeDictee, candidatsDictee: candidatsDictee };
 })();
 
 </script>
