@@ -58311,7 +58311,7 @@ window.continueTradApart = async function (msgId) {
 
   var CLE_HIST = 'theo_adeodat_v1', CLE_PERSO = 'theo_adeodat_persona', CLE_TTS = 'theo_adeodat_tts';
   var MAX_HIST = 100;         /* messages conservés */
-  var MAX_CTX = 12;           /* messages envoyés au modèle */
+  var MAX_CTX = 8;            /* messages envoyés au modèle (V3e : latence) */
 
   function ST() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
   function esc(s) {
@@ -58403,7 +58403,10 @@ window.continueTradApart = async function (msgId) {
     msgs.push({ role: 'user', content: texteUser });
     /* V3c — STREAMING : la bulle se remplit au fil de l'eau ; le calque
        d'outils (v566) parse les ACTION sur le texte complet. */
-    return await callLLMStream(cfg, msgs, { temperature: 0.6 }, function (delta) { if (onChunk) onChunk(delta); });
+    /* V3e — latence : réponses bornées (700 tokens) — le systemPrompt impose
+       déjà la concision ; la latence perçue est surtout traitée par le
+       TTS phrase-par-phrase. */
+    return await callLLMStream(cfg, msgs, { temperature: 0.6, max_tokens: 700 }, function (delta) { if (onChunk) onChunk(delta); });
   }
 
   /* ── panneau + orbe ── */
@@ -58474,7 +58477,13 @@ window.continueTradApart = async function (msgId) {
     document.getElementById('adeodat-in').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && this.value.trim()) { const t = this.value; this.value = ''; envoyer(t); }
     });
-    document.getElementById('adeodat-mic').addEventListener('click', ecouter);
+    /* V3e — le micro pilote la SESSION CONTINUE (v566) : plus d'one-shot qui
+       s'arrête au timeout SR (défaut Windows constaté). Relance auto sur
+       onend/no-speech tant que la session est active. */
+    document.getElementById('adeodat-mic').addEventListener('click', function () {
+      if (window.__v566Libre) window.__v566Libre.continuSet(!window.__v566Libre.continuGet());
+      else ecouter();
+    });
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && pan && pan.style.display === 'flex') fermer();
     });
@@ -58526,14 +58535,41 @@ window.continueTradApart = async function (msgId) {
     bulle('user', texte);
     const bulleA = bulle('assistant', '…');
     try {
-      const plein = await penser(texte, function (chunk) {
+      /* V3e — TTS PHRASE-PAR-PHRASE : la première phrase est lue PENDANT
+         que la suite se génère (latence perçue divisée). File séquentielle.
+         t = tampon global de la réponse ; parlé = offset déjà lu à voix haute. */
+      let tampon = '', parleDeja = 0;
+      const file = []; let fileEnCours = false;
+      function parlerSuivant() {
+        if (!file.length) { fileEnCours = false; return; }
+        const phrase = file.shift(); fileEnCours = true;
+        try { if (typeof ttsEmission === 'function') ttsEmission(phrase, 'fr-FR', function () { parlerSuivant(); }, function () { parlerSuivant(); }); else { fileEnCours = false; } } catch (e) { fileEnCours = false; }
+      }
+      function ttsx(chunk) {
         if (chunk && bulleA) { const tx = bulleA.querySelector('.ad-tx'); if (tx) tx.textContent += chunk; scrollBas(); }
-      });
+        if (!chunk) return;
+        tampon += chunk;
+        for (let i = parleDeja; i < tampon.length; i++) {
+          const c = tampon.charAt(i);
+          if (c === '.' || c === '!' || c === '?' || c === '\n') {
+            const phrase = tampon.slice(parleDeja, i + 1).trim();
+            if (phrase.length > 1) {
+              file.push(phrase);
+              if (!fileEnCours) parlerSuivant();
+            }
+            parleDeja = i + 1;
+          }
+        }
+      }
+      const plein = await penser(texte, ttsx);
       const txt = String(plein || '').trim() || '(réponse vide)';
       if (bulleA) { const tx = bulleA.querySelector('.ad-tx'); if (tx) tx.textContent = txt; }
       ajouterH('assistant', txt);
       scrollBas();
-      parler(txt);
+      /* V3e — la file TTS a déjà lu la quasi-totalité : on ne prononce que
+         la fin restée en attente (sinon la réponse serait lue deux fois). */
+      const reste = txt.slice(Math.min(parleDeja, txt.length)).trim();
+      if (ttsActif() && reste.length > 1) parler(reste);
     } catch (e) {
       const msg = '⚠️ ' + String(e && e.message || e);
       if (bulleA) { const tx = bulleA.querySelector('.ad-tx'); if (tx) tx.textContent = msg; }
@@ -58556,6 +58592,9 @@ window.continueTradApart = async function (msgId) {
     }
     const inp = document.getElementById('adeodat-in');
     if (inp) inp.focus();
+    /* V3e — l'orbe passe en mode ÉCOUTE : la session micro démarre avec le
+       panneau (mains libres d'office ; toggle 🎤 pour couper). */
+    try { if (window.__v566Libre && !window.__v566Libre.continuGet()) window.__v566Libre.continuSet(true); } catch (e) {}
   }
   function fermer() { if (pan) pan.style.display = 'none'; taire(); }
 
@@ -58665,7 +58704,9 @@ window.continueTradApart = async function (msgId) {
       const adeodat = String(sys).indexOf('Adeodat') !== -1;
       let texte = '';
       try {
-        texte = await orig.call(this, cfg, messages, opts);
+        /* v566bis — TRANSMETTRE onChunk : sans lui, aucun callback de
+           streaming n'atteint l'affichage ni le TTS phrase-par-phrase. */
+        texte = await orig.call(this, cfg, messages, opts, onChunk);
       } catch (e) {
         /* REPLI HORS-LIGNE : seulement pour Adeodat, si le toggle est on,
            que le cfg actif n'est PAS déjà Ollama et qu'Ollama est dispo. */
