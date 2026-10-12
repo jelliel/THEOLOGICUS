@@ -58562,6 +58562,158 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+<script id="v565-adeodat-outils">
+/* ═══════════════════════════════════════════════════════════════════════
+   v565 — ADEODAT INTERAGIT (V3.0, lot V3b) — calque d'OUTILS.
+
+   Adeodat peut désormais AGIR sur l'application. Protocole : le system
+   prompt (étendu ici) décrit les ACTIONS ; le modèle termine sa réponse
+   par une ligne EXACTE « ACTION: {json} » ; ce module intercepte la
+   réponse au joint callLLM (seulement pour les conversations Adeodat —
+   repérées par le system prompt), EXÉCUTE les outils whitelistrés (2 au
+   plus) et rend le texte NETTOYÉ de la ligne d'action.
+
+   Outils (tous sur des APIs VÉRIFIÉES de l'app) :
+     ouvrir_coran  {sourate, v1, v2?} → __v183Open      (panneau Coran :
+       tafsirs, mot-à-mot, parallèles, asbāb)
+     ouvrir_peres  {ref}              → __v167OpenPanel (Pères sur un passage)
+     note          {texte}            → __v189BasketAdd (feuille d'étude)
+     lire          {texte}            → ttsEmission (lecture à voix haute)
+     ouvrir_nav    {url, titre}       → __theoOpenNav (https UNIQUEMENT)
+
+   Sécurité : whitelist stricte des noms d'outils, https seul pour le
+   navigateur, 2 actions max par réponse, ligne malformée = ignorée
+   (jamais d'exception remontée à l'utilisateur). ═══════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v565Outils) return;
+
+  var DOC_ACTION = [
+    '',
+    '═══ ACTIONS — agir sur l\'application ═══',
+    'Tu peux agir sur l\'application en terminant ta réponse par UNE ligne exacte :',
+    'ACTION: {"outil":"<nom>","params":{...}}',
+    'Outils disponibles (ne les invente pas) :',
+    '- ouvrir_coran {"sourate":N,"v1":N,"v2":N?} — ouvre le panneau du verset coranique (tafsirs, mot-à-mot, parallèles).',
+    '- ouvrir_peres {"ref":"Jean 3:16"} — ouvre les Pères de l\'Église sur un passage biblique (référence française : « Jean 3:16 », « Mt 5:1-12 »).',
+    '- note {"texte":"…"} — ajoute ce texte à la feuille d\'étude de l\'utilisateur.',
+    '- lire {"texte":"…"} — lit ce texte à voix haute (court : une phrase, un verset).',
+    '- ouvrir_nav {"url":"https://…","titre":"…"} — ouvre une page https dans le navigateur interne.',
+    'Règles : UNE seule ACTION par réponse, en DERNIÈRE ligne, après ta réponse en prose ;',
+    'ne mets jamais d\'ACTION si l\'utilisateur n\'en a pas besoin ; ne mets jamais d\'autre',
+    'outil que ceux de la liste.'
+  ].join('\n');
+
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+
+  /* ── exécuteurs (whitelist) ── */
+  var OUTILS = {
+    ouvrir_coran: function (p) {
+      var s = parseInt(p.sourate, 10), v1 = parseInt(p.v1, 10);
+      var v2 = p.v2 !== undefined && p.v2 !== null && p.v2 !== '' ? parseInt(p.v2, 10) : null;
+      if (!s || !v1 || s < 1 || s > 114) return 'référence coranique invalide';
+      if (typeof window.__v183Open !== 'function') return 'panneau Coran indisponible';
+      window.__v183Open(s, v1, v2 || v1);
+      return '📖 Coran ' + s + ':' + v1 + (v2 && v2 !== v1 ? '-' + v2 : '') + ' ouvert';
+    },
+    ouvrir_peres: function (p) {
+      var ref = String(p.ref || '').trim();
+      if (!ref) return 'référence biblique manquante';
+      if (typeof window.__v167OpenPanel !== 'function') return 'panneau Pères indisponible';
+      window.__v167OpenPanel(ref);
+      return '📖 Pères de l\'Église — ' + ref + ' ouvert';
+    },
+    note: function (p) {
+      var t = String(p.texte || '').trim();
+      if (!t) return 'note vide';
+      if (typeof window.__v189BasketAdd !== 'function') return 'feuille d\'étude indisponible';
+      window.__v189BasketAdd({ text: t });
+      return '🧺 Ajouté à la feuille d\'étude';
+    },
+    lire: function (p) {
+      var t = String(p.texte || '').trim();
+      if (!t) return 'rien à lire';
+      if (typeof ttsEmission === 'function') { ttsEmission(t.slice(0, 600), 'fr-FR', null, null); return '🔊 Lecture en cours'; }
+      return 'TTS indisponible';
+    },
+    ouvrir_nav: function (p) {
+      var u = String(p.url || '').trim();
+      if (!/^https:\/\//i.test(u)) return 'URL non https refusée';
+      if (typeof window.__theoOpenNav !== 'function') return 'navigateur interne indisponible';
+      window.__theoOpenNav(u, String(p.titre || 'Adeodat'));
+      return '🌐 ' + (p.titre || u.slice(0, 40)) + ' ouvert';
+    }
+  };
+
+  /* ── parse + exécution ── */
+  function parserActions(texte) {
+    var lignes = String(texte || '').split(/\r?\n/);
+    var actions = [], propres = [];
+    for (var i = 0; i < lignes.length; i++) {
+      var m = /^\s*ACTION:\s*(\{.*\})\s*$/.exec(lignes[i]);
+      if (m) {
+        try { actions.push(JSON.parse(m[1])); } catch (e) { /* malformée : ignorée */ }
+      } else propres.push(lignes[i]);
+    }
+    return { actions: actions, propre: propres.join('\n').replace(/\n{3,}/g, '\n\n').trim() };
+  }
+
+  function executer(action) {
+    try {
+      if (!action || typeof action !== 'object') return null;
+      var nom = String(action.outil || '');
+      if (!Object.prototype.hasOwnProperty.call(OUTILS, nom)) { toast('Adeodat : outil « ' + nom + ' » inconnu (ignoré)', 'warn'); return null; }
+      var r = OUTILS[nom](action.params || {});
+      if (r) toast('🕊️ ' + r, 'success');
+      return r || null;
+    } catch (e) { return null; }   /* jamais d'exception vers l'utilisateur */
+  }
+
+  function executerActions(texte) {
+    var p = parserActions(texte);
+    var fait = [];
+    var max = Math.min(p.actions.length, 2);
+    for (var i = 0; i < max; i++) {
+      var r = executer(p.actions[i]);
+      if (r) fait.push(r);
+    }
+    return { propre: p.propre, fait: fait };
+  }
+
+  /* ── le joint callLLM : parse + exécute + nettoie (Adeodat seulement) ── */
+  function installer() {
+    if (typeof callLLM !== 'function' || callLLM.__v565) return;
+    const orig = callLLM;
+    window.callLLM = async function (cfg, messages, opts) {
+      const texte = await orig.call(this, cfg, messages, opts);
+      try {
+        const sys = (messages && messages[0] && messages[0].content) || '';
+        if (String(sys).indexOf('Adeodat') === -1) return texte;   /* hors Adeodat : intact */
+        const r = executerActions(texte);
+        return r.propre;
+      } catch (e) { return texte; }
+    };
+    callLLM.__v565 = true;
+  }
+
+  /* ── étendre le systemPrompt d'Adeodat avec le protocole d'actions ── */
+  function installerPrompt() {
+    const A = window.__v564Adeodat;
+    if (!A || A.systemPrompt.__v565) return;
+    const orig = A.systemPrompt;
+    A.systemPrompt = function () { return orig() + '\n' + DOC_ACTION; };
+    A.systemPrompt.__v565 = true;
+  }
+
+  function init() { installer(); installerPrompt(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1200);   /* v564-adeodat peut se charger après ce script */
+
+  window.__v565Outils = { executer: executer, executerActions: executerActions, parserActions: parserActions, outils: Object.keys(OUTILS), DOC_ACTION: DOC_ACTION };
+})();
+
+</script>
 </body>
 </html>
 </html>
