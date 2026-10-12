@@ -82,10 +82,13 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   ok("l'ancrage est ACTIF par défaut", await page.evaluate(() => window.__v523Rag.actif()));
   // v524 s'enveloppe PAR-DESSUS v523 : le drapeau __v523 est sur la couche
   // INTERNE. On vérifie donc que les DEUX routes portent une couche RAG.
-  ok("callLLM ET callLLMStream sont enveloppés (chaîne RAG)", await page.evaluate(() => {
+  /* v566 — la chaîne de wrappers s'installe sur DOMContentLoaded (+1 module :
+     v565). On ATTEND la condition (règle des bancs) au lieu d'un 800 ms fixe. */
+  const chaineOk = await page.waitForFunction(() => {
     const f = window.callLLM, g = window.callLLMStream;
     return !!(f && g && (f.__v523 || f.__v524) && (g.__v523 || g.__v524));
-  }));
+  }, { timeout: 8000 }).then(() => true).catch(() => false);
+  ok("callLLM ET callLLMStream sont enveloppés (chaîne RAG)", chaineOk);
 
   section("1. Détection du chat principal et extraction de la question");
   const det = await page.evaluate(() => {

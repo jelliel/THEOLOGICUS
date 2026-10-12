@@ -75,8 +75,12 @@ function ok(label, cond, detail) {
   await page.evaluate(() => {
     window.fetch = async function (url, opts) {
       if (String(url).indexOf('/chat/completions') !== -1) {
-        const corps = JSON.stringify({ choices: [{ message: { content: 'Voici le verset que vous cherchez.\nACTION: {"outil":"ouvrir_coran","params":{"sourate":2,"v1":255}}' } }] });
-        return { ok: true, status: 200, clone: function () { return this; }, text: async () => corps, json: async () => JSON.parse(corps) };
+        /* V3c : le penser est en STREAMING — doublure SSE avec body.getReader */
+        const enc = s2 => new TextEncoder().encode(s2);
+        const contenu = 'Voici le verset que vous cherchez.\nACTION: {"outil":"ouvrir_coran","params":{"sourate":2,"v1":255}}';
+        const tout = enc('data: ' + JSON.stringify({ choices: [{ delta: { content: contenu } }] }) + '\n\n' + enc('data: [DONE]\n\n'));
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
       }
       return { ok: false, status: 404, clone: function () { return this; }, text: async () => '', json: async () => ({}) };
     };
@@ -105,8 +109,11 @@ function ok(label, cond, detail) {
   await page.evaluate(() => {
     window.fetch = async function (url, opts) {
       if (String(url).indexOf('/chat/completions') !== -1) {
-        const corps = JSON.stringify({ choices: [{ message: { content: 'Écoutons les Pères.\nACTION: {"outil":"ouvrir_peres","params":{"ref":"Jean 3:16"}}' } }] });
-        return { ok: true, status: 200, clone: function () { return this; }, text: async () => corps, json: async () => JSON.parse(corps) };
+        const enc = s2 => new TextEncoder().encode(s2);
+        const contenu = 'Écoutons les Pères.\nACTION: {"outil":"ouvrir_peres","params":{"ref":"Jean 3:16"}}';
+        const tout = enc('data: ' + JSON.stringify({ choices: [{ delta: { content: contenu } }] }) + '\n\n' + enc('data: [DONE]\n\n'));
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
       }
       return { ok: false, status: 404, clone: function () { return this; }, text: async () => '', json: async () => ({}) };
     };
@@ -129,8 +136,11 @@ function ok(label, cond, detail) {
   await page.evaluate(() => {
     window.fetch = async function (url, opts) {
       if (String(url).indexOf('/chat/completions') !== -1) {
-        const corps = JSON.stringify({ choices: [{ message: { content: 'Noté.\nACTION: {"outil":"note","params":{"texte":"Mémoriser : la patristique sur Jn 3:16 insiste sur le don du Fils."}}' } }] });
-        return { ok: true, status: 200, clone: function () { return this; }, text: async () => corps, json: async () => JSON.parse(corps) };
+        const enc = s2 => new TextEncoder().encode(s2);
+        const contenu = 'Noté.\nACTION: {"outil":"note","params":{"texte":"Mémoriser : la patristique sur Jn 3:16 insiste sur le don du Fils."}}';
+        const tout = enc('data: ' + JSON.stringify({ choices: [{ delta: { content: contenu } }] }) + '\n\n' + enc('data: [DONE]\n\n'));
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
       }
       return { ok: false, status: 404, clone: function () { return this; }, text: async () => '', json: async () => ({}) };
     };
@@ -154,8 +164,11 @@ function ok(label, cond, detail) {
     window.__ttsRecu = [];
     window.fetch = async function (url, opts) {
       if (String(url).indexOf('/chat/completions') !== -1) {
-        const corps = JSON.stringify({ choices: [{ message: { content: 'Écoutons.\nACTION: {"outil":"lire","params":{"texte":"Au commencement était le Verbe."}}' } }] });
-        return { ok: true, status: 200, clone: function () { return this; }, text: async () => corps, json: async () => JSON.parse(corps) };
+        const enc = s2 => new TextEncoder().encode(s2);
+        const contenu = 'Écoutons.\nACTION: {"outil":"lire","params":{"texte":"Au commencement était le Verbe."}}';
+        const tout = enc('data: ' + JSON.stringify({ choices: [{ delta: { content: contenu } }] }) + '\n\n' + enc('data: [DONE]\n\n'));
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
       }
       return { ok: false, status: 404, clone: function () { return this; }, text: async () => '', json: async () => ({}) };
     };

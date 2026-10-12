@@ -58401,9 +58401,9 @@ window.continueTradApart = async function (msgId) {
     var msgs = [{ role: 'system', content: systemPrompt() }];
     for (var i = 0; i < h.length; i++) msgs.push({ role: h[i].role, content: h[i].texte });
     msgs.push({ role: 'user', content: texteUser });
-    /* V3a — réponse complète (callLLM) ; le streaming + la boucle vocale
-       continue arrivent en V3c (le doublage de banc n'a pas de flux SSE). */
-    return await callLLM(cfg, msgs, { temperature: 0.6 });
+    /* V3c — STREAMING : la bulle se remplit au fil de l'eau ; le calque
+       d'outils (v566) parse les ACTION sur le texte complet. */
+    return await callLLMStream(cfg, msgs, { temperature: 0.6 }, function (delta) { if (onChunk) onChunk(delta); });
   }
 
   /* ── panneau + orbe ── */
@@ -58562,6 +58562,163 @@ window.continueTradApart = async function (msgId) {
 })();
 
 </script>
+
+<script id="v566-adeodat-v3c">
+/* ═══════════════════════════════════════════════════════════════════════
+   v566 — ADEODAT MAINS LIBRES (V3.0, lot V3c) :
+     1. ÉCOUTE CONTINUE — toggle 🔁 dans le panneau : la reconnaissance
+        redémarre automatiquement après chaque phrase ; barre-in (le TTS
+        se tait dès que tu commences à parler) ; chaque phrase reconnue
+        est envoyée à Adeodat.
+     2. REPLI HORS-LIGNE — toggle 📶 : si le modèle actif échoue (réseau,
+        clé, service), la réponse est retentée via Ollama local
+        (127.0.0.1:11434, aucun cloud) et marquée « (📶 hors-ligne) ».
+     3. Le streaming (v564 penser → callLLMStream) est WRAPPÉ ici avec le
+        MÊME calque d'outils que v565 : les ACTION du flux sont exécutées
+        et nettoyées du texte final (le chat principal reste intact).
+
+   Réglages : localStorage theo_adeodat_cont ('1'), theo_adeodat_ollama
+   ('1'), theo_adeodat_ollama_model ('qwen2.5'). ════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v566Libre) return;
+
+  var CLE_CONT = 'theo_adeodat_cont', CLE_OLL = 'theo_adeodat_ollama', CLE_OLL_M = 'theo_adeodat_ollama_model';
+  var recC = null;
+
+  function ST() { try { return (typeof state !== 'undefined') ? state : window.state; } catch (e) { return window.state; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function taire() { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {} }
+
+  function contActif() { try { return localStorage.getItem(CLE_CONT) === '1'; } catch (e) { return false; } }
+  function ollActif() { try { return localStorage.getItem(CLE_OLL) === '1'; } catch (e) { return false; } }
+  function ollModel() { try { return localStorage.getItem(CLE_OLL_M) || 'qwen2.5'; } catch (e) { return 'qwen2.5'; } }
+
+  /* ── 1. écoute continue ── */
+  function demarrerContinue() {
+    if (!contActif() || recC) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { toast('Reconnaissance vocale indisponible — écoute continue impossible', 'error'); return; }
+    taire();                                   /* barre-in : le TTS se tait */
+    recC = new SR();
+    recC.lang = 'fr-FR'; recC.interimResults = false; recC.continuous = true;
+    recC.onresult = function (ev) {
+      var t = '';
+      for (var i = 0; i < ev.results.length; i++) t += (ev.results[i][0] || {}).transcript || '';
+      t = String(t || '').trim();
+      if (t && window.__v564Adeodat && typeof window.__v564Adeodat.envoyer === 'function') {
+        taire();                               /* barre-in à chaque prise */
+        window.__v564Adeodat.envoyer(t);
+      }
+    };
+    recC.onerror = function () { /* 'no-speech', 'aborted' : onend gère */ };
+    recC.onend = function () {
+      recC = null;
+      if (contActif()) setTimeout(demarrerContinue, 400);   /* relance auto */
+    };
+    try { recC.start(); toast('🔁 Écoute continue ACTIVE — parlez naturellement', 'success'); } catch (e) {}
+  }
+  function arreterContinue() {
+    if (recC) { try { recC.stop(); } catch (e) {} recC = null; }
+    toast('Écoute continue arrêtée', 'info');
+  }
+
+  function boutonContinu() {
+    var tts = document.getElementById('adeodat-tts');
+    var pan = document.getElementById('adeodat-pan');
+    if (!tts || !pan || document.getElementById('adeodat-cont')) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'adeodat-cont';
+    b.title = 'Écoute continue — parlez sans toucher l\'écran';
+    b.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:14px';
+    b.textContent = contActif() ? '🔁' : '🔁';   /* l'état est montré par l'opacité */
+    b.style.opacity = contActif() ? '1' : '.45';
+    b.addEventListener('click', function () {
+      if (contActif()) { try { localStorage.setItem(CLE_CONT, '0'); } catch (e) {} arreterContinue(); b.style.opacity = '.45'; }
+      else { try { localStorage.setItem(CLE_CONT, '1'); } catch (e) {} demarrerContinue(); b.style.opacity = '1'; }
+    });
+    tts.parentNode.insertBefore(b, tts);
+  }
+
+  /* ── 2. repli hors-ligne + calque d'outils sur le STREAMING ── */
+  function cfgOllama() {
+    try {
+      var cfg = (typeof resolveModelConfig === 'function') ? resolveModelConfig('ollama:' + ollModel()) : null;
+      return (cfg && cfg.endpoint) ? cfg : null;
+    } catch (e) { return null; }
+  }
+
+  function installer() {
+    if (typeof callLLMStream !== 'function' || callLLMStream.__v566) return;
+    const orig = callLLMStream;
+    window.callLLMStream = async function (cfg, messages, opts, onChunk) {
+      const sys = (messages && messages[0] && messages[0].content) || '';
+      const adeodat = String(sys).indexOf('Adeodat') !== -1;
+      let texte = '';
+      try {
+        texte = await orig.call(this, cfg, messages, opts);
+      } catch (e) {
+        /* REPLI HORS-LIGNE : seulement pour Adeodat, si le toggle est on,
+           que le cfg actif n'est PAS déjà Ollama et qu'Ollama est dispo. */
+        const ocfg = (adeodat && ollActif() && String((cfg && cfg.endpoint) || '').indexOf('11434') === -1) ? cfgOllama() : null;
+        if (!ocfg) throw e;
+        toast('📶 Modèle actif injoignable — repli Ollama hors-ligne', 'warn');
+        texte = await orig.call(this, ocfg, messages, opts);
+        texte = String(texte || '') + '\n\n(📶 réponse hors-ligne — Ollama)';
+      }
+      if (!adeodat) return texte;                /* hors Adeodat : intact */
+      /* MÊME calque d'outils que v565, sur le texte complet du flux */
+      try {
+        const O = window.__v565Outils;
+        if (O) {
+          const r = O.executerActions(texte);
+          texte = r.propre;
+        } else {
+          const lignes = String(texte).split(/\r?\n/);
+          texte = lignes.filter(l => !/^\s*ACTION:\s*\{/.test(l)).join('\n').trim();
+        }
+      } catch (e2) {}
+      return texte;
+    };
+    callLLMStream.__v566 = true;
+  }
+
+  /* ── injections dans le panneau ── */
+  function installerUI() {
+    boutonContinu();
+    const inp = document.getElementById('adeodat-in');
+    if (inp && !inp.__v566info) {
+      inp.__v566info = true;
+      inp.placeholder = 'Parler à Adeodat… (🔁 = mains libres, 📶 = repli hors-ligne)';
+    }
+  }
+
+  function init() { installer(); installerUI(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+  setTimeout(init, 1400);   /* le panneau peut se construire après */
+
+  /* re-render des boutons quand le panneau s'ouvre */
+  try {
+    const pan = document.getElementById('adeodat-pan');
+    if (pan) {
+      const obs = new MutationObserver(function () {
+        if (pan.style.display === 'flex') installerUI();
+      });
+      obs.observe(pan, { attributes: true, attributeFilter: ['style'] });
+    }
+  } catch (e) {}
+
+  window.__v566Libre = {
+    continuGet: contActif,
+    continuSet: function (on) { try { localStorage.setItem(CLE_CONT, on ? '1' : '0'); } catch (e) {} if (on) demarrerContinue(); else arreterContinue(); },
+    ollamaGet: ollActif,
+    ollamaSet: function (on, modele) { try { localStorage.setItem(CLE_OLL, on ? '1' : '0'); if (modele) localStorage.setItem(CLE_OLL_M, modele); } catch (e) {} },
+    demarrerContinue: demarrerContinue, arreterContinue: arreterContinue
+  };
+})();
+
+</script>
 <script id="v565-adeodat-outils">
 /* ═══════════════════════════════════════════════════════════════════════
    v565 — ADEODAT INTERAGIT (V3.0, lot V3b) — calque d'OUTILS.
@@ -58684,7 +58841,10 @@ window.continueTradApart = async function (msgId) {
   function installer() {
     if (typeof callLLM !== 'function' || callLLM.__v565) return;
     const orig = callLLM;
-    window.callLLM = async function (cfg, messages, opts) {
+    /* v565bis — le wrapper CONSERVE les marqueurs de la chaîne (v523 exige
+       __v523/__v524 sur window.callLLM) : copie de toutes les propriétés
+       du callLLM d'origine sur le wrapper. */
+    const enveloppe = async function (cfg, messages, opts) {
       const texte = await orig.call(this, cfg, messages, opts);
       try {
         const sys = (messages && messages[0] && messages[0].content) || '';
@@ -58693,7 +58853,9 @@ window.continueTradApart = async function (msgId) {
         return r.propre;
       } catch (e) { return texte; }
     };
-    callLLM.__v565 = true;
+    for (const k in orig) { try { enveloppe[k] = orig[k]; } catch (e2) {} }
+    enveloppe.__v565 = true;
+    window.callLLM = enveloppe;
   }
 
   /* ── étendre le systemPrompt d'Adeodat avec le protocole d'actions ── */

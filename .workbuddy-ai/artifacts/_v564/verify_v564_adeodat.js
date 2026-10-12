@@ -93,8 +93,10 @@ function ok(label, cond, detail) {
       const u = String(url);
       if (u.indexOf('/chat/completions') !== -1) {
         window.__llmAppels.push({ url: u.slice(0, 70), modele: (JSON.parse(opts.body) || {}).model });
-        const corps = JSON.stringify({ choices: [{ message: { content: 'Je suis Adeodat, votre compagnon de prière et d\'étude. La paix soit avec vous.' } }] });
-        return { ok: true, status: 200, clone: function () { return this; }, text: async () => corps, json: async () => JSON.parse(corps) };
+        const enc = s2 => new TextEncoder().encode(s2);
+        const tout = enc('data: ' + JSON.stringify({ choices: [{ delta: { content: 'Je suis Adeodat, votre compagnon de pri\u00e8re et d\u2019\u00e9tude. La paix soit avec vous.' } }] }) + '\n\n' + enc('data: [DONE]\n\n'));
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
       }
       return { ok: false, status: 404, clone: function () { return this; }, text: async () => '', json: async () => ({}) };
     };
