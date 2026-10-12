@@ -114,7 +114,8 @@ function ok(label, cond, detail) {
   section('2. Mains libres : la phrase reconnue part à Adeodat');
   await page.evaluate(() => {
     const inst = window.__srInstances[window.__srInstances.length - 1];
-    inst.onresult({ results: [[{ transcript: 'Qui es-tu ?' }]] });
+    /* v570 : payload FINAL — depuis v570 seuls les résultats finaux déclenchent l'envoi */
+    inst.onresult({ results: [{ isFinal: true, 0: { transcript: 'Qui es-tu ?' } }] });
   });
   await page.waitForFunction(() => {
     const tx = document.querySelector('#adeodat-msgs .ad-assistant:last-of-type .ad-tx');

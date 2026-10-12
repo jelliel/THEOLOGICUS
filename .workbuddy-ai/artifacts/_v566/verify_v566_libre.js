@@ -52,7 +52,12 @@ function ok(label, cond, detail) {
     st.model = 'agnes:agnes-2.5-flash';
     window.__ttsRecu = [];
     if (typeof ttsEmission === 'function') {
-      window.ttsEmission = function (texte) { window.__ttsRecu.push(String(texte).slice(0, 60)); return true; };
+      /* v570 : onEnd APPELÉ — la reprise du micro attend la fin réelle de la file TTS */
+      window.ttsEmission = function (texte, lang, onEnd, onErr) {
+        window.__ttsRecu.push(String(texte).slice(0, 60));
+        if (typeof onEnd === 'function') setTimeout(onEnd, 60);
+        return true;
+      };
     }
     window.__cancels = 0;
     if (window.speechSynthesis) window.speechSynthesis.cancel = function () { window.__cancels++; };
@@ -156,8 +161,9 @@ function ok(label, cond, detail) {
     const inst1 = window.__srInstances[window.__srInstances.length - 1];
     const demarre1 = inst1 && inst1.__demarre;
     const cancelsAvant = window.__cancels;
-    /* le locuteur parle : onresult → envoyer */
-    inst1.onresult({ results: [[{ transcript: 'Jean 3:16' }]] });
+    /* le locuteur parle : onresult → envoyer
+       (v570 : payload FINAL — seuls les résultats finaux déclenchent l'envoi) */
+    inst1.onresult({ results: [{ isFinal: true, 0: { transcript: 'Jean 3:16' } }] });
     await new Promise(r2 => setTimeout(r2, 1400));
     const users = document.querySelectorAll('#adeodat-msgs .ad-user');
     const derniereU = users[users.length - 1];

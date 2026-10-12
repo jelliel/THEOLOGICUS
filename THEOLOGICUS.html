@@ -13395,6 +13395,11 @@ const toast = (msg, type = "info") => {
     setTimeout(() => t.remove(), 350);
   }, 3800);
 };
+/* v570 — exposer le toast GLOBAL sur window : les très nombreux modules qui
+   appellent « if (typeof window.toast === "function") window.toast(...) »
+   (dont ADEODAT : écoute continue, micro indisponible, reprises…) restaient
+   SILENCIEUX — un const en top-level de script ne crée PAS window.toast. */
+window.toast = toast;
 
 // Stockage persistant API key : cookie 365j + localStorage fallback
 const setCookie = (n, v, d = 365) => {
@@ -58351,15 +58356,20 @@ window.continueTradApart = async function (msgId) {
 
   /* ── PARLER (TTS existant) ── */
   function ttsActif() { try { return localStorage.getItem(CLE_TTS) !== '0'; } catch (e) { return true; } }
-  function parler(t) {
+  /* V3f (v570) — `fin` : callback de FIN de lecture. La session micro
+     continue est suspendue tant que Adeodat parle (sinon, sur Android, le
+     micro entend le TTS → boucle d\'écho + bips de reconnaissance). */
+  function parler(t, fin) {
     if (!ttsActif() || !t) return;
     try {
-      if (typeof ttsEmission === 'function') ttsEmission(String(t).slice(0, 1200), 'fr-FR', null, null);
+      if (typeof ttsEmission === 'function') ttsEmission(String(t).slice(0, 1200), 'fr-FR', fin || null, fin || null);
       else if (window.speechSynthesis) {
         var u = new window.SpeechSynthesisUtterance(String(t).slice(0, 1200));
-        u.lang = 'fr-FR'; window.speechSynthesis.speak(u);
+        u.lang = 'fr-FR';
+        if (fin) { u.onend = fin; u.onerror = fin; }
+        window.speechSynthesis.speak(u);
       }
-    } catch (e) {}
+    } catch (e) { if (fin) try { fin(); } catch (e2) {} }
   }
   function taire() { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {} }
 
@@ -58534,16 +58544,32 @@ window.continueTradApart = async function (msgId) {
     ajouterH('user', texte);
     bulle('user', texte);
     const bulleA = bulle('assistant', '…');
+    /* V3f (v570) — MICRO SUSPENDU pendant toute la réponse : sur Android le
+       micro resté actif entendait le TTS d'Adeodat → boucle d'écho (il
+       s'envoyait ses propres réponses) + bip du recognizer à chaque
+       redémarrage = « son de notification en permanence ». La session
+       continue est suspendue ici, puis REPRISE quand la réponse est finie
+       d'être dite (ou immédiatement si TTS muet / en cas d'erreur). */
+    try { if (window.__v566Libre && window.__v566Libre.microPause) window.__v566Libre.microPause(); } catch (e) {}
+    const file = []; let fileEnCours = false; let resteEnParcours = false;
+    let reponseFinie = false;
+    function tenterReprise() {
+      if (!reponseFinie || fileEnCours || resteEnParcours) return;
+      reponseFinie = false;                 /* la reprise ne survient qu\'une fois */
+      try { if (window.__v566Libre && window.__v566Libre.microReprendre) window.__v566Libre.microReprendre(); } catch (e) {}
+    }
     try {
       /* V3e — TTS PHRASE-PAR-PHRASE : la première phrase est lue PENDANT
          que la suite se génère (latence perçue divisée). File séquentielle.
          t = tampon global de la réponse ; parlé = offset déjà lu à voix haute. */
       let tampon = '', parleDeja = 0;
-      const file = []; let fileEnCours = false;
+      /* file / fileEnCours : remontés au niveau de la fonction (v570) pour
+         que la reprise du micro attende la fin RÉELLE de la file TTS. */
       function parlerSuivant() {
-        if (!file.length) { fileEnCours = false; return; }
+        if (!ttsActif()) { file.length = 0; fileEnCours = false; tenterReprise(); return; }
+        if (!file.length) { fileEnCours = false; tenterReprise(); return; }
         const phrase = file.shift(); fileEnCours = true;
-        try { if (typeof ttsEmission === 'function') ttsEmission(phrase, 'fr-FR', function () { parlerSuivant(); }, function () { parlerSuivant(); }); else { fileEnCours = false; } } catch (e) { fileEnCours = false; }
+        try { if (typeof ttsEmission === 'function') ttsEmission(phrase, 'fr-FR', function () { parlerSuivant(); }, function () { parlerSuivant(); }); else { fileEnCours = false; tenterReprise(); } } catch (e) { fileEnCours = false; tenterReprise(); }
       }
       function ttsx(chunk) {
         if (chunk && bulleA) { const tx = bulleA.querySelector('.ad-tx'); if (tx) tx.textContent += chunk; scrollBas(); }
@@ -58568,9 +58594,16 @@ window.continueTradApart = async function (msgId) {
       scrollBas();
       /* V3e — la file TTS a déjà lu la quasi-totalité : on ne prononce que
          la fin restée en attente (sinon la réponse serait lue deux fois). */
+      reponseFinie = true;
       const reste = txt.slice(Math.min(parleDeja, txt.length)).trim();
-      if (ttsActif() && reste.length > 1) parler(reste);
+      if (ttsActif() && reste.length > 1) {
+        resteEnParcours = true;
+        parler(reste, function () { resteEnParcours = false; tenterReprise(); });
+      }
+      tenterReprise();                      /* reprise du micro (fin de réponse) */
     } catch (e) {
+      reponseFinie = true; fileEnCours = false; resteEnParcours = false;
+      tenterReprise();                      /* ne jamais laisser le micro suspendu */
       const msg = '⚠️ ' + String(e && e.message || e);
       if (bulleA) { const tx = bulleA.querySelector('.ad-tx'); if (tx) tx.textContent = msg; }
       toast('Adeodat : ' + String(e && e.message || e), 'error');
@@ -58594,9 +58627,21 @@ window.continueTradApart = async function (msgId) {
     if (inp) inp.focus();
     /* V3e — l'orbe passe en mode ÉCOUTE : la session micro démarre avec le
        panneau (mains libres d'office ; toggle 🎤 pour couper). */
-    try { if (window.__v566Libre && !window.__v566Libre.continuGet()) window.__v566Libre.continuSet(true); } catch (e) {}
+    /* V3f (v570) — (ré)amorcer TOUJOURS la session à l'ouverture : après une
+       fermeture (session stoppée avec le panneau) ou un drapeau '1' resté
+       sur une session morte (défaut Windows « le micro ne fait rien »),
+       l\'orbe doit redonner un micro VIVANT. continuSet(true) est idempotent. */
+    try { if (window.__v566Libre) window.__v566Libre.continuSet(true); } catch (e) {}
   }
-  function fermer() { if (pan) pan.style.display = 'none'; taire(); }
+  /* V3f (v570) — fermer le panneau ARRÊTE la session micro : plus de
+     reconnaissance qui tourne « en permanence en arrière-plan » (bips
+     système répétés constatés sur Android). L\'orbe la relance à la
+     réouverture. */
+  function fermer() {
+    if (pan) pan.style.display = 'none';
+    taire();
+    try { if (window.__v566Libre && window.__v566Libre.fermerSession) window.__v566Libre.fermerSession(); } catch (e) {}
+  }
 
   /* amorçage : l'orbe existe dès le chargement (hors ui-* — invariant v513) */
   function init() { orbe(); }
@@ -58642,34 +58687,108 @@ window.continueTradApart = async function (msgId) {
   function ollActif() { try { return localStorage.getItem(CLE_OLL) === '1'; } catch (e) { return false; } }
   function ollModel() { try { return localStorage.getItem(CLE_OLL_M) || 'qwen2.5'; } catch (e) { return 'qwen2.5'; } }
 
-  /* ── 1. écoute continue ── */
-  function demarrerContinue() {
-    if (!contActif() || recC) return;
+  /* ── 1. écoute continue (V3f v570 — moteur repris) ──
+     Défauts corrigés (constats utilisateur) :
+       • ANDROID : le polyfill v53 pousse des RÉSULTATS PARTIELS — l\'ancien
+         handler les envoyait chacun à Adeodat (demi-phrases en rafale).
+         Désormais seuls les résultats FINAUX déclenchent l\'envoi.
+       • ANDROID : chaque start() du recognizer joue un bip système ; la
+         session tournant EN PERMANENCE (même panneau fermé) = bips sans
+         fin + boucle d\'écho micro→TTS→micro. La session ne vit plus que
+         panneau OUVERT, se SUSPEND quand Adeodat parle (microPause /
+         microReprendre, pilotés par v564.envoyer) et s\'ARRÊTE à la
+         fermeture du panneau (fermerSession).
+       • WINDOWS : un start() en échec laissait recC posé — session
+         fantôme : plus aucun démarrage possible, le clic micro « ne fait
+         rien ». L\'échec est désormais signalé et la session réarmée ; le
+         bouton micro reflète l\'état RÉEL (⏺ = écoute, 🎤 = silence). */
+  var timerRelance = null;
+  var pauseTTS = false;         /* session suspendue : Adeodat parle */
+  var alerteMicroFaite = false; /* une seule alerte d\'autorisation */
+  var RELANCE_MS = 400;         /* timer couvert par le banc v568 */
+
+  function panneauOuvert() {
+    var p = document.getElementById('adeodat-pan');
+    return !!(p && p.style.display === 'flex');
+  }
+  function majMicEtat() {
+    var b = document.getElementById('adeodat-mic');
+    if (!b) return;
+    b.textContent = recC ? '⏺' : '🎤';
+    b.title = recC ? 'Arrêter l\'écoute' : 'Parler à Adeodat';
+  }
+  function annulerRelance() {
+    if (timerRelance) { clearTimeout(timerRelance); timerRelance = null; }
+  }
+  function tuerSession() {                    /* stoppe sans relance ni toast */
+    annulerRelance();
+    if (recC) { var r = recC; recC = null; try { r.onend = null; r.stop(); } catch (e) {} }
+    majMicEtat();
+  }
+  function demarrerContinue(silencieux) {
+    annulerRelance();
+    if (!contActif() || recC || pauseTTS) return;
+    if (!panneauOuvert()) return;      /* JAMAIS d\'écoute en arrière-plan */
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { toast('Reconnaissance vocale indisponible — écoute continue impossible', 'error'); return; }
-    taire();                                   /* barre-in : le TTS se tait */
-    recC = new SR();
-    recC.lang = 'fr-FR'; recC.interimResults = false; recC.continuous = true;
-    recC.onresult = function (ev) {
-      var t = '';
-      for (var i = 0; i < ev.results.length; i++) t += (ev.results[i][0] || {}).transcript || '';
-      t = String(t || '').trim();
-      if (t && window.__v564Adeodat && typeof window.__v564Adeodat.envoyer === 'function') {
-        taire();                               /* barre-in à chaque prise */
-        window.__v564Adeodat.envoyer(t);
-      }
-    };
-    recC.onerror = function () { /* 'no-speech', 'aborted' : onend gère */ };
-    recC.onend = function () {
+    if (!SR) { if (!silencieux) toast('Reconnaissance vocale indisponible — écoute continue impossible', 'error'); return; }
+    if (!silencieux) alerteMicroFaite = false;
+    taire();                           /* barre-in : le TTS se tait */
+    try {
+      recC = new SR();
+      recC.lang = 'fr-FR'; recC.interimResults = false; recC.continuous = true;
+      recC.onresult = function (ev) {
+        /* v570 — SEULS les résultats FINAUX déclenchent l\'envoi : le
+           polyfill Android (v53) pousse des partiels en continu ; les
+           envoyer produisait des requêtes en rafale sur des demi-phrases. */
+        var t = '', finalVu = false, rs = ev && ev.results;
+        for (var i = 0; rs && i < rs.length; i++) {
+          var r = rs[i];
+          if (r && r.isFinal) { t += (r[0] || {}).transcript || ''; finalVu = true; }
+        }
+        t = String(t || '').trim();
+        if (finalVu && t && window.__v564Adeodat && typeof window.__v564Adeodat.envoyer === 'function') {
+          taire();                     /* barre-in à chaque prise */
+          window.__v564Adeodat.envoyer(t);   /* envoyer suspend le micro (v570) */
+        }
+      };
+      recC.onerror = function (ev) {
+        var c = ev && ev.error;
+        if (!c || c === 'no-speech' || c === 'aborted') return;   /* onend gère */
+        if (!alerteMicroFaite) {
+          alerteMicroFaite = true;
+          toast('🎙️ Micro indisponible (' + c + ') — vérifiez l\'autorisation', 'warn');
+        }
+      };
+      recC.onend = function () {
+        recC = null; majMicEtat();
+        /* relance auto tant que la session est demandée (anti-stop Windows),
+           JAMAIS hors du panneau ouvert ni pendant la pause TTS */
+        if (contActif() && !pauseTTS && panneauOuvert()) {
+          timerRelance = setTimeout(function () { timerRelance = null; demarrerContinue(true); }, RELANCE_MS);
+        }
+      };
+      recC.start();
+      if (!silencieux) toast('🔁 Écoute continue ACTIVE — parlez naturellement', 'success');
+    } catch (e) {
+      /* v570 — un échec de start laissait recC posé : session fantôme. */
       recC = null;
-      if (contActif()) setTimeout(demarrerContinue, 400);   /* relance auto */
-    };
-    try { recC.start(); toast('🔁 Écoute continue ACTIVE — parlez naturellement', 'success'); } catch (e) {}
+      if (!silencieux) toast('Micro indisponible : ' + String(e && e.message || e), 'error');
+    }
+    majMicEtat();
   }
-  function arreterContinue() {
-    if (recC) { try { recC.stop(); } catch (e) {} recC = null; }
-    toast('Écoute continue arrêtée', 'info');
+  function arreterContinue(silencieux) {
+    tuerSession();
+    if (!silencieux) toast('Écoute continue arrêtée', 'info');
   }
+  /* v570 — pilotage par v564.envoyer : suspendre pendant la réponse TTS */
+  function microPause() { pauseTTS = true; tuerSession(); }
+  function microReprendre() {
+    pauseTTS = false;
+    if (contActif() && panneauOuvert()) demarrerContinue(true);
+    else majMicEtat();
+  }
+  /* v570 — piloté par v564.fermer : plus de micro en arrière-plan */
+  function fermerSession() { pauseTTS = false; tuerSession(); }
 
   function boutonContinu() {
     var tts = document.getElementById('adeodat-tts');
@@ -58736,6 +58855,8 @@ window.continueTradApart = async function (msgId) {
   /* ── injections dans le panneau ── */
   function installerUI() {
     boutonContinu();
+    const cb = document.getElementById('adeodat-cont');
+    if (cb) cb.style.opacity = contActif() ? '1' : '.45';   /* état à jour (v570) */
     const inp = document.getElementById('adeodat-in');
     if (inp && !inp.__v566info) {
       inp.__v566info = true;
@@ -58761,10 +58882,16 @@ window.continueTradApart = async function (msgId) {
 
   window.__v566Libre = {
     continuGet: contActif,
-    continuSet: function (on) { try { localStorage.setItem(CLE_CONT, on ? '1' : '0'); } catch (e) {} if (on) demarrerContinue(); else arreterContinue(); },
+    continuSet: function (on) {
+      try { localStorage.setItem(CLE_CONT, on ? '1' : '0'); } catch (e) {}
+      if (on) { pauseTTS = false; demarrerContinue(); }   /* action explicite : réarme la pause TTS */
+      else arreterContinue();
+    },
     ollamaGet: ollActif,
     ollamaSet: function (on, modele) { try { localStorage.setItem(CLE_OLL, on ? '1' : '0'); if (modele) localStorage.setItem(CLE_OLL_M, modele); } catch (e) {} },
-    demarrerContinue: demarrerContinue, arreterContinue: arreterContinue
+    demarrerContinue: demarrerContinue, arreterContinue: arreterContinue,
+    /* v570 — cycle de vie du micro piloté par v564 (envoyer / ouvrir / fermer) */
+    microPause: microPause, microReprendre: microReprendre, fermerSession: fermerSession
   };
 })();
 
