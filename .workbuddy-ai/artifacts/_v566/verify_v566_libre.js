@@ -132,6 +132,12 @@ function ok(label, cond, detail) {
 
   /* ── 3. écoute continue ── */
   section('3. Écoute continue : barre-in, envoi, redémarrage auto');
+  /* v569 — depuis V3e, ouvrir() démarre la session micro AUTOMATIQUEMENT :
+     la session (tenue par le SR polyfillé/CI) occupe recC → le faux SR ne
+     peut pas démarrer. On COUPPE la session avant d'installer le faux. */
+  await page.evaluate(() => { window.__v566Libre.continuSet(false); });
+  await page.waitForTimeout(400);   /* laisse le onend/arrêt se produire */
+
   const cont = await page.evaluate(async () => {
     /* classe SR FAUSSE : instances enregistrées, pilotables */
     window.__srInstances = [];
