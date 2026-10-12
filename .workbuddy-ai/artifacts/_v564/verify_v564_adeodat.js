@@ -62,6 +62,30 @@ function ok(label, cond, detail) {
     Array.from(document.querySelectorAll('[class*="ui-"]')).filter(e => !e.closest('#studio-modal,#aivideo-modal,#v521-panel,#v527-panel,#v189-pan')).length);
   ok('aucun composant ui-* posé au repos par le module', orbe.uiAvant >= 0 && uiRepos >= 0, 'ui-* visibles: ' + uiRepos);
 
+  /* ── 1b. MOBILE (390×844) : l'orbe garde sa géométrie (correctif v564bis —
+     un module d'a11y retire l'attribut style des boutons → l'orbe redevenait
+     position:static et s'étalait sur tout l'écran). La règle #id !important
+     survit. Le composeur ne doit PAS être recouvert. */
+  {
+    const page2 = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page2.addInitScript(H.isolationInit);
+    await page2.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page2.waitForTimeout(1200);
+    const mob = await page2.evaluate(() => {
+      const o = document.getElementById('adeodat-orbe');
+      const r = o.getBoundingClientRect();
+      const cs = getComputedStyle(o);
+      const composer = document.getElementById('main-prompt') || document.querySelector('textarea');
+      const cr = composer ? composer.getBoundingClientRect() : null;
+      return { fixe: cs.position === 'fixed', taille: Math.round(r.width) === 52 && Math.round(r.height) === 52,
+               chevauche: cr ? !(r.bottom < cr.top || r.top > cr.bottom) : false };
+    });
+    await page2.close();
+    ok('MOBILE 390×844 : orbe fixed 52×52 (règle CSS !important survit au strip de style)',
+       mob.fixe && mob.taille, JSON.stringify(mob));
+    ok('MOBILE : l\'orbe ne recouvre PAS le composeur', mob.chevauche === false);
+  }
+
   /* ── 2. panneau + persona ── */
   section('2. Panneau de conversation + personas');
   await page.click('#adeodat-orbe');

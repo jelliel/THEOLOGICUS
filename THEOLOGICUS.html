@@ -58416,6 +58416,15 @@ window.continueTradApart = async function (msgId) {
     o.type = 'button';
     o.id = 'adeodat-orbe';
     o.className = 'adeodat-orbe';           /* PAS de classe ui-* : invariant v513 */
+    /* v564bis — style par RÈGLE CSS (pas inline) : un module d'accessibilité
+       retire l'attribut style des boutons ; une règle #id !important y
+       survit (défaut mesuré sur mobile : orbe position:static 390×844). */
+    if (!document.getElementById('adeodat-orbe-css')) {
+      const st = document.createElement('style');
+      st.id = 'adeodat-orbe-css';
+      st.textContent = '#adeodat-orbe{position:fixed!important;right:18px!important;bottom:18px!important;width:52px!important;height:52px!important;border-radius:50%!important;border:1px solid rgba(229,193,90,.55)!important;background:radial-gradient(circle at 30% 30%,#1a2436,#0d1522)!important;color:#e5c15a!important;font-size:22px!important;cursor:pointer!important;box-shadow:0 8px 24px rgba(0,0,0,.5)!important;z-index:139000!important;display:block!important;padding:0!important;line-height:50px!important;text-align:center!important}@media (max-width:640px){#adeodat-orbe{bottom:96px!important}}';
+      document.head.appendChild(st);
+    }
     o.title = 'Adeodat — le Compagnon (V3.0)';
     o.setAttribute('aria-label', 'Ouvrir Adeodat, le compagnon');
     o.textContent = '🕊️';
