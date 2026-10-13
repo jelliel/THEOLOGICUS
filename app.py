@@ -459,6 +459,14 @@ LAUNCH_BANNER_JS = r"""
         if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(ok, fb); else fb();
       });
       bar.appendChild(copy);
+      var qrb = document.createElement('button');
+      qrb.textContent = 'QR';
+      qrb.title = 'Code QR de cette adresse (a scanner avec l autre appareil)';
+      qrb.style.cssText = 'background:rgba(28,58,120,.6);color:#bfd4ff;border:1px solid rgba(79,142,247,.4);border-radius:8px;padding:4px 9px;font:700 11px Consolas,monospace;cursor:pointer';
+      qrb.addEventListener('click', function(){
+        if (window.__v574AdeodatQR && window.__v574AdeodatQR.modal) window.__v574AdeodatQR.modal(lan);
+      });
+      bar.appendChild(qrb);
       var close = document.createElement('button');
       close.textContent = 'X';
       close.title = 'Masquer';
