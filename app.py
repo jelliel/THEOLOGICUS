@@ -433,17 +433,19 @@ LAUNCH_BANNER_JS = r"""
       if (window.__theoLanBanner) return;
       if (!document.body) { setTimeout(function(){ show(info); }, 300); return; }
       window.__theoLanBanner = true;
-      var lan = (info && info.lan) || '';
+      var lan = (info && (info.https || info.lan)) || '';
+      var estHttps = !!(info && info.https);
       var bar = document.createElement('div');
       bar.id = 'theo-lan-banner';
       bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;gap:10px;align-items:center;justify-content:center;background:linear-gradient(90deg,#0d1626,#13243f);border-bottom:1px solid rgba(79,142,247,.55);color:#cfe0ff;font:600 13px Consolas,monospace;padding:8px 12px;box-shadow:0 6px 22px rgba(0,0,0,.45);transition:opacity .6s';
       var label = document.createElement('span');
-      label.innerHTML = '<b>Acces reseau</b> :';
+      label.innerHTML = estHttps ? '<b>Autre appareil (HTTPS — micro inclus)</b> :' : '<b>Acces reseau</b> :';
       bar.appendChild(label);
       var link = document.createElement('a');
       link.href = lan || '#';
       link.textContent = lan || '(adresse LAN introuvable - connectez-vous a un reseau)';
       link.target = '_blank';
+      link.title = estHttps ? 'Ouvrez cette adresse sur l autre appareil et acceptez le certificat une fois' : '';
       link.style.cssText = 'color:#7fb4ff;text-decoration:underline;word-break:break-all';
       bar.appendChild(link);
       var copy = document.createElement('button');
@@ -626,6 +628,7 @@ class DesktopApi:
             "local": getattr(self, "local_url", ""),
             "lan": getattr(self, "lan_url", ""),
             "lan_ip": getattr(self, "lan_ip", None),
+            "https": getattr(self, "lan_url_https", ""),
         }
 
 
@@ -663,6 +666,11 @@ def demarrer_https(base, handler, lan_ip):
             httpd_tls.daemon_threads = True
             httpd_tls.socket = ctx.wrap_socket(httpd_tls.socket, server_side=True)
             threading.Thread(target=httpd_tls.serve_forever, daemon=True).start()
+            try:
+                with open(os.path.join(dossier, "port.txt"), "w") as f3:
+                    f3.write(str(p))
+            except Exception:
+                pass
             hote = lan_ip or "127.0.0.1"
             print(f"[OK] HTTPS prêt : https://{hote}:{p}/THEOLOGICUS.html  (certificat auto-signé : acceptez l'avertissement au premier accès — requis pour le micro depuis cet appareil)")
             return p
@@ -785,11 +793,25 @@ def main() -> int:
     # automatiquement l'icône embarquée dans l'exécutable.
     # v2xx — accès réseau (LAN) : on prépare l'API qui expose l'URL réseau au
     # JavaScript pour la bannière affichée au lancement.
+    # v573c — l'URL HTTPS (micro depuis un autre appareil) : celle de CE
+    # lancement, sinon celle notée par l'instance précédente (port.txt).
+    lan_url_https = ""
+    try:
+        dossier_https = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "THEOLOGICUS", "https")
+        pf = os.path.join(dossier_https, "port.txt")
+        if os.path.exists(pf) and lan_ip:
+            with open(pf) as f4:
+                p_https = int(f4.read().strip())
+            if 8443 <= p_https <= 8446:
+                lan_url_https = f"https://{lan_ip}:{p_https}/THEOLOGICUS.html"
+    except Exception:
+        pass
     api = DesktopApi()
     api.port = port
     api.local_url = url
     api.lan_ip = lan_ip
     api.lan_url = lan_url
+    api.lan_url_https = lan_url_https
 
     icon_path = os.path.join(base, "THEOLOGICUS.ico")
     window = webview.create_window(

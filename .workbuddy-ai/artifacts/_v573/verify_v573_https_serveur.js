@@ -54,6 +54,10 @@ function ok(label, cond, detail) {
   enfant.stderr.on('data', d => console.log('  [app] ' + String(d).trim().slice(0, 110)));
   while (Date.now() - t0 < 30000 && !portHttps) await new Promise(r => setTimeout(r, 250));
   ok('app.py annonce un serveur HTTPS (port 8443+)', portHttps >= 8443, 'port=' + (portHttps || 'aucun'));
+  const portTxt = path.join(STORE_DIR, 'THEOLOGICUS', 'https', 'port.txt');
+  ok('le port HTTPS est noté (port.txt — repris par l\\\'instance suivante)',
+     fs.existsSync(portTxt) && fs.readFileSync(portTxt, 'utf8').trim() === String(portHttps),
+     fs.existsSync(portTxt) ? fs.readFileSync(portTxt, 'utf8').trim() : 'absent');
   if (!portHttps) { enfant.kill(); process.exit(3); }
 
   const browser = await H.launchBrowser();
