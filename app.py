@@ -629,6 +629,50 @@ class DesktopApi:
         }
 
 
+def demarrer_https(base, handler, lan_ip):
+    """v573 — serveur HTTPS auto-signé (ports 8443-8446) pour le micro
+    depuis un AUTRE appareil : getUserMedia et SpeechRecognition exigent
+    un contexte sécurisé (localhost ou https) — une adresse réseau HTTP
+    ne peut donc pas servir le micro. Le certificat est embarqué
+    (https/) et copié dans les données utilisateur au premier lancement.
+    Retourne le port HTTPS ou None."""
+    try:
+        import ssl
+        dossier = os.path.join(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir(), "THEOLOGICUS", "https")
+        os.makedirs(dossier, exist_ok=True)
+        paire = (("theologicus-local.pem", "theologicus-local-cert.pem"),
+                 ("theologicus-local-key.pem", "theologicus-local-key.pem"))
+        for src_nom, dst_nom in paire:
+            src = os.path.join(base, "https", src_nom)
+            dst = os.path.join(dossier, dst_nom)
+            if (not os.path.exists(dst)) and os.path.exists(src):
+                with open(src, "rb") as f1, open(dst, "wb") as f2:
+                    f2.write(f1.read())
+        cert_chemin = os.path.join(dossier, "theologicus-local-cert.pem")
+        cle_chemin = os.path.join(dossier, "theologicus-local-key.pem")
+        if not (os.path.exists(cert_chemin) and os.path.exists(cle_chemin)):
+            print("[!] HTTPS désactivé : certificat embarqué introuvable (https/)", file=sys.stderr)
+            return None
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(cert_chemin, cle_chemin)
+        for p in (8443, 8444, 8445, 8446):
+            try:
+                httpd_tls = ThreadingHTTPServer(("0.0.0.0", p), handler)
+            except OSError:
+                continue
+            httpd_tls.daemon_threads = True
+            httpd_tls.socket = ctx.wrap_socket(httpd_tls.socket, server_side=True)
+            threading.Thread(target=httpd_tls.serve_forever, daemon=True).start()
+            hote = lan_ip or "127.0.0.1"
+            print(f"[OK] HTTPS prêt : https://{hote}:{p}/THEOLOGICUS.html  (certificat auto-signé : acceptez l'avertissement au premier accès — requis pour le micro depuis cet appareil)")
+            return p
+        print("[!] HTTPS désactivé : ports 8443-8446 tous occupés", file=sys.stderr)
+        return None
+    except Exception as e:
+        print("[!] HTTPS indisponible : " + str(e), file=sys.stderr)
+        return None
+
+
 def main() -> int:
     base = app_dir()
     os.chdir(base)  # répertoire courant = dossier de l'exe / du script
@@ -645,6 +689,7 @@ def main() -> int:
 
     ports = port_range(proxy_server.PORT)
     httpd = None
+    https_port = None
 
     # v117 — réutiliser l'instance déjà lancée GARANTIT la même origine, donc
     # la même clé API et la même configuration. Deux fenêtres sur deux ports
@@ -679,6 +724,13 @@ def main() -> int:
         server_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
         server_thread.start()
 
+        # v573 — HTTPS pour le micro depuis un autre appareil (voir
+        # demarrer_https) : le port effectif est imprimé et retourné.
+        https_port = demarrer_https(base, handler, lan_ip)
+        if https_port and lan_ip:
+            lan_url_https = f"https://{lan_ip}:{https_port}/THEOLOGICUS.html"
+            print(f"[OK] HTTPS (LAN)  : {lan_url_https}")
+
         # v117 — tracer le port : sans lui, le symptôme était indiagnosticable.
         print(f"[OK] Serveur local démarré sur le port {port} — origine {url}")
         if port != ports[0]:
@@ -695,6 +747,11 @@ def main() -> int:
         print(f"[OK] Serveur prêt : {url}  (Ctrl+C pour arrêter)")
         if lan_url:
             print(f"[OK] Réseau (LAN)   : {lan_url}")
+        if not https_port:
+            https_port = demarrer_https(base, partial(proxy_server.CORSProxyHandler, directory=base), get_lan_ip())
+        if https_port:
+            hote = get_lan_ip() or "127.0.0.1"
+            print(f"[OK] HTTPS (réseau) : https://{hote}:{https_port}/THEOLOGICUS.html")
         try:
             while True:
                 time.sleep(3600)

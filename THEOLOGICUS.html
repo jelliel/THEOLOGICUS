@@ -59292,7 +59292,7 @@ window.continueTradApart = async function (msgId) {
            http://192.168.x.x ou 0.0.0.0) -> navigator.mediaDevices n\'existe
            pas. Le micro exige localhost (ou https) — message qui dit quoi
            faire au lieu d\'un « autorisez l\'accès » hors-sujet. */
-        toast("🎙️ Micro indisponible : l\'adresse « " + location.origin + " » n\'est pas sécurisée. Sur l\'ordinateur serveur, ouvrez http://localhost:" + (location.port || "8765") + " — depuis un autre appareil, le micro exige HTTPS.", "error");
+        toast("🎙️ Micro indisponible : l\'adresse « " + location.origin + " » n\'est pas sécurisée. Sur l\'ordinateur serveur, ouvrez http://localhost:" + (location.port || "8765") + " ; depuis un autre appareil : https://<adresse-réseau-du-serveur>:8443 (acceptez le certificat une fois).", "error");
         dicteeArreter(true);
         return false;
       }

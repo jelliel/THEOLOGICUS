@@ -2303,6 +2303,17 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             h = urlparse(o).hostname or ''
         except Exception:
             return False
+        if h in ('127.0.0.1', 'localhost', '::1') or h.endswith('.localhost'):
+            return True
+        # v573 — MÊME ORIGINE que ce serveur : la page peut être ouverte en
+        # HTTPS réseau (https://<lan>:8443, mode micro) — son Origin est
+        # l'adresse de CE serveur lui-même, donc de confiance.
+        try:
+            hote = (self.headers.get('Host') or '').strip().lower()
+            if hote and urlparse(o).netloc.lower() == hote:
+                return True
+        except Exception:
+            pass
         return h in ('127.0.0.1', 'localhost', '::1') or h.endswith('.localhost')
 
     # Hôtes que /montage accepte de TÉLÉCHARGER : le fournisseur et la boucle
