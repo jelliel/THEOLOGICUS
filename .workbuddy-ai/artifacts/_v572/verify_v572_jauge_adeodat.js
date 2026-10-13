@@ -250,6 +250,36 @@ function ok(label, cond, detail) {
   ok('le toast de transcription contient le VRAI diagnostic (HTTP 404)',
      /Transcription impossible/.test(diag) && /404/.test(diag), diag.slice(0, 110));
 
+  /* ── 5bis. contexte non sécurisé : le message donne la SOLUTION ── */
+  section('5bis. Contexte non sécurisé (TypeError) : message avec la solution localhost');
+  await page.evaluate(() => {
+    /* simule une origine NON sécurisée : mediaDevices absent (TypeError).
+       ⚠️ on arrête d'abord la session dictée : le getUserMedia réel (headless)
+       peut rester PENDANT dans capter() — dicteeDemarrer refuserait de
+       ré-entrer (if dicteeDemandee return) et la garde ne s'exécuterait pas. */
+    try { window.__v571Adeodat.dicteeArreter(true); } catch (e) {}
+    try { Object.defineProperty(navigator, 'mediaDevices', { get: () => undefined, configurable: true }); } catch (e) {}
+    window.__toasts.length = 0;
+  });
+  await page.click('#adeodat-orbe');           /* ouvrir → dictée → garde */
+  await page.waitForFunction(() => {
+    const p = document.getElementById('adeodat-pan');
+    return p && p.style.display === 'flex' && window.__toasts.some(t => t.indexOf("est pas sécurisée") !== -1);
+  }, null, { timeout: 10000 }).catch(e => console.log('5bis wait: ' + String(e).slice(0, 60)));
+  const ins = await page.evaluate(() => {
+    const p = document.getElementById('adeodat-pan');
+    const md = document.getElementById('aj-modal');
+    return 'TOASTS=' + window.__toasts.join(' | ').slice(0, 160) +
+      ' | panneau=' + (p ? p.style.display : 'nul') +
+      ' | jauge=' + (md ? md.className : 'nul') +
+      ' | dicteeActive=' + (window.__v571Adeodat ? window.__v571Adeodat.dicteeActive() : '?') +
+      ' | flag=' + localStorage.getItem('theo_adeodat_dictee') +
+      ' | customs=' + ((state.customModels || []).length);
+  });
+  ok('le toast explique l\'adresse non sécurisée + la solution (localhost)',
+     /est pas sécurisée/.test(ins) && /localhost/.test(ins), ins.slice(0, 120));
+  await page.evaluate(() => { try { delete navigator.mediaDevices; } catch (e) {} });
+
   /* ── 6. re-test ── */
   section('6. ↻ Re-tester relance les sondes');
   await page.evaluate(() => { document.getElementById('aj-retest').click(); });
