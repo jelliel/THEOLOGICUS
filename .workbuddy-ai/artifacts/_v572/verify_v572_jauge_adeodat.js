@@ -207,6 +207,13 @@ function ok(label, cond, detail) {
   });
   ok('la sonde dictée a envoyé un VRAI appel de transcription', dic.stt >= 1, 'appels=' + dic.stt);
   const dicAudio = dic.rows.find(r => /Mon Audio/.test(r.det) || dic.rows.indexOf(r) === 0);
+  const dicPremiere = await page.evaluate(() => {
+    const n = document.querySelector('#aj-dic-list .aj-row .tj-nm');
+    return n ? n.textContent : '';
+  });
+  ok('la PREMIÈRE ligne dictée est la config réellement utilisée (🧠, cerveau suivi)',
+     /🧠/.test(dicPremiere) && /mon-audio-1/.test(dic.rows[0].det || ''),
+     'ligne="' + dicPremiere.slice(0, 60) + '"');
   ok('le modèle audio personnalisé est 🟢 opérationnel', dic.rows.length >= 1 && dic.rows[0].ico === '🟢', JSON.stringify(dic.rows[0]));
   const dicAgnes = await page.evaluate(() => {
     const rows = document.querySelectorAll('#aj-dic-list .aj-row');

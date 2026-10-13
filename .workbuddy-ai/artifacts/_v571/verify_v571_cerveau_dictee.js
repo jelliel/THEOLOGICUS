@@ -77,9 +77,10 @@ function ok(label, cond, detail) {
         const body = JSON.parse(opts.body);
         const msgs = body.messages || [];
         if (msgs.some(m => Array.isArray(m.content))) {
-          const audio = (msgs.reduce((acc, m) => acc.concat(Array.isArray(m.content) ? m.content : []), [])
-            .find(c => c.type === 'audio_url') || {}).audio_url || '';
-          window.__sttAppels.push({ model: body.model, audio: audio });
+          /* v572bis : format input_audio {data, format} (audio_url était 422) */
+          const ia = (msgs.reduce((acc, m) => acc.concat(Array.isArray(m.content) ? m.content : []), [])
+            .find(c => c.type === 'input_audio') || {}).input_audio || {};
+          window.__sttAppels.push({ model: body.model, audio: 'data:audio/' + (ia.format || 'wav') + ';base64,' + (ia.data || '') });
           return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: window.__sttReponse } }] }) };
         }
         window.__llmAppels.push({ model: body.model });
