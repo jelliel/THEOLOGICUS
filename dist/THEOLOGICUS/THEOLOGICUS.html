@@ -55834,12 +55834,32 @@ window.continueTradApart = async function (msgId) {
       + '<button class="x" id="v527-x">✕</button></div>'
       + '<div class="l" id="v527-l"></div>'
       + '<div class="ft"><span class="ds" style="font-size:.68rem">Ces agents s\'ajoutent au sélecteur habituel. Vos agents personnels ne sont jamais modifiés.</span>'
+      + '<button class="ui-btn" id="v527-export">⬇ Exporter les ' + PRESETS.length + ' (JSON)</button>'
       + '<button class="ui-btn" id="v527-installe">↻ (Ré)installer</button></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
     p.querySelector('#v527-x').addEventListener('click', function () { p.classList.remove('open'); });
     p.querySelector('#v527-installe').addEventListener('click', async function () {
       var r = await seme(); toast(r.poses ? r.poses + ' agent(s) installé(s)' : 'Déjà installés', 'success'); rendre();
+    });
+    /* v582 — export des agents théologiques au format des agents utilisateur :
+       importable tel quel via « Importer un agent » (id regénéré à l'import). */
+    p.querySelector('#v527-export').addEventListener('click', function () {
+      try {
+        const data = PRESETS.map(function (x) {
+          return { id: x.id, name: x.name, desc: x.desc, instructions: x.instructions || '',
+            primer: x.primer || '', tags: x.tags || [], temperature: (x.temp == null ? 0.7 : x.temp),
+            maxTokens: 4096, style: x.style || '', forbidden: x.forbidden || '', memPrio: 3,
+            source: 'theologicus-preset' };
+        });
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const u = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = u; a.download = 'agents-theologiques-theologicus.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(u); } catch (e) {} }, 1000);
+        toast('⬇ ' + data.length + ' agents théologiques exportés — importables via « Importer un agent »', 'success');
+      } catch (e) { toast('Export impossible : ' + String(e && e.message || e), 'error'); }
     });
     p.querySelector('#v527-l').addEventListener('click', function (e) {
       var t = e.target.closest ? e.target.closest('[data-act],[data-toggle]') : null;
