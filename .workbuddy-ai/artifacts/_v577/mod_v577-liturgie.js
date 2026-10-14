@@ -1,0 +1,312 @@
+
+/* ═══════════════════════════════════════════════════════════════════
+   v577 — LECTIONNAIRE « Aujourd’hui » (temps liturgique + lectures).
+   CALENDRIER : calculé, exact (Pâques = Meeus/Jones/Butcher ; Avent =
+   dimanche le plus proche du 30 nov. ; Cendres = Pâques − 46 ; temps
+   ordinaire numéroté pour finir à la 34e semaine avant l’Avent).
+   LECTURES : table EMBARQUÉE INDICATIVE pour les dimanches d’Avent, de
+   Carême, du temps pascal et les solennités majeures (cycles A/B/C,
+   évangile + 1re lecture quand elle est stable). Pour les dimanches du
+   temps ordinaire : cadre exact (semaine N, évangile de l’année A=Mt,
+   B=Mc, C=Lc) mais PAS de péricope — vérifiez le missel de votre rite.
+   Actions par lecture : ⚖ versions (v578), ▶ lire (ttsEmission → voix
+   de PARAMÈTRES), 🕊 étudier avec Adeodat. ═══════════════════════════ */
+(function () {
+  "use strict";
+  if (window.__v577Liturgie) return;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "&quot;"); }
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k || "info"); } catch (e) {} }
+
+  /* ── calendrier ── */
+  function paques(a) {
+    const aa = a % 19, b = Math.floor(a / 100), c = a % 100,
+      d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+      g = Math.floor((b - f + 1) / 3), h = (19 * aa + b - d - g + 15) % 30,
+      i = Math.floor(c / 4), k = c % 4,
+      l = (32 + 2 * e + 2 * i - h - k) % 7,
+      m = Math.floor((aa + 11 * h + 22 * l) / 451),
+      mois = Math.floor((h + l - 7 * m + 114) / 31),
+      jour = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(a, mois - 1, jour, 12, 0, 0);
+  }
+  function addJ(d, n) { const x = new Date(d.getTime()); x.setDate(x.getDate() + n); x.setHours(12, 0, 0, 0); return x; }
+  function memeJour(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function dimAvantOuLe(d) { const x = new Date(d.getTime()); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
+  function dimancheLePlusProcheDu30Nov(a) {
+    const n30 = new Date(a, 10, 30, 12, 0, 0);
+    const s1 = dimAvantOuLe(n30);
+    const s2 = addJ(s1, 7);
+    return (Math.abs(n30 - s1) <= Math.abs(s2 - n30)) ? s1 : s2;
+  }
+  const CYCLES = ["A", "B", "C"];
+  function cycleDeLAnneeLiturgique(anneeAvent) {
+    const i = ((anneeAvent - 2025) % 3 + 3) % 3;
+    return CYCLES[i];
+  }
+  const NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const NOMS_JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+  function fmtDate(d) { return NOMS_JOURS[d.getDay()] + " " + d.getDate() + " " + NOMS_MOIS[d.getMonth()] + " " + d.getFullYear(); }
+
+  /* ── tables de lectures (indicatives, dimanches & solennités) ── */
+  const L = {};
+  function L_(k, t, ev, l1) { L[k] = { t: t, ev: ev || "", l1: l1 || "" }; }
+  /* Avent — année A */
+  L_("avent-A1", "1er dimanche de l’Avent (année A)", "Mt 24:37-44", "Is 2:1-5");
+  L_("avent-A2", "2e dimanche de l’Avent (année A)", "Mt 3:1-12", "Is 11:1-10");
+  L_("avent-A3", "3e dimanche de l’Avent (année A)", "Mt 11:2-11", "Is 35:1-6a.10");
+  L_("avent-A4", "4e dimanche de l’Avent (année A)", "Mt 1:18-24", "Is 7:10-14");
+  /* Avent — année B */
+  L_("avent-B1", "1er dimanche de l’Avent (année B)", "Lc 21:25-28.34-36", "Jr 33:14-16");
+  L_("avent-B2", "2e dimanche de l’Avent (année B)", "Lc 3:1-6", "Ba 5:1-9");
+  L_("avent-B3", "3e dimanche de l’Avent (année B)", "Jn 1:6-8.19-28", "Is 61:1-2a.10-11");
+  L_("avent-B4", "4e dimanche de l’Avent (année B)", "Lc 1:26-38", "2S 7:1-5.8b-12.14a.16");
+  /* Avent — année C */
+  L_("avent-C1", "1er dimanche de l’Avent (année C)", "Lc 21:25-28.34-36", "Jr 33:14-16");
+  L_("avent-C2", "2e dimanche de l’Avent (année C)", "Lc 3:1-6", "Ba 5:1-9");
+  L_("avent-C3", "3e dimanche de l’Avent (année C)", "Lc 3:10-18", "So 3:14-18a");
+  L_("avent-C4", "4e dimanche de l’Avent (année C)", "Lc 1:39-45", "Mi 5:1-4a");
+  /* Noël */
+  L_("noel-veille", "Veille de Noël", "Mt 1:18-25", "Is 62:1-5");
+  L_("noel-nuit", "Noël — messe de la nuit", "Lc 2:1-14", "Is 9:1-6");
+  L_("noel-aurore", "Noël — messe de l’aurore", "Lc 2:15-20", "Is 62:11-12");
+  L_("noel", "Noël — messe du jour", "Jn 1:1-18", "Is 52:7-10");
+  L_("sainte-famille", "Sainte Famille", "Lc 2:41-52", "Si 3:2-6.12-14");
+  L_("marie-mere-dieu", "Marie, Mère de Dieu (1er janvier)", "Lc 2:16-21", "Nb 6:22-27");
+  L_("epiphanie", "Épiphanie du Seigneur (6 janvier)", "Mt 2:1-12", "Is 60:1-6");
+  L_("bapteme-A", "Baptême du Seigneur (année A)", "Mt 3:13-17", "Is 42:1-4.6-7");
+  L_("bapteme-B", "Baptême du Seigneur (année B)", "Mc 1:7-11", "Is 55:1-11");
+  L_("bapteme-C", "Baptême du Seigneur (année C)", "Lc 3:15-16.21-22", "Is 40:1-5.9-11");
+  /* Carême */
+  L_("careme-cendres", "Mercredi des Cendres", "Mt 6:1-6.16-18", "Jl 2:12-18");
+  L_("careme-A1", "1er dimanche de Carême (année A)", "Mt 4:1-11", "Gn 2:7-9; 3:1-7");
+  L_("careme-A2", "2e dimanche de Carême (année A)", "Mt 17:1-9", "Gn 12:1-4a");
+  L_("careme-A3", "3e dimanche de Carême (année A)", "Jn 4:5-42", "Ex 17:3-7");
+  L_("careme-A4", "4e dimanche de Carême (année A)", "Jn 9:1-41", "1S 16:1b.6-7.10-13a");
+  L_("careme-A5", "5e dimanche de Carême (année A)", "Jn 11:1-45", "Ez 37:12-14");
+  L_("careme-B1", "1er dimanche de Carême (année B)", "Mc 1:12-15", "Gn 9:8-15");
+  L_("careme-B2", "2e dimanche de Carême (année B)", "Mc 9:2-10", "Gn 22:1-2.9a.10-13.15-18");
+  L_("careme-B3", "3e dimanche de Carême (année B)", "Jn 2:13-25", "Ex 20:1-17");
+  L_("careme-B4", "4e dimanche de Carême (année B)", "Jn 3:14-21", "2Ch 36:14-16.19-23");
+  L_("careme-B5", "5e dimanche de Carême (année B)", "Jn 12:20-33", "Jr 31:31-34");
+  L_("careme-C1", "1er dimanche de Carême (année C)", "Lc 4:1-13", "Dt 26:4-10");
+  L_("careme-C2", "2e dimanche de Carême (année C)", "Lc 9:28b-36", "Gn 15:5-12.17-18");
+  L_("careme-C3", "3e dimanche de Carême (année C)", "Lc 13:1-9", "Ex 3:1-8a.13-15");
+  L_("careme-C4", "4e dimanche de Carême (année C)", "Lc 15:1-3.11-32", "Jos 5:9a.10-12");
+  L_("careme-C5", "5e dimanche de Carême (année C)", "Jn 8:1-11", "Is 43:16-21");
+  L_("rameaux-A", "Dimanche des Rameaux (année A) — Passion selon saint Matthieu", "Mt 26:14-27,66");
+  L_("rameaux-B", "Dimanche des Rameaux (année B) — Passion selon saint Marc", "Mc 14:1-15,47");
+  L_("rameaux-C", "Dimanche des Rameaux (année C) — Passion selon saint Luc", "Lc 22:14-23,56");
+  /* Temps pascal */
+  L_("paques", "Dimanche de la Résurrection", "Jn 20:1-9", "Ac 10:34a.37-43");
+  L_("paques-2", "2e dimanche de Pâques — Divine Miséricorde", "Jn 20:19-31", "Ac 2:42-47");
+  L_("paques-3", "3e dimanche de Pâques — les disciples d’Emmaüs", "Lc 24:13-35", "Ac 2:14.22-33");
+  L_("paques-4-A", "4e dimanche de Pâques (année A) — le Bon Pasteur", "Jn 10:1-10", "Ac 2:14a.36-41");
+  L_("paques-4-B", "4e dimanche de Pâques (année B) — le Bon Pasteur", "Jn 10:11-18", "Ac 4:8-12");
+  L_("paques-4-C", "4e dimanche de Pâques (année C) — le Bon Pasteur", "Jn 10:27-30", "Ac 13:14.43-52");
+  L_("paques-5-A", "5e dimanche de Pâques (année A) — Je suis le chemin", "Jn 14:1-12", "Ac 6:1-7");
+  L_("paques-5-B", "5e dimanche de Pâques (année B) — la vraie vigne", "Jn 15:1-8", "Ac 9:26-31");
+  L_("paques-5-C", "5e dimanche de Pâques (année C) — je vous donne un commandement nouveau", "Jn 13:31-33a.34-35", "Ac 14:21-27");
+  L_("paques-6-A", "6e dimanche de Pâques (année A)", "Jn 14:15-21", "Ac 8:5-8.14-17");
+  L_("paques-6-B", "6e dimanche de Pâques (année B)", "Jn 15:9-17", "Ac 10:25-26.34-35.44-48");
+  L_("paques-6-C", "6e dimanche de Pâques (année C)", "Jn 14:23-29", "Ac 15:1-2.22-29");
+  L_("ascension-A", "Ascension du Seigneur (année A)", "Mt 28:16-20", "Ac 1:1-11");
+  L_("ascension-B", "Ascension du Seigneur (année B)", "Mc 16:15-20", "Ac 1:1-11");
+  L_("ascension-C", "Ascension du Seigneur (année C)", "Lc 24:46-53", "Ac 1:1-11");
+  L_("pentecote", "Pentecôte — messe du jour", "Jn 20:19-23", "Ac 2:1-11");
+  /* solennités & fêtes fixes */
+  L_("fete-01-01", "Marie, Mère de Dieu", "Lc 2:16-21", "Nb 6:22-27");
+  L_("fete-03-25", "Annonciation du Seigneur", "Lc 1:26-38", "Is 7:10-14; 8:10");
+  L_("fete-02-02", "Présentation du Seigneur au Temple", "Lc 2:22-40", "Ml 3:1-4");
+  L_("fete-08-06", "Transfiguration du Seigneur", "Lc 9:28b-36", "Dn 7:9-10.13-14");
+  L_("fete-08-15", "Assomption de la Vierge Marie", "Lc 1:39-56", "Ap 11:19a; 12:1-6a.10ab");
+  L_("fete-09-14", "Exaltation de la Sainte-Croix", "Jn 3:13-17", "Nb 21:4b-9");
+  L_("fete-11-01", "Toussaint", "Mt 5:1-12a", "Ap 7:2-4.9-14");
+  L_("fete-12-08", "Immaculée Conception de la Vierge Marie", "Lc 1:26-38", "Gn 3:9-15.20");
+  L_("christ-roi-A", "Christ Roi de l’univers (année A)", "Mt 25:31-46", "Ez 34:11-12.15-17");
+  L_("christ-roi-B", "Christ Roi de l’univers (année B)", "Jn 18:33b-37", "Dn 7:13-14");
+  L_("christ-roi-C", "Christ Roi de l’univers (année C)", "Lc 23:35-43", "2S 5:1-3");
+  L_("vendredi-passion", "Vendredi de la Passion du Seigneur", "Jn 18:1-19,42", "Is 52:13-53,12");
+
+  /* ── calcul du jour liturgique ── */
+  function calculer(dIn) {
+    const d = new Date(dIn.getTime()); d.setHours(12, 0, 0, 0);
+    const a = d.getFullYear();
+    const paq = paques(a);
+    const cendres = addJ(paq, -46);
+    const pent = addJ(paq, 49);
+    const trinite = addJ(paq, 56);
+    const a1 = dimancheLePlusProcheDu30Nov(a);
+    const noel = new Date(a, 11, 25, 12, 0, 0);
+    const r = { date: d, fmt: fmtDate(d), temps: "", semaine: null, cycle: "", evangileAnnee: "", fetes: [], lectures: null };
+    /* cycle : l’année liturgique commencée à l’Avent précédent */
+    const anneeAvent = (d >= a1) ? a : (a - 1);
+    r.cycle = cycleDeLAnneeLiturgique(anneeAvent);
+    r.evangileAnnee = r.cycle === "A" ? "Matthieu (A)" : (r.cycle === "B" ? "Marc (B)" : "Luc (C)");
+    const key = (k) => r.lectures ? r.lectures : (r.lectures = L[k] ? Object.assign({ cle: k }, L[k]) : null);
+    /* fêtes de date fixe — une solennité prime sur le cadre du temps */
+    const cleFete = "fete-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+    if (L[cleFete]) { r.fetes.push(L[cleFete].t); if (!r.lectures) r.lectures = Object.assign({ cle: cleFete }, L[cleFete]); }
+    /* Avent (du 1er dimanche au 24 déc.) */
+    if (d >= a1 && d < noel) {
+      r.temps = "Avent";
+      const n = Math.round((dimAvantOuLe(d) - a1) / 604800000) + 1;
+      if (d.getDay() === 0 && n >= 1 && n <= 4) key("avent-" + r.cycle + n);
+      else r.semaine = n;
+      return r;
+    }
+    /* Noël → Baptême du Seigneur */
+    const bapteme = (() => { /* dimanche après l’Épiphanie (6 janv) */
+      const ep = new Date(a, 0, 6, 12, 0, 0);
+      let s = new Date(ep.getTime()); s.setDate(s.getDate() + (7 - s.getDay()) % 7 || 7);
+      if (s <= ep) s.setDate(s.getDate() + 7);
+      return s;
+    })();
+    if ((d.getMonth() === 11 && d.getDate() >= 25) || (a > 1970 && d <= bapteme && d.getMonth() === 0) || (d >= noel && d <= bapteme)) {
+      r.temps = "Noël";
+      if (memeJour(d, noel)) key("noel");
+      else if (memeJour(d, new Date(a, 11, 24, 12, 0, 0))) key("noel-veille");
+      else if (memeJour(d, new Date(a, 0, 1, 12, 0, 0))) key("marie-mere-dieu");
+      else if (memeJour(d, new Date(a, 0, 6, 12, 0, 0))) key("epiphanie");
+      else if (memeJour(d, bapteme)) key("bapteme-" + r.cycle);
+      else { const sf = dimAvantOuLe(addJ(noel, 7)); if (memeJour(d, sf)) key("sainte-famille"); }
+      return r;
+    }
+    /* Carême (Cendres → Veille pascale) */
+    const pveille = addJ(paq, -1);
+    if (d >= cendres && d <= pveille) {
+      r.temps = "Carême";
+      if (memeJour(d, cendres)) key("careme-cendres");
+      else if (memeJour(d, addJ(paq, -2))) key("vendredi-passion");
+      else if (memeJour(d, addJ(paq, -7))) key("rameaux-" + r.cycle);
+      else if (d.getDay() === 0) {
+        const n = Math.round((paq - dimAvantOuLe(d)) / 604800000);
+        if (n >= 1 && n <= 5) key("careme-" + r.cycle + n);
+      }
+      return r;
+    }
+    /* temps pascal (Pâques → Pentecôte inclus) */
+    if (d >= paq && d <= pent) {
+      r.temps = "Temps pascal";
+      if (memeJour(d, paq)) key("paques");
+      else if (memeJour(d, addJ(paq, 39)) || (memeJour(d, addJ(paq, 43)) && addJ(paq, 39).getDay() !== 0)) key("ascension-" + r.cycle);
+      else if (memeJour(d, pent)) key("pentecote");
+      else if (d.getDay() === 0) {
+        const n = Math.round((d - paq) / 604800000);
+        if (n === 7) { key("pentecote"); }
+        else if (n >= 2 && n <= 6) {
+          const g4 = { A: "Jn 10:1-10", B: "Jn 10:11-18", C: "Jn 10:27-30" },
+            g5 = { A: "Jn 14:1-12", B: "Jn 15:1-8", C: "Jn 13:31-33a.34-35" },
+            g6 = { A: "Jn 14:15-21", B: "Jn 15:9-17", C: "Jn 14:23-29" };
+          key("paques-" + n + "-" + r.cycle) || null;
+          if (!r.lectures && n === 4) r.lectures = Object.assign({ cle: "paques-4-" + r.cycle }, L["paques-4-" + r.cycle] || {});
+          if (!r.lectures && n === 5) r.lectures = Object.assign({ cle: "paques-5-" + r.cycle }, L["paques-5-" + r.cycle] || {});
+          if (!r.lectures && n === 6) r.lectures = Object.assign({ cle: "paques-6-" + r.cycle }, L["paques-6-" + r.cycle] || {});
+        }
+      }
+      return r;
+    }
+    /* temps ordinaire — numérotation du missel (34e semaine = dernière avant l’Avent) ;
+       la semaine se calcule aussi pour les jours de semaine (dimanche d’ouverture) */
+    const a1Suiv = dimancheLePlusProcheDu30Nov(a);
+    const cr = addJ(a1Suiv, -7);            /* Christ-Roi */
+    r.temps = "Temps ordinaire";
+    const dimSem = dimAvantOuLe(d);
+    if (d > trinite && d <= cr) {
+      if (dimSem >= trinite) r.semaine = 34 - Math.round((cr - dimSem) / 604800000);
+      if (memeJour(d, cr)) { r.lectures = r.lectures || Object.assign({ cle: "christ-roi-" + r.cycle }, L["christ-roi-" + r.cycle]); r.fetes.push("Christ Roi de l’univers"); }
+    } else if (d > bapteme && d < cendres) {
+      r.semaine = 1 + Math.floor((dimAvantOuLe(d) - addJ(bapteme, 1)) / 604800000);
+      if (r.semaine < 2) r.semaine = 2;
+    } else {
+      r.semaine = null;
+    }
+    return r;
+  }
+
+  /* ── panneau ── */
+  let modal = null, dateVue = null;
+  function panneau() {
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "v577-modal";
+    modal.innerHTML = '<style>#v577-modal{position:fixed;inset:0;z-index:140960;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}#v577-modal.open{display:flex}#v577-modal .b{width:min(760px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v577-modal .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v577-modal .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}#v577-modal .corps{overflow:auto;padding:.8rem .9rem;font-size:.84rem;line-height:1.55}#v577-modal .lec{border-left:3px solid rgba(229,193,90,.4);padding:.45rem .6rem;margin:.45rem 0;background:rgba(255,255,255,.03);border-radius:0 8px 8px 0}#v577-modal .ref{font-weight:700;color:var(--ui-info,#4f8ef7)}#v577-modal .note{font-size:.66rem;color:var(--ui-dim,#8a8896);margin-top:.6rem}#v577-modal .acts{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.35rem}#v577-modal .acts button{background:rgba(79,142,247,.14);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:.2rem .5rem;cursor:pointer;font-size:.66rem}</style>'
+      + '<div class="b"><div class="hd"><h3>📖 Aujourd’hui — lectionnaire</h3><button type="button" id="v577-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div><div class="corps" id="v577-corps"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.remove("open"); });
+    modal.querySelector("#v577-x").addEventListener("click", function () { modal.classList.remove("open"); });
+    return modal;
+  }
+  function ligneLec(titre, ref, extra) {
+    let h = '<div class="lec"><div><span class="ref">' + esc(titre) + (ref ? " — " + esc(ref) : "") + '</span>' + (extra ? '<div style="font-size:.7rem;color:var(--ui-dim,#8a8896)">' + esc(extra) + '</div>' : "") + '</div>';
+    if (ref) {
+      h += '<div class="acts">'
+        + '<button type="button" data-act="versions" data-ref="' + esc(ref) + '">⚖ versions</button>'
+        + '<button type="button" data-act="lire" data-ref="' + esc(ref) + '">▶ lire</button>'
+        + '<button type="button" data-act="etudier" data-ref="' + esc(ref) + '">🕊 étudier avec Adeodat</button>'
+        + '</div>';
+    }
+    return h + '</div>';
+  }
+  function render(d) {
+    dateVue = new Date(d.getTime());
+    const r = calculer(d);
+    const corps = document.getElementById("v577-corps");
+    if (!corps) return;
+    let h = '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">'
+      + '<button type="button" id="v577-prev" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer">◀</button>'
+      + '<div style="flex:1"><b>' + esc(r.fmt) + '</b><div style="font-size:.7rem;color:var(--ui-accent,#e5c15a)">' + esc(r.temps) + (r.semaine ? " · " + r.semaine + "e semaine" : "") + " · évangile de l’année : " + esc(r.evangileAnnee) + '</div></div>'
+      + '<button type="button" id="v577-next" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer">▶</button>'
+      + '<button type="button" id="v577-auj" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer;font-size:.7rem">aujourd’hui</button></div>';
+    r.fetes.forEach(function (f) { h += '<div style="margin:.2rem 0">✨ ' + esc(f) + '</div>'; });
+    if (r.lectures) {
+      h += ligneLec(r.lectures.t, r.lectures.ev, r.lectures.l1 ? "1re lecture : " + r.lectures.l1 : "");
+    } else {
+      h += '<div class="lec" style="opacity:.75">Pas de table de lectures pour ce jour — voir le missel de votre rite. Cadre : ' + esc(r.temps) + (r.semaine ? ", " + r.semaine + "e semaine" : "") + " ; évangile de l’année : " + esc(r.evangileAnnee) + '.</div>';
+    }
+    h += '<div class="note">Calendrier liturgique calculé (exact). Tables de lectures embarquées INDICATIVES (dimanches d’Avent, de Carême, temps pascal, solennités) — vérifiez le missel de votre rite pour la célébration.</div>';
+    corps.innerHTML = h;
+    corps.querySelector("#v577-prev").addEventListener("click", function () { render(addJ(dateVue, -7)); });
+    corps.querySelector("#v577-next").addEventListener("click", function () { render(addJ(dateVue, 7)); });
+    corps.querySelector("#v577-auj").addEventListener("click", function () { render(new Date()); });
+    corps.querySelectorAll("[data-act]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        const ref = b.getAttribute("data-ref"), act = b.getAttribute("data-act");
+        if (act === "versions" && window.__v578Versions) window.__v578Versions.ouvrir(ref);
+        else if (act === "lire") {
+          try { if (typeof ttsEmission === "function") ttsEmission(ref + ". ", "francais", null, null); toast("▶ Lecture confiée à la voix de PARAMÈTRES", "info"); } catch (e) {}
+        } else if (act === "etudier") {
+          try {
+            if (window.__v564Adeodat) { window.__v564Adeodat.ouvrir(); window.__v564Adeodat.envoyer("Étudie ce passage de la liturgie du jour : " + ref + " — contexte historique, liens avec le temps liturgique, lecture des Pères si tu en connais, et une application concrète pour aujourd’hui."); }
+          } catch (e2) {}
+        }
+      });
+    });
+  }
+  function ouvrir() {
+    panneau().classList.add("open");
+    render(dateVue || new Date());
+  }
+  /* entrée dans le menu « + » */
+  function menuEntry() {
+    const m = document.getElementById("v6-more-menu");
+    if (!m || m.querySelector("#v577-menu-entry")) return;
+    const l = document.createElement("div");
+    l.className = "mm-label";
+    l.textContent = "Prière & liturgie";
+    m.appendChild(l);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hud-btn";
+    b.id = "v577-menu-entry";
+    b.textContent = "📖 AUJOURD’HUI";
+    b.title = "Temps liturgique + lectures du jour";
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); ouvrir(); });
+    m.appendChild(b);
+  }
+  function init() { menuEntry(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  const ivM = setInterval(function () { menuEntry(); if (document.getElementById("v577-menu-entry")) clearInterval(ivM); }, 600);
+  window.__v577Liturgie = { ouvrir: ouvrir, calculer: calculer, paques: paques };
+})();
+

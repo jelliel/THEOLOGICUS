@@ -1,0 +1,123 @@
+
+/* ═══════════════════════════════════════════════════════════════════
+   v578 — BANC DE VERSIONS pour un verset : Segond / Vulgate / Peshitta.
+   Corpus locaux (bible/bN.js, biblelt/bN.js, syriaque/bN.js — mêmes
+   ancres que la concordance v530). Peshitta : NT SEUL (note honnête
+   pour l’AT). Références acceptées : « Jn 3:16 », « Jean 3:16 »,
+   « 43:3:16 », plages « Mt 24:37-44 ». ══════════════════════════════ */
+(function () {
+  "use strict";
+  if (window.__v578Versions) return;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "&quot;"); }
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k || "info"); } catch (e) {} }
+
+  const LIV = { "genese":1,"gn":1,"gen":1,"exode":2,"ex":2,"levitique":3,"lv":3,"nombres":4,"nb":4,
+    "deuteronome":5,"dt":5,"josue":6,"jos":6,"juges":7,"jg":7,"ruth":8,"ru":8,"1samuel":9,"1s":9,
+    "2samuel":10,"2s":10,"1rois":11,"1r":11,"2rois":12,"2r":12,"1chroniques":13,"1ch":13,"2chroniques":14,"2ch":14,
+    "esdras":15,"esd":15,"nehemie":16,"ne":16,"esther":17,"est":17,"job":18,"psaume":19,"psaumes":19,"ps":19,
+    "proverbes":20,"pr":20,"ecclesiaste":21,"ec":21,"cantique":22,"cant":22,"esaie":23,"isaie":23,"is":23,
+    "jeremie":24,"jr":24,"lamentations":25,"lam":25,"ezechiel":26,"ez":26,"daniel":27,"dn":27,"osee":28,"os":28,
+    "joel":29,"jl":29,"amos":30,"am":30,"abdias":31,"ab":31,"jonas":32,"jon":32,"michee":33,"mi":33,
+    "nahum":34,"na":34,"habacuc":35,"hab":35,"sophonie":36,"so":36,"aggee":37,"ag":37,"zacharie":38,"za":38,
+    "malachie":39,"ml":39,"matthieu":40,"mt":40,"marc":41,"mc":41,"luc":42,"lc":42,"jean":43,"jn":43,
+    "actes":44,"ac":44,"romains":45,"rm":45,"1corinthiens":46,"1co":46,"2corinthiens":47,"2co":47,
+    "galates":48,"ga":48,"ephesiens":49,"ep":49,"philippiens":50,"ph":50,"colossiens":51,"col":51,
+    "1thessaloniciens":52,"1th":52,"2thessaloniciens":53,"2th":53,"1timothee":54,"1tm":54,"2timothee":55,"2tm":55,
+    "tite":56,"ti":56,"philemon":57,"phm":57,"hebreux":58,"he":58,"jacques":59,"jc":59,"1pierre":60,"1p":60,
+    "2pierre":61,"2p":61,"1jean":62,"1jn":62,"2jean":63,"2jn":63,"3jean":64,"3jn":64,"jude":65,"jude":65,"apocalypse":66,"ap":66 };
+  function parserRef(txt) {
+    const t = String(txt || "").trim().toLowerCase().replace(/\s+/g, " ");
+    let m = /^([1-3]?\s?[a-zàâäéèêëîïôöùûüç]+)\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?$/.exec(t);
+    if (m) {
+      const b = LIV[m[1].replace(/\s/g, "")];
+      if (!b) return null;
+      return { b: b, c: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+    }
+    m = /^\s*(\d{1,2})\s*:\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*$/.exec(t);
+    if (m) return { b: +m[1], c: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+    return null;
+  }
+  function parseFichier(t) {
+    const ancre = t.indexOf("||{})[");
+    let pos = -1;
+    if (ancre >= 0) pos = t.indexOf("=", ancre);
+    if (pos < 0) pos = t.lastIndexOf("=");
+    return JSON.parse(t.slice(pos + 1).replace(/;\s*$/, ""));
+  }
+  async function verset(src, b, c, v1, v2) {
+    try {
+      const r = await fetch(src);
+      if (!r.ok) return null;
+      const j = parseFichier(await r.text());
+      const ch = j[c];
+      if (!ch || typeof ch !== "object") return null;
+      const out = [];
+      for (let v = v1; v <= v2; v++) {
+        const t = ch[v];
+        if (typeof t === "string" && t) out.push({ v: v, t: t });
+      }
+      return out;
+    } catch (e) { return null; }
+  }
+
+  let modal = null;
+  function panneau() {
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "v578-modal";
+    modal.innerHTML = '<style>#v578-modal{position:fixed;inset:0;z-index:140960;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}#v578-modal.open{display:flex}#v578-modal .b{width:min(1000px,96vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v578-modal .hd{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v578-modal .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}#v578-modal .cfg{display:flex;gap:.5rem;padding:.6rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v578-modal input{flex:1;min-width:160px;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:6px;padding:.4rem .55rem;font-size:.8rem}#v578-modal .cols{display:flex;gap:.6rem;overflow:auto;padding:.7rem}#v578-modal .col{flex:1;min-width:220px;border:1px solid var(--ui-border,#2a2a3a);border-radius:8px;padding:.55rem .6rem;background:rgba(255,255,255,.02)}#v578-modal .col h4{margin:.1rem 0 .45rem;font-size:.78rem;color:var(--ui-accent,#e5c15a)}#v578-modal .vt{font-size:.8rem;line-height:1.6}#v578-modal .vt b{color:var(--ui-info,#4f8ef7)}#v578-modal .sy{direction:rtl;text-align:right;font-size:1.05rem;line-height:1.9}#v578-modal .vide{opacity:.55;font-size:.74rem}</style>'
+      + '<div class="b"><div class="hd"><h3>⚖ Banc de versions</h3><button type="button" id="v578-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
+      + '<div class="cfg"><input type="text" id="v578-ref" placeholder="Référence — ex. Jn 3:16, Jean 3:16, Mt 24:37-44, 43:3:16…" aria-label="Référence biblique"><button type="button" id="v578-go" class="ui-btn" style="padding:.35rem .7rem">Afficher</button></div>'
+      + '<div class="cols" id="v578-cols"><div class="vide">Entrez une référence (livre chapitre:verset) — Segond, Vulgate et Peshitta sont lues hors-ligne.</div></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.remove("open"); });
+    modal.querySelector("#v578-x").addEventListener("click", function () { modal.classList.remove("open"); });
+    modal.querySelector("#v578-go").addEventListener("click", function () { charger(modal.querySelector("#v578-ref").value); });
+    modal.querySelector("#v578-ref").addEventListener("keydown", function (e) { if (e.key === "Enter") charger(this.value); });
+    return modal;
+  }
+  function col(titre, html, rtl) {
+    return '<div class="col"><h4>' + esc(titre) + '</h4><div class="vt' + (rtl ? " sy" : "") + '">' + html + '</div></div>';
+  }
+  function versHtml(liste) {
+    if (!liste || !liste.length) return '<span class="vide">indisponible</span>';
+    return liste.map(x => "<b>" + x.v + "</b> " + esc(x.t)).join("<br>");
+  }
+  async function charger(txt) {
+    const ref = parserRef(txt);
+    if (!ref) { toast("Référence non reconnue — ex. Jn 3:16 ou Mt 24:37-44", "warn"); return; }
+    const cols = document.getElementById("v578-cols");
+    if (!cols) return;
+    cols.innerHTML = '<div class="vide">Chargement hors-ligne…</div>';
+    const seg = await verset("bible/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2);
+    const vul = await verset("biblelt/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2);
+    const psy = ref.b >= 40 ? await verset("syriaque/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2) : [];
+    const noteSy = ref.b < 40 ? '<span class="vide">Peshitta : Nouveau Testament seul — l’Ancien Testament n’est pas dans ce corpus.</span>' : versHtml(psy);
+    cols.innerHTML =
+      col("Segond (français)", versHtml(seg), false) +
+      col("Vulgate (latin)", versHtml(vul), false) +
+      col("Peshitta (syriaque — NT seul)", noteSy, true);
+  }
+  function ouvrir(ref) {
+    panneau().classList.add("open");
+    if (ref) { document.getElementById("v578-ref").value = ref; charger(ref); }
+  }
+  function menuEntry() {
+    const m = document.getElementById("v6-more-menu");
+    if (!m || m.querySelector("#v578-menu-entry")) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hud-btn";
+    b.id = "v578-menu-entry";
+    b.textContent = "⚖ BANC DE VERSIONS";
+    b.title = "Un verset → Segond / Vulgate / Peshitta côte à côte (hors-ligne)";
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); ouvrir(); });
+    m.appendChild(b);
+  }
+  function init() { menuEntry(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  const ivM = setInterval(function () { menuEntry(); if (document.getElementById("v578-menu-entry")) clearInterval(ivM); }, 650);
+  window.__v578Versions = { ouvrir: ouvrir, parserRef: parserRef };
+})();
+

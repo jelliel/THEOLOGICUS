@@ -62288,7 +62288,12 @@ var qrcode = function() {
         }
       }
     } catch (e) {}
-    if (!extraits.length && !peres.length && !vlt.length) return null;
+    /* v577 — Catéchisme + Denzinger */
+    let cat = [], denz = [];
+    try { cat = cibler(await assurerCec(), kws, 3); } catch (eC1) {}
+    /* textes latins : radicaux tronqués (misericorde → miseric…) */
+    try { denz = cibler(await assurerDenz(), kws.map(function (k) { return k.slice(0, 7); }).filter(function (k) { return k.length >= 5; }), 3); } catch (eD1) {}
+    if (!extraits.length && !peres.length && !vlt.length && !cat.length && !denz.length) return null;
     const lignesR = [];
     extraits.forEach(function (x) {
       if (/^\d+:\d+:\d+$/.test(x.ref)) lignesR.push("- Bible (Segond) " + x.ref + " : « " + String(x.texte).slice(0, 260) + " »");
@@ -62300,10 +62305,69 @@ var qrcode = function() {
       const titre = ep.t || ep.titre || ep.title || "";
       lignesR.push("- Maria Valtorta — L'Évangile tel qu'il m'a été révélé" + (titre ? ", « " + titre + " »" : "") + (c && c.raw ? " [" + c.raw + "]" : ""));
     });
+    cat.forEach(function (p) { lignesR.push("- Catéchisme de l’Église catholique " + p.ref + " : « " + String(p.texte).slice(0, 240) + " »"); });
+    denz.forEach(function (p) { lignesR.push("- Denzinger — " + p.ref + " : « " + String(p.texte).slice(0, 240) + " »"); });
     return {
-      extraits: extraits, peres: peres, vlt: vlt,
-      bloc: "SOURCES LOCALES TROUVÉES DANS LES CORPUS EMBARQUÉS DE THEOLOGICUS (utilise-les si elles sont pertinentes et cite leurs références entre parenthèses, par ex. (Jn 3:16)) :\n" + lignesR.join("\n")
+      extraits: extraits, peres: peres, vlt: vlt, cat: cat, denz: denz,
+      bloc: "SOURCES LOCALES TROUVÉES DANS LES CORPUS EMBARQUÉS DE THEOLOGICUS (utilise-les si elles sont pertinentes et cite leurs références entre parenthèses, par ex. (Jn 3:16), (CEC §27), (Denzinger §150)) :\n" + lignesR.join("\n")
     };
+  }
+  /* v577 — Catéchisme (CEC) + Denzinger : « que dit l’Église… » */
+  let docsCec = null, docsDenz = null;
+  async function assurerCec() {
+    if (docsCec) return docsCec;
+    const r = await fetch("tradition/cec/cec_fr.json", { cache: "no-store" });
+    const j = r.ok ? await r.json() : null;
+    docsCec = ((j && j.paragraphes) || []).map(function (p) { return { ref: "§" + p.n, texte: String(p.t || "") }; }).filter(function (p) { return p.texte.length > 30; });
+    return docsCec;
+  }
+  async function assurerDenz() {
+    if (docsDenz) return docsDenz;
+    const docs = [];
+    await new Promise(function (fini) {
+      let restant = 130;
+      for (let i = 1; i <= 130; i++) {
+        (function (i) {
+          fetch("denzinger/ddz_" + ("00" + i).slice(-3) + ".js").then(function (r) { return r.ok ? r.text() : null; }).then(function (t) {
+            if (t) {
+              try {
+                const kd = t.lastIndexOf("__denzingerWorks[");
+                const pos = kd >= 0 ? t.indexOf("=", kd) : t.lastIndexOf("=");
+                const j = JSON.parse(t.slice(pos + 1).replace(/;\s*$/, ""));
+                /* le JSON peut être l’œuvre DIRECTE ({id,a,t,u,c}) ou un dict {dz_xxx: œuvre} */
+                const works = (j && j.c) ? [j] : Object.keys(j || {}).map(function (k) { return j[k]; }).filter(function (w2) { return w2 && w2.c; });
+                works.forEach(function (w) {
+                  (w.c || []).forEach(function (ch) {
+                    (ch.s || []).forEach(function (se) {
+                      (se.p || []).forEach(function (p) {
+                        if (typeof p === "string" && p.length > 20) docs.push({ ref: (w.t || "Denzinger") + " §" + (se.t || ""), texte: p });
+                      });
+                    });
+                  });
+                });
+              } catch (e) {}
+            }
+          }).catch(function () {}).then(function () { if (--restant === 0) fini(); });
+        })(i);
+      }
+    });
+    docsDenz = docs;
+    return docs;
+  }
+  function cibler(docs, kws, nMax) {
+    const scores = [];
+    for (let i = 0; i < docs.length; i++) {
+      const d = docs[i], n = norm(d.texte);
+      let dist = 0, score = 0;
+      for (let k = 0; k < kws.length; k++) {
+        let c = 0, p = 0;
+        while ((p = n.indexOf(kws[k], p)) >= 0) { c++; p += kws[k].length; }
+        if (c) { dist++; score += c * (kws[k].length >= 6 ? 2 : 1); }
+      }
+      if (dist) scores.push({ d: d, s: score + dist * 10 });
+    }
+    scores.sort(function (a, b) { return b.s - a.s; });
+    return scores.slice(0, nMax).map(function (x) { return x.d; });
   }
   window.__v574Chercher = { chercher: chercher, mots: mots };
 
@@ -62506,6 +62570,605 @@ var qrcode = function() {
     }, 400);
   } catch (e) {}
   window.__v576AdeodatVoix = { majBadge: majBadge, moteurActif: cfgMoteur };
+})();
+
+</script>
+<script id="v577-liturgie">
+/* ═══════════════════════════════════════════════════════════════════
+   v577 — LECTIONNAIRE « Aujourd’hui » (temps liturgique + lectures).
+   CALENDRIER : calculé, exact (Pâques = Meeus/Jones/Butcher ; Avent =
+   dimanche le plus proche du 30 nov. ; Cendres = Pâques − 46 ; temps
+   ordinaire numéroté pour finir à la 34e semaine avant l’Avent).
+   LECTURES : table EMBARQUÉE INDICATIVE pour les dimanches d’Avent, de
+   Carême, du temps pascal et les solennités majeures (cycles A/B/C,
+   évangile + 1re lecture quand elle est stable). Pour les dimanches du
+   temps ordinaire : cadre exact (semaine N, évangile de l’année A=Mt,
+   B=Mc, C=Lc) mais PAS de péricope — vérifiez le missel de votre rite.
+   Actions par lecture : ⚖ versions (v578), ▶ lire (ttsEmission → voix
+   de PARAMÈTRES), 🕊 étudier avec Adeodat. ═══════════════════════════ */
+(function () {
+  "use strict";
+  if (window.__v577Liturgie) return;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "&quot;"); }
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k || "info"); } catch (e) {} }
+
+  /* ── calendrier ── */
+  function paques(a) {
+    const aa = a % 19, b = Math.floor(a / 100), c = a % 100,
+      d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25),
+      g = Math.floor((b - f + 1) / 3), h = (19 * aa + b - d - g + 15) % 30,
+      i = Math.floor(c / 4), k = c % 4,
+      l = (32 + 2 * e + 2 * i - h - k) % 7,
+      m = Math.floor((aa + 11 * h + 22 * l) / 451),
+      mois = Math.floor((h + l - 7 * m + 114) / 31),
+      jour = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(a, mois - 1, jour, 12, 0, 0);
+  }
+  function addJ(d, n) { const x = new Date(d.getTime()); x.setDate(x.getDate() + n); x.setHours(12, 0, 0, 0); return x; }
+  function memeJour(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+  function dimAvantOuLe(d) { const x = new Date(d.getTime()); x.setHours(12, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
+  function dimancheLePlusProcheDu30Nov(a) {
+    const n30 = new Date(a, 10, 30, 12, 0, 0);
+    const s1 = dimAvantOuLe(n30);
+    const s2 = addJ(s1, 7);
+    return (Math.abs(n30 - s1) <= Math.abs(s2 - n30)) ? s1 : s2;
+  }
+  const CYCLES = ["A", "B", "C"];
+  function cycleDeLAnneeLiturgique(anneeAvent) {
+    const i = ((anneeAvent - 2025) % 3 + 3) % 3;
+    return CYCLES[i];
+  }
+  const NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  const NOMS_JOURS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+  function fmtDate(d) { return NOMS_JOURS[d.getDay()] + " " + d.getDate() + " " + NOMS_MOIS[d.getMonth()] + " " + d.getFullYear(); }
+
+  /* ── tables de lectures (indicatives, dimanches & solennités) ── */
+  const L = {};
+  function L_(k, t, ev, l1) { L[k] = { t: t, ev: ev || "", l1: l1 || "" }; }
+  /* Avent — année A */
+  L_("avent-A1", "1er dimanche de l’Avent (année A)", "Mt 24:37-44", "Is 2:1-5");
+  L_("avent-A2", "2e dimanche de l’Avent (année A)", "Mt 3:1-12", "Is 11:1-10");
+  L_("avent-A3", "3e dimanche de l’Avent (année A)", "Mt 11:2-11", "Is 35:1-6a.10");
+  L_("avent-A4", "4e dimanche de l’Avent (année A)", "Mt 1:18-24", "Is 7:10-14");
+  /* Avent — année B */
+  L_("avent-B1", "1er dimanche de l’Avent (année B)", "Lc 21:25-28.34-36", "Jr 33:14-16");
+  L_("avent-B2", "2e dimanche de l’Avent (année B)", "Lc 3:1-6", "Ba 5:1-9");
+  L_("avent-B3", "3e dimanche de l’Avent (année B)", "Jn 1:6-8.19-28", "Is 61:1-2a.10-11");
+  L_("avent-B4", "4e dimanche de l’Avent (année B)", "Lc 1:26-38", "2S 7:1-5.8b-12.14a.16");
+  /* Avent — année C */
+  L_("avent-C1", "1er dimanche de l’Avent (année C)", "Lc 21:25-28.34-36", "Jr 33:14-16");
+  L_("avent-C2", "2e dimanche de l’Avent (année C)", "Lc 3:1-6", "Ba 5:1-9");
+  L_("avent-C3", "3e dimanche de l’Avent (année C)", "Lc 3:10-18", "So 3:14-18a");
+  L_("avent-C4", "4e dimanche de l’Avent (année C)", "Lc 1:39-45", "Mi 5:1-4a");
+  /* Noël */
+  L_("noel-veille", "Veille de Noël", "Mt 1:18-25", "Is 62:1-5");
+  L_("noel-nuit", "Noël — messe de la nuit", "Lc 2:1-14", "Is 9:1-6");
+  L_("noel-aurore", "Noël — messe de l’aurore", "Lc 2:15-20", "Is 62:11-12");
+  L_("noel", "Noël — messe du jour", "Jn 1:1-18", "Is 52:7-10");
+  L_("sainte-famille", "Sainte Famille", "Lc 2:41-52", "Si 3:2-6.12-14");
+  L_("marie-mere-dieu", "Marie, Mère de Dieu (1er janvier)", "Lc 2:16-21", "Nb 6:22-27");
+  L_("epiphanie", "Épiphanie du Seigneur (6 janvier)", "Mt 2:1-12", "Is 60:1-6");
+  L_("bapteme-A", "Baptême du Seigneur (année A)", "Mt 3:13-17", "Is 42:1-4.6-7");
+  L_("bapteme-B", "Baptême du Seigneur (année B)", "Mc 1:7-11", "Is 55:1-11");
+  L_("bapteme-C", "Baptême du Seigneur (année C)", "Lc 3:15-16.21-22", "Is 40:1-5.9-11");
+  /* Carême */
+  L_("careme-cendres", "Mercredi des Cendres", "Mt 6:1-6.16-18", "Jl 2:12-18");
+  L_("careme-A1", "1er dimanche de Carême (année A)", "Mt 4:1-11", "Gn 2:7-9; 3:1-7");
+  L_("careme-A2", "2e dimanche de Carême (année A)", "Mt 17:1-9", "Gn 12:1-4a");
+  L_("careme-A3", "3e dimanche de Carême (année A)", "Jn 4:5-42", "Ex 17:3-7");
+  L_("careme-A4", "4e dimanche de Carême (année A)", "Jn 9:1-41", "1S 16:1b.6-7.10-13a");
+  L_("careme-A5", "5e dimanche de Carême (année A)", "Jn 11:1-45", "Ez 37:12-14");
+  L_("careme-B1", "1er dimanche de Carême (année B)", "Mc 1:12-15", "Gn 9:8-15");
+  L_("careme-B2", "2e dimanche de Carême (année B)", "Mc 9:2-10", "Gn 22:1-2.9a.10-13.15-18");
+  L_("careme-B3", "3e dimanche de Carême (année B)", "Jn 2:13-25", "Ex 20:1-17");
+  L_("careme-B4", "4e dimanche de Carême (année B)", "Jn 3:14-21", "2Ch 36:14-16.19-23");
+  L_("careme-B5", "5e dimanche de Carême (année B)", "Jn 12:20-33", "Jr 31:31-34");
+  L_("careme-C1", "1er dimanche de Carême (année C)", "Lc 4:1-13", "Dt 26:4-10");
+  L_("careme-C2", "2e dimanche de Carême (année C)", "Lc 9:28b-36", "Gn 15:5-12.17-18");
+  L_("careme-C3", "3e dimanche de Carême (année C)", "Lc 13:1-9", "Ex 3:1-8a.13-15");
+  L_("careme-C4", "4e dimanche de Carême (année C)", "Lc 15:1-3.11-32", "Jos 5:9a.10-12");
+  L_("careme-C5", "5e dimanche de Carême (année C)", "Jn 8:1-11", "Is 43:16-21");
+  L_("rameaux-A", "Dimanche des Rameaux (année A) — Passion selon saint Matthieu", "Mt 26:14-27,66");
+  L_("rameaux-B", "Dimanche des Rameaux (année B) — Passion selon saint Marc", "Mc 14:1-15,47");
+  L_("rameaux-C", "Dimanche des Rameaux (année C) — Passion selon saint Luc", "Lc 22:14-23,56");
+  /* Temps pascal */
+  L_("paques", "Dimanche de la Résurrection", "Jn 20:1-9", "Ac 10:34a.37-43");
+  L_("paques-2", "2e dimanche de Pâques — Divine Miséricorde", "Jn 20:19-31", "Ac 2:42-47");
+  L_("paques-3", "3e dimanche de Pâques — les disciples d’Emmaüs", "Lc 24:13-35", "Ac 2:14.22-33");
+  L_("paques-4-A", "4e dimanche de Pâques (année A) — le Bon Pasteur", "Jn 10:1-10", "Ac 2:14a.36-41");
+  L_("paques-4-B", "4e dimanche de Pâques (année B) — le Bon Pasteur", "Jn 10:11-18", "Ac 4:8-12");
+  L_("paques-4-C", "4e dimanche de Pâques (année C) — le Bon Pasteur", "Jn 10:27-30", "Ac 13:14.43-52");
+  L_("paques-5-A", "5e dimanche de Pâques (année A) — Je suis le chemin", "Jn 14:1-12", "Ac 6:1-7");
+  L_("paques-5-B", "5e dimanche de Pâques (année B) — la vraie vigne", "Jn 15:1-8", "Ac 9:26-31");
+  L_("paques-5-C", "5e dimanche de Pâques (année C) — je vous donne un commandement nouveau", "Jn 13:31-33a.34-35", "Ac 14:21-27");
+  L_("paques-6-A", "6e dimanche de Pâques (année A)", "Jn 14:15-21", "Ac 8:5-8.14-17");
+  L_("paques-6-B", "6e dimanche de Pâques (année B)", "Jn 15:9-17", "Ac 10:25-26.34-35.44-48");
+  L_("paques-6-C", "6e dimanche de Pâques (année C)", "Jn 14:23-29", "Ac 15:1-2.22-29");
+  L_("ascension-A", "Ascension du Seigneur (année A)", "Mt 28:16-20", "Ac 1:1-11");
+  L_("ascension-B", "Ascension du Seigneur (année B)", "Mc 16:15-20", "Ac 1:1-11");
+  L_("ascension-C", "Ascension du Seigneur (année C)", "Lc 24:46-53", "Ac 1:1-11");
+  L_("pentecote", "Pentecôte — messe du jour", "Jn 20:19-23", "Ac 2:1-11");
+  /* solennités & fêtes fixes */
+  L_("fete-01-01", "Marie, Mère de Dieu", "Lc 2:16-21", "Nb 6:22-27");
+  L_("fete-03-25", "Annonciation du Seigneur", "Lc 1:26-38", "Is 7:10-14; 8:10");
+  L_("fete-02-02", "Présentation du Seigneur au Temple", "Lc 2:22-40", "Ml 3:1-4");
+  L_("fete-08-06", "Transfiguration du Seigneur", "Lc 9:28b-36", "Dn 7:9-10.13-14");
+  L_("fete-08-15", "Assomption de la Vierge Marie", "Lc 1:39-56", "Ap 11:19a; 12:1-6a.10ab");
+  L_("fete-09-14", "Exaltation de la Sainte-Croix", "Jn 3:13-17", "Nb 21:4b-9");
+  L_("fete-11-01", "Toussaint", "Mt 5:1-12a", "Ap 7:2-4.9-14");
+  L_("fete-12-08", "Immaculée Conception de la Vierge Marie", "Lc 1:26-38", "Gn 3:9-15.20");
+  L_("christ-roi-A", "Christ Roi de l’univers (année A)", "Mt 25:31-46", "Ez 34:11-12.15-17");
+  L_("christ-roi-B", "Christ Roi de l’univers (année B)", "Jn 18:33b-37", "Dn 7:13-14");
+  L_("christ-roi-C", "Christ Roi de l’univers (année C)", "Lc 23:35-43", "2S 5:1-3");
+  L_("vendredi-passion", "Vendredi de la Passion du Seigneur", "Jn 18:1-19,42", "Is 52:13-53,12");
+
+  /* ── calcul du jour liturgique ── */
+  function calculer(dIn) {
+    const d = new Date(dIn.getTime()); d.setHours(12, 0, 0, 0);
+    const a = d.getFullYear();
+    const paq = paques(a);
+    const cendres = addJ(paq, -46);
+    const pent = addJ(paq, 49);
+    const trinite = addJ(paq, 56);
+    const a1 = dimancheLePlusProcheDu30Nov(a);
+    const noel = new Date(a, 11, 25, 12, 0, 0);
+    const r = { date: d, fmt: fmtDate(d), temps: "", semaine: null, cycle: "", evangileAnnee: "", fetes: [], lectures: null };
+    /* cycle : l’année liturgique commencée à l’Avent précédent */
+    const anneeAvent = (d >= a1) ? a : (a - 1);
+    r.cycle = cycleDeLAnneeLiturgique(anneeAvent);
+    r.evangileAnnee = r.cycle === "A" ? "Matthieu (A)" : (r.cycle === "B" ? "Marc (B)" : "Luc (C)");
+    const key = (k) => r.lectures ? r.lectures : (r.lectures = L[k] ? Object.assign({ cle: k }, L[k]) : null);
+    /* fêtes de date fixe — une solennité prime sur le cadre du temps */
+    const cleFete = "fete-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+    if (L[cleFete]) { r.fetes.push(L[cleFete].t); if (!r.lectures) r.lectures = Object.assign({ cle: cleFete }, L[cleFete]); }
+    /* Avent (du 1er dimanche au 24 déc.) */
+    if (d >= a1 && d < noel) {
+      r.temps = "Avent";
+      const n = Math.round((dimAvantOuLe(d) - a1) / 604800000) + 1;
+      if (d.getDay() === 0 && n >= 1 && n <= 4) key("avent-" + r.cycle + n);
+      else r.semaine = n;
+      return r;
+    }
+    /* Noël → Baptême du Seigneur */
+    const bapteme = (() => { /* dimanche après l’Épiphanie (6 janv) */
+      const ep = new Date(a, 0, 6, 12, 0, 0);
+      let s = new Date(ep.getTime()); s.setDate(s.getDate() + (7 - s.getDay()) % 7 || 7);
+      if (s <= ep) s.setDate(s.getDate() + 7);
+      return s;
+    })();
+    if ((d.getMonth() === 11 && d.getDate() >= 25) || (a > 1970 && d <= bapteme && d.getMonth() === 0) || (d >= noel && d <= bapteme)) {
+      r.temps = "Noël";
+      if (memeJour(d, noel)) key("noel");
+      else if (memeJour(d, new Date(a, 11, 24, 12, 0, 0))) key("noel-veille");
+      else if (memeJour(d, new Date(a, 0, 1, 12, 0, 0))) key("marie-mere-dieu");
+      else if (memeJour(d, new Date(a, 0, 6, 12, 0, 0))) key("epiphanie");
+      else if (memeJour(d, bapteme)) key("bapteme-" + r.cycle);
+      else { const sf = dimAvantOuLe(addJ(noel, 7)); if (memeJour(d, sf)) key("sainte-famille"); }
+      return r;
+    }
+    /* Carême (Cendres → Veille pascale) */
+    const pveille = addJ(paq, -1);
+    if (d >= cendres && d <= pveille) {
+      r.temps = "Carême";
+      if (memeJour(d, cendres)) key("careme-cendres");
+      else if (memeJour(d, addJ(paq, -2))) key("vendredi-passion");
+      else if (memeJour(d, addJ(paq, -7))) key("rameaux-" + r.cycle);
+      else if (d.getDay() === 0) {
+        const n = Math.round((paq - dimAvantOuLe(d)) / 604800000);
+        if (n >= 1 && n <= 5) key("careme-" + r.cycle + n);
+      }
+      return r;
+    }
+    /* temps pascal (Pâques → Pentecôte inclus) */
+    if (d >= paq && d <= pent) {
+      r.temps = "Temps pascal";
+      if (memeJour(d, paq)) key("paques");
+      else if (memeJour(d, addJ(paq, 39)) || (memeJour(d, addJ(paq, 43)) && addJ(paq, 39).getDay() !== 0)) key("ascension-" + r.cycle);
+      else if (memeJour(d, pent)) key("pentecote");
+      else if (d.getDay() === 0) {
+        const n = Math.round((d - paq) / 604800000);
+        if (n === 7) { key("pentecote"); }
+        else if (n >= 2 && n <= 6) {
+          const g4 = { A: "Jn 10:1-10", B: "Jn 10:11-18", C: "Jn 10:27-30" },
+            g5 = { A: "Jn 14:1-12", B: "Jn 15:1-8", C: "Jn 13:31-33a.34-35" },
+            g6 = { A: "Jn 14:15-21", B: "Jn 15:9-17", C: "Jn 14:23-29" };
+          key("paques-" + n + "-" + r.cycle) || null;
+          if (!r.lectures && n === 4) r.lectures = Object.assign({ cle: "paques-4-" + r.cycle }, L["paques-4-" + r.cycle] || {});
+          if (!r.lectures && n === 5) r.lectures = Object.assign({ cle: "paques-5-" + r.cycle }, L["paques-5-" + r.cycle] || {});
+          if (!r.lectures && n === 6) r.lectures = Object.assign({ cle: "paques-6-" + r.cycle }, L["paques-6-" + r.cycle] || {});
+        }
+      }
+      return r;
+    }
+    /* temps ordinaire — numérotation du missel (34e semaine = dernière avant l’Avent) ;
+       la semaine se calcule aussi pour les jours de semaine (dimanche d’ouverture) */
+    const a1Suiv = dimancheLePlusProcheDu30Nov(a);
+    const cr = addJ(a1Suiv, -7);            /* Christ-Roi */
+    r.temps = "Temps ordinaire";
+    const dimSem = dimAvantOuLe(d);
+    if (d > trinite && d <= cr) {
+      if (dimSem >= trinite) r.semaine = 34 - Math.round((cr - dimSem) / 604800000);
+      if (memeJour(d, cr)) { r.lectures = r.lectures || Object.assign({ cle: "christ-roi-" + r.cycle }, L["christ-roi-" + r.cycle]); r.fetes.push("Christ Roi de l’univers"); }
+    } else if (d > bapteme && d < cendres) {
+      r.semaine = 1 + Math.floor((dimAvantOuLe(d) - addJ(bapteme, 1)) / 604800000);
+      if (r.semaine < 2) r.semaine = 2;
+    } else {
+      r.semaine = null;
+    }
+    return r;
+  }
+
+  /* ── panneau ── */
+  let modal = null, dateVue = null;
+  function panneau() {
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "v577-modal";
+    modal.innerHTML = '<style>#v577-modal{position:fixed;inset:0;z-index:140960;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}#v577-modal.open{display:flex}#v577-modal .b{width:min(760px,95vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v577-modal .hd{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v577-modal .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}#v577-modal .corps{overflow:auto;padding:.8rem .9rem;font-size:.84rem;line-height:1.55}#v577-modal .lec{border-left:3px solid rgba(229,193,90,.4);padding:.45rem .6rem;margin:.45rem 0;background:rgba(255,255,255,.03);border-radius:0 8px 8px 0}#v577-modal .ref{font-weight:700;color:var(--ui-info,#4f8ef7)}#v577-modal .note{font-size:.66rem;color:var(--ui-dim,#8a8896);margin-top:.6rem}#v577-modal .acts{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.35rem}#v577-modal .acts button{background:rgba(79,142,247,.14);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:6px;padding:.2rem .5rem;cursor:pointer;font-size:.66rem}</style>'
+      + '<div class="b"><div class="hd"><h3>📖 Aujourd’hui — lectionnaire</h3><button type="button" id="v577-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div><div class="corps" id="v577-corps"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.remove("open"); });
+    modal.querySelector("#v577-x").addEventListener("click", function () { modal.classList.remove("open"); });
+    return modal;
+  }
+  function ligneLec(titre, ref, extra) {
+    let h = '<div class="lec"><div><span class="ref">' + esc(titre) + (ref ? " — " + esc(ref) : "") + '</span>' + (extra ? '<div style="font-size:.7rem;color:var(--ui-dim,#8a8896)">' + esc(extra) + '</div>' : "") + '</div>';
+    if (ref) {
+      h += '<div class="acts">'
+        + '<button type="button" data-act="versions" data-ref="' + esc(ref) + '">⚖ versions</button>'
+        + '<button type="button" data-act="lire" data-ref="' + esc(ref) + '">▶ lire</button>'
+        + '<button type="button" data-act="etudier" data-ref="' + esc(ref) + '">🕊 étudier avec Adeodat</button>'
+        + '</div>';
+    }
+    return h + '</div>';
+  }
+  function render(d) {
+    dateVue = new Date(d.getTime());
+    const r = calculer(d);
+    const corps = document.getElementById("v577-corps");
+    if (!corps) return;
+    let h = '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">'
+      + '<button type="button" id="v577-prev" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer">◀</button>'
+      + '<div style="flex:1"><b>' + esc(r.fmt) + '</b><div style="font-size:.7rem;color:var(--ui-accent,#e5c15a)">' + esc(r.temps) + (r.semaine ? " · " + r.semaine + "e semaine" : "") + " · évangile de l’année : " + esc(r.evangileAnnee) + '</div></div>'
+      + '<button type="button" id="v577-next" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer">▶</button>'
+      + '<button type="button" id="v577-auj" style="background:none;border:1px solid var(--ui-border,#2a2a3a);color:inherit;border-radius:6px;cursor:pointer;font-size:.7rem">aujourd’hui</button></div>';
+    r.fetes.forEach(function (f) { h += '<div style="margin:.2rem 0">✨ ' + esc(f) + '</div>'; });
+    if (r.lectures) {
+      h += ligneLec(r.lectures.t, r.lectures.ev, r.lectures.l1 ? "1re lecture : " + r.lectures.l1 : "");
+    } else {
+      h += '<div class="lec" style="opacity:.75">Pas de table de lectures pour ce jour — voir le missel de votre rite. Cadre : ' + esc(r.temps) + (r.semaine ? ", " + r.semaine + "e semaine" : "") + " ; évangile de l’année : " + esc(r.evangileAnnee) + '.</div>';
+    }
+    h += '<div class="note">Calendrier liturgique calculé (exact). Tables de lectures embarquées INDICATIVES (dimanches d’Avent, de Carême, temps pascal, solennités) — vérifiez le missel de votre rite pour la célébration.</div>';
+    corps.innerHTML = h;
+    corps.querySelector("#v577-prev").addEventListener("click", function () { render(addJ(dateVue, -7)); });
+    corps.querySelector("#v577-next").addEventListener("click", function () { render(addJ(dateVue, 7)); });
+    corps.querySelector("#v577-auj").addEventListener("click", function () { render(new Date()); });
+    corps.querySelectorAll("[data-act]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        const ref = b.getAttribute("data-ref"), act = b.getAttribute("data-act");
+        if (act === "versions" && window.__v578Versions) window.__v578Versions.ouvrir(ref);
+        else if (act === "lire") {
+          try { if (typeof ttsEmission === "function") ttsEmission(ref + ". ", "francais", null, null); toast("▶ Lecture confiée à la voix de PARAMÈTRES", "info"); } catch (e) {}
+        } else if (act === "etudier") {
+          try {
+            if (window.__v564Adeodat) { window.__v564Adeodat.ouvrir(); window.__v564Adeodat.envoyer("Étudie ce passage de la liturgie du jour : " + ref + " — contexte historique, liens avec le temps liturgique, lecture des Pères si tu en connais, et une application concrète pour aujourd’hui."); }
+          } catch (e2) {}
+        }
+      });
+    });
+  }
+  function ouvrir() {
+    panneau().classList.add("open");
+    render(dateVue || new Date());
+  }
+  /* entrée dans le menu « + » */
+  function menuEntry() {
+    const m = document.getElementById("v6-more-menu");
+    if (!m || m.querySelector("#v577-menu-entry")) return;
+    const l = document.createElement("div");
+    l.className = "mm-label";
+    l.textContent = "Prière & liturgie";
+    m.appendChild(l);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hud-btn";
+    b.id = "v577-menu-entry";
+    b.textContent = "📖 AUJOURD’HUI";
+    b.title = "Temps liturgique + lectures du jour";
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); ouvrir(); });
+    m.appendChild(b);
+  }
+  function init() { menuEntry(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  const ivM = setInterval(function () { menuEntry(); if (document.getElementById("v577-menu-entry")) clearInterval(ivM); }, 600);
+  window.__v577Liturgie = { ouvrir: ouvrir, calculer: calculer, paques: paques };
+})();
+
+</script>
+<script id="v578-versions">
+/* ═══════════════════════════════════════════════════════════════════
+   v578 — BANC DE VERSIONS pour un verset : Segond / Vulgate / Peshitta.
+   Corpus locaux (bible/bN.js, biblelt/bN.js, syriaque/bN.js — mêmes
+   ancres que la concordance v530). Peshitta : NT SEUL (note honnête
+   pour l’AT). Références acceptées : « Jn 3:16 », « Jean 3:16 »,
+   « 43:3:16 », plages « Mt 24:37-44 ». ══════════════════════════════ */
+(function () {
+  "use strict";
+  if (window.__v578Versions) return;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "&quot;"); }
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k || "info"); } catch (e) {} }
+
+  const LIV = { "genese":1,"gn":1,"gen":1,"exode":2,"ex":2,"levitique":3,"lv":3,"nombres":4,"nb":4,
+    "deuteronome":5,"dt":5,"josue":6,"jos":6,"juges":7,"jg":7,"ruth":8,"ru":8,"1samuel":9,"1s":9,
+    "2samuel":10,"2s":10,"1rois":11,"1r":11,"2rois":12,"2r":12,"1chroniques":13,"1ch":13,"2chroniques":14,"2ch":14,
+    "esdras":15,"esd":15,"nehemie":16,"ne":16,"esther":17,"est":17,"job":18,"psaume":19,"psaumes":19,"ps":19,
+    "proverbes":20,"pr":20,"ecclesiaste":21,"ec":21,"cantique":22,"cant":22,"esaie":23,"isaie":23,"is":23,
+    "jeremie":24,"jr":24,"lamentations":25,"lam":25,"ezechiel":26,"ez":26,"daniel":27,"dn":27,"osee":28,"os":28,
+    "joel":29,"jl":29,"amos":30,"am":30,"abdias":31,"ab":31,"jonas":32,"jon":32,"michee":33,"mi":33,
+    "nahum":34,"na":34,"habacuc":35,"hab":35,"sophonie":36,"so":36,"aggee":37,"ag":37,"zacharie":38,"za":38,
+    "malachie":39,"ml":39,"matthieu":40,"mt":40,"marc":41,"mc":41,"luc":42,"lc":42,"jean":43,"jn":43,
+    "actes":44,"ac":44,"romains":45,"rm":45,"1corinthiens":46,"1co":46,"2corinthiens":47,"2co":47,
+    "galates":48,"ga":48,"ephesiens":49,"ep":49,"philippiens":50,"ph":50,"colossiens":51,"col":51,
+    "1thessaloniciens":52,"1th":52,"2thessaloniciens":53,"2th":53,"1timothee":54,"1tm":54,"2timothee":55,"2tm":55,
+    "tite":56,"ti":56,"philemon":57,"phm":57,"hebreux":58,"he":58,"jacques":59,"jc":59,"1pierre":60,"1p":60,
+    "2pierre":61,"2p":61,"1jean":62,"1jn":62,"2jean":63,"2jn":63,"3jean":64,"3jn":64,"jude":65,"jude":65,"apocalypse":66,"ap":66 };
+  function parserRef(txt) {
+    const t = String(txt || "").trim().toLowerCase().replace(/\s+/g, " ");
+    let m = /^([1-3]?\s?[a-zàâäéèêëîïôöùûüç]+)\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?$/.exec(t);
+    if (m) {
+      const b = LIV[m[1].replace(/\s/g, "")];
+      if (!b) return null;
+      return { b: b, c: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+    }
+    m = /^\s*(\d{1,2})\s*:\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*-\s*(\d{1,3}))?\s*$/.exec(t);
+    if (m) return { b: +m[1], c: +m[2], v1: +m[3], v2: m[4] ? +m[4] : +m[3] };
+    return null;
+  }
+  function parseFichier(t) {
+    const ancre = t.indexOf("||{})[");
+    let pos = -1;
+    if (ancre >= 0) pos = t.indexOf("=", ancre);
+    if (pos < 0) pos = t.lastIndexOf("=");
+    return JSON.parse(t.slice(pos + 1).replace(/;\s*$/, ""));
+  }
+  async function verset(src, b, c, v1, v2) {
+    try {
+      const r = await fetch(src);
+      if (!r.ok) return null;
+      const j = parseFichier(await r.text());
+      const ch = j[c];
+      if (!ch || typeof ch !== "object") return null;
+      const out = [];
+      for (let v = v1; v <= v2; v++) {
+        const t = ch[v];
+        if (typeof t === "string" && t) out.push({ v: v, t: t });
+      }
+      return out;
+    } catch (e) { return null; }
+  }
+
+  let modal = null;
+  function panneau() {
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "v578-modal";
+    modal.innerHTML = '<style>#v578-modal{position:fixed;inset:0;z-index:140960;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.7);backdrop-filter:blur(4px)}#v578-modal.open{display:flex}#v578-modal .b{width:min(1000px,96vw);max-height:88vh;margin-top:4vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v578-modal .hd{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v578-modal .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}#v578-modal .cfg{display:flex;gap:.5rem;padding:.6rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v578-modal input{flex:1;min-width:160px;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:6px;padding:.4rem .55rem;font-size:.8rem}#v578-modal .cols{display:flex;gap:.6rem;overflow:auto;padding:.7rem}#v578-modal .col{flex:1;min-width:220px;border:1px solid var(--ui-border,#2a2a3a);border-radius:8px;padding:.55rem .6rem;background:rgba(255,255,255,.02)}#v578-modal .col h4{margin:.1rem 0 .45rem;font-size:.78rem;color:var(--ui-accent,#e5c15a)}#v578-modal .vt{font-size:.8rem;line-height:1.6}#v578-modal .vt b{color:var(--ui-info,#4f8ef7)}#v578-modal .sy{direction:rtl;text-align:right;font-size:1.05rem;line-height:1.9}#v578-modal .vide{opacity:.55;font-size:.74rem}</style>'
+      + '<div class="b"><div class="hd"><h3>⚖ Banc de versions</h3><button type="button" id="v578-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
+      + '<div class="cfg"><input type="text" id="v578-ref" placeholder="Référence — ex. Jn 3:16, Jean 3:16, Mt 24:37-44, 43:3:16…" aria-label="Référence biblique"><button type="button" id="v578-go" class="ui-btn" style="padding:.35rem .7rem">Afficher</button></div>'
+      + '<div class="cols" id="v578-cols"><div class="vide">Entrez une référence (livre chapitre:verset) — Segond, Vulgate et Peshitta sont lues hors-ligne.</div></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.classList.remove("open"); });
+    modal.querySelector("#v578-x").addEventListener("click", function () { modal.classList.remove("open"); });
+    modal.querySelector("#v578-go").addEventListener("click", function () { charger(modal.querySelector("#v578-ref").value); });
+    modal.querySelector("#v578-ref").addEventListener("keydown", function (e) { if (e.key === "Enter") charger(this.value); });
+    return modal;
+  }
+  function col(titre, html, rtl) {
+    return '<div class="col"><h4>' + esc(titre) + '</h4><div class="vt' + (rtl ? " sy" : "") + '">' + html + '</div></div>';
+  }
+  function versHtml(liste) {
+    if (!liste || !liste.length) return '<span class="vide">indisponible</span>';
+    return liste.map(x => "<b>" + x.v + "</b> " + esc(x.t)).join("<br>");
+  }
+  async function charger(txt) {
+    const ref = parserRef(txt);
+    if (!ref) { toast("Référence non reconnue — ex. Jn 3:16 ou Mt 24:37-44", "warn"); return; }
+    const cols = document.getElementById("v578-cols");
+    if (!cols) return;
+    cols.innerHTML = '<div class="vide">Chargement hors-ligne…</div>';
+    const seg = await verset("bible/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2);
+    const vul = await verset("biblelt/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2);
+    const psy = ref.b >= 40 ? await verset("syriaque/b" + ref.b + ".js", ref.b, ref.c, ref.v1, ref.v2) : [];
+    const noteSy = ref.b < 40 ? '<span class="vide">Peshitta : Nouveau Testament seul — l’Ancien Testament n’est pas dans ce corpus.</span>' : versHtml(psy);
+    cols.innerHTML =
+      col("Segond (français)", versHtml(seg), false) +
+      col("Vulgate (latin)", versHtml(vul), false) +
+      col("Peshitta (syriaque — NT seul)", noteSy, true);
+  }
+  function ouvrir(ref) {
+    panneau().classList.add("open");
+    if (ref) { document.getElementById("v578-ref").value = ref; charger(ref); }
+  }
+  function menuEntry() {
+    const m = document.getElementById("v6-more-menu");
+    if (!m || m.querySelector("#v578-menu-entry")) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hud-btn";
+    b.id = "v578-menu-entry";
+    b.textContent = "⚖ BANC DE VERSIONS";
+    b.title = "Un verset → Segond / Vulgate / Peshitta côte à côte (hors-ligne)";
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); ouvrir(); });
+    m.appendChild(b);
+  }
+  function init() { menuEntry(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  const ivM = setInterval(function () { menuEntry(); if (document.getElementById("v578-menu-entry")) clearInterval(ivM); }, 650);
+  window.__v578Versions = { ouvrir: ouvrir, parserRef: parserRef };
+})();
+
+</script>
+<script id="v579-chapelet">
+/* ═══════════════════════════════════════════════════════════════════
+   v579 — CHAPELET GUIDÉ À LA VOIX. Mystères du jour : dim/sam =
+   joyeux, mar/ven = douloureux, mer/dim = glorieux, jeu = lumineux.
+   Deux modes : « complet » (toute la prière est parlée) et « guides »
+   (les Ave sont comptés avec une courte pause). La voix suit
+   PARAMÈTRES → Lecture vocale (ttsEmission → Supertonic 3 / système).
+   Réglage : theo_adeodat… non — v579_silencieux. ════════════════════ */
+(function () {
+  "use strict";
+  if (window.__v579Chapelet) return;
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/"/g, "&quot;"); }
+
+  const MYST = {
+    joyeux: { nom: "Mystères joyeux", titres: ["L’Annonciation", "La Visitation", "La Nativité de Jésus", "La Présentation de Jésus au Temple", "Le Recouvrement de Jésus au Temple"],
+      refs: ["Lc 1:26-38", "Lc 1:39-56", "Lc 2:1-20", "Lc 2:22-35", "Lc 2:41-52"],
+      meds: ["L’ange Gabriel annonce à Marie qu’elle sera Mère de Dieu.", "Élisabeth bénit Marie : « Bénie êtes-vous entre toutes les femmes. »", "Jésus naît à Bethléem, dans la pauvreté d’une étable.", "Jésus est présenté au Temple ; Siméon reconnaît la lumière des nations.", "Jésus retrouvé au Temple, au milieu des docteurs."] },
+    douloureux: { nom: "Mystères douloureux", titres: ["L’Agonie au Jardin des Oliviers", "La Flagellation", "Le Couronnement d’épines", "Le Portement de croix", "La Crucifixion et la mort de Jésus"],
+      refs: ["Mt 26:36-46", "Mc 15:6-15", "Mc 15:16-20", "Jn 19:16-22", "Jn 19:25-37"],
+      meds: ["« Que ma volonté se fasse, non la tienne. » Jésus prie et suinte le sang.", "Jésus est flagellé par ordre de Pilate, par amour pour nous.", "On couronne Jésus d’épines ; il est raillé comme Roi.", "Jésus porte sa croix vers le Golgotha, en silence.", "Jésus meurt sur la croix, remettant son esprit entre les mains du Père."] },
+    glorieux: { nom: "Mystères glorieux", titres: ["La Résurrection de Jésus", "L’Ascension", "La Pentecôte", "L’Assomption de Marie", "Le Couronnement de Marie"],
+      refs: ["Mt 28:1-10", "Ac 1:6-12", "Ac 2:1-13", "Lc 1:39-56 (tradition)", "Ap 12:1-6 (tradition)"],
+      meds: ["Le tombeau est vide : Jésus est ressuscité, alléluia !", "Jésus monte au ciel et siège à la droite du Père.", "L’Esprit-Saint descend sur l’Église naissante, en langues de feu.", "Marie est élevée corps et âme au ciel.", "Marie est couronnée Reine du ciel et de la terre."] },
+    lumineux: { nom: "Mystères lumineux", titres: ["Le Baptême de Jésus au Jourdain", "Les Noces de Cana", "L’annonce du Royaume", "La Transfiguration", "L’institution de l’Eucharistie"],
+      refs: ["Mt 3:13-17", "Jn 2:1-11", "Mc 1:14-15", "Lc 9:28-36", "Mt 26:26-28"],
+      meds: ["Le Père proclame : « Celui-ci est mon Fils bien-aimé. »", "Premier signe : l’eau devient vin, à la demande de Marie.", "« Convertissez-vous et croyez à la Bonne Nouvelle. »", "Sur la montagne, le visage de Jésus brille comme le soleil.", "« Ceci est mon corps, ceci est mon sang » — Jésus se donne en nourriture."] }
+  };
+  const PRIERES = {
+    signe: "Au nom du Père, et du Fils, et du Saint-Esprit. Amen.",
+    credo: "Je crois en Dieu, le Père tout-puissant, créateur du ciel et de la terre. Et en Jésus-Christ, son unique Fils, notre Seigneur, qui a été conçu du Saint-Esprit, est né de la Vierge Marie, a souffert sous Ponce Pilate, a été crucifié, est mort, a été enseveli, est descendu aux enfers, le troisième jour est ressuscité des morts, est monté aux cieux, est assis à la droite de Dieu le Père tout-puissant, d’où il viendra juger les vivants et les morts. Je crois en l’Esprit-Saint, à la sainte Église catholique, à la communion des saints, à la rémission des péchés, à la résurrection de la chair, à la vie éternelle. Amen.",
+    pater: "Notre Père qui es aux cieux, que ton nom soit sanctifié, que ton règne vienne, que ta volonté soit faite sur la terre comme au ciel. Donne-nous aujourd’hui notre pain de ce jour. Pardonne-nous nos offenses, comme nous pardonnons aussi à ceux qui nous ont offensés. Et ne nous soumets pas à la tentation, mais délivre-nous du mal. Amen.",
+    ave: "Je vous salue Marie, pleine de grâces, le Seigneur est avec vous. Vous êtes bénie entre toutes les femmes, et Jésus, le fruit de vos entrailles, est béni. Sainte Marie, Mère de Dieu, priez pour nous, pauvres pécheurs, maintenant et à l’heure de notre mort. Amen.",
+    gloire: "Gloire au Père, et au Fils, et au Saint-Esprit, comme il était au commencement, maintenant et toujours, dans les siècles des siècles. Amen.",
+    jesus: "Ô mon Jésus, pardonnez-nous nos péchés, préservez-nous du feu de l’enfer et conduisez au ciel toutes les âmes, surtout celles qui ont le plus besoin de votre miséricorde.",
+    salve: "Salut, ô Reine, Mère de miséricorde, notre vie, notre douceur et notre espérance, salut ! Nous crions vers vous, enfants d’Ève ; vers vous nous soupirons, gémissants et pleurant dans cette vallée de larmes. Et cependant, ô notre avocate, tournez vers nous votre regard miséricordieux ; et, après cet exil, montrez-nous Jésus, le fruit béni de vos entrailles. Ô clémente, ô pieuse, ô douce Vierge Marie. Priez pour nous, sainte Mère de Dieu, afin que nous soyons rendus dignes des promesses de Notre-Seigneur Jésus-Christ. Amen."
+  };
+  const MOTS_AVE = ["un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix"];
+  function setDuJour(d) {
+    const j = (d || new Date()).getDay();
+    return (j === 0 || j === 3 || j === 6) ? "glorieux" : (j === 2 || j === 5 ? "douloureux" : (j === 4 ? "lumineux" : "joyeux"));
+  }
+
+  let modal = null, steps = [], idx = 0, enMarche = false, timer = null;
+  let silencieux = false;
+  try { silencieux = localStorage.getItem("v579_silencieux") === "1"; } catch (e) {}
+  function setSilencieux(v) { silencieux = !!v; try { localStorage.setItem("v579_silencieux", silencieux ? "1" : "0"); } catch (e) {} }
+
+  function construire(setCle) {
+    const M = MYST[setCle];
+    const st = [];
+    st.push({ k: "signe", t: PRIERES.signe });
+    st.push({ k: "credo", t: PRIERES.credo });
+    for (let i = 0; i < 5; i++) {
+      st.push({ k: "mystere", n: i, t: "Premier|Deuxième|Troisième|Quatrième|Cinquième".split("|")[i] + " mystère : " + M.titres[i] + " (" + M.refs[i] + "). " + M.meds[i] });
+      st.push({ k: "pater", t: PRIERES.pater });
+      for (let a = 0; a < 10; a++) st.push({ k: "ave", n: a, t: silencieux ? (MOTS_AVE[a] + ".") : PRIERES.ave });
+      st.push({ k: "gloire", t: PRIERES.gloire });
+      st.push({ k: "jesus", t: PRIERES.jesus });
+    }
+    st.push({ k: "salve", t: PRIERES.salve });
+    return st;
+  }
+  function majUI() {
+    if (!modal) return;
+    const s = steps[idx] || null;
+    const t = modal.querySelector("#v579-cour");
+    const c = modal.querySelector("#v579-compte");
+    if (t) t.textContent = s ? s.t : "Que le Seigneur vous bénisse.";
+    if (c) {
+      const M = MYST[modal.getAttribute("data-set") || setDuJour()];
+      let ligne = M.nom;
+      if (s && s.k === "ave") ligne += " — Ave " + MOTS_AVE[s.n] + " (" + (s.n + 1) + "/10)";
+      else if (s && s.n != null) ligne += " — " + (s.n + 1) + "ᵉ dizaine";
+      c.textContent = ligne + " · " + (idx + 1) + "/" + steps.length;
+    }
+  }
+  function jouer() {
+    if (!enMarche) return;
+    if (idx >= steps.length) { finir(); return; }
+    majUI();
+    const s = steps[idx];
+    if (s.k === "ave" && silencieux) {
+      timer = setTimeout(function () { idx++; jouer(); }, 2200);
+    } else {
+      try {
+        if (typeof ttsEmission === "function") ttsEmission(s.t, "francais", function () { if (!enMarche) return; idx++; jouer(); }, function () { if (!enMarche) return; idx++; jouer(); });
+        else { timer = setTimeout(function () { idx++; jouer(); }, 2500); }
+      } catch (e) { timer = setTimeout(function () { idx++; jouer(); }, 2500); }
+    }
+  }
+  function finir() {
+    enMarche = false;
+    majUI();
+    toast("📿 Chapelet achevé — que la Vierge Marie vous garde.", "success");
+  }
+  function stop() {
+    enMarche = false;
+    if (timer) { clearTimeout(timer); timer = null; }
+    try { if (typeof ttsStop === "function") ttsStop(); } catch (e) {}
+  }
+
+
+  function panneau() {
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "v579-modal";
+    modal.innerHTML = '<style>#v579-modal{position:fixed;inset:0;z-index:140960;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72);backdrop-filter:blur(4px)}#v579-modal.open{display:flex}#v579-modal .b{width:min(620px,95vw);max-height:88vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v579-modal .hd{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v579-modal .hd h3{margin:0;font-size:.95rem;color:var(--ui-accent,#e5c15a);flex:1}#v579-modal .corps{padding:.7rem .9rem;display:flex;flex-direction:column;gap:.55rem;overflow:auto}#v579-modal #v579-cour{min-height:5.2em;background:rgba(255,255,255,.04);border:1px solid var(--ui-border,#2a2a3a);border-radius:8px;padding:.6rem;font-size:.9rem;line-height:1.6}#v579-modal #v579-compte{font-size:.7rem;color:var(--ui-dim,#8a8896)}#v579-modal .cts{display:flex;gap:.4rem;flex-wrap:wrap}#v579-modal .cts button{background:rgba(79,142,247,.14);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:.35rem .7rem;cursor:pointer;font-size:.78rem}</style>'
+      + '<div class="b"><div class="hd"><h3>📿 Chapelet</h3><label style="font-size:.66rem;color:var(--ui-dim,#8a8896);display:flex;gap:.3rem;align-items:center;cursor:pointer"><input type="checkbox" id="v579-sil" style="accent-color:#e5c15a"> Ave comptés</label><button type="button" id="v579-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
+      + '<div class="corps"><div id="v579-compte"></div><div id="v579-cour"></div>'
+      + '<div class="cts"><button type="button" id="v579-play">▶ Prier</button><button type="button" id="v579-pause">⏸ Pause</button><button type="button" id="v579-prec">◀ Précédent</button><button type="button" id="v579-suiv">Suivant ▶</button><button type="button" id="v579-stop">⏹ Arrêter</button></div></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener("click", function (e) { if (e.target === modal) { stop(); modal.classList.remove("open"); } });
+    modal.querySelector("#v579-x").addEventListener("click", function () { stop(); modal.classList.remove("open"); });
+    modal.querySelector("#v579-play").addEventListener("click", function () {
+      if (idx >= steps.length) idx = 0;
+      enMarche = true;
+      if (idx === 0 && modal.querySelector("#v579-cour").textContent.indexOf(steps[0].t) === -1) majUI();
+      jouer();
+    });
+    modal.querySelector("#v579-pause").addEventListener("click", function () { stop(); });
+    modal.querySelector("#v579-prec").addEventListener("click", function () { if (idx > 0) idx--; majUI(); });
+    modal.querySelector("#v579-suiv").addEventListener("click", function () { stop(); if (idx < steps.length) idx++; majUI(); });
+    modal.querySelector("#v579-stop").addEventListener("click", function () { stop(); idx = 0; majUI(); });
+    const sil = modal.querySelector("#v579-sil");
+    sil.checked = silencieux;
+    sil.addEventListener("change", function () {
+      setSilencieux(sil.checked);
+      const setCle = modal.getAttribute("data-set") || setDuJour();
+      steps = construire(setCle);
+      majUI();
+      toast(silencieux ? "📿 Ave comptés — seuls les mystères et oraisons sont parlés" : "📿 Mode complet — toute la prière est parlée", "info");
+    });
+    return modal;
+  }
+  function ouvrir() {
+    const setCle = setDuJour();
+    steps = construire(setCle);
+    idx = 0; enMarche = false;
+    panneau().setAttribute("data-set", setCle);
+    panneau().classList.add("open");
+    majUI();
+  }
+  function menuEntry() {
+    const m = document.getElementById("v6-more-menu");
+    if (!m || m.querySelector("#v579-menu-entry")) return;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "hud-btn";
+    b.id = "v579-menu-entry";
+    b.textContent = "📿 CHAPELET";
+    b.title = "Chapelet guidé à la voix — mystères du jour";
+    b.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); ouvrir(); });
+    m.appendChild(b);
+  }
+  function init() { menuEntry(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  const ivM = setInterval(function () { menuEntry(); if (document.getElementById("v579-menu-entry")) clearInterval(ivM); }, 700);
+  window.__v579Chapelet = { ouvrir: ouvrir, setDuJour: setDuJour, construire: construire, stop: stop, getIdx: function () { return idx; } };
 })();
 
 </script>
