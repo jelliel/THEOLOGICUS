@@ -96,8 +96,18 @@ function ok(label, cond, detail) {
   });
   ok('la fenêtre de secours affiche le JSON (parse OK)', fen1 === nApres, 'n=' + fen1);
   const info = await page.evaluate(() => document.getElementById('v583-info').textContent);
-  ok('l’info indique où trouver le fichier (Téléchargements / copier sur Android)',
-     info.indexOf('Téléchargements') !== -1 && info.indexOf('Copier le JSON') !== -1, info.slice(0, 90));
+  /* v588 — le PC n'est PLUS renvoyé vers « Téléchargements » : la WebView n'y
+     télécharge RIEN. L'info doit nommer la destination RÉELLE (backups/) et
+     garder le repli Android « Copier le JSON ». */
+  ok('l’info nomme la destination réelle (backups) et le repli Android',
+     info.indexOf('backups') !== -1 && info.indexOf('Copier le JSON') !== -1, info.slice(0, 110));
+  const boutons = await page.evaluate(() => ({
+    dossier: !!document.getElementById('v583-dossier'),
+    libelle: (document.getElementById('v583-telech') || {}).textContent || ''
+  }));
+  ok('un bouton « 📂 Ouvrir le dossier » est proposé', boutons.dossier === true, JSON.stringify(boutons));
+  ok('le bouton d’écriture annonce « Enregistrer » (plus « Télécharger »)',
+     /Enregistrer/.test(boutons.libelle), boutons.libelle);
 
   /* ── 3. copier → presse-papiers ── */
   section('3. 📋 Copier le JSON → presse-papiers');

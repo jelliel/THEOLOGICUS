@@ -2174,6 +2174,8 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self._save_config()
         elif self.path.split('?')[0] == '/save-data':
             self._save_data()
+        elif self.path.split('?')[0] == '/reveal-exports':
+            self._reveal_exports()
         elif self.path.split('?')[0] == '/theologicus-store':
             self._post_store()
         elif self.path.split('?')[0] == '/libretranslate/start':
@@ -2575,6 +2577,35 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(f'erreur: {e}'.encode())
             except Exception:
                 pass
+
+    def _reveal_exports(self):
+        """Ouvre le dossier des exports (SERVE_DIR/backups) dans le gestionnaire
+        de fichiers du système. Répond {ok, dossier}.
+
+        Pourquoi : la WebView (exe/APK) ne télécharge PAS les blob URL — elle
+        échoue SANS lever d'erreur. L'app écrit donc les exports ici et doit
+        pouvoir MONTRER ce dossier, sinon l'utilisateur cherche un fichier qui
+        n'est jamais arrivé dans « Téléchargements ».
+        """
+        dossier = os.path.join(SERVE_DIR, 'backups')
+        try:
+            os.makedirs(dossier, exist_ok=True)
+            # « ?dry=1 » : on ne fait que RÉPONDRE (pas d'ouverture de fenêtre).
+            # Indispensable aux bancs : ouvrir Explorer sur la machine de
+            # l'utilisateur à chaque exécution de la CI serait intrusif.
+            q = parse_qs(urlparse(self.path).query)
+            if (q.get('dry') or [''])[0] == '1':
+                self._json_response({"ok": True, "dossier": dossier, "ouvert": False})
+                return
+            if os.name == 'nt':
+                os.startfile(dossier)                      # noqa: S606 — ouverture voulue
+            elif sys.platform == 'darwin':
+                subprocess.Popen(['open', dossier])
+            else:
+                subprocess.Popen(['xdg-open', dossier])
+            self._json_response({"ok": True, "dossier": dossier, "ouvert": True})
+        except Exception as e:
+            self._json_response({"ok": False, "dossier": dossier, "erreur": str(e)})
 
     def _post_store(self):
         """v403 — fusionne des entrées dans le magasin partagé (sync multi-appareils).
