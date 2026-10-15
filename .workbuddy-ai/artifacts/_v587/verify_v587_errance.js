@@ -87,12 +87,15 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const e3a = await page.evaluate(() => window.__v584Pets.etat());
   ok("la cible quitte l ancre pour « errance »", e3a.cible === "errance", JSON.stringify(e3a));
 
-  /* on echantillonne la position REELLE (getBoundingClientRect) pendant la promenade */
+  /* on echantillonne la position REELLE (getBoundingClientRect) pendant la promenade.
+     Fenetre dimensionnee au PIRE CAS du calendrier aleatoire : un pas dure au plus
+     3,6 s + jusqu'a 2,9 s de pause (6,5 s) ; 3 positions distinctes exigent donc
+     jusqu'a ~20 s. 35 s laisse une marge confortable meme sur un runner lent. */
   const vue = await page.evaluate(async () => {
     const z = window.__v584Pets.errance().zone;
     const pts = [], anims = new Set();
     let hors = 0;
-    const fin = Date.now() + 15000;
+    const fin = Date.now() + 35000;
     while (Date.now() < fin) {
       const h = document.getElementById("v584-pet");
       if (h) {
@@ -114,10 +117,11 @@ const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
   /* ── 4. invariant de sens : data-face suit le sens du deplacement ── */
   section("4. Le compagnon se retourne dans le sens de sa marche");
+  /* 40 s = marge sur le pire cas (6,5 s par pas) pour observer 4 deplacements */
   const sens = await page.evaluate(async () => {
     const mouv = [];
     let prec = window.__v584Pets.errance().pos;
-    const fin = Date.now() + 16000;
+    const fin = Date.now() + 40000;
     while (Date.now() < fin && mouv.length < 4) {
       await new Promise(r => setTimeout(r, 140));
       const e = window.__v584Pets.errance();
