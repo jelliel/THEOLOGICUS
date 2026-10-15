@@ -63696,7 +63696,8 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
      thinking=8 (6). Mascottes vectorielles generees localement.
      Vie : selection d agent → pet au composeur ; envoi → il suit la
      question (thinking) ; la reponse arrive → il la suit (wave pendant
-     la voix, happy a la fin) ; puis retour au coin bas-gauche. */
+     la voix, happy a la fin) ; puis il se repose et DEAMBULE LIBREMENT
+     dans toute l interface du chat (reglage « Deambulation libre »). */
   var FW = 256, FH = 278, COLS = 8, ROWS = 4;
   var AW = COLS * FW, AH = ROWS * FH;
   var ETATS = {
@@ -64035,6 +64036,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       + "pointer-events:none;transform:translate(-320px,-320px);"
       + "transition:transform .62s cubic-bezier(.34,1.28,.42,1);will-change:transform}"
       + "#v584-pet .v584-bob{width:100%;height:100%;background-repeat:no-repeat;}"
+      + "#v584-pet[data-face=\"gauche\"] .v584-bob{transform:scaleX(-1)}"
       + "#v584-pet .v584-float{width:100%;height:100%;"
       + "animation:v584-bob 2.8s ease-in-out infinite alternate}"
       + "@keyframes v584-bob{from{transform:translateY(0) rotate(-0.8deg)}to{transform:translateY(-3.5px) rotate(1.2deg)}}"
@@ -64108,7 +64110,82 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     if (!host) return;
     cibleNom = nom;
     var p = ciblePos(nom);
-    host.style.transform = "translate(" + p.x + "px," + p.y + "px)";
+    poser(p.x, p.y, 0.62, 0);
+  }
+
+  /* ── errance : deambulation LIBRE dans toute l interface du chat ──
+     Le compagnon choisit un point aleatoire de la zone de chat, y
+     marche (duree proportionnelle a la distance, miroir selon le sens),
+     marque une pause, puis recommence. Interrompu a chaque evenement
+     (agent, generation, voix) et repris au repos. */
+  var pos = { x: -320, y: -320 }, face = 1;
+  /* easing de MARCHE : ressort discret (depassement < 0,6 %) — l easing par
+     defaut (.34,1.28,.42,1) depasse de ~2,6 %, ce qui faisait sortir le
+     compagnon de la zone pres des bords. */
+  var EASE_PAS = "cubic-bezier(.28,1.14,.38,1)";
+  var ERR = { actif: false, pas: null };
+  function erranceOn() { return lit("theo_pets_errance") !== "0"; }
+  /* zone = conversation (#chat-wrap) etendue jusqu au bas du composeur */
+  function zoneErrance() {
+    var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    var z = { x: 8, y: 8, w: Math.max(80, vw - 16), h: Math.max(80, vh - 16) };
+    try {
+      var wrap = document.getElementById("chat-wrap");
+      var r = wrap ? wrap.getBoundingClientRect() : null;
+      if (r && r.width > 140 && r.height > 140) {
+        var bas = r.bottom;
+        var inp = document.getElementById("input-area");
+        if (inp) { var ir = inp.getBoundingClientRect(); if (ir.height > 0) bas = Math.max(bas, ir.bottom); }
+        z = { x: r.left, y: r.top, w: r.width, h: Math.max(80, bas - r.top) };
+      }
+    } catch (e) {}
+    return z;
+  }
+  function choisirPoint() {
+    var z = zoneErrance();
+    var w = host ? (host.offsetWidth || 76) : 76, h = host ? (host.offsetHeight || 82) : 82;
+    var m = 14, x0 = z.x + m, y0 = z.y + m;
+    var x1 = Math.max(x0, z.x + z.w - w - m), y1 = Math.max(y0, z.y + z.h - h - m);
+    return { x: R(x0 + Math.random() * (x1 - x0)), y: R(y0 + Math.random() * (y1 - y0)) };
+  }
+  function poser(x, y, duree, sens, doux) {
+    if (!host) return;
+    pos.x = R(x); pos.y = R(y);
+    host.style.transitionDuration = R(duree || 0.62) + "s";
+    host.style.transitionTimingFunction = doux ? EASE_PAS : "";
+    if (sens) {
+      var f = sens > 0 ? 1 : -1;
+      if (f !== face) { face = f; host.setAttribute("data-face", f > 0 ? "droite" : "gauche"); }
+    }
+    host.style.transform = "translate(" + pos.x + "px," + pos.y + "px)";
+  }
+  function pasErrance() {
+    ERR.pas = null;
+    if (!host || !arme() || !ERR.actif) return null;
+    if (fluxActif || paroleRecente()) { ERR.pas = setTimeout(pasErrance, 1000); return null; }
+    var best = null, bd = -1, i, c, dx, dy, d;
+    for (i = 0; i < 6; i++) {          /* on garde le point le plus eloigne */
+      c = choisirPoint();
+      dx = c.x - pos.x; dy = c.y - pos.y; d = Math.sqrt(dx * dx + dy * dy);
+      if (d > bd) { bd = d; best = c; }
+    }
+    dx = best.x - pos.x;
+    var duree = Math.min(3.6, Math.max(1, bd / 180));
+    cibleNom = "errance";
+    animer("idle");
+    poser(best.x, best.y, duree, dx === 0 ? face : (dx > 0 ? 1 : -1), true);
+    ERR.pas = setTimeout(pasErrance, R((duree + 0.7 + Math.random() * 2.2) * 1000));
+    return best;
+  }
+  function demarrerErrance(delai) {
+    arreterErrance();
+    if (!arme() || !host || !erranceOn()) return;
+    ERR.actif = true;
+    ERR.pas = setTimeout(pasErrance, delai == null ? 2800 : delai);
+  }
+  function arreterErrance() {
+    ERR.actif = false;
+    if (ERR.pas) { clearTimeout(ERR.pas); ERR.pas = null; }
   }
 
   /* ── machine a etats : idle / wave / happy / thinking + voyage ── */
@@ -64116,10 +64193,12 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   function animer(a) { if (host) host.setAttribute("data-anim", a); }
   function cacher() {
     seq++;
+    arreterErrance();
     if (rafraichir) { clearInterval(rafraichir); rafraichir = null; }
     if (quiet) { clearTimeout(quiet); quiet = null; }
     if (host) { host.remove(); host = null; }
     cibleNom = "coin";
+    pos.x = -320; pos.y = -320; face = 1;
   }
   var atlasFaits = {};
   function assureAtlas(cle) {
@@ -64137,6 +64216,8 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       host = document.createElement("div");
       host.id = "v584-pet";
       host.className = "v584-pet";
+      host.setAttribute("data-face", "droite");
+      face = 1;
       document.body.appendChild(host);
       var bob = document.createElement("div");
       bob.className = "v584-bob";
@@ -64158,15 +64239,17 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   }
   function onAgent(ag) {
     if (!arme() || !ag) { cacher(); return; }
+    arreterErrance();
     montrer(familleDe(ag));
     ancre("composeur");
     animer("wave");
     var t = ++seq;
     if (quiet) { clearTimeout(quiet); quiet = null; }
-    quiet = setTimeout(function () { if (t === seq) animer("idle"); }, 2300);
+    quiet = setTimeout(function () { if (t === seq) { animer("idle"); demarrerErrance(); } }, 2300);
   }
   function fluxDebut() {
     if (!arme() || !host) return;
+    arreterErrance();
     fluxActif = true;
     var t = ++seq;
     if (quiet) { clearTimeout(quiet); quiet = null; }
@@ -64185,11 +64268,12 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     ancre("message");
     if (quiet) { clearTimeout(quiet); quiet = null; }
     quiet = setTimeout(function () {
-      if (t === seq && !paroleRecente() && !fluxActif) { ancre("composeur"); animer("idle"); }
+      if (t === seq && !paroleRecente() && !fluxActif) { ancre("composeur"); animer("idle"); demarrerErrance(); }
     }, 2200);
   }
   function parole() {
     if (!arme() || !host) return;
+    arreterErrance();
     paroleT = Date.now();
     var t = ++seq;
     if (rafraichir) { clearInterval(rafraichir); rafraichir = null; }
@@ -64197,7 +64281,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     animer("wave");
     if (quiet) { clearTimeout(quiet); quiet = null; }
     quiet = setTimeout(function () {
-      if (t === seq && !fluxActif) { ancre("composeur"); animer("idle"); }
+      if (t === seq && !fluxActif) { ancre("composeur"); animer("idle"); demarrerErrance(); }
     }, 1700);
   }
 
@@ -64260,6 +64344,14 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     row.appendChild(chk);
     row.appendChild(document.createTextNode("Afficher le compagnon quand un agent est sélectionné"));
     g.appendChild(row);
+    var rowE = document.createElement("label");
+    rowE.className = "field-label";
+    rowE.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin:6px 0;";
+    var chkE = document.createElement("input");
+    chkE.type = "checkbox"; chkE.id = "v584-errance"; chkE.checked = erranceOn();
+    rowE.appendChild(chkE);
+    rowE.appendChild(document.createTextNode("Déambulation libre — le compagnon se promène dans toute l’interface du chat"));
+    g.appendChild(rowE);
     var row2 = document.createElement("div");
     row2.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin:6px 0;";
     var labT = document.createElement("span");
@@ -64297,7 +64389,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     g.appendChild(row2);
     var hint = document.createElement("div");
     hint.className = "field-hint";
-    hint.textContent = "Le compagnon vit près du composeur, suit votre question pendant la génération, s’agite quand il parle, puis regagne son coin en bas à gauche. Mascottes au format OpenPets (MIT) — import de compagnons supplémentaires à venir.";
+    hint.textContent = "Le compagnon se promène librement dans toute l’interface du chat, suit votre question pendant la génération et s’agite quand il parle, puis reprend sa promenade. Décochez « Déambulation libre » pour qu’il reste près du composeur. Mascottes au format OpenPets (MIT) — import de compagnons supplémentaires à venir.";
     g.appendChild(hint);
     chk.addEventListener("change", function () {
       ecrit("theo_pets", chk.checked ? "1" : "0");
@@ -64312,6 +64404,13 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     selP.addEventListener("change", function () {
       ecrit("theo_pets_pet", selP.value);
       if (arme()) onAgent(etatAgent());
+    });
+    chkE.addEventListener("change", function () {
+      ecrit("theo_pets_errance", chkE.checked ? "1" : "0");
+      if (!chkE.checked) {
+        arreterErrance();
+        if (host) { ancre("composeur"); animer("idle"); }
+      } else if (arme() && host) demarrerErrance(400);
     });
     pan.appendChild(g);
     return true;
@@ -64339,7 +64438,10 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       rafP = 0;
       if (!host) return;
       rafraichirStyle();
-      ancre(cibleNom);
+      if (cibleNom === "errance") {
+        var z = zoneErrance(), w = host.offsetWidth || 76, h = host.offsetHeight || 82, m = 10;
+        poser(Math.max(z.x + m, Math.min(pos.x, z.x + z.w - w - m)), Math.max(z.y + m, Math.min(pos.y, z.y + z.h - h - m)), 0.3, 0);
+      } else ancre(cibleNom);
     });
   });
   var chatEl = document.getElementById("chat-container");
@@ -64363,7 +64465,11 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       };
     },
     appliquer: appliquer,
-    familleDe: familleDe
+    familleDe: familleDe,
+    errance: function () {
+      return { on: erranceOn(), actif: ERR.actif, zone: zoneErrance(), pos: { x: pos.x, y: pos.y }, face: face > 0 ? "droite" : "gauche", taille: host ? host.offsetWidth : 0 };
+    },
+    choisirPoint: choisirPoint
   };
 })();
 </script>
