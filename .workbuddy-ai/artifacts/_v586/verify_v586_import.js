@@ -9,7 +9,7 @@
 const H = require("../../../tools/bench_common.js");
 const { chromium } = require("playwright");
 const path = require("path"), os = require("os");
-const P = "C:/tmp/theoverify/.workbuddy-ai/artifacts/_v586/paquets/";
+const P = path.join(__dirname, "paquets") + "/";   /* chemin relatif : valable en CI */
 const resultats = [];
 function section(t) { console.log("\n■ " + t); }
 function ok(label, cond, detail) {

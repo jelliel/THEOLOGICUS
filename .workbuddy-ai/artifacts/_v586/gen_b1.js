@@ -12,7 +12,7 @@ L.push("   un message clair, rien en base ; survit au rechargement. ════
 L.push("const H = require(\"../../../tools/bench_common.js\");");
 L.push("const { chromium } = require(\"playwright\");");
 L.push("const path = require(\"path\"), os = require(\"os\");");
-L.push("const P = \"C:/tmp/theoverify/.workbuddy-ai/artifacts/_v586/paquets/\";");
+L.push("const P = path.join(__dirname, \"paquets\") + \"/\";   /* chemin relatif : valable en CI */");
 L.push("const resultats = [];");
 L.push("function section(t) { console.log(\"\\n■ \" + t); }");
 L.push("function ok(label, cond, detail) {");
