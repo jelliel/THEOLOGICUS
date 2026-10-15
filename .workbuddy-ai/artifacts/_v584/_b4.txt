@@ -1,0 +1,70 @@
+
+  /* ── 6. voix : il suit la lecture puis se taire ── */
+  section("6. Voix : le compagnon s agite pendant la lecture, puis se repose");
+  await page.evaluate(() => {
+    const orig = window.ttsEmission;
+    window.__ttsAppels = 0;
+    window.ttsEmission = function (t, l, onEnd, onErr) {
+      window.__ttsAppels++;
+      try { return orig.call(this, t, l, onEnd, onErr); } catch (e) { try { if (onEnd) onEnd(); } catch (e2) {} }
+    };
+  });
+  await page.evaluate(() => { window.ttsEmission("Phrase de test du compagnon.", "fr-FR", function () {}, function () {}); });
+  await page.waitForFunction(() => window.__v584Pets.etat().anim === "wave", null, { timeout: 4000 });
+  const e6 = await page.evaluate(() => window.__v584Pets.etat());
+  ok("pendant la lecture : compagnon anime (wave)", e6.anim === "wave", JSON.stringify(e6));
+  await page.waitForFunction(() => window.__v584Pets.etat().cible === "coin", null, { timeout: 6000 });
+  const e6b = await page.evaluate(() => window.__v584Pets.etat());
+  ok("apres le silence : retour au coin en idle", e6b.anim === "idle" && e6b.cible === "coin", JSON.stringify(e6b));
+
+  /* ── 7. wrappers marques ── */
+  section("7. Les crochets sont marques et se reaffirment");
+  const e7 = await page.evaluate(() => ({ flux: !!(window.callLLMStream && window.callLLMStream.__v584W), tts: !!(window.ttsEmission && window.ttsEmission.__v584W) }));
+  ok("callLLMStream porte le marqueur __v584W", e7.flux === true, JSON.stringify(e7));
+  ok("ttsEmission porte le marqueur __v584W", e7.tts === true, JSON.stringify(e7));
+
+  /* ── 8. atlas : grille OpenPets reelle ── */
+  section("8. Atlas des mascottes : format OpenPets verifie");
+  const atlas = await page.evaluate(() => new Promise(function (res) {
+    const img = new Image();
+    img.onload = function () { res({ w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = function () { res({ w: 0, h: 0 }); };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(window.__v584Pets.atlas("colombe"));
+  }));
+  ok("atlas SVG decode aux dimensions OpenPets (1536x2288)", atlas.w === 1536 && atlas.h === 2288, JSON.stringify(atlas));
+  const fam = await page.evaluate(() => ({ pat: window.__v584Pets.familleDe({ name: "Exegete", desc: " " }), def: window.__v584Pets.familleDe({ name: "Agent perso", desc: " " }) }));
+  ok("famille Exegete → chouette ; agent perso → phenix", fam.pat === "chouette" && fam.def === "phenix", JSON.stringify(fam));
+
+  /* ── 9. pile et invariants ── */
+  section("9. Pile z-index et invariants de surface");
+  const e9 = await page.evaluate(() => {
+    const h = document.getElementById("v584-pet");
+    if (!h) return null;
+    const cs = getComputedStyle(h);
+    return { z: parseFloat(cs.zIndex), cls: h.className, pe: cs.pointerEvents, inline: (h.getAttribute("style") || "") };
+  });
+  ok("z-index derive des tokens : au-dessus du contenu, sous les fiches", e9 && e9.z > 1000 && e9.z < 9900, e9 ? "z=" + e9.z : "absent");
+  ok("aucune classe ui-* au repos (invariant v513)", e9 && e9.cls.indexOf("ui-") === -1, e9 ? e9.cls : "");
+  ok("traverse la souris (pointer-events none)", e9 && e9.pe === "none", e9 ? e9.pe : "");
+  ok("aucune url dans le style inline (sanitizer a11y)", e9 && e9.inline.indexOf("url(") === -1, e9 ? e9.inline.slice(0, 40) : "");
+
+  /* ── 10. OFF → disparition + persistance ── */
+  section("10. Desactivation : le compagnon quitte l ecran (et y reste apres rechargement)");
+  await page.evaluate(() => { const c = document.getElementById("v584-on"); if (c.checked) c.click(); });
+  await page.waitForFunction(() => window.__v584Pets.etat().visible === false, null, { timeout: 5000 });
+  const e10 = await page.evaluate(() => ({ host: !!document.getElementById("v584-pet"), cle: localStorage.getItem("theo_pets") }));
+  ok("case decochee → compagnon retire du DOM", e10.host === false);
+  ok("choix persiste (theo_pets = 0)", e10.cle === "0", e10.cle);
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(1800);
+  const e10b = await page.evaluate(() => ({ host: !!document.getElementById("v584-pet"), st: window.__v584Pets.etat() }));
+  ok("apres rechargement : toujours aucun compagnon", e10b.host === false && e10b.st.visible === false, JSON.stringify(e10b));
+
+  /* proprete */
+  ok("aucune erreur JavaScript", bruit.length === 0, bruit.slice(0, 3).join(" | "));
+  const bons = resultats.filter(r => r.pass).length;
+  console.log("\nRESULTAT : " + bons + "/" + resultats.length);
+  await browser.close();
+  try { await H.killRelay(relais); } catch (e) { try { relais.proc.kill(); } catch (e2) {} }
+  process.exit(bons === resultats.length ? 0 : 1);
+})();

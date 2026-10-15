@@ -1,0 +1,80 @@
+
+  /* ── machine a etats : idle / wave / happy / thinking + voyage ── */
+  var seq = 0, quiet = null, rafraichir = null, fluxActif = false, paroleT = 0;
+  function animer(a) { if (host) host.setAttribute("data-anim", a); }
+  function cacher() {
+    seq++;
+    if (rafraichir) { clearInterval(rafraichir); rafraichir = null; }
+    if (quiet) { clearTimeout(quiet); quiet = null; }
+    if (host) { host.remove(); host = null; }
+    cibleNom = "coin";
+  }
+  var atlasFaits = {};
+  function assureAtlas(cle) {
+    if (atlasFaits[cle]) return;
+    var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(atlasSvg(cle));
+    regleCss("#v584-pet[data-pet=\"" + cle + "\"]", "background-image:url(\"" + url + "\")");
+    atlasFaits[cle] = true;
+  }
+  function montrer(cle) {
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "v584-pet";
+      host.className = "v584-pet";
+      document.body.appendChild(host);
+    }
+    if (host.getAttribute("data-pet") !== cle) { host.setAttribute("data-pet", cle); assureAtlas(cle); }
+    animer("idle");
+  }
+  function familleDe(ag) {
+    if (lit("theo_pets_pet") && lit("theo_pets_pet") !== "auto") return lit("theo_pets_pet");
+    if (!ag) return "phenix";
+    var t = (ag.name || "") + " " + (ag.desc || "");
+    var i;
+    for (i = 0; i < FAMILLES.length; i++) if (FAMILLES[i][0].test(t)) return FAMILLES[i][1];
+    return "phenix";
+  }
+  function onAgent(ag) {
+    if (!arme() || !ag) { cacher(); return; }
+    montrer(familleDe(ag));
+    ancre("composeur");
+    animer("wave");
+    var t = ++seq;
+    if (quiet) { clearTimeout(quiet); quiet = null; }
+    quiet = setTimeout(function () { if (t === seq) animer("idle"); }, 2300);
+  }
+  function fluxDebut() {
+    if (!arme() || !host) return;
+    fluxActif = true;
+    var t = ++seq;
+    if (quiet) { clearTimeout(quiet); quiet = null; }
+    ancre("message");
+    animer("thinking");
+    if (rafraichir) clearInterval(rafraichir);
+    rafraichir = setInterval(function () { if (t === seq && fluxActif && cibleNom === "message") ancre("message"); }, 700);
+  }
+  function paroleRecente() { return (Date.now() - paroleT) < 2000; }
+  function fluxFin() {
+    fluxActif = false;
+    if (rafraichir) { clearInterval(rafraichir); rafraichir = null; }
+    if (!arme() || !host) return;
+    var t = ++seq;
+    animer("happy");
+    ancre("message");
+    if (quiet) { clearTimeout(quiet); quiet = null; }
+    quiet = setTimeout(function () {
+      if (t === seq && !paroleRecente() && !fluxActif) { ancre("coin"); animer("idle"); }
+    }, 2200);
+  }
+  function parole() {
+    if (!arme() || !host) return;
+    paroleT = Date.now();
+    var t = ++seq;
+    if (rafraichir) { clearInterval(rafraichir); rafraichir = null; }
+    ancre("message");
+    animer("wave");
+    if (quiet) { clearTimeout(quiet); quiet = null; }
+    quiet = setTimeout(function () {
+      if (t === seq && !fluxActif) { ancre("coin"); animer("idle"); }
+    }, 1700);
+  }

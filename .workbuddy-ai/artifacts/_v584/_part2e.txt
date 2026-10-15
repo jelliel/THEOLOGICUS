@@ -1,0 +1,56 @@
+
+  function accessoire(def, p, etat, i) {
+    var s = "", q = p.quill || 0, h = i * 2.4;
+    if (def.acc === "halo") {
+      s += el("ellipse", { cx: 96, cy: 34, rx: 26, ry: 8, fill: "none", stroke: "#e5c15a", "stroke-width": 4 });
+      s += el("ellipse", { cx: 96, cy: 34, rx: 26, ry: 8, fill: "none", stroke: "#fff3c4", "stroke-width": 1.6 });
+    } else if (def.acc === "livre") {
+      s += el("rect", { x: 116, y: R(150 + q * 0.3), width: 34, height: 24, rx: 3, fill: "#8f4a2a", stroke: "#5e2f18", "stroke-width": 2, transform: "rotate(-8 133 " + R(162 + q * 0.3) + ")" });
+      s += el("line", { x1: 133, y1: R(150 + q * 0.3), x2: 133, y2: R(174 + q * 0.3), stroke: "#fff3c4", "stroke-width": 2, transform: "rotate(-8 133 " + R(162 + q * 0.3) + ")" });
+    } else if (def.acc === "bulles") {
+      s += el("circle", { cx: 146, cy: R(96 - h), r: 3, fill: "none", stroke: "#bfe6f7", "stroke-width": 1.6 });
+      s += el("circle", { cx: 154, cy: R(78 - h * 1.4), r: 4.4, fill: "none", stroke: "#bfe6f7", "stroke-width": 1.6 });
+      s += el("circle", { cx: 142, cy: R(62 - h * 1.8), r: 2.4, fill: "none", stroke: "#bfe6f7", "stroke-width": 1.4 });
+    } else if (def.acc === "etoile") {
+      s += etoile(150, 34, 9, "#ffd166", 0.9);
+      s += etoile(134, 48, 5, "#ffe8a3", 0.7);
+    } else if (def.acc === "braises") {
+      s += etoile(148, 70, 4, "#ffb347", 0.5);
+      s += etincelles(p);
+    }
+    return s;
+  }
+
+  function creature(def, etat, i) {
+    var p = params(etat, i), s = "";
+    s += el("ellipse", { cx: 96, cy: 196, rx: R(Math.max(24, 50 - p.jump)), ry: 7, fill: "rgba(15,25,45,0.20)" });
+    s += "<g transform=\"translate(0," + R(-(p.bob + p.jump)) + ")\">";
+    var cle = def.cle;
+    if (cle === "cierge") s += cierge(def, p);
+    else if (cle === "lion") s += lion(def, p);
+    else if (cle === "poisson") s += poisson(def, p);
+    else if (cle === "fennec") s += fennec(def, p);
+    else if (cle === "chouette") s += chouette(def, p);
+    else s += oiseau(def, p);
+    s += accessoire(def, p, etat, i);
+    s += pensee(p);
+    s += "</g>";
+    return s;
+  }
+
+  function atlasSvg(cle) {
+    var def = MASC[cle];
+    def.cle = cle;
+    var out = ["<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1536\" height=\"2288\" viewBox=\"0 0 1536 2288\">"];
+    var e, f, cleEtat;
+    for (cleEtat in ETATS) {
+      e = ETATS[cleEtat];
+      for (f = 0; f < e.n; f++) {
+        out.push("<g transform=\"translate(" + (f * FW) + "," + (e.row * FH) + ")\">");
+        out.push(creature(def, cleEtat, f));
+        out.push("</g>");
+      }
+    }
+    out.push("</svg>");
+    return out.join("");
+  }

@@ -1,0 +1,117 @@
+<script id="v584-pets">
+(function () {
+  "use strict";
+  if (window.__v584Pets) return;
+  /* V4.0 — PETS : compagnons animes des agents, a la maniere de Codex, au
+     format OpenPets (MIT). Atlas : frames 192x208, 8 colonnes, 11 lignes
+     (1536x2288) ; etats : idle=0 (6 frames), wave=3 (4), happy=4 (5),
+     thinking=8 (6). Mascottes vectorielles generees localement.
+     Vie : selection d agent → pet au composeur ; envoi → il suit la
+     question (thinking) ; la reponse arrive → il la suit (wave pendant
+     la voix, happy a la fin) ; puis retour au coin bas-gauche. */
+  var FW = 192, FH = 208, COLS = 8, ROWS = 11;
+  var AW = COLS * FW, AH = ROWS * FH;
+  var ETATS = {
+    idle: { row: 0, n: 6, dur: 1.8 },
+    wave: { row: 3, n: 4, dur: 1.15 },
+    happy: { row: 4, n: 5, dur: 1.25 },
+    thinking: { row: 8, n: 6, dur: 1.5 }
+  };
+
+  /* ── les 8 mascottes (definitions parametriques) ── */
+  var MASC = {
+    chouette: { nom: "Chouette du Scribe", corps: "#7a5c44", ventre: "#e9ddc8", fonc: "#43321f", acc: "rouleau" },
+    colombe:  { nom: "Colombe des Pères", corps: "#e3eefc", ventre: "#ffffff", fonc: "#7f9fc9", acc: "halo" },
+    cierge:   { nom: "Cierge de Prière", corps: "#fdf6dd", ventre: "#fffdf2", fonc: "#b39a5f", acc: "flamme" },
+    lion:     { nom: "Lionceau de Juda", corps: "#e8a33d", ventre: "#ffe8b0", fonc: "#8f5a1c", acc: "balance" },
+    perroquet:{ nom: "Perroquet des Langues", corps: "#3f9e4d", ventre: "#d8f0cf", fonc: "#1f5c2a", acc: "livre" },
+    poisson:  { nom: "Poisson des Origines", corps: "#59b7e8", ventre: "#e2f3fd", fonc: "#2a6f96", acc: "bulles" },
+    fennec:   { nom: "Fennec du Désert", corps: "#f2c187", ventre: "#fff4e2", fonc: "#9a662a", acc: "etoile" },
+    phenix:   { nom: "Phénix", corps: "#e85d3d", ventre: "#ffd9a8", fonc: "#8f2f1c", acc: "braises" }
+  };
+  /* familles theologiques → mascotte (par defaut : phenix) */
+  var FAMILLES = [
+    [/ex.g|thomist|cat.ch/i, "chouette"],
+    [/patrist|augustin|concile|orientale/i, "colombe"],
+    [/liturg|mystiq/i, "cierge"],
+    [/apolog|canonist|moralist|r.forme/i, "lion"],
+    [/h.breu|grec|talmud|traduct/i, "perroquet"],
+    [/histor|arch.olog/i, "poisson"],
+    [/islamolog|coranolog/i, "fennec"]
+  ];
+
+  function lit(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+  function ecrit(k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+  function arme() { return lit("theo_pets") === "1"; }
+  function R(n) { return Math.round(n * 100) / 100; }
+  function el(t, a) {
+    var s = "<" + t, k;
+    for (k in a) s += " " + k + "=\"" + a[k] + "\"";
+    return s + "/>";
+  }
+
+  /* ── parametres d animation par etat et par frame ── */
+  function params(etat, i) {
+    var p = { bob: 0, jump: 0, blink: false, look: false, tilt: 0, mouth: 0, spark: 0, dots: 0, wing: 0, flam: 0, quill: 0 };
+    var T = 6.2832;
+    if (etat === "idle") {
+      p.bob = 3 * Math.sin(i / 6 * T);
+      p.wing = 6 * Math.sin(i / 6 * T);
+      p.blink = (i === 2);
+      p.flam = 2 * Math.sin(i / 6 * T);
+      p.quill = 3 * Math.sin(i / 6 * T);
+    } else if (etat === "wave") {
+      p.paw = [5, 11, 14, 11][i] || 0;
+      p.bob = 1.5 * Math.sin(i / 4 * T);
+      p.wing = 8 + p.paw;
+      p.flam = 2.5 * Math.sin(i / 4 * T);
+      p.quill = 2 * Math.sin(i / 4 * T);
+    } else if (etat === "happy") {
+      p.jump = 13 * Math.abs(Math.sin((i + 0.5) / 5 * 3.1416));
+      p.mouth = 1; p.spark = 1;
+      p.wing = -12 * Math.sin((i + 0.5) / 5 * 3.1416);
+      p.flam = 3; p.quill = -4;
+    } else if (etat === "thinking") {
+      p.tilt = [0, 2, 4, 5, 4, 2][i] || 0;
+      p.look = true; p.dots = 1;
+      p.flam = 3 * Math.sin(i / 6 * T);
+      p.quill = 6 + 2 * Math.sin(i / 6 * T);
+      p.bob = 1 * Math.sin(i / 6 * T);
+    }
+    return p;
+  }
+
+  function yeux(def, p, ey) {
+    var sw = 2.2;
+    if (p.blink) {
+      return el("path", { d: "M75 " + ey + " q7 6 14 0", stroke: def.fonc, "stroke-width": sw, fill: "none", "stroke-linecap": "round" })
+           + el("path", { d: "M103 " + ey + " q7 6 14 0", stroke: def.fonc, "stroke-width": sw, fill: "none", "stroke-linecap": "round" });
+    }
+    var dx = p.look ? -2.5 : 0, dy = p.look ? -3 : 0;
+    return el("circle", { cx: 82, cy: ey, r: 7.5, fill: "#ffffff", stroke: def.fonc, "stroke-width": 1.6 })
+         + el("circle", { cx: 110, cy: ey, r: 7.5, fill: "#ffffff", stroke: def.fonc, "stroke-width": 1.6 })
+         + el("circle", { cx: R(82 + dx), cy: R(ey + dy), r: 3.4, fill: "#26313f" })
+         + el("circle", { cx: R(110 + dx), cy: R(ey + dy), r: 3.4, fill: "#26313f" });
+  }
+  function etoile(x, y, r, fill, op) {
+    return el("path", {
+      d: "M" + x + " " + (y - r) + " L" + (x + r * 0.3) + " " + (y - r * 0.3) + " L" + (x + r) + " " + y +
+         " L" + (x + r * 0.3) + " " + (y + r * 0.3) + " L" + x + " " + (y + r) +
+         " L" + (x - r * 0.3) + " " + (y + r * 0.3) + " L" + (x - r) + " " + y +
+         " L" + (x - r * 0.3) + " " + (y - r * 0.3) + " Z",
+      fill: fill, opacity: op });
+  }
+  function etincelles(p) {
+    if (!p.spark) return "";
+    var a = 0.55 + 0.45 * Math.abs(Math.sin(p.jump / 13 * 3.1416));
+    return etoile(38, 70, 9, "#ffd166", R(a))
+         + etoile(156, 60, 7, "#ffd166", R(a * 0.9))
+         + etoile(148, 108, 5, "#fff3c4", R(a * 0.8));
+  }
+  function pensee(p) {
+    if (!p.dots) return "";
+    var h = p.tilt || 0;
+    return el("circle", { cx: 126, cy: R(44 - h), r: 2.4, fill: "#9fb7d8", opacity: 0.85 })
+         + el("circle", { cx: 136, cy: R(34 - h), r: 3.4, fill: "#9fb7d8", opacity: 0.7 })
+         + el("circle", { cx: 148, cy: R(22 - h), r: 4.6, fill: "#9fb7d8", opacity: 0.55 });
+  }

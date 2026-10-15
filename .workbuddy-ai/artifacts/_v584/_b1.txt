@@ -1,0 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════
+   Banc v584 — PETS V4.0 (compagnons animes des agents)
+   Contrat : OFF par defaut (rien au repos) ; case dans PARAMETRES ;
+   activation agent → compagnon au composeur (salue puis se pose) ;
+   tout changement d agent change la mascotte ; generation → il suit
+   la question (thinking) ; voix → il suit la reponse (wave) ; fin →
+   heureux puis retour au coin bas-gauche. Atlas verifie : grille
+   OpenPets 1536x2288. Magasin isole (v559). ════════════════════════ */
+const H = require("../../../tools/bench_common.js");
+const { chromium } = require("playwright");
+const path = require("path"), os = require("os");
+const resultats = [];
+function section(t) { console.log("\n■ " + t); }
+function ok(label, cond, detail) {
+  resultats.push({ label, pass: !!cond });
+  console.log((cond ? "  [OK]   " : "  [ECHEC]") + " " + label + (detail ? " — " + detail : ""));
+}
+(async () => {
+  const port = await H.pickFreePort();
+  const STORE_DIR = path.join(os.tmpdir(), "theo_v584_store_" + Date.now());
+  const relais = await H.spawnRelay({ port, localAppData: STORE_DIR });
+  const BASE = "http://127.0.0.1:" + port + "/THEOLOGICUS.html";
+  const browser = await H.launchBrowser();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const bruit = [];
+  page.on("pageerror", e => bruit.push(String(e)));
+  await page.addInitScript(H.isolationInit);
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60000 });
+  await H.adminLogin(page, H.AUTH_HASH);
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(1600);
+
+  /* cle semee pour le flux (regle v559) */
+  await page.evaluate(() => {
+    try { state.keys = state.keys || {}; state.keys.agnes = "banc-cle-factice"; state.model = "agnes:agnes-2.5-flash"; } catch (e) {}
+  });
+
+  /* ── 1. OFF par defaut : reglages montes, aucun compagnon au repos ── */
+  section("1. Repos : aucune mascotte (defaut OFF), reglages presents");
+  const e1 = await page.evaluate(() => ({
+    host: !!document.getElementById("v584-pet"),
+    case: document.getElementById("v584-on") ? document.getElementById("v584-on").checked : null,
+    style: !!document.getElementById("v584-style")
+  }));
+  ok("reglages Pets injectes dans PARAMETRES → mouvement", e1.case !== null, JSON.stringify(e1));
+  ok("case DECOCHEE par defaut (OFF)", e1.case === false);
+  ok("aucun compagnon au repos (invariant)", e1.host === false);
+  ok("feuille de style du module posee (aucun style au repos)", e1.style === true);

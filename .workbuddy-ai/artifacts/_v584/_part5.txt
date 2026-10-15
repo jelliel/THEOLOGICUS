@@ -1,0 +1,41 @@
+
+  /* ── wrappers marques : le compagnon suit TOUT chemin de selection ── */
+  function enroulerFlux() {
+    var f = window.callLLMStream;
+    if (typeof f !== "function" || f.__v584W) return;
+    var w = function () {
+      try { fluxDebut(); } catch (e) {}
+      var r;
+      try { r = f.apply(this, arguments); }
+      catch (e) { try { fluxFin(); } catch (e2) {} throw e; }
+      if (r && typeof r.then === "function") {
+        r.then(function () { try { fluxFin(); } catch (e) {} }, function () { try { fluxFin(); } catch (e) {} });
+      } else { try { fluxFin(); } catch (e) {} }
+      return r;
+    };
+    for (var k in f) { try { w[k] = f[k]; } catch (e) {} }
+    w.__v584W = true;
+    window.callLLMStream = w;
+  }
+  function enroulerTts() {
+    var f = window.ttsEmission;
+    if (typeof f !== "function" || f.__v584W) return;
+    var w = function () {
+      try { parole(); } catch (e) {}
+      return f.apply(this, arguments);
+    };
+    for (var k in f) { try { w[k] = f[k]; } catch (e) {} }
+    w.__v584W = true;
+    window.ttsEmission = w;
+  }
+  function reaffirmer() { enroulerFlux(); enroulerTts(); }
+
+  /* ── scrutateur de selection d agent (tous chemins : modal, panneau, menus) ── */
+  var dernierAgent = "__aucun__";
+  setInterval(function () {
+    reaffirmer();
+    if (!arme()) { if (host) cacher(); return; }
+    var ag = null;
+    try { ag = state.agent || null; } catch (e) { ag = null; }
+    if (ag !== dernierAgent) { dernierAgent = ag; onAgent(ag); }
+  }, 600);

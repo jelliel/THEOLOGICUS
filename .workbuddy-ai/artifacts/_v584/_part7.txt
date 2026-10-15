@@ -1,0 +1,37 @@
+
+  /* ── rappels redimensionnement / defilement (v128 : rAF, pas de burinage) ── */
+  var rafP = 0;
+  window.addEventListener("resize", function () {
+    if (rafP) return;
+    rafP = requestAnimationFrame(function () {
+      rafP = 0;
+      if (!host) return;
+      rafraichirStyle();
+      ancre(cibleNom);
+    });
+  });
+  var chatEl = document.getElementById("chat-container");
+  if (chatEl) {
+    chatEl.addEventListener("scroll", function () {
+      if (!host || cibleNom !== "message" || rafP) return;
+      rafP = requestAnimationFrame(function () { rafP = 0; ancre("message"); });
+    }, { passive: true });
+  }
+
+  /* ── API publique (bancs + futurs lots) ── */
+  window.__v584Pets = {
+    atlas: atlasSvg,
+    etat: function () {
+      return {
+        arme: arme(),
+        visible: !!host,
+        pet: host ? host.getAttribute("data-pet") : null,
+        anim: host ? host.getAttribute("data-anim") : null,
+        cible: host ? cibleNom : null
+      };
+    },
+    appliquer: appliquer,
+    familleDe: familleDe
+  };
+})();
+</script>

@@ -1,0 +1,21 @@
+/* diagnostic v584 — suite immédiate de l appel du wrapper de flux */
+const fs = require("fs");
+const L = [];
+L.push("");
+L.push("  await page.evaluate(() => {");
+L.push("    window.__diag = [];");
+L.push("  });");
+L.push("  const diag = await page.evaluate(() => {");
+L.push("    let cfg = null;");
+L.push("    try { cfg = (typeof resolveModelConfig === \"function\") ? resolveModelConfig(\"agnes:agnes-2.5-flash\") : null; } catch (e) {}");
+L.push("    if (!cfg) cfg = { apiEndpoint: \"http://127.0.0.1:9/v1\" };");
+L.push("    const p = window.callLLMStream(cfg, [{ role: \"user\", content: \"Q\" }], { temperature: 0.4, max_tokens: 60 }, function () {});");
+L.push("    return {");
+L.push("      animJusteApresAppel: window.__v584Pets.etat().anim,");
+L.push("      thenable: !!(p && typeof p.then === \"function\"),");
+L.push("      fluxMarque: !!(window.callLLMStream && window.callLLMStream.__v584W)");
+L.push("    };");
+L.push("  });");
+L.push("  console.log(\"   [diag] \" + JSON.stringify(diag));");
+fs.writeFileSync("C:/tmp/theoverify/.workbuddy-ai/artifacts/_v584/_diag.txt", L.join("\r\n"), "utf8");
+console.log("diagnostic ecrit");

@@ -1,0 +1,57 @@
+
+  /* ── 5. generation : il suit la question (thinking) puis la reponse (happy) ── */
+  section("5. Generation : le compagnon suit la question puis revient au coin");
+  await page.evaluate(() => {
+    try { state.messages.push({ role: "user", content: "Question de test du compagnon." }); } catch (e) {}
+    if (typeof renderMessages === "function") renderMessages();
+    window.__fluxFini = false;
+    const enc = s => new TextEncoder().encode(s);
+    window.fetch = async function (url, opts) {
+      if (String(url).indexOf("/chat/completions") !== -1) {
+        await new Promise(r => setTimeout(r, 1800));
+        const parts = [];
+        ["Reponse de test, phrase complete. "].forEach(function (m) {
+          parts.push(enc("data: " + JSON.stringify({ choices: [{ delta: { content: m } }] }) + "\n\n"));
+        });
+        parts.push(enc("data: [DONE]\n\n"));
+        const plat = [];
+        parts.forEach(function (c) { c.forEach(function (b) { plat.push(b); }); });
+        const tout = new Uint8Array(plat);
+        let lu = false;
+        return { ok: true, status: 200, body: { getReader: function () { return { read: async function () { return lu ? { done: true } : (lu = true, { done: false, value: tout }); } }; } } };
+      }
+      return { ok: false, status: 404, text: async function () { return ""; } };
+    };
+  });
+  const diag = await page.evaluate(() => {
+    let cfg = null;
+    try { cfg = (typeof resolveModelConfig === "function") ? resolveModelConfig("agnes:agnes-2.5-flash") : null; } catch (e) {}
+    if (!cfg) cfg = { apiEndpoint: "http://127.0.0.1:9/v1" };
+    const p = window.callLLMStream(cfg, [{ role: "user", content: "Q" }], { temperature: 0.4, max_tokens: 60 }, function () {});
+    window.__fluxFini = false;
+    if (p && typeof p.then === "function") p.then(function () { window.__fluxFini = true; }, function () { window.__fluxFini = true; });
+    return { animJusteApresAppel: window.__v584Pets.etat().anim, thenable: !!(p && typeof p.then === "function") };
+  });
+  console.log("   [diag] " + JSON.stringify(diag));
+  await page.waitForFunction(() => window.__v584Pets.etat().anim === "thinking", null, { timeout: 6000 });
+  await page.waitForTimeout(900); /* laisse finir le vol (transition 550 ms) */
+  const e5a = await page.evaluate(() => {
+    const st = window.__v584Pets.etat();
+    const h = document.getElementById("v584-pet").getBoundingClientRect();
+    const ms = document.querySelectorAll("#chat-container .message");
+    const m = ms.length ? ms[ms.length - 1].getBoundingClientRect() : null;
+    return { st: st, hb: h.bottom, hx: h.right, mb: m ? m.top : null, mx: m ? m.right : null };
+  });
+  ok("pendant la generation : animation thinking", e5a.st.anim === "thinking", e5a.st.anim);
+  ok("ancre sur le message (suit la question)", e5a.st.cible === "message", e5a.st.cible);
+  ok("position collee au dernier message", e5a.mb !== null && Math.abs(e5a.hb - (e5a.mb + 10)) < 80 && Math.abs(e5a.hx - e5a.mx) < 220, JSON.stringify(e5a));
+  await page.waitForFunction(() => window.__fluxFini === true, null, { timeout: 8000 });
+  await page.waitForFunction(() => window.__v584Pets.etat().anim === "happy", null, { timeout: 5000 });
+  ok("fin de generation : mascotte heureuse (happy)", true);
+  await page.waitForFunction(() => window.__v584Pets.etat().cible === "coin", null, { timeout: 6000 });
+  await page.waitForTimeout(800);
+  const posCoin = await page.evaluate(() => {
+    const h = document.getElementById("v584-pet").getBoundingClientRect();
+    return { l: h.left, vh: window.innerHeight, b: h.bottom, a: window.__v584Pets.etat() };
+  });
+  ok("retour au coin BAS-GAUCHE en idle", posCoin.l < 60 && (posCoin.vh - posCoin.b) < 60 && posCoin.a.anim === "idle" && posCoin.a.cible === "coin", JSON.stringify(posCoin));

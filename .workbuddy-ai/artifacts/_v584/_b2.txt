@@ -1,0 +1,39 @@
+
+  /* ── 2. active sans agent : toujours rien ── */
+  section("2. Pets actifs mais aucun agent : aucun compagnon");
+  await page.evaluate(() => { document.getElementById("v584-on").click(); });
+  await page.waitForTimeout(700);
+  const e2 = await page.evaluate(() => ({ cle: localStorage.getItem("theo_pets"), st: window.__v584Pets.etat() }));
+  ok("case cochee → theo_pets = 1", e2.cle === "1", e2.cle);
+  ok("aucun compagnon tant qu aucun agent n est choisi", e2.st.visible === false, JSON.stringify(e2.st));
+
+  /* ── 3. activation d un agent → salutation au composeur ── */
+  section("3. Agent Patristique active → Colombe au composeur, salue puis se pose");
+  await page.evaluate(async () => {
+    await db.put("agents", { id: "v584-pat", name: "Patristique", desc: "Peres de l Eglise" });
+    await db.put("agents", { id: "v584-isl", name: "Islamologue", desc: "Monde musulman" });
+  });
+  await page.evaluate(() => window.activateAgent("v584-pat"));
+  await page.waitForFunction(() => window.__v584Pets && window.__v584Pets.etat().visible, null, { timeout: 8000 });
+  const e3a = await page.evaluate(() => window.__v584Pets.etat());
+  ok("compagnon visible apres activation", e3a.visible === true, JSON.stringify(e3a));
+  ok("mascotte COLOMBE pour agent Patristique (famille pere)", e3a.pet === "colombe", e3a.pet);
+  ok("salutation (wave) a l arrivee", e3a.anim === "wave", e3a.anim);
+  await page.waitForTimeout(800);
+  const posC = await page.evaluate(() => {
+    const h = document.getElementById("v584-pet").getBoundingClientRect();
+    const i = document.getElementById("input-area").getBoundingClientRect();
+    return { pb: h.bottom, pl: h.left, it: i.top, il: i.left, pw: h.width };
+  });
+  ok("pose PRES du composeur (perche au-dessus)", posC.pb >= posC.it - 20 && posC.pb <= posC.it + 70 && posC.pl >= posC.il - 30 && posC.pl <= posC.il + 130, JSON.stringify(posC));
+  await page.waitForTimeout(2200);
+  const e3b = await page.evaluate(() => window.__v584Pets.etat());
+  ok("retour a la respiration idle apres la salutation", e3b.anim === "idle" && e3b.cible === "composeur", JSON.stringify(e3b));
+
+  /* ── 4. tout autre chemin de selection → autre mascotte ── */
+  section("4. Choisir Islamologue (via state) → Fennec");
+  await page.evaluate(async () => { state.agent = await db.get("agents", "v584-isl"); });
+  await page.waitForFunction(() => window.__v584Pets.etat().pet === "fennec", null, { timeout: 8000 });
+  const e4 = await page.evaluate(() => window.__v584Pets.etat());
+  ok("changement d agent → changement de mascotte (fennec du desert)", e4.pet === "fennec", JSON.stringify(e4));
+  await page.waitForTimeout(800);

@@ -1,0 +1,89 @@
+
+  /* ── reglages injectes dans PARAMETRES → mouvement ── */
+  function monterReglages() {
+    var pan = document.getElementById("settings-panneau-motion");
+    if (!pan || document.getElementById("v584-on")) return false;
+    var g = document.createElement("div");
+    g.className = "field-group";
+    var t = document.createElement("div");
+    t.className = "field-label";
+    t.textContent = "🐾 Compagnons (Pets) — mascottes des agents";
+    g.appendChild(t);
+    var row = document.createElement("label");
+    row.className = "field-label";
+    row.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer;margin:6px 0;";
+    var chk = document.createElement("input");
+    chk.type = "checkbox"; chk.id = "v584-on"; chk.checked = arme();
+    row.appendChild(chk);
+    row.appendChild(document.createTextNode("Afficher le compagnon quand un agent est sélectionné"));
+    g.appendChild(row);
+    var row2 = document.createElement("div");
+    row2.style.cssText = "display:flex;gap:10px;flex-wrap:wrap;margin:6px 0;";
+    var labT = document.createElement("span");
+    labT.className = "field-label"; labT.style.cssText = "margin:0;";
+    labT.textContent = "Taille";
+    var selT = document.createElement("select");
+    selT.className = "field-input field-select"; selT.id = "v584-taille";
+    selT.style.cssText = "max-width:150px;";
+    var opT = [["60", "Petit"], ["76", "Normal"], ["96", "Grand"]];
+    for (var i = 0; i < opT.length; i++) {
+      var o = document.createElement("option");
+      o.value = opT[i][0]; o.textContent = opT[i][1];
+      if (String(tailleCourante()) === opT[i][0] || (window.innerWidth >= 640 && (lit("theo_pets_taille") || "76") === opT[i][0])) o.selected = true;
+      selT.appendChild(o);
+    }
+    var labP = document.createElement("span");
+    labP.className = "field-label"; labP.style.cssText = "margin:0;";
+    labP.textContent = "Mascotte";
+    var selP = document.createElement("select");
+    selP.className = "field-input field-select"; selP.id = "v584-pet-sel";
+    selP.style.cssText = "max-width:230px;";
+    var o0 = document.createElement("option");
+    o0.value = "auto"; o0.textContent = "Auto — selon la famille de l’agent";
+    if ((lit("theo_pets_pet") || "auto") === "auto") o0.selected = true;
+    selP.appendChild(o0);
+    var cle;
+    for (cle in MASC) {
+      var op = document.createElement("option");
+      op.value = cle; op.textContent = MASC[cle].nom;
+      if (lit("theo_pets_pet") === cle) op.selected = true;
+      selP.appendChild(op);
+    }
+    row2.appendChild(labT); row2.appendChild(selT);
+    row2.appendChild(labP); row2.appendChild(selP);
+    g.appendChild(row2);
+    var hint = document.createElement("div");
+    hint.className = "field-hint";
+    hint.textContent = "Le compagnon vit près du composeur, suit votre question pendant la génération, s’agite quand il parle, puis regagne son coin en bas à gauche. Mascottes au format OpenPets (MIT) — import de compagnons supplémentaires à venir.";
+    g.appendChild(hint);
+    chk.addEventListener("change", function () {
+      ecrit("theo_pets", chk.checked ? "1" : "0");
+      appliquer();
+    });
+    selT.addEventListener("change", function () {
+      ecrit("theo_pets_taille", selT.value);
+      if (armé()) montrer(familleDe(etatAgent()));
+      rafraichirStyle();
+      ancre(cibleNom);
+    });
+    selP.addEventListener("change", function () {
+      ecrit("theo_pets_pet", selP.value);
+      if (armé()) onAgent(etatAgent());
+    });
+    pan.appendChild(g);
+    return true;
+  }
+  function etatAgent() { try { return state.agent || null; } catch (e) { return null; } }
+  function appliquer() {
+    rafraichirStyle();
+    if (arme()) {
+      var ag = etatAgent();
+      dernierAgent = ag;
+      if (ag) onAgent(ag); else cacher();
+    } else cacher();
+  }
+  var essais = 0;
+  var ivRegl = setInterval(function () {
+    if (monterReglages()) { clearInterval(ivRegl); return; }
+    if (++essais > 50) clearInterval(ivRegl);
+  }, 900);

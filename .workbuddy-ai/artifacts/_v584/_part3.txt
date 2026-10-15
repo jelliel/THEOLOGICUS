@@ -1,0 +1,71 @@
+
+  /* ── feuille de style dynamique (image d atlas en regle CSS, jamais en style inline) ── */
+  var styleEl = document.createElement("style");
+  styleEl.id = "v584-style";
+  var reglesAtlas = [];
+  function regleCss(sel, decl) { reglesAtlas.push(sel + "{" + decl + "}"); rafraichirStyle(); }
+  function cssBase() {
+    return "#v584-pet{position:fixed;left:0;top:0;z-index:calc(var(--z-modal-lg,2000) - 100);"
+      + "pointer-events:none;background-repeat:no-repeat;transform:translate(-320px,-320px);"
+      + "transition:transform .55s cubic-bezier(.3,.9,.35,1);will-change:transform}";
+  }
+  function tailleCourante() {
+    if (window.innerWidth < 640) return 60;
+    var t = parseInt(lit("theo_pets_taille"), 10);
+    return (t === 60 || t === 76 || t === 96) ? t : 76;
+  }
+  function cssDynamique() {
+    var t = tailleCourante();
+    var k = t / FW, hs = R(FH * k), aws = R(AW * k), ahs = R(AH * k);
+    var s = "#v584-pet{width:" + t + "px;height:" + hs + "px;background-size:" + aws + "px " + ahs + "px;}";
+    var reduire = false;
+    try { reduire = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+    var cleEtat, e, f, stops;
+    for (cleEtat in ETATS) {
+      e = ETATS[cleEtat];
+      if (reduire) {
+        if (cleEtat === "idle") s += "#v584-pet[data-anim=\"idle\"]{background-position:0 0;}";
+        continue;
+      }
+      s += "#v584-pet[data-anim=\"" + cleEtat + "\"]{animation:v584-" + cleEtat + " " + e.dur + "s steps(1,end) infinite;}";
+      stops = "";
+      for (f = 0; f < e.n; f++) {
+        stops += (f / e.n * 100).toFixed(4) + "%{background-position:" + R(-f * FW * k) + "px " + R(-e.row * FH * k) + "px;}";
+      }
+      s += "@keyframes v584-" + cleEtat + "{" + stops + "}";
+    }
+    return s;
+  }
+  function rafraichirStyle() { styleEl.textContent = cssBase() + cssDynamique() + reglesAtlas.join(""); }
+  rafraichirStyle();
+  if (document.head) document.head.appendChild(styleEl);
+  else document.documentElement.appendChild(styleEl);
+
+  /* ── ancres : coin bas-gauche / composeur / message suivi ── */
+  var host = null, cibleNom = "coin";
+  function ciblePos(nom) {
+    var w = host ? host.offsetWidth : 76, h = host ? host.offsetHeight : 82;
+    var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    var mob = vw < 640, x = 14, y = vh - h - (mob ? 96 : 14);
+    if (nom === "composeur") {
+      var r = document.getElementById("input-area");
+      var rr = r ? r.getBoundingClientRect() : null;
+      if (rr) { x = rr.left + 16; y = rr.top - h * 0.82; }
+    } else if (nom === "message") {
+      var ms = document.querySelectorAll("#chat-container .message");
+      var m = ms.length ? ms[ms.length - 1] : null;
+      if (!m) return ciblePos("composeur");
+      var mr = m.getBoundingClientRect();
+      x = mr.right - w * 0.7;
+      y = mr.top - h + 10;
+    }
+    x = Math.max(6, Math.min(x, vw - w - 6));
+    y = Math.max(6, Math.min(y, vh - h - 6));
+    return { x: R(x), y: R(y) };
+  }
+  function ancre(nom) {
+    if (!host) return;
+    cibleNom = nom;
+    var p = ciblePos(nom);
+    host.style.transform = "translate(" + p.x + "px," + p.y + "px)";
+  }
