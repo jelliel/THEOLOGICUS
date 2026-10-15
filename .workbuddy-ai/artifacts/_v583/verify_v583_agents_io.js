@@ -98,9 +98,11 @@ function ok(label, cond, detail) {
   const info = await page.evaluate(() => document.getElementById('v583-info').textContent);
   /* v588 — le PC n'est PLUS renvoyé vers « Téléchargements » : la WebView n'y
      télécharge RIEN. L'info doit nommer la destination RÉELLE (backups/) et
-     garder le repli Android « Copier le JSON ». */
+     garder le repli Android.
+     v589 — le modal sert AUSSI le Markdown : le libellé est généralisé
+     (« Copier le contenu »), plus « Copier le JSON ». */
   ok('l’info nomme la destination réelle (backups) et le repli Android',
-     info.indexOf('backups') !== -1 && info.indexOf('Copier le JSON') !== -1, info.slice(0, 110));
+     info.indexOf('backups') !== -1 && info.indexOf('Copier le contenu') !== -1, info.slice(0, 110));
   const boutons = await page.evaluate(() => ({
     dossier: !!document.getElementById('v583-dossier'),
     libelle: (document.getElementById('v583-telech') || {}).textContent || ''
@@ -139,7 +141,9 @@ function ok(label, cond, detail) {
   section('5. Export individuel ⬇ : téléchargement + fenêtre de secours');
   const dl2 = page.waitForEvent('download', { timeout: 15000 });
   await page.evaluate(() => {
-    const b = document.querySelector('#agent-existing-list .agent-action-btn[title="Exporter"]');
+    /* v589 — on ancre sur l'ACTION et non sur l'infobulle : le titre du bouton
+       a changé (« Exporter en JSON (réimportable) ») depuis l'ajout du .md. */
+    const b = document.querySelector('#agent-existing-list [onclick*="exportAgent(\'"]');
     if (b) b.click();
   });
   const d2 = await dl2;

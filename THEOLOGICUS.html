@@ -20304,7 +20304,8 @@ async function loadAgents() {
             <div class="agent-card-actions">
               <button class="agent-action-btn" onclick="event.stopPropagation();openEditAgent('${a.id}')" title="Modifier">✎</button>
               <button class="agent-action-btn" onclick="event.stopPropagation();duplicateAgentById('${a.id}')" title="Dupliquer">⎘</button>
-              <button class="agent-action-btn" onclick="event.stopPropagation();exportAgent('${a.id}')" title="Exporter">⬇</button>
+              <button class="agent-action-btn" onclick="event.stopPropagation();exportAgent('${a.id}')" title="Exporter en JSON (réimportable)">⬇</button>
+              <button class="agent-action-btn" onclick="event.stopPropagation();exportAgentMd('${a.id}')" title="Exporter en Markdown (.md) — lecture et partage">📄</button>
               <button class="agent-action-btn danger" onclick="event.stopPropagation();deleteAgent('${a.id}')" title="Supprimer">✕</button>
             </div>
           </div>
@@ -55835,6 +55836,7 @@ window.continueTradApart = async function (msgId) {
       + '<div class="l" id="v527-l"></div>'
       + '<div class="ft"><span class="ds" style="font-size:.68rem">Ces agents s\'ajoutent au sélecteur habituel. Vos agents personnels ne sont jamais modifiés.</span>'
       + '<button class="ui-btn" id="v527-export">⬇ Exporter les ' + PRESETS.length + ' (JSON)</button>'
+      + '<button class="ui-btn" id="v527-export-md">⬇ Exporter les ' + PRESETS.length + ' (.md)</button>'
       + '<button class="ui-btn" id="v527-installe">↻ (Ré)installer</button></div></div>';
     document.body.appendChild(p);
     p.addEventListener('click', function (e) { if (e.target === p) p.classList.remove('open'); });
@@ -55844,21 +55846,42 @@ window.continueTradApart = async function (msgId) {
     });
     /* v582 — export des agents théologiques au format des agents utilisateur :
        importable tel quel via « Importer un agent » (id regénéré à l'import). */
+    /* v589 — les presets passent par l’écriture ROBUSTE du module d’export
+       (le téléchargement direct échouait en SILENCE dans la WebView, comme
+       l’export d’agent corrigé en v588) ; ajout du format Markdown. */
+    function presetsDonnees() {
+      return PRESETS.map(function (x) {
+        return { id: x.id, name: x.name, desc: x.desc, instructions: x.instructions || '',
+          primer: x.primer || '', tags: x.tags || [], temperature: (x.temp == null ? 0.7 : x.temp),
+          maxTokens: 4096, style: x.style || '', forbidden: x.forbidden || '', memPrio: 3,
+          source: 'theologicus-preset' };
+      });
+    }
+    async function presetsEcrire(nom, texte, message) {
+      let r = { ok: false, mode: 'aucun' };
+      try {
+        if (window.__v583AgentsIo && window.__v583AgentsIo.enregistrer) {
+          r = await window.__v583AgentsIo.enregistrer(nom, texte);
+        }
+      } catch (e) {}
+      if (r.ok && r.chemin) toast('💾 ' + message + ' — ' + r.chemin, 'success');
+      else if (r.ok) toast('💾 ' + message, 'success');
+      else toast(message + ' — enregistrement indisponible ici', 'warn');
+    }
     p.querySelector('#v527-export').addEventListener('click', function () {
       try {
-        const data = PRESETS.map(function (x) {
-          return { id: x.id, name: x.name, desc: x.desc, instructions: x.instructions || '',
-            primer: x.primer || '', tags: x.tags || [], temperature: (x.temp == null ? 0.7 : x.temp),
-            maxTokens: 4096, style: x.style || '', forbidden: x.forbidden || '', memPrio: 3,
-            source: 'theologicus-preset' };
-        });
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const u = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = u; a.download = 'agents-theologiques-theologicus.json';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(function () { try { URL.revokeObjectURL(u); } catch (e) {} }, 1000);
-        toast('⬇ ' + data.length + ' agents théologiques exportés — importables via « Importer un agent »', 'success');
+        const data = presetsDonnees();
+        presetsEcrire('agents-theologiques-theologicus.json', JSON.stringify(data, null, 2),
+          data.length + ' agents théologiques exportés (JSON) — importables via « Importer un agent »');
+      } catch (e) { toast('Export impossible : ' + String(e && e.message || e), 'error'); }
+    });
+    p.querySelector('#v527-export-md').addEventListener('click', function () {
+      try {
+        const data = presetsDonnees();
+        const gen = window.__v583AgentsIo && window.__v583AgentsIo.agentsMd;
+        if (!gen) { toast('Export Markdown indisponible', 'warn'); return; }
+        presetsEcrire('agents-theologiques-theologicus.md', gen(data, 'Agents théologiques THEOLOGICUS (' + data.length + ')'),
+          data.length + ' agents théologiques exportés (Markdown)');
       } catch (e) { toast('Export impossible : ' + String(e && e.message || e), 'error'); }
     });
     p.querySelector('#v527-l').addEventListener('click', function (e) {
@@ -63526,8 +63549,9 @@ var qrcode = function() {
 <script id="v583-agents-io">
 /* ═══════════════════════════════════════════════════════════════════
    v583 — AGENTS : export/import ROBUSTES. La WebView (exe/APK) ne
-   télécharge pas les blob URL : chaque export ouvre donc AUSSI une
-   fenêtre avec le JSON copiable. L’import accepte un agent seul OU un
+   télécharge pas les blob URL : chaque export ÉCRIT donc côté serveur
+   (/save-data → backups/) ET ouvre une fenêtre au contenu copiable.
+   Formats : JSON (réimportable) et MARKDOWN (lecture et partage). L’import accepte un agent seul OU un
    tableau (export « tout »). Magasin : IndexedDB « agents ». ═══════ */
 (function () {
   "use strict";
@@ -63545,7 +63569,7 @@ var qrcode = function() {
       ioModal.innerHTML = '<style>#v583-io-modal{position:fixed;inset:0;z-index:141500;display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.74);backdrop-filter:blur(4px)}#v583-io-modal.open{display:flex}#v583-io-modal .b{width:min(720px,94vw);max-height:88vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,#0d1626);border:1px solid var(--ui-border,#2a2a3a);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.6);overflow:hidden}#v583-io-modal .hd{display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,#2a2a3a)}#v583-io-modal .hd h3{margin:0;font-size:.9rem;color:var(--ui-accent,#e5c15a);flex:1}#v583-io-modal textarea{flex:1;min-height:260px;margin:.6rem .9rem;background:var(--ui-bg,#0a0a12);color:var(--ui-ink,#e8e6e0);border:1px solid var(--ui-border,#2a2a3a);border-radius:8px;padding:.6rem;font:11px/1.5 Consolas,monospace;resize:vertical}#v583-io-modal .cts{display:flex;gap:.4rem;flex-wrap:wrap;padding:0 .9rem .7rem}#v583-io-modal .cts button{background:rgba(79,142,247,.14);color:#cfe0ff;border:1px solid rgba(79,142,247,.35);border-radius:8px;padding:.35rem .7rem;cursor:pointer;font-size:.78rem}#v583-io-modal .info{font-size:.64rem;color:var(--ui-dim,#8a8896);padding:0 .9rem .6rem}</style>'
         + '<div class="b"><div class="hd"><h3 id="v583-titre"></h3><button type="button" id="v583-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>'
         + '<textarea id="v583-json" readonly spellcheck="false"></textarea>'
-        + '<div class="cts"><button type="button" id="v583-copier">📋 Copier le JSON</button><button type="button" id="v583-telech">💾 Enregistrer le fichier</button><button type="button" id="v583-dossier">📂 Ouvrir le dossier</button></div>'
+        + '<div class="cts"><button type="button" id="v583-copier">📋 Copier le contenu</button><button type="button" id="v583-telech">💾 Enregistrer le fichier</button><button type="button" id="v583-dossier">📂 Ouvrir le dossier</button></div>'
         + '<div class="info" id="v583-info"></div></div>';
       document.body.appendChild(ioModal);
       ioModal.addEventListener("click", function (e) { if (e.target === ioModal) ioModal.classList.remove("open"); });
@@ -63556,7 +63580,7 @@ var qrcode = function() {
         let fait = false;
         try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(ta.value); fait = true; } } catch (e1) {}
         if (!fait) { try { document.execCommand("copy"); fait = true; } catch (e2) {} }
-        toast(fait ? "📋 JSON copié — collez-le dans un fichier ou une note" : "Copie impossible — sélectionnez le texte manuellement", fait ? "success" : "warn");
+        toast(fait ? "📋 Contenu copié — collez-le dans un fichier ou une note" : "Copie impossible — sélectionnez le texte manuellement", fait ? "success" : "warn");
       });
       ioModal.querySelector("#v583-telech").addEventListener("click", async function () {
         const nom = ioModal.getAttribute("data-fich") || "agents.json";
@@ -63579,7 +63603,7 @@ var qrcode = function() {
     ioModal.querySelector("#v583-titre").textContent = titre;
     ioModal.querySelector("#v583-json").value = texte;
     ioModal.setAttribute("data-fich", nomFich || "agents.json");
-    ioModal.querySelector("#v583-info").textContent = "Fichier : " + (nomFich || "agents.json") + " — sur PC, « Enregistrer le fichier » l’écrit dans le dossier « backups » de THEOLOGICUS (le chemin exact s’affiche ici) ; « Ouvrir le dossier » le montre. Sur Android, utilisez « Copier le JSON ».";
+    ioModal.querySelector("#v583-info").textContent = "Fichier : " + (nomFich || "agents.json") + " — sur PC, « Enregistrer le fichier » l’écrit dans le dossier « backups » de THEOLOGICUS (le chemin exact s’affiche ici) ; « Ouvrir le dossier » le montre. Sur Android, utilisez « Copier le contenu ».";
     ioModal.classList.add("open");
   }
   /* ── écriture ROBUSTE du fichier ──────────────────────────────────
@@ -63632,6 +63656,65 @@ var qrcode = function() {
     return { k: "warn", m: "Téléchargement indisponible ici — utilisez « Copier le JSON »" };
   }
 
+  /* ── nom de fichier sûr (les noms d’agents peuvent contenir : * ? etc.) ── */
+  function nomAgentFichier(nom, ext) {
+    const s = String(nom || "agent").replace(/[\\/:*?"<>|\s]+/g, "-").replace(/^-+|-+$/g, "");
+    return "agent-" + (s || "agent") + "." + ext;
+  }
+
+  /* ── export MARKDOWN : document de LECTURE et de PARTAGE ────────────
+     Le .md n’est pas réimportable (l’import attend du JSON) — c’est dit
+     dans le document lui-même, pour ne pas créer d’attente fausse. */
+  function mdNet(s) { return String(s == null ? "" : s).replace(/\r\n/g, "\n").trim(); }
+  function mdLigne(s) { return mdNet(s).replace(/\s*\n+\s*/g, " "); }
+  function agentMd(ag, niv, source) {
+    const H = new Array(Math.max(1, niv || 1) + 1).join("#");
+    const h = new Array(Math.max(2, (niv || 1) + 1) + 1).join("#");
+    const l = [];
+    l.push(H + " " + mdLigne(ag.name || "Agent"));
+    l.push("");
+    if (mdLigne(ag.desc)) l.push("> " + mdLigne(ag.desc));
+    l.push("");
+    const meta = [];
+    meta.push(["Source", source || ag.source || "agent personnel"]);
+    if (ag.modelPref) meta.push(["Modèle préféré", ag.modelPref]);
+    if (ag.temperature != null) meta.push(["Température", ag.temperature]);
+    if (ag.maxTokens != null) meta.push(["Tokens max", ag.maxTokens]);
+    if (mdLigne(ag.style)) meta.push(["Style", mdLigne(ag.style)]);
+    if (ag.memPrio != null) meta.push(["Priorité mémoire", ag.memPrio]);
+    if (ag.tags && ag.tags.length) meta.push(["Étiquettes", ag.tags.join(", ")]);
+    meta.forEach(function (kv) { l.push("- **" + kv[0] + "** : " + kv[1]); });
+    l.push("");
+    if (mdNet(ag.instructions)) { l.push(h + " Instructions"); l.push(""); l.push(mdNet(ag.instructions)); l.push(""); }
+    if (mdNet(ag.primer)) { l.push(h + " Amorces"); l.push(""); l.push(mdNet(ag.primer)); l.push(""); }
+    if (mdNet(ag.forbidden)) { l.push(h + " Termes interdits"); l.push(""); l.push(mdNet(ag.forbidden)); l.push(""); }
+    /* le .md n’est PAS réimportable : on le dit DANS le document, sinon on crée
+       une attente fausse (l’import attend du JSON). Le document multi-agents
+       porte déjà l’avertissement en tête, d’où la condition sur le niveau. */
+    if ((niv || 1) === 1) {
+      l.push("---");
+      l.push("");
+      l.push("*Export Markdown de THEOLOGICUS — document de LECTURE. Pour réimporter cet agent dans l’application, utilisez l’export JSON.*");
+      l.push("");
+    }
+    return l.join("\n");
+  }
+  function agentsMd(liste, titre) {
+    const l = [];
+    l.push("# " + (titre || "Agents THEOLOGICUS"));
+    l.push("");
+    l.push("- **Agents** : " + liste.length);
+    l.push("- **Exporté le** : " + new Date().toLocaleString("fr-FR"));
+    l.push("- **Format** : Markdown — document de LECTURE. Pour réimporter dans THEOLOGICUS, utilisez l’export JSON.");
+    l.push("");
+    l.push("## Sommaire");
+    l.push("");
+    liste.forEach(function (a, i) { l.push((i + 1) + ". " + mdLigne(a.name || "Agent")); });
+    l.push("");
+    liste.forEach(function (a) { l.push("---"); l.push(""); l.push(agentMd(a, 2)); });
+    return l.join("\n") + "\n";
+  }
+
   /* ── export TOUT ── */
   async function exportTout() {
     try {
@@ -63653,13 +63736,44 @@ var qrcode = function() {
       const ag = await db.get("agents", id);
       if (!ag) { toast("Agent introuvable", "warn"); return; }
       const texte = JSON.stringify(ag, null, 2);
-      const fich = "agent-" + String(ag.name || "agent").replace(/\s+/g, "-") + ".json";
+      const fich = nomAgentFichier(ag.name, "json");
       const r = await enregistrer(fich, texte);
       fenetreJson("📤 Export — " + ag.name, texte, fich);
       const a = annoncer(r, fich);
       toast(r.ok ? a.m : "Agent « " + ag.name + " » prêt — " + a.m, a.k);
     } catch (e) { toast("Erreur export agent : " + String(e && e.message || e), "error"); }
   };
+
+  /* ── export MARKDOWN individuel ── */
+  async function exportAgentMd(id) {
+    try {
+      const ag = await db.get("agents", id);
+      if (!ag) { toast("Agent introuvable", "warn"); return; }
+      const texte = agentMd(ag, 1);
+      const fich = nomAgentFichier(ag.name, "md");
+      const r = await enregistrer(fich, texte);
+      fenetreJson("📄 Export Markdown — " + ag.name, texte, fich);
+      const a = annoncer(r, fich);
+      toast(r.ok ? a.m : "Agent « " + ag.name + " » prêt — " + a.m, a.k);
+    } catch (e) { toast("Erreur export Markdown : " + String(e && e.message || e), "error"); }
+  }
+  window.exportAgentMd = exportAgentMd;
+
+  /* ── export MARKDOWN de TOUS les agents (un seul document) ── */
+  async function exportToutMd() {
+    try {
+      const all = (await db.getAll("agents")) || [];
+      if (!all.length) { toast("Aucun agent utilisateur à exporter (les 20 agents théologiques 🎓 ont leur propre bouton d’export).", "warn"); return; }
+      all.sort(function (a, b) { return String(a.name || "").localeCompare(String(b.name || "")); });
+      const texte = agentsMd(all, "Mes agents THEOLOGICUS (" + all.length + ")");
+      const d = new Date();
+      const fich = "agents-theologicus-" + d.getFullYear() + ("0" + (d.getMonth() + 1)).slice(-2) + ("0" + d.getDate()).slice(-2) + ".md";
+      const r = await enregistrer(fich, texte);
+      fenetreJson("📄 Export Markdown — " + all.length + " agents", texte, fich);
+      const a = annoncer(r, fich);
+      toast(r.ok ? a.m + " (" + all.length + " agents)" : a.m, a.k);
+    } catch (e) { toast("Export Markdown impossible : " + String(e && e.message || e), "error"); }
+  }
 
   /* ── import : agent seul OU tableau (export « tout ») ── */
   function rebindImport() {
@@ -63692,16 +63806,33 @@ var qrcode = function() {
   /* ── bouton EXPORTER TOUT dans le panneau des agents ── */
   function installerBouton() {
     const ancre = document.getElementById("import-agent-btn");
-    if (!ancre || document.getElementById("export-all-agents-btn")) return;
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = ancre.className || "btn-ghost";
-    b.id = "export-all-agents-btn";
-    b.style.cssText = "font-size:10px;padding:5px 10px";
-    b.textContent = "⬇⬇ EXPORTER TOUT (JSON)";
-    b.title = "Exporter TOUS vos agents en un seul fichier JSON (ou copiable)";
-    b.addEventListener("click", exportTout);
-    ancre.parentNode.insertBefore(b, ancre.nextSibling);
+    if (!ancre) return;
+    /* les deux boutons sont créés INDÉPENDAMMENT : une version antérieure
+       n’ayant que le JSON ne doit pas empêcher l’apparition du .md */
+    let b = document.getElementById("export-all-agents-btn");
+    if (!b) {
+      b = document.createElement("button");
+      b.type = "button";
+      b.className = ancre.className || "btn-ghost";
+      b.id = "export-all-agents-btn";
+      b.style.cssText = "font-size:10px;padding:5px 10px";
+      b.textContent = "⬇⬇ EXPORTER TOUT (JSON)";
+      b.title = "Exporter TOUS vos agents en un seul fichier JSON (ou copiable)";
+      b.addEventListener("click", exportTout);
+      ancre.parentNode.insertBefore(b, ancre.nextSibling);
+    }
+    let b2 = document.getElementById("export-all-agents-md-btn");
+    if (!b2) {
+      b2 = document.createElement("button");
+      b2.type = "button";
+      b2.className = ancre.className || "btn-ghost";
+      b2.id = "export-all-agents-md-btn";
+      b2.style.cssText = "font-size:10px;padding:5px 10px";
+      b2.textContent = "⬇⬇ EXPORTER TOUT (.MD)";
+      b2.title = "Exporter TOUS vos agents en un document Markdown lisible (lecture et partage)";
+      b2.addEventListener("click", exportToutMd);
+      b.parentNode.insertBefore(b2, b.nextSibling);
+    }
     rebindImport();
   }
   function init() { installerBouton(); }
@@ -63713,7 +63844,8 @@ var qrcode = function() {
     const obs = new MutationObserver(function () { installerBouton(); });
     obs.observe(document.body, { childList: true });
   } catch (e) {}
-  window.__v583AgentsIo = { exportTout: exportTout };
+  window.__v583AgentsIo = { exportTout: exportTout, exportToutMd: exportToutMd, exportAgentMd: exportAgentMd,
+    agentMd: agentMd, agentsMd: agentsMd, enregistrer: enregistrer, annoncer: annoncer, nomAgentFichier: nomAgentFichier };
 })();
 
 </script>

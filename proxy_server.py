@@ -2553,7 +2553,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             filename = req.get('filename') or ''
             # Sécurité : nom de fichier simple, pas de chemin
             filename = os.path.basename(filename).replace('\\', '_').replace('/', '_')
-            if not filename or not (filename.endswith('.json') or filename.endswith('.theologicus.json')):
+            # v589 — le Markdown est un format d'export légitime (lecture et
+            # partage) au même titre que le JSON : on l'accepte explicitement.
+            extensions = ('.json', '.md', '.markdown', '.txt')
+            if not filename or not filename.lower().endswith(extensions):
                 raise ValueError('nom de fichier invalide')
             data = base64.b64decode(req.get('data64') or b'')
             if not data:
