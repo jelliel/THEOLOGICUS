@@ -1,0 +1,65 @@
+
+  /* ── 3. validation du spritesheet SVG (profil restreint, comme OpenPets) ── */
+  var SVG_EL = {};
+  ["svg", "g", "defs", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon",
+   "linearGradient", "radialGradient", "stop", "clipPath", "title", "desc"].forEach(function (t) { SVG_EL[t] = 1; });
+  var SVG_AT = {};
+  ["id", "xmlns", "version", "width", "height", "viewBox", "preserveAspectRatio",
+   "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry", "fx", "fy", "fr",
+   "d", "points", "transform", "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width",
+   "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray",
+   "stroke-dashoffset", "opacity", "clip-path", "clip-rule", "clipPathUnits",
+   "gradientUnits", "gradientTransform", "spreadMethod", "offset", "stop-color", "stop-opacity",
+   "vector-effect", "shape-rendering", "color"].forEach(function (t) { SVG_AT[t] = 1; });
+  function validerSvg(txt, w, h) {
+    if (txt.indexOf("&") !== -1) throw new Error("SVG : entites interdites");
+    if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(txt)) throw new Error("SVG : caracteres invalides");
+    if (/<script|<style|<!ENTITY|<\?xml-stylesheet|javascript:/i.test(txt)) throw new Error("SVG : contenu actif interdit");
+    var p = 0, prof = 0, balises = [];
+    while (p < txt.length) {
+      var s = txt.indexOf("<", p);
+      if (s < 0) break;
+      if (txt.slice(p, s).trim()) throw new Error("SVG : texte hors title/desc interdit");
+      if (txt.startsWith("<!--", s)) { var fc = txt.indexOf("-->", s); if (fc < 0) throw new Error("SVG : commentaire non ferme"); p = fc + 3; continue; }
+      var e = txt.indexOf(">", s);
+      if (e < 0) throw new Error("SVG : balise non fermee");
+      var t = txt.slice(s + 1, e);
+      p = e + 1;
+      if (t.charAt(0) === "/") {
+        var ferm = t.slice(1).trim();
+        if (!/^[A-Za-z]+$/.test(ferm)) throw new Error("SVG : fermeture invalide");
+        if (balises.pop() !== ferm) throw new Error("SVG : balises imbriquees incoherentes");
+        continue;
+      }
+      var m = /^([A-Za-z]+)([\s\S]*?)(\/?)$/.exec(t);
+      if (!m) throw new Error("SVG : balise illisible");
+      var nom = m[1], brut = m[2] || "", auto = m[3] === "/";
+      if (!SVG_EL[nom]) throw new Error("SVG : element non autorise (« " + nom + " »)");
+      prof++;
+      if (prof > 20000 || balises.length > 64) throw new Error("SVG : complexite excessive");
+      var re = /\s+([A-Za-z][A-Za-z0-9-]*)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/g, mm;
+      var vus = {};
+      while ((mm = re.exec(brut))) {
+        var at = mm[1], va = (mm[2] !== undefined ? mm[2] : mm[3]) || "";
+        if (vus[at]) throw new Error("SVG : attribut duplique");
+        vus[at] = 1;
+        if (!SVG_AT[at]) throw new Error("SVG : attribut non autorise (« " + at + " »)");
+        if (va.length > 262144) throw new Error("SVG : attribut trop long");
+        if (/url\s*\(/i.test(va)) {
+          if (!/^url\(#[A-Za-z_][A-Za-z0-9_.-]*\)$/.test(va)) throw new Error("SVG : reference url() interdite");
+          if (["fill", "stroke", "clip-path"].indexOf(at) === -1) throw new Error("SVG : url() hors fill/stroke/clip-path");
+        }
+      }
+      if (nom === "svg") {
+        var vb = (vus.viewBox ? /([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)/.exec(brut) : null);
+        var lw = vus.width ? parseFloat((/width\s*=\s*"(\d+)/.exec(brut) || [])[1]) : NaN;
+        var lh = vus.height ? parseFloat((/height\s*=\s*"(\d+)/.exec(brut) || [])[1]) : NaN;
+        if (vus.xmlns === undefined) throw new Error("SVG : xmlns manquant");
+        if (lw !== w || lh !== h) throw new Error("SVG : dimensions attendues " + w + "x" + h + " (recu " + lw + "x" + lh + ")");
+        if (!vb || Number(vb[3]) !== w || Number(vb[4]) !== h) throw new Error("SVG : viewBox doit valoir 0 0 " + w + " " + h);
+      }
+      if (!auto) balises.push(nom);
+    }
+    if (balises.length) throw new Error("SVG : document incomplet");
+    if (!prof) throw new Error("SVG : vide");
+  }

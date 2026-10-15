@@ -1,0 +1,70 @@
+
+  /* ── 4. validation du spritesheet WebP (signature + dimensions) ── */
+  async function validerWebp(octets, version) {
+    if (octets.length < 30) throw new Error("WebP : fichier trop petit");
+    var sig = String.fromCharCode(octets[0], octets[1], octets[2], octets[3]);
+    var fmt = String.fromCharCode(octets[8], octets[9], octets[10], octets[11]);
+    if (sig !== "RIFF" || fmt !== "WEBP") throw new Error("WebP : signature invalide");
+    var bmp;
+    try { bmp = await createImageBitmap(new Blob([octets], { type: "image/webp" })); }
+    catch (e) { throw new Error("WebP : image illisible"); }
+    var attenduH = version === 2 ? 2288 : 1872;
+    if (bmp.width !== 1536 || bmp.height !== attenduH) {
+      try { bmp.close(); } catch (e2) {}
+      throw new Error("WebP : dimensions attendues 1536x" + attenduH + " (recu " + bmp.width + "x" + bmp.height + ")");
+    }
+    try { bmp.close(); } catch (e3) {}
+  }
+  function octetsVersDataUrl(octets, mime) {
+    var s = "", i, pas = 8192;
+    for (i = 0; i < octets.length; i += pas) s += String.fromCharCode.apply(null, octets.subarray(i, i + pas));
+    return "data:" + mime + ";base64," + btoa(s);
+  }
+
+  /* ── 5. stockage (magasin app_config, cle pet::<id>) ── */
+  function geoOpenPets(version) {
+    return {
+      rows: version === 2 ? 11 : 9,
+      etats: {
+        idle: { row: 0, n: 6 },
+        wave: { row: 3, n: 4 },
+        happy: { row: 4, n: 5 },
+        thinking: { row: 8, n: 6 }
+      }
+    };
+  }
+  async function enregistrer(pet) {
+    var enr = {
+      id: "pet::" + pet.id,
+      petId: pet.id,
+      nom: pet.nom,
+      desc: pet.desc,
+      version: pet.version,
+      spritesheet: pet.spritesheet
+    };
+    await db.put("app_config", enr);
+    appliquerEnMemoire(enr);
+    return enr;
+  }
+  function appliquerEnMemoire(enr) {
+    var cle = "ext:" + enr.petId;
+    window.__v585Atlas = window.__v585Atlas || {};
+    window.__v585Frames = window.__v585Frames || {};
+    window.__v585Geo = window.__v585Geo || {};
+    window.__v585Noms = window.__v585Noms || {};
+    window.__v585Atlas[cle] = enr.spritesheet;
+    window.__v585Frames[cle] = { idle: 6, wave: 4, happy: 5, thinking: 6 };
+    window.__v585Geo[cle] = geoOpenPets(enr.version || 1);
+    window.__v585Noms[cle] = enr.nom;
+    return cle;
+  }
+  async function chargerImportes() {
+    try {
+      var tous = await db.getAll("app_config");
+      var n = 0;
+      (tous || []).forEach(function (e) {
+        if (e && typeof e.id === "string" && e.id.indexOf("pet::") === 0 && e.spritesheet) { appliquerEnMemoire(e); n++; }
+      });
+      return n;
+    } catch (e) { return 0; }
+  }

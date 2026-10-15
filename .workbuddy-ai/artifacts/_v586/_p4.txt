@@ -1,0 +1,115 @@
+
+  /* ── 6. traitement d un paquet (zip ou fichiers separes) ── */
+  async function traiterFichiers(fichiers) {
+    var jsonTxt = null, sprite = null, estSvg = false, f, i;
+    var liste = Array.prototype.slice.call(fichiers || []);
+    if (!liste.length) throw new Error("aucun fichier");
+    for (i = 0; i < liste.length; i++) {
+      f = liste[i];
+      if (/\.zip$/i.test(f.name)) {
+        var entrees = await lireZip(await f.arrayBuffer());
+        for (var nom in entrees) {
+          if (/pet\.json$/i.test(nom)) jsonTxt = new TextDecoder().decode(entrees[nom]);
+          else if (/spritesheet\.svg$/i.test(nom)) { sprite = entrees[nom]; estSvg = true; }
+          else if (/spritesheet\.webp$/i.test(nom)) { sprite = entrees[nom]; estSvg = false; }
+        }
+      } else if (/\.json$/i.test(f.name)) {
+        jsonTxt = await f.text();
+      } else if (/\.svg$/i.test(f.name)) {
+        sprite = new Uint8Array(await f.arrayBuffer()); estSvg = true;
+      } else if (/\.webp$/i.test(f.name)) {
+        sprite = new Uint8Array(await f.arrayBuffer()); estSvg = false;
+      }
+    }
+    if (!jsonTxt) throw new Error("pet.json absent du paquet");
+    var meta = validerPetJson(jsonTxt);
+    if (!sprite) throw new Error("spritesheet absent du paquet");
+    if ((meta.chemin === "spritesheet.svg") !== estSvg) throw new Error("pet.json et spritesheet ne correspondent pas");
+    var h = meta.version === 2 ? 2288 : 1872;
+    if (estSvg) {
+      validerSvg(new TextDecoder().decode(sprite), 1536, h);
+      meta.spritesheet = octetsVersDataUrl(sprite, "image/svg+xml");
+    } else {
+      await validerWebp(sprite, meta.version);
+      meta.spritesheet = octetsVersDataUrl(sprite, "image/webp");
+    }
+    await enregistrer(meta);
+    majSelecteur();
+    return meta;
+  }
+
+  /* ── 7. interface : ligne d import dans les reglages des compagnons ── */
+  function toast(m, k) { try { if (typeof window.toast === "function") window.toast(m, k); } catch (e) {} }
+  function majSelecteur() {
+    var sel = document.getElementById("v584-pet-sel");
+    if (!sel) return;
+    var vus = {};
+    Array.prototype.slice.call(sel.options).forEach(function (o) { vus[o.value] = 1; });
+    var atlas = window.__v585Atlas || {};
+    Object.keys(atlas).forEach(function (cle) {
+      if (cle.indexOf("ext:") !== 0 || vus[cle]) return;
+      var o = document.createElement("option");
+      o.value = cle;
+      o.textContent = "📦 " + ((window.__v585Noms || {})[cle] || cle.slice(4));
+      sel.appendChild(o);
+    });
+  }
+  function monterImport() {
+    var pan = document.getElementById("settings-panneau-motion");
+    if (!pan || document.getElementById("v586-import-btn")) return !!document.getElementById("v586-import-btn");
+    var g = document.createElement("div");
+    g.className = "field-group";
+    var lab = document.createElement("div");
+    lab.className = "field-label";
+    lab.textContent = "📦 Importer un compagnon (format OpenPets)";
+    g.appendChild(lab);
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "v586-import-btn";
+    btn.className = "field-input";
+    btn.style.cssText = "max-width:260px;cursor:pointer;";
+    btn.textContent = "Choisir un paquet (.zip ou pet.json + spritesheet)";
+    var inp = document.createElement("input");
+    inp.type = "file";
+    inp.id = "v586-import-input";
+    inp.multiple = true;
+    inp.accept = ".zip,.json,.webp,.svg";
+    inp.style.display = "none";
+    btn.addEventListener("click", function () { inp.value = ""; inp.click(); });
+    inp.addEventListener("change", function () {
+      var fs2 = inp.files;
+      if (!fs2 || !fs2.length) return;
+      traiterFichiers(fs2).then(function (meta) {
+        toast("Compagnon importe : " + meta.nom, "success");
+      }).catch(function (e) {
+        toast("Import refuse : " + (e && e.message ? e.message : e), "error");
+      });
+    });
+    g.appendChild(btn);
+    g.appendChild(inp);
+    var hint = document.createElement("div");
+    hint.className = "field-hint";
+    hint.textContent = "Paquet OpenPets : pet.json + spritesheet.webp ou .svg (1536x1872 ou 1536x2288). Le fichier est verifie (structure, elements et attributs autorises, dimensions) avant d etre enregistre dans l application.";
+    g.appendChild(hint);
+    pan.appendChild(g);
+    majSelecteur();
+    return true;
+  }
+  var essais = 0;
+  var iv = setInterval(function () {
+    if (monterImport() || ++essais > 50) clearInterval(iv);
+  }, 900);
+
+  /* ── 8. API + amorcage ── */
+  window.__v586Import = {
+    traiterFichiers: traiterFichiers,
+    chargerImportes: chargerImportes,
+    lireZip: lireZip,
+    validerPetJson: validerPetJson,
+    validerSvg: validerSvg,
+    validerWebp: validerWebp,
+    monterImport: monterImport
+  };
+  chargerImportes().then(function (n) { if (n) majSelecteur(); });
+})();
+</script>
