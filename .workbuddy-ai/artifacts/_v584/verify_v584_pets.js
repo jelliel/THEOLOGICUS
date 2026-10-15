@@ -168,15 +168,38 @@ function ok(label, cond, detail) {
   ok("callLLMStream porte le marqueur __v584W", e7.flux === true, JSON.stringify(e7));
   ok("ttsEmission porte le marqueur __v584W", e7.tts === true, JSON.stringify(e7));
 
-  /* ── 8. atlas : grille OpenPets reelle ── */
-  section("8. Atlas des mascottes : format OpenPets verifie");
+  /* ── 8. atlas : grille illustree (WebP) + familles ── */
+  section("8. Atlas illustre : grille WebP 8x4 + familles");
   const atlas = await page.evaluate(() => new Promise(function (res) {
     const img = new Image();
-    img.onload = function () { res({ w: img.naturalWidth, h: img.naturalHeight }); };
-    img.onerror = function () { res({ w: 0, h: 0 }); };
-    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(window.__v584Pets.atlas("colombe"));
+    img.onload = function () { res({ w: img.naturalWidth, h: img.naturalHeight, fmt: (window.__v585Atlas && window.__v585Atlas.colombe || "").slice(5, 19) }); };
+    img.onerror = function () { res({ w: 0, h: 0, fmt: "erreur" }); };
+    img.src = window.__v585Atlas && window.__v585Atlas.colombe ? window.__v585Atlas.colombe : "";
   }));
-  ok("atlas SVG decode aux dimensions OpenPets (1536x2288)", atlas.w === 1536 && atlas.h === 2288, JSON.stringify(atlas));
+  ok("atlas colombe decode (WebP 2048x1112, grille 8x4)", atlas.w === 2048 && atlas.h === 1112, JSON.stringify(atlas));
+  const kf = await page.evaluate(() => {
+    const b = document.querySelector("#v584-pet .v584-bob");
+    const st = document.getElementById("v584-style") ? document.getElementById("v584-style").textContent : "";
+    const petCourant = document.getElementById("v584-pet").getAttribute("data-pet");
+    return { anim: getComputedStyle(b).animationName, petCourant: petCourant, keyframesPerso: st.indexOf("@keyframes v584-idle-" + petCourant) !== -1, frames: (window.__v585Frames || {}).colombe };
+  });
+  ok("animation idle propre au pet courant (nom par pet)", kf.anim === "v584-idle-" + kf.petCourant, JSON.stringify(kf));
+  /* bascule forcee sur la colombe via le select de reglages */
+  await page.evaluate(() => {
+    const s = document.getElementById("v584-pet-sel");
+    s.value = "colombe";
+    s.dispatchEvent(new Event("change"));
+  });
+  await page.waitForFunction(() => { const h = document.getElementById("v584-pet"); return h && h.getAttribute("data-pet") === "colombe" && h.getAttribute("data-anim") === "idle"; }, null, { timeout: 8000 });
+  const kf2 = await page.evaluate(() => {
+    const b = document.querySelector("#v584-pet .v584-bob");
+    const st = document.getElementById("v584-style") ? document.getElementById("v584-style").textContent : "";
+    return { anim: getComputedStyle(b).animationName, keyframesPerso: st.indexOf("@keyframes v584-idle-colombe") !== -1 };
+  });
+  ok("colombe forcee par le reglage : keyframes 3 frames presents", kf2.keyframesPerso && kf2.anim === "v584-idle-colombe", JSON.stringify(kf2));
+  /* retour au mode auto pour tester la deduction de famille */
+  await page.evaluate(() => { const s = document.getElementById("v584-pet-sel"); s.value = "auto"; s.dispatchEvent(new Event("change")); });
+  ok("metadonnees de frames de la colombe (3/2/2/1)", kf.frames && kf.frames.idle === 3 && kf.frames.thinking === 2 && kf.frames.happy === 2 && kf.frames.wave === 1, JSON.stringify(kf.frames));
   const fam = await page.evaluate(() => ({ pat: window.__v584Pets.familleDe({ name: "Exegete", desc: " " }), def: window.__v584Pets.familleDe({ name: "Agent perso", desc: " " }) }));
   ok("famille Exegete → chouette ; agent perso → phenix", fam.pat === "chouette" && fam.def === "phenix", JSON.stringify(fam));
 

@@ -214,10 +214,10 @@ function ok(label, cond, detail) {
   await page.evaluate(() => { window.__srFail = false; });
   await page.click('#adeodat-mic');                       /* off */
   await page.click('#adeodat-mic');                       /* on → doit REPARTIR */
-  await page.waitForFunction(() => {
+  await page.waitForFunction((n0) => {
     const n = window.__srInstances.length;
-    return n > nAvantFantome && window.__srInstances[n - 1].__demarre === true;
-  }, { timeout: 6000 }).catch(() => {});
+    return n > n0 && window.__srInstances[n - 1].__demarre === true;
+  }, nAvantFantome, { timeout: 6000 }).catch(() => {});
   const repris = await page.evaluate(() => {
     const n = window.__srInstances.length;
     return { n, demarre: n ? window.__srInstances[n - 1].__demarre : false };
