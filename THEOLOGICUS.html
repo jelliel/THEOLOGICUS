@@ -64000,8 +64000,13 @@ var qrcode = function() {
   function regleCss(sel, decl) { reglesAtlas.push(sel + "{" + decl + "}"); rafraichirStyle(); }
   function cssBase() {
     return "#v584-pet{position:fixed;left:0;top:0;z-index:calc(var(--z-modal-lg,2000) - 100);"
-      + "pointer-events:none;background-repeat:no-repeat;transform:translate(-320px,-320px);"
-      + "transition:transform .55s cubic-bezier(.3,.9,.35,1);will-change:transform}";
+      + "pointer-events:none;transform:translate(-320px,-320px);"
+      + "transition:transform .62s cubic-bezier(.34,1.28,.42,1);will-change:transform}"
+      + "#v584-pet .v584-bob{width:100%;height:100%;background-repeat:no-repeat;}"
+      + "#v584-pet .v584-float{width:100%;height:100%;"
+      + "animation:v584-bob 2.8s ease-in-out infinite alternate}"
+      + "@keyframes v584-bob{from{transform:translateY(0) rotate(-0.8deg)}to{transform:translateY(-3.5px) rotate(1.2deg)}}"
+      + "@media (prefers-reduced-motion: reduce){#v584-pet .v584-float{animation:none}}";
   }
   function tailleCourante() {
     if (window.innerWidth < 640) return 60;
@@ -64011,17 +64016,18 @@ var qrcode = function() {
   function cssDynamique() {
     var t = tailleCourante();
     var k = t / FW, hs = R(FH * k), aws = R(AW * k), ahs = R(AH * k);
-    var s = "#v584-pet{width:" + t + "px;height:" + hs + "px;background-size:" + aws + "px " + ahs + "px;}";
+    var s = "#v584-pet{width:" + t + "px;height:" + hs + "px;}";
     var reduire = false;
     try { reduire = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
     var cleEtat, e, f, stops;
     for (cleEtat in ETATS) {
       e = ETATS[cleEtat];
       if (reduire) {
-        if (cleEtat === "idle") s += "#v584-pet[data-anim=\"idle\"]{background-position:0 0;}";
+        if (cleEtat === "idle") s += "#v584-pet[data-anim=\"idle\"] .v584-bob{background-position:0 0;}";
         continue;
       }
-      s += "#v584-pet[data-anim=\"" + cleEtat + "\"]{animation:v584-" + cleEtat + " " + e.dur + "s steps(1,end) infinite;}";
+      s += "#v584-pet[data-anim=\"" + cleEtat + "\"] .v584-bob{animation:v584-" + cleEtat + " " + e.dur + "s steps(1,end) infinite;}";
+      s += "#v584-pet .v584-bob{background-size:" + aws + "px " + ahs + "px;}";
       stops = "";
       for (f = 0; f < e.n; f++) {
         stops += (f / e.n * 100).toFixed(4) + "%{background-position:" + R(-f * FW * k) + "px " + R(-e.row * FH * k) + "px;}";
@@ -64078,7 +64084,7 @@ var qrcode = function() {
   function assureAtlas(cle) {
     if (atlasFaits[cle]) return;
     var url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(atlasSvg(cle));
-    regleCss("#v584-pet[data-pet=\"" + cle + "\"]", "background-image:url(\"" + url + "\")");
+    regleCss("#v584-pet[data-pet=\"" + cle + "\"] .v584-bob", "background-image:url(\"" + url + "\")");
     atlasFaits[cle] = true;
   }
   function montrer(cle) {
@@ -64087,6 +64093,12 @@ var qrcode = function() {
       host.id = "v584-pet";
       host.className = "v584-pet";
       document.body.appendChild(host);
+      var bob = document.createElement("div");
+      bob.className = "v584-bob";
+      host.appendChild(bob);
+      var flt = document.createElement("div");
+      flt.className = "v584-float";
+      bob.appendChild(flt);
     }
     if (host.getAttribute("data-pet") !== cle) { host.setAttribute("data-pet", cle); assureAtlas(cle); }
     animer("idle");
@@ -64128,7 +64140,7 @@ var qrcode = function() {
     ancre("message");
     if (quiet) { clearTimeout(quiet); quiet = null; }
     quiet = setTimeout(function () {
-      if (t === seq && !paroleRecente() && !fluxActif) { ancre("coin"); animer("idle"); }
+      if (t === seq && !paroleRecente() && !fluxActif) { ancre("composeur"); animer("idle"); }
     }, 2200);
   }
   function parole() {
@@ -64140,7 +64152,7 @@ var qrcode = function() {
     animer("wave");
     if (quiet) { clearTimeout(quiet); quiet = null; }
     quiet = setTimeout(function () {
-      if (t === seq && !fluxActif) { ancre("coin"); animer("idle"); }
+      if (t === seq && !fluxActif) { ancre("composeur"); animer("idle"); }
     }, 1700);
   }
 
@@ -64248,13 +64260,13 @@ var qrcode = function() {
     });
     selT.addEventListener("change", function () {
       ecrit("theo_pets_taille", selT.value);
-      if (armé()) montrer(familleDe(etatAgent()));
+      if (arme()) montrer(familleDe(etatAgent()));
       rafraichirStyle();
       ancre(cibleNom);
     });
     selP.addEventListener("change", function () {
       ecrit("theo_pets_pet", selP.value);
-      if (armé()) onAgent(etatAgent());
+      if (arme()) onAgent(etatAgent());
     });
     pan.appendChild(g);
     return true;

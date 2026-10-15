@@ -51,12 +51,13 @@ L.push("  ok(\"position collee au dernier message\", e5a.mb !== null && Math.abs
 L.push("  await page.waitForFunction(() => window.__fluxFini === true, null, { timeout: 8000 });");
 L.push("  await page.waitForFunction(() => window.__v584Pets.etat().anim === \"happy\", null, { timeout: 5000 });");
 L.push("  ok(\"fin de generation : mascotte heureuse (happy)\", true);");
-L.push("  await page.waitForFunction(() => window.__v584Pets.etat().cible === \"coin\", null, { timeout: 6000 });");
+L.push("  await page.waitForFunction(() => window.__v584Pets.etat().cible === \"composeur\", null, { timeout: 6000 });");
 L.push("  await page.waitForTimeout(800);");
-L.push("  const posCoin = await page.evaluate(() => {");
+L.push("  const posRetour = await page.evaluate(() => {");
 L.push("    const h = document.getElementById(\"v584-pet\").getBoundingClientRect();");
-L.push("    return { l: h.left, vh: window.innerHeight, b: h.bottom, a: window.__v584Pets.etat() };");
+L.push("    const i = document.getElementById(\"input-area\").getBoundingClientRect();");
+L.push("    return { hb: h.bottom, it: i.top, hl: h.left, il: i.left, a: window.__v584Pets.etat() };");
 L.push("  });");
-L.push("  ok(\"retour au coin BAS-GAUCHE en idle\", posCoin.l < 60 && (posCoin.vh - posCoin.b) < 60 && posCoin.a.anim === \"idle\" && posCoin.a.cible === \"coin\", JSON.stringify(posCoin));");
+L.push("  ok(\"fin du suivi : retour a l ETAT INITIAL (perche au composeur, idle)\", posRetour.hb >= posRetour.it - 20 && posRetour.hb <= posRetour.it + 70 && posRetour.a.cible === \"composeur\" && posRetour.a.anim === \"idle\", JSON.stringify(posRetour));");
 fs.writeFileSync("C:/tmp/theoverify/.workbuddy-ai/artifacts/_v584/_b3.txt", L.join("\r\n"), "utf8");
 console.log("banc morceau 3 :", L.length, "lignes");

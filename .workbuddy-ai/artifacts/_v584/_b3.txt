@@ -48,10 +48,11 @@
   await page.waitForFunction(() => window.__fluxFini === true, null, { timeout: 8000 });
   await page.waitForFunction(() => window.__v584Pets.etat().anim === "happy", null, { timeout: 5000 });
   ok("fin de generation : mascotte heureuse (happy)", true);
-  await page.waitForFunction(() => window.__v584Pets.etat().cible === "coin", null, { timeout: 6000 });
+  await page.waitForFunction(() => window.__v584Pets.etat().cible === "composeur", null, { timeout: 6000 });
   await page.waitForTimeout(800);
-  const posCoin = await page.evaluate(() => {
+  const posRetour = await page.evaluate(() => {
     const h = document.getElementById("v584-pet").getBoundingClientRect();
-    return { l: h.left, vh: window.innerHeight, b: h.bottom, a: window.__v584Pets.etat() };
+    const i = document.getElementById("input-area").getBoundingClientRect();
+    return { hb: h.bottom, it: i.top, hl: h.left, il: i.left, a: window.__v584Pets.etat() };
   });
-  ok("retour au coin BAS-GAUCHE en idle", posCoin.l < 60 && (posCoin.vh - posCoin.b) < 60 && posCoin.a.anim === "idle" && posCoin.a.cible === "coin", JSON.stringify(posCoin));
+  ok("fin du suivi : retour a l ETAT INITIAL (perche au composeur, idle)", posRetour.hb >= posRetour.it - 20 && posRetour.hb <= posRetour.it + 70 && posRetour.a.cible === "composeur" && posRetour.a.anim === "idle", JSON.stringify(posRetour));

@@ -135,13 +135,14 @@ function ok(label, cond, detail) {
   await page.waitForFunction(() => window.__fluxFini === true, null, { timeout: 8000 });
   await page.waitForFunction(() => window.__v584Pets.etat().anim === "happy", null, { timeout: 5000 });
   ok("fin de generation : mascotte heureuse (happy)", true);
-  await page.waitForFunction(() => window.__v584Pets.etat().cible === "coin", null, { timeout: 6000 });
+  await page.waitForFunction(() => window.__v584Pets.etat().cible === "composeur", null, { timeout: 6000 });
   await page.waitForTimeout(800);
-  const posCoin = await page.evaluate(() => {
+  const posRetour = await page.evaluate(() => {
     const h = document.getElementById("v584-pet").getBoundingClientRect();
-    return { l: h.left, vh: window.innerHeight, b: h.bottom, a: window.__v584Pets.etat() };
+    const i = document.getElementById("input-area").getBoundingClientRect();
+    return { hb: h.bottom, it: i.top, hl: h.left, il: i.left, a: window.__v584Pets.etat() };
   });
-  ok("retour au coin BAS-GAUCHE en idle", posCoin.l < 60 && (posCoin.vh - posCoin.b) < 60 && posCoin.a.anim === "idle" && posCoin.a.cible === "coin", JSON.stringify(posCoin));
+  ok("fin du suivi : retour a l ETAT INITIAL (perche au composeur, idle)", posRetour.hb >= posRetour.it - 20 && posRetour.hb <= posRetour.it + 70 && posRetour.a.cible === "composeur" && posRetour.a.anim === "idle", JSON.stringify(posRetour));
 
   /* ── 6. voix : il suit la lecture puis se taire ── */
   section("6. Voix : le compagnon s agite pendant la lecture, puis se repose");
@@ -157,9 +158,9 @@ function ok(label, cond, detail) {
   await page.waitForFunction(() => window.__v584Pets.etat().anim === "wave", null, { timeout: 4000 });
   const e6 = await page.evaluate(() => window.__v584Pets.etat());
   ok("pendant la lecture : compagnon anime (wave)", e6.anim === "wave", JSON.stringify(e6));
-  await page.waitForFunction(() => window.__v584Pets.etat().cible === "coin", null, { timeout: 6000 });
+  await page.waitForFunction(() => window.__v584Pets.etat().cible === "composeur", null, { timeout: 6000 });
   const e6b = await page.evaluate(() => window.__v584Pets.etat());
-  ok("apres le silence : retour au coin en idle", e6b.anim === "idle" && e6b.cible === "coin", JSON.stringify(e6b));
+  ok("apres le silence : retour a l etat initial", e6b.anim === "idle" && e6b.cible === "composeur", JSON.stringify(e6b));
 
   /* ── 7. wrappers marques ── */
   section("7. Les crochets sont marques et se reaffirment");
@@ -191,6 +192,12 @@ function ok(label, cond, detail) {
   ok("aucune classe ui-* au repos (invariant v513)", e9 && e9.cls.indexOf("ui-") === -1, e9 ? e9.cls : "");
   ok("traverse la souris (pointer-events none)", e9 && e9.pe === "none", e9 ? e9.pe : "");
   ok("aucune url dans le style inline (sanitizer a11y)", e9 && e9.inline.indexOf("url(") === -1, e9 ? e9.inline.slice(0, 40) : "");
+  const bob = await page.evaluate(() => {
+    const h = document.getElementById("v584-pet");
+    const b = h ? h.querySelector(".v584-float") : null;
+    return { present: !!b, anim: b ? getComputedStyle(b).animationName : "", taille: b ? getComputedStyle(b).animationDuration : "" };
+  });
+  ok("corps flottant separe du voyage (bob anime en permanence)", bob.present && bob.anim === "v584-bob", JSON.stringify(bob));
 
   /* ── 10. OFF → disparition + persistance ── */
   section("10. Desactivation : le compagnon quitte l ecran (et y reste apres rechargement)");

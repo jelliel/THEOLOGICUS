@@ -16,9 +16,9 @@ L.push("  await page.evaluate(() => { window.ttsEmission(\"Phrase de test du com
 L.push("  await page.waitForFunction(() => window.__v584Pets.etat().anim === \"wave\", null, { timeout: 4000 });");
 L.push("  const e6 = await page.evaluate(() => window.__v584Pets.etat());");
 L.push("  ok(\"pendant la lecture : compagnon anime (wave)\", e6.anim === \"wave\", JSON.stringify(e6));");
-L.push("  await page.waitForFunction(() => window.__v584Pets.etat().cible === \"coin\", null, { timeout: 6000 });");
+L.push("  await page.waitForFunction(() => window.__v584Pets.etat().cible === \"composeur\", null, { timeout: 6000 });");
 L.push("  const e6b = await page.evaluate(() => window.__v584Pets.etat());");
-L.push("  ok(\"apres le silence : retour au coin en idle\", e6b.anim === \"idle\" && e6b.cible === \"coin\", JSON.stringify(e6b));");
+L.push("  ok(\"apres le silence : retour a l etat initial\", e6b.anim === \"idle\" && e6b.cible === \"composeur\", JSON.stringify(e6b));");
 L.push("");
 L.push("  /* ── 7. wrappers marques ── */");
 L.push("  section(\"7. Les crochets sont marques et se reaffirment\");");
@@ -50,6 +50,12 @@ L.push("  ok(\"z-index derive des tokens : au-dessus du contenu, sous les fiches
 L.push("  ok(\"aucune classe ui-* au repos (invariant v513)\", e9 && e9.cls.indexOf(\"ui-\") === -1, e9 ? e9.cls : \"\");");
 L.push("  ok(\"traverse la souris (pointer-events none)\", e9 && e9.pe === \"none\", e9 ? e9.pe : \"\");");
 L.push("  ok(\"aucune url dans le style inline (sanitizer a11y)\", e9 && e9.inline.indexOf(\"url(\") === -1, e9 ? e9.inline.slice(0, 40) : \"\");");
+L.push("  const bob = await page.evaluate(() => {");
+L.push("    const h = document.getElementById(\"v584-pet\");");
+L.push("    const b = h ? h.querySelector(\".v584-float\") : null;");
+L.push("    return { present: !!b, anim: b ? getComputedStyle(b).animationName : \"\", taille: b ? getComputedStyle(b).animationDuration : \"\" };");
+L.push("  });");
+L.push("  ok(\"corps flottant separe du voyage (bob anime en permanence)\", bob.present && bob.anim === \"v584-bob\", JSON.stringify(bob));");
 L.push("");
 L.push("  /* ── 10. OFF → disparition + persistance ── */");
 L.push("  section(\"10. Desactivation : le compagnon quitte l ecran (et y reste apres rechargement)\");");
