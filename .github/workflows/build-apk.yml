@@ -83,13 +83,31 @@ jobs:
       - name: Tests unitaires du cœur
         run: node theo_tests/test_coeur.js
 
+      # v599 — FUMÉE ultra-rapide (< 30 s, sans navigateur) : compte les modules
+      # et vérifie les ancres critiques. Échoue AVANT de lancer la meute Playwright
+      # coûteuse, donc remonte une régression grossière en < 2 min au lieu d'attendre
+      # la fin du parcours des bancs.
+      - name: Fumée structurale (retour < 2 min sur régression grossière)
+        env:
+          THEO_ROOT: ${{ github.workspace }}
+        run: node tools/ci_smoke.js
+
   # ── BANCS (v462) ─────────────────────────────────────────────────────
   # Les vérifications vivaient uniquement sur la machine de développement :
   # une régression ne se voyait qu'à la main. Elles tournent maintenant ici.
+  #
+  # v599 — PARALLÉLISATION par SHARDS : autrefois tous les bancs couraient en
+  # SÉQUENTIEL (une régression n'était signalée qu'à la FIN, > 40 min). On découpe
+  # la liste en SHARD_TOTAL tranches, chacune dans un runner DIFFÉRENT et PARALLÈLE.
+  # Un défaut remonte dès que SA tranche se termine (~ durée tranche / N).
   bancs:
     needs: controles
     runs-on: ubuntu-latest
     timeout-minutes: 70
+    strategy:
+      fail-fast: false          # un shard en échec n'interrompt PAS les autres
+      matrix:
+        shard: [0, 1, 2, 3, 4]  # 5 tranches parallèles
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -104,65 +122,50 @@ jobs:
         run: |
           npm install playwright@1.55.0 --no-save
           npx playwright install --with-deps chromium
-      - name: Bancs (hors _v457 — voie ffmpeg.wasm abandonnée)
+      - name: Bancs (shard ${{ matrix.shard }})
         env:
           THEO_ROOT: ${{ github.workspace }}
           PY_BIN: python3
-        run: |
-          # Exclus volontairement (et pourquoi) :
-          #   _v457 : voie ffmpeg.wasm abandonnée (Worker cross-origin, cœur 32 Mo)
-          #   _v441 : exige un serveur Ollama local, absent en CI
-          echecs=0; ignores=0; ok=0
-          for b in $(ls .workbuddy-ai/artifacts/_v4*/verify_*.js .workbuddy-ai/artifacts/_v5*/verify_*.js | grep -Ev '/(_v457|_v441)/'); do
-            echo "───── $b"
-            sortie=$(mktemp)
-            # 300 s max par banc : un banc qui se bloque (attente réseau,
-            # serveur absent) ne doit pas figer la CI pendant des heures.
-            if timeout 300 node "$b" > "$sortie" 2>&1; then
-              ok=$((ok+1)); tail -1 "$sortie"
-              echo "### OK — $b" >> rapport.md
-            else
-              code=$?
-              if [ "$code" -eq 124 ]; then
-                echecs=$((echecs+1))
-                echo "  DÉPASSEMENT DE DÉLAI (300 s) — banc bloqué"
-                { echo "### DÉPASSEMENT DE DÉLAI (300 s) — $b"; echo '```'; tail -15 "$sortie"; echo '```'; } >> rapport.md
-              elif [ "$code" -eq 77 ]; then
-                ignores=$((ignores+1)); echo "  IGNORÉ (prérequis absent)"; tail -1 "$sortie"
-                echo "### IGNORÉ — $b" >> rapport.md
-              else
-                echecs=$((echecs+1))
-                echo "  ÉCHEC (code $code) — 25 dernières lignes :"
-                tail -25 "$sortie"
-                { echo "### ÉCHEC (code $code) — $b"; echo '```'; tail -30 "$sortie"; echo '```'; } >> rapport.md
-              fi
-            fi
-            rm -f "$sortie"
-          done
-          { echo "**Bancs : $ok réussi(s), $ignores ignoré(s), $echecs en échec.**"; echo; cat rapport.md 2>/dev/null; } > rapport_final.md
-          echo "───────── $ok réussi(s), $ignores ignoré(s), $echecs en échec"
-          if [ "$echecs" -ne 0 ]; then exit 1; fi
-          echo "Tous les bancs sont passés."
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_TOTAL: 5
+        run: node tools/bancs_shard.js
 
-      # Le journal d'un job n'est lisible qu'avec un jeton : en cas d'échec on
-      # publie donc le détail en COMMENTAIRE DE COMMIT, lisible par l'API.
-      - name: Publier le détail des échecs (commentaire de commit)
-        if: failure()
+  # v599 — PORTE AGREGÉE : les jobs build/windows attendent CETTE porte, pas les
+  # shards individuels (sinon un shard vert masquerait un shard rouge). Elle n'échoue
+  # que si AU MOINS UN shard a échoué, et publie le détail des échecs en commentaire
+  # de commit (le journal de job n'étant lisible qu'avec un jeton).
+  bancs_gate:
+    needs: bancs
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Agréger et publier le détail des échecs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
-          if [ -f rapport_final.md ]; then
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-              -f body="$(cat rapport_final.md)" > /dev/null && echo "détail publié"
+          if [ "${{ needs.bancs.result }}" != "success" ]; then
+            { echo "**Bancs : AU MOINS UN SHARD EN ÉCHEC.**"; echo; \
+              for f in rapport_shard_*.md; do [ -f "$f" ] && { echo "──── $f"; cat "$f"; echo; }; done; } > rapport_final.md
+            if [ -f rapport_final.md ]; then
+              gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+                -f body="$(cat rapport_final.md)" > /dev/null && echo "détail publié"
+            fi
+            echo "Un ou plusieurs shards de bancs ont échoué — publication bloquée."
+            exit 1
           fi
+          echo "Tous les shards de bancs sont passés."
 
   # Les BANCS sont de nouveau bloquants (2026-10-08) : les deux échecs de la
   # première exécution étaient des défauts d'OUTILLAGE (chemin de navigateur en
   # dur dans v440, prérequis Ollama non déclaré dans v445), tous deux corrigés,
   # et le contrôle de portabilité empêche leur retour. Une régression réelle
-  # doit désormais empêcher la publication.
+  # doit désormais empêcher la publication. dépend de bancs_gate (agrégat des
+  # shards parallèles) et non des shards individuels.
   build:
-    needs: [controles, bancs]
+    needs: [controles, bancs_gate]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -263,7 +266,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   windows:
-    needs: [controles, bancs]
+    needs: [controles, bancs_gate]
     runs-on: windows-latest
     steps:
       - name: Checkout

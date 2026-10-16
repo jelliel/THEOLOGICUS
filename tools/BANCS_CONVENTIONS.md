@@ -10,6 +10,21 @@ que si le DÉFAUT qu'il vise est présent** — jamais parce qu'un AUTRE module 
 évolué. Un faux rouge de banc bloque la publication (CI : `bancs → failure`
 ⇒ pas de release). Donc : un banc fragile est un risque de livraison.
 
+## 0b. Exécution en CI (v599)
+Les bancs ne courent PLUS en séquentiel. `tools/bancs_shard.js` découpe la liste
+en `SHARD_TOTAL` tranches (5 dans `.github/workflows/build-apk.yml`) ; chaque
+tranche tourne dans un runner **parallèle**. Conséquences pour l'écriture d'un
+banc :
+- **Pas de partage de fichier de rapport entre bancs** : chaque banc doit être
+  autonome (sortie sur stdout/stderr). `bancs_shard.js` agrège les résultats.
+- **Délais** : chaque banc a 300 s max (un banc bloqué ne fige pas la CI). Un
+  banc qui dépasse doit être découpé ou rendu moins dépendant du réseau.
+- `fail-fast: false` sur la matrice : un shard rouge n'interrompt PAS les
+  autres. La porte `bancs_gate` (`if: always()`) échoue seulement si AU MOINS UN
+  shard a échoué, et publie le détail en commentaire de commit.
+- Fumée `tools/ci_smoke.js` (sans navigateur, < 30 s) tourne dans `controles`
+  AVANT les bancs : régression grossière détectée en < 2 min.
+
 ## 1. Ajouts DOM additifs (leçon v598 → v597)
 Un module **additif** (bouton sticky, menu, badge) peut ajouter un enfant à un
 conteneur **partagé** (`.header-controls` est touché par v6/v31/v35/v597/v598).
