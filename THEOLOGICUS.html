@@ -65498,6 +65498,47 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
 })();
 </script>
 
+<style id="v596-send-contraste">
+/* v596 — CONTRASTE DU BOUTON SEND (corrige un défaut MESURÉ).
+
+   Mesure avant correction : `#send-btn` = texte `#fff` sur
+   `rgb(79,142,247)` SURMONTÉ d'un reflet blanc translucide
+   `linear-gradient(135deg, rgba(255,255,255,.26), rgba(255,255,255,.02))`.
+   Le reflet ÉCLAIRCIT le fond, donc le pire cas n'est pas la couleur unie mais
+   le coin clair du reflet :
+       2,31:1  (arrêt alpha .26 → rgb(125,171,249))
+       3,21:1  (couleur unie seule — le MEILLEUR cas)
+   Seuil WCAG AA pour un libellé de 13 px en gras : 4,5:1. C'est l'ACTION
+   PRINCIPALE de l'application.
+
+   Correctif, en deux gestes :
+     1. base assombrie  #4f8ef7 → #3568d4  (blanc dessus : ≈ 5,1:1) ;
+     2. le reflet passe de BLANC (qui éclaircit, donc dégrade) à NOIR (qui
+        assombrit, donc améliore). Le pire cas devient la couleur de base
+        elle-même, puisque l'autre extrémité du reflet est plus sombre.
+
+   ⚠️ SPÉCIFICITÉ — c'est le point délicat, et il est déjà résolu dans ce
+   fichier : `.v12-bar > #send-btn { background: rgb(79,142,247) !important }`
+   (1 id + 1 classe) bat un simple `#send-btn !important`. On reprend donc la
+   technique employée par v25 : DOUBLER l'id (`#send-btn#send-btn` = 2 ids),
+   qui l'emporte quel que soit le nombre de classes et de pseudo-classes.
+   Le `:hover` existant (`#send-btn#send-btn:hover`, 2 ids + 1 pseudo) est
+   surpassé par le nôtre parce qu'il vient PLUS LOIN dans le document.
+
+   On ne touche ni à la bordure, ni au halo, ni à la mise en page : seuls le
+   fond et la couleur du texte changent. */
+#send-btn#send-btn,
+#send-btn#send-btn:hover,
+#send-btn#send-btn:active,
+#send-btn#send-btn:focus-visible {
+  background-color: #3568d4 !important;
+  background-image: linear-gradient(135deg, rgba(0, 0, 0, .20), rgba(0, 0, 0, 0)) !important;
+  color: #ffffff !important;
+}
+/* l'état désactivé est explicitement HORS du périmètre WCAG 1.4.3 (contraste
+   du texte) : on n'y touche pas, l'opacité .4 d'origine est conservée. */
+</style>
+
 </body>
 </html>
 </html>
