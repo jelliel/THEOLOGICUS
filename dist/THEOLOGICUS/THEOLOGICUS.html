@@ -6602,6 +6602,13 @@ body.custom-bg #voice-overlay {
   width: 320px;
   max-height: 65vh;
   background: rgba(9,21,37,0.97);
+  /* v601 — le panneau est une SURCOUCHE SOMBRE INVARIANTE (fond indépendant du
+     thème, mesuré identique avant/après tokenisation) : l'accent qui y est
+     consommé doit rester l'accent « fond sombre », pas celui du thème courant
+     (en v6-light, #185fa5 sur ce fond = 2.64:1, mesuré). On épingle donc les
+     jetons d'accent à leur valeur de référence dans cette portée. */
+  --accent: #4f8ef7;
+  --accent-rgb: 79,142,247;
   border: var(--hud-border);
   border-radius: var(--r-lg);
   padding: 0;
