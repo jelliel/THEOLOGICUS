@@ -103,8 +103,10 @@ const SCAN_RGB = ([r, g, b]) => {
   ok("surcharger --accent fait apparaître du rouge (éléments pilotés)", rouge > 0, rouge + " élément(s)");
   ok("le nombre d'éléments accent DIMINUE (des règles suivent le jeton)",
      totalApres < totalBase, "avant " + totalBase + ", après " + totalApres);
-  console.log("   info : " + totalApres + " élément(s) restent en dur dans les AUTRES blocs" +
-              " (v9-palette, modules inline) — tranches 2 et suivantes.");
+  ok("la couverture tokenisée ne régresse pas (tranches 1-2 : ≥ 20 règles pilotées)",
+     (totalBase - totalApres) >= 20, "écart " + (totalBase - totalApres));
+  console.log("   info : " + totalApres + " élément(s) restent en dur (styles inline JS," +
+              " attributs HTML, valeurs propres aux thèmes) — tranches suivantes.");
 
   /* ── 4. --accent-rgb pilote les rgba() à opacité variable ── */
   section("4. Contrôle négatif — rgba(var(--accent-rgb), α) suit aussi");
