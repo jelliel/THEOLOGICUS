@@ -48,6 +48,7 @@ on:
       # décrit plus haut). On déclenche donc la CI sur les bancs eux-mêmes.
       - '.workbuddy-ai/artifacts/_v4*/verify_*.js'
       - '.workbuddy-ai/artifacts/_v5*/verify_*.js'   # v534 : _v5* inclus — un banc v5* seul ne declenchait RIEN ; _v1xx EXCLU (bancs Windows non portables)
+      - '.workbuddy-ai/artifacts/_v6*/verify_*.js'   # v600 : chantier thèmes — un banc v6* seul doit déclencher la CI (même piège que v534)
       # --- ajoutez ici tout nouveau fichier dont depend l'application ---
       # La documentation et les journaux de memoire (.workbuddy-ai/** hors
       # bancs) restent volontairement DEHORS : un commit de notes ne doit pas

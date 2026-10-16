@@ -39,7 +39,7 @@ function listerBancs() {
   catch { return trouves; }
   for (const g of groupes) {
     if (!g.isDirectory()) continue;
-    if (/^_v[45]\d*$/.test(g.name)) visiter(path.join(racine, g.name));
+    if (/^_v[456]\d*$/.test(g.name)) visiter(path.join(racine, g.name));
   }
   const exclus = /[\\/]_v457[\\/]|[\\/]_v441[\\/]/;
   return trouves

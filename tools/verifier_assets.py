@@ -190,7 +190,7 @@ def controle_bancs():
     """
     import glob
     erreurs, infos = [], []
-    motifs = ('_v4*', '_v5*')
+    motifs = ('_v4*', '_v5*', '_v6*')
     bancs = []
     for motif in motifs:
         bancs += glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', motif, 'verify_*.js'))
@@ -223,7 +223,7 @@ def controle_bancs_assertions_dom():
     """
     import glob
     erreurs, infos = [], []
-    motifs = ('_v4*', '_v5*')
+    motifs = ('_v4*', '_v5*', '_v6*')
     bancs = []
     for motif in motifs:
         bancs += glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', motif, 'verify_*.js'))
