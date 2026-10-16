@@ -1,0 +1,130 @@
+<script id="v595-topbar-debordement">
+/* v595 — DÉBORDEMENT DE LA BARRE D'OUTILS (corrige un défaut MESURÉ).
+
+   Constat, mesuré et non déduit : la bande `.header-controls` contient
+   8 boutons pour 981 px de contenu, mais sa boîte n'a que 544 px à 1280,
+   611 px à 1366, 344 px à 1024. Elle est bien `overflow-x: auto` — donc rien
+   n'est perdu — mais son contenu est ROGNÉ, et `scrollbar-width: thin` ne le
+   signale presque pas. Mesure avant correction : 4 boutons sur 8 visibles
+   à 1280 px, 2 sur 8 à 1024 px.
+   ⚠️ Piège de mesure : `getBoundingClientRect()` ne tient PAS compte du
+   rognage d'un ancêtre — un premier relevé comptait donc ces boutons comme
+   « visibles » alors qu'ils sont hors de la boîte.
+
+   Le remède suit le motif DÉJÀ en place dans l'application : le menu « Plus »
+   reçoit les actions peu fréquentes (v203 : « WORD et ÉTUDE déplacés dans le
+   menu (libération de place header) »). On le rend ici AUTOMATIQUE et
+   RÉVERSIBLE : les boutons qui ne tiennent pas descendent dans le menu, et
+   remontent dès que la place revient. Aucun bouton n'est perdu, aucun n'est
+   masqué, aucun n'est dupliqué.
+
+   🔴 PIÈGE VÉCU, et c'est le cœur de la méthode retenue : la boîte de la bande
+   est dimensionnée par son CONTENU (`flex: 0 1 auto` sur le parent). Un critère
+   du type « retirer jusqu'à ce que la boîte ne déborde plus » ne converge donc
+   JAMAIS — chaque retrait rétrécit la boîte et entretient le débordement.
+   Mesuré : 6 boutons descendus au lieu de 4 à 1280 px, la barre se vidait.
+   On calcule donc, en UNE passe, le PRÉFIXE de boutons qui tient dans la place
+   mesurée AVANT tout retrait. Déterministe, sans rétroaction.
+
+   ADDITIF : n'écrase rien, ne déplace que des `.hud-btn` de la bande, et se
+   ré-arme tout seul si un autre module ajoute des boutons. */
+(function () {
+  "use strict";
+  if (window.__v595Topbar) return;
+
+  var ETIQUETTE = "Barre d'outils";
+
+  function bande() { return document.querySelector(".header-controls"); }
+  function menu() { return document.getElementById("v6-more-menu"); }
+  function tous(el) { return Array.prototype.slice.call(el.querySelectorAll(".hud-btn")); }
+
+  function etiquette(m) {
+    var l = m.querySelector('.mm-label[data-v595="1"]');
+    if (!l) {
+      l = document.createElement("div");
+      l.className = "mm-label";
+      l.setAttribute("data-v595", "1");
+      l.textContent = ETIQUETTE;
+      m.insertBefore(l, m.firstChild);
+    }
+    return l;
+  }
+
+  function descendre(el, m, marque) {
+    el.setAttribute("data-v595", "1");
+    m.insertBefore(el, marque.nextSibling);
+  }
+
+  /* Ajuste en repartant TOUJOURS d'un état propre : tout dans la bande, puis on
+     descend la queue. Idempotent par construction. */
+  function ajuster() {
+    var b = bande(), m = menu();
+    if (!b || !m) return null;
+    var marque = etiquette(m);
+
+    var revenus = 0;
+    Array.prototype.forEach.call(m.querySelectorAll('.hud-btn[data-v595="1"]'), function (el) {
+      el.removeAttribute("data-v595");
+      b.appendChild(el);
+      revenus++;
+    });
+
+    var liste = tous(b);
+    var dispo = b.clientWidth;          /* FIGÉE avant tout retrait */
+    var gap = 0, descendus = 0, i;
+
+    if (liste.length > 1) {
+      gap = Math.max(0, Math.round(liste[1].getBoundingClientRect().left - liste[0].getBoundingClientRect().right));
+    }
+
+    if (dispo <= 0) {
+      /* bande de largeur nulle (masquée) : elle ne peut RIEN montrer */
+      for (i = 0; i < liste.length; i++) { descendre(liste[i], m, marque); descendus++; }
+    } else {
+      var cumul = 0, garder = 0;
+      for (i = 0; i < liste.length; i++) {
+        cumul += liste[i].getBoundingClientRect().width + (i ? gap : 0);
+        if (cumul > dispo + 1) break;
+        garder = i + 1;
+      }
+      for (i = garder; i < liste.length; i++) { descendre(liste[i], m, marque); descendus++; }
+    }
+
+    if (!m.querySelector('.hud-btn[data-v595="1"]') && marque.parentNode) marque.parentNode.removeChild(marque);
+    return { revenus: revenus, descendus: descendus, bande: tous(b).length,
+             menu: m.querySelectorAll('.hud-btn[data-v595="1"]').length, dispo: dispo, gap: gap };
+  }
+
+  /* ── planification : jamais pendant notre propre mutation (sinon boucle) ── */
+  var prevu = null, enCours = false;
+  function planifier() {
+    if (enCours) return;
+    if (prevu) clearTimeout(prevu);
+    prevu = setTimeout(function () {
+      prevu = null; enCours = true;
+      try { ajuster(); } catch (e) {} finally { enCours = false; }
+    }, 120);
+  }
+
+  function armer() {
+    var b = bande();
+    if (!b) return false;
+    try {
+      new MutationObserver(function () { if (!enCours) planifier(); })
+        .observe(b, { childList: true });
+    } catch (e) {}
+    window.addEventListener("resize", planifier);
+    planifier();
+    return true;
+  }
+
+  /* la barre est construite par un module : on attend qu'elle existe */
+  var essais = 0;
+  var iv = setInterval(function () {
+    if (armer()) { clearInterval(iv); return; }
+    if (++essais > 60) clearInterval(iv);
+  }, 250);
+
+  window.__v595Topbar = { ajuster: ajuster, planifier: planifier, ETIQUETTE: ETIQUETTE };
+})();
+</script>
