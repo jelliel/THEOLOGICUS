@@ -135,8 +135,13 @@ const SIGNATURE = () => {
   const autres = modifies.filter(k => !/v6-grp/.test(k));
   ok("seul .v6-grp change, et seulement de position (ancrage du dégradé)",
      autres.length === 0, "modifiés : " + modifies.slice(0, 5).join(", "));
-  const ordre = await page.evaluate(() => Array.prototype.map.call(document.querySelector(".header-controls").children, c => c.id || c.tagName).join(","));
-  ok("l'ORDRE des enfants de la bande est inchangé (12 enfants, aucun déplacé)",
+  const ordreBrut = await page.evaluate(() => Array.prototype.map.call(document.querySelector(".header-controls").children, c => c.id || c.tagName).join(","));
+  // #v598-plus (module v598, ultérieur) est un enfant LÉGITIME de la bande en cas de
+  // débordement : on l'exclut de l'A/B d'ordre, qui ne doit vérifier que le fait que
+  // les 12 contrôles d'ORIGINE ne bougent pas. (v598 n'en déplace aucun — prouvé par
+  // verify_v598_overflow_menu.js : rects identiques on/off.)
+  const ordre = ordreBrut.split(",").filter(x => x !== "v598-plus").join(",");
+  ok("l'ORDRE des 12 contrôles d'origine est inchangé (aucun déplacé — #v598-plus exclu)",
      ordre.split(",").length === 12 && /open-palette,model-select,open-gsearch/.test(ordre), ordre.slice(0, 70));
 
   /* ── 6. propreté ── */
