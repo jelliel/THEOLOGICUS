@@ -206,10 +206,51 @@ def controle_bancs():
     return erreurs, infos
 
 
+def controle_bancs_assertions_dom():
+    """Garde-fou v598→v597 : un module additif ajoutant un enfant DOM à un
+    conteneur PARTAGÉ (ex. `.header-controls`, touché par v6/v31/v35/v597/v598)
+    casse le banc d'un module antérieur qui COMPTE ou ORDONNE les enfants — sans
+    aucune régression réelle (faux positif, et la CI bloque la publication).
+
+    Deux gardes, conçues pour ne rien signaler aujourd'hui et protéger les ajouts
+    futurs :
+      (a) ERREUR si un banc égalise `.children.length` (ou `childElementCount`) à
+          un entier fixe — risque direct de cross-bench sur conteneur partagé ;
+      (b) AVERTISSEMENT (non fatal) si un banc lit l'ordre des enfants de
+          `.header-controls` SANS exclure les éléments ajoutés dynamiquement
+          (ni `.filter(`, ni `NORM_ORDRE`).
+    Voir tools/BANCS_CONVENTIONS.md §1.
+    """
+    import glob
+    erreurs, infos = [], []
+    motifs = ('_v4*', '_v5*')
+    bancs = []
+    for motif in motifs:
+        bancs += glob.glob(os.path.join(ROOT, '.workbuddy-ai', 'artifacts', motif, 'verify_*.js'))
+    # On ne cible que les COMPTAGES EXACTS d'un nombre POSITIF d'enfants (risque
+    # cross-bench sur conteneur partagé). Les tests d'EMPTY (=== 0, > 0, >= 0)
+    # sont sûrs et exclus via le lookahead (?!0\b). Garde NON FATALE : avertissement.
+    regex_compte = re.compile(r'(?:\.children\.length|childElementCount)\s*===\s*(?!0\b)\d+')
+    ordres_sans_filtre = []
+    for f in sorted(bancs):
+        src = io.open(f, encoding='utf-8').read()
+        rel = os.path.basename(os.path.dirname(f)) + '/' + os.path.basename(f)
+        if regex_compte.search(src):
+            infos.append("⚠ %s : assertion .children.length/childElementCount === N (risque cross-bench si conteneur partagé — préférer une allow-list d'éléments d'origine)" % rel)
+        if 'header-controls' in src and re.search(r'\b(ordre|order)\b', src) and '.children' in src:
+            if '.filter(' not in src and 'NORM_ORDRE' not in src:
+                ordres_sans_filtre.append(rel)
+    if ordres_sans_filtre:
+        infos.append("⚠ banc(s) ordre sur .header-controls SANS exclusion des éléments dynamiques : " + ', '.join(ordres_sans_filtre))
+    infos.append('%d banc(s) scanné(s) pour les assertions DOM fragiles' % len(bancs))
+    return erreurs, infos
+
+
 def main():
     erreurs, infos = [], []
     for controle in (controle_assets, controle_corpus, controle_copie_embarquee,
-                     controle_fins_de_ligne, controle_modules, controle_bancs):
+                     controle_fins_de_ligne, controle_modules, controle_bancs,
+                     controle_bancs_assertions_dom):
         e, i = controle()
         erreurs += e
         infos += i

@@ -135,14 +135,21 @@ const SIGNATURE = () => {
   const autres = modifies.filter(k => !/v6-grp/.test(k));
   ok("seul .v6-grp change, et seulement de position (ancrage du dégradé)",
      autres.length === 0, "modifiés : " + modifies.slice(0, 5).join(", "));
-  const ordreBrut = await page.evaluate(() => Array.prototype.map.call(document.querySelector(".header-controls").children, c => c.id || c.tagName).join(","));
-  // #v598-plus (module v598, ultérieur) est un enfant LÉGITIME de la bande en cas de
-  // débordement : on l'exclut de l'A/B d'ordre, qui ne doit vérifier que le fait que
-  // les 12 contrôles d'ORIGINE ne bougent pas. (v598 n'en déplace aucun — prouvé par
-  // verify_v598_overflow_menu.js : rects identiques on/off.)
-  const ordre = ordreBrut.split(",").filter(x => x !== "v598-plus").join(",");
-  ok("l'ORDRE des 12 contrôles d'origine est inchangé (aucun déplacé — #v598-plus exclu)",
-     ordre.split(",").length === 12 && /open-palette,model-select,open-gsearch/.test(ordre), ordre.slice(0, 70));
+  // Conteneur partagé : plusieurs modules y ajoutent des enfants SANS déplacer les
+  // contrôles d'ORIGINE (v598 → #v598-plus ; tout module futur vNNN-* fera de même).
+  // L'A/B d'ordre doit vérifier l'ordre RELATIF des 12 contrôles d'ORIGINE et IGNORER
+  // tout élément ajouté dynamiquement — quelle que soit son identité. (Robustesse
+  // v598→v597 : un module additif avait cassé ce banc en comptant 13 enfants au lieu
+  // de 12. La preuve qu'aucun contrôle d'origine ne bouge : verify_v598_overflow_menu.js,
+  // garde-fou « rects identiques on/off ».)
+  const ORIGINE = ["open-palette","model-select","open-gsearch","open-diag","open-rapid",
+                   "open-corbeille","open-presets","v155-atelier","agent-select",
+                   "v159-media-wrap","context-meter","auto-save-indicator"];
+  const enfants = await page.evaluate(() => Array.prototype.map.call(document.querySelector(".header-controls").children, c => c.id || c.tagName));
+  const vus = ORIGINE.filter(id => enfants.includes(id));
+  const ordreOk = vus.length === ORIGINE.length && ORIGINE.every((id, i) => vus[i] === id);
+  ok("l'ORDRE des 12 contrôles d'origine est inchangé (ajouts dynamiques ignorés, aucun déplacé)",
+     ordreOk, enfants.join(","));
 
   /* ── 6. propreté ── */
   section("6. Propreté");
