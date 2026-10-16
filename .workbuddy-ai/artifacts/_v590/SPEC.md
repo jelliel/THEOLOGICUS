@@ -127,7 +127,40 @@ vide. Chaque verdict est affirmé. Le banc échoue si un cas change de verdict.
   - Décision : travaille sur les éléments `.bible-ref` **déjà rendus** par
     l'appareil existant — le module ne re-parse donc pas les références
     (aucune duplication de `parseRef` / `BOOK_NUM`).
-- [ ] **T3 — l'UI** : marquer chaque citation. Dépend de la Q1.
+- [x] **T3 — l'UI** (module `v591-citations-ui`) : marque distincte posée sur le
+  TEXTE CITÉ (✓ vert conforme / ≈ orange proche / ≠ rouge divergent), le ✅
+  existant restant intact. Respecte le réglage `theologicus_verify` (off/souple/
+  strict), `demarquer()` pour re-marquer, idempotent, **ne touche pas au message
+  en cours de flux** (`.theo-streaming`, l.12376) et reprend après.
+  - Acceptance : voir le banc `_v591` (24/24).
+  - Décision : option (a) de la Q1 — AJOUTER une marque, ne pas changer le sens
+    du ✅ déjà livré. Réversible.
 - [ ] **T4 — les références magistérielles** (Somme, CEC, conciles) : il faut
   un corpus texte pour comparer ; aujourd'hui `theoRefHtml` ne fait qu'un lien.
   Dépend d'un arbitrage de périmètre (le corpus Somme/CEC est-il complet ?).
+
+## 11. Constats annexes (trouvés en chemin, NON corrigés ici)
+
+Ces trois points sont hors périmètre de la tranche en cours. Ils sont notés
+parce qu'ils sont **vérifiés**, pas supposés.
+
+1. 🔴 **`parseRef` ne résout PAS les livres numérotés en abrégé.**
+   Mesuré : `Jn 3,16` → livre 43 ✔ ; `Mt 5,3` → 40 ✔ ; mais `2 Tm 3,16` → **null**,
+   `2Tm 3,16` → **null**, `1 Co 13,4` → **null**. Seule la forme longue marche
+   (`2 Timothée 3,16` → 55). Cause : la clé est reconstruite avec un espace
+   (`"2 tm"`) alors que `BOOK_NUM` ne contient que `"2tm"`, et la regex exige un
+   espace après le chiffre. **Conséquence sur l'existant** : ces références ne
+   reçoivent ni lien ni ✅ — elles passent inaperçues. Correctif possible et
+   petit, mais c'est une **surface partagée** (concordance, graphe, marquage) :
+   à faire dans sa propre tranche, avec son propre banc.
+2. **Anomalie de corpus** : le texte de `Mt 5,3` (BJ) commence par un guillemet
+   droit parasite — `"Heureux ceux qui ont une âme de pauvre…`. À vérifier dans
+   la chaîne de fabrication du corpus.
+3. ✅ **Défaut RÉEL trouvé par le banc et corrigé (T3)** : la marque ✅ de
+   l'appareil existant est insérée **entre** la référence et la citation
+   (`initVerifyMarks`, l.27588). Sans traitement, elle **masquait** le texte et
+   la détection échouait dès que le ✅ était posé — donc en production, et pas
+   dans un banc exécuté trop tôt. Correctif : `voisinTexte()` saute les nœuds de
+   marque (`verify-mark`, `v591-cite`) et les nœuds texte vides ; les glyphes de
+   marque sont aussi absorbés par les séparateurs. Deux assertions de
+   non-régression ajoutées au banc `_v590`.

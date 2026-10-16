@@ -1,7 +1,7 @@
 
 /* v590 — VÉRIFICATION DE FIDÉLITÉ DES CITATIONS.
    T1 : le comparateur (texte cité ↔ texte réel du corpus).
-   T2 : l'appariement référence ↔ texte cité.
+   T2 : l'appariement référence ↔ texte cité (+ localisation DOM pour T3).
 
    Constat VÉRIFIÉ : initVerifyMarks() (l.27539) marque déjà les références
    bibliques/coraniques ✅/⚠️/✏️ — mais à partir des SEULS NUMÉROS du verset.
@@ -77,11 +77,38 @@
      délimitée, on ne devine PAS : mieux vaut ne rien dire que se tromper. */
   var PROXIMITE = 40;
   var MIN_CITE = 8;
-  var SEP_TETE = /^[\s:;,.\u2014\u2013\u2026()\-]+/;
-  var SEP_QUEUE = /[\s:;,.\u2014\u2013\u2026()\-]+$/;
+  /* Les marques de vérification (✅ de l'appareil existant, ✏️, et les nôtres)
+     S'INTERCALENT entre la référence et la citation : elles ne sont pas du
+     texte et ne doivent donc ni masquer la citation ni compter dans la
+     proximité. Constat VÉCU : sans cela, la détection échouait dès que
+     initVerifyMarks avait posé son ✅ — le banc _v591 l'a attrapé. */
+  var GLYPHES = "\\u2713\\u2705\\u26a0\\ufe0f\\u270f\\u2248\\u2260";
+  var SEP_TETE = new RegExp("^[\\s:;,.\\u2014\\u2013\\u2026()\\-" + GLYPHES + "]+");
+  var SEP_QUEUE = new RegExp("[\\s:;,.\\u2014\\u2013\\u2026()\\-" + GLYPHES + "]+$");
+  var MARQUES = /(^|\s)(verify-mark|v591-cite)(\s|$)/;
   var PAIRES = [["\u00ab", "\u00bb"], ["\u201c", "\u201d"], ["\"", "\""]];
   var OUVRANTS = {}, FERMANTS = {};
   for (var _i = 0; _i < PAIRES.length; _i++) { OUVRANTS[PAIRES[_i][0]] = PAIRES[_i][1]; FERMANTS[PAIRES[_i][1]] = PAIRES[_i][0]; }
+
+  /* Premier nœud TEXTE voisin, en sautant les marques insérées entre-temps
+     (et les nœuds texte vides). C'est ce qui rend la détection robuste à la
+     présence du ✅ existant. */
+  function voisinTexte(el, sens) {
+    var n = sens === "avant" ? el.previousSibling : el.nextSibling;
+    var garde = 0;
+    while (n && garde++ < 8) {
+      if (n.nodeType === 3) {
+        if (String(n.nodeValue).trim() === "") { n = sens === "avant" ? n.previousSibling : n.nextSibling; continue; }
+        return n;
+      }
+      if (n.nodeType === 1 && typeof n.className === "string" && MARQUES.test(n.className)) {
+        n = sens === "avant" ? n.previousSibling : n.nextSibling;
+        continue;
+      }
+      return null;
+    }
+    return null;
+  }
 
   /* Texte du même bloc, APRÈS / AVANT l'élément (borné : au-delà de 400
      caractères ce n'est plus la citation de CETTE référence). */
@@ -126,15 +153,53 @@
     if (deb < 0) return null;
     return t.slice(deb + 1, t.length - 1);
   }
-  /* {cite, sens} pour un élément de référence, ou null si rien de sûr. */
+
+  /* Localisation EXACTE de la citation dans le DOM, pour le cas courant et
+     réel : la citation tient dans UN SEUL nœud texte voisin de la référence.
+     C'est ce que T3 utilise pour poser sa marque au bon endroit. On préfère
+     ne rien localiser plutôt que de poser une marque au mauvais endroit. */
+  function localiser(el) {
+    var t = voisinTexte(el, "apres");
+    if (t) {
+      var txt = t.nodeValue, s = txt.replace(SEP_TETE, "");
+      var skipe = txt.length - s.length;
+      if (skipe <= PROXIMITE) {
+        var fermant = OUVRANTS[s.charAt(0)];
+        if (fermant) {
+          var fin = s.indexOf(fermant, 1);
+          if (fin >= 0) return { noeud: t, i0: skipe, i1: skipe + fin + 1, cite: s.slice(1, fin), sens: "apres" };
+        }
+      }
+    }
+    t = voisinTexte(el, "avant");
+    if (t) {
+      var txt2 = t.nodeValue, s2 = txt2.replace(SEP_QUEUE, "");
+      var skipe2 = txt2.length - s2.length;
+      if (skipe2 <= PROXIMITE) {
+        var c = s2.charAt(s2.length - 1), ouvrant = FERMANTS[c];
+        if (ouvrant) {
+          var deb = s2.lastIndexOf(ouvrant, s2.length - 2);
+          if (deb >= 0) return { noeud: t, i0: deb + 1, i1: s2.length - 1, cite: s2.slice(deb + 1, s2.length - 1), sens: "avant" };
+        }
+      }
+    }
+    return null;
+  }
+
+  /* {cite, sens, noeud?, i0?, i1?} pour un élément de référence, ou null. */
   function citationAssociee(el) {
     if (!el) return null;
+    var l = localiser(el);
+    if (l && l.cite.trim().length >= MIN_CITE) {
+      return { cite: l.cite.trim(), sens: l.sens, noeud: l.noeud, i0: l.i0, i1: l.i1 };
+    }
     var a = citationOuvrante(texteApres(el));
     if (a) { a = a.trim(); if (a.length >= MIN_CITE) return { cite: a, sens: "apres" }; }
     var b = citationFermante(texteAvant(el));
     if (b) { b = b.trim(); if (b.length >= MIN_CITE) return { cite: b, sens: "avant" }; }
     return null;
   }
+
   /* Toutes les citations appariables d'un conteneur (corps d'un message).
      La résolution du texte réel du corpus reste à la charge de l'appelant
      (T3) : elle exige le corpus chargé, ce module n'y touche pas. */
@@ -147,7 +212,7 @@
       var ref = String(el.textContent || "").trim();
       var p = null;
       try { p = window.__parseBibleRef ? window.__parseBibleRef(ref) : null; } catch (e) { p = null; }
-      out.push({ el: el, ref: ref, cite: c.cite, sens: c.sens, parse: p });
+      out.push({ el: el, ref: ref, cite: c.cite, sens: c.sens, noeud: c.noeud || null, parse: p });
     });
     return out;
   }
@@ -157,6 +222,7 @@
     normaliser: normaliser,
     citationAssociee: citationAssociee,
     citationsDuBloc: citationsDuBloc,
+    localiser: localiser,
     SEUILS: SEUILS,
     MIN_JETONS: MIN_JETONS,
     MAX_CAR: MAX_CAR,

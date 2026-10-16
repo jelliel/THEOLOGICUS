@@ -77,8 +77,8 @@ function versetCorpus(livre, ch, v) {
     };
   });
   ok("window.__v590Citations est exposé", surface.present === true, JSON.stringify(surface));
-  ok("surface d'API minimale (T1 comparateur + T2 appariement + bornes)",
-     surface.cles === "MAX_CAR,MIN_CITE,MIN_JETONS,PROXIMITE,SEUILS,citationAssociee,citationsDuBloc,comparer,normaliser",
+  ok("surface d'API minimale (T1 comparateur + T2 appariement + localisation)",
+     surface.cles === "MAX_CAR,MIN_CITE,MIN_JETONS,PROXIMITE,SEUILS,citationAssociee,citationsDuBloc,comparer,localiser,normaliser",
      surface.cles);
   ok("aucun élément DOM injecté par le module", surface.domV590 === 0, "n=" + surface.domV590);
 
@@ -146,7 +146,7 @@ function versetCorpus(livre, ch, v) {
     function cas(html) {
       hote.innerHTML = html;
       return C.citationsDuBloc(hote).map(function (r) {
-        return { ref: r.ref, cite: r.cite, sens: r.sens, livre: r.parse ? r.parse.book : null };
+        return { ref: r.ref, cite: r.cite, sens: r.sens, livre: r.parse ? r.parse.book : null, noeud: !!r.noeud };
       });
     }
     const out = {};
@@ -160,6 +160,11 @@ function versetCorpus(livre, ch, v) {
     out.nonFermee = cas('<p><span class="bible-ref">Jn 3,16</span> « Dieu a tant aimé le monde</p>');
     out.courte = cas('<p><span class="bible-ref">Jn 3,16</span> « Dieu »</p>');
     out.sansRef = cas('<p>« Dieu a tant aimé le monde. » sans référence</p>');
+    /* RÉGRESSION VÉCUE : l'appareil existant insère son ✅ ENTRE la référence
+       et la citation (initVerifyMarks, l.27588). Sans le saut de marques, la
+       détection échouait dès que le ✅ était posé. */
+    out.marqueIntercalee = cas('<p>Jésus dit : <span class="bible-ref">Jn 3,16</span><span class="verify-mark">\u2705</span> « Dieu a tant aimé le monde qu\'il a donné son Fils unique. »</p>');
+    out.marqueAvantCitation = cas('<p><span class="bible-ref">Gn 1,1</span><span class="verify-mark">\u2705</span> : "Au commencement, Dieu créa le ciel et la terre."</p>');
     hote.remove();
     return out;
   });
@@ -181,6 +186,12 @@ function versetCorpus(livre, ch, v) {
   ok("citation non fermée → RIEN", t2.nonFermee.length === 0, JSON.stringify(t2.nonFermee));
   ok("citation trop courte (< MIN_CITE) → RIEN", t2.courte.length === 0, JSON.stringify(t2.courte));
   ok("citation sans référence → RIEN (le module ne balaie pas le texte)", t2.sansRef.length === 0, JSON.stringify(t2.sansRef));
+  ok("le ✅ de l'appareil existant INTERCALÉ ne masque pas la citation (après)",
+     t2.marqueIntercalee.length === 1 && /Dieu a tant aim/.test(t2.marqueIntercalee[0].cite) && t2.marqueIntercalee[0].noeud === true,
+     JSON.stringify(t2.marqueIntercalee));
+  ok("le ✅ INTERCALÉ ne masque pas non plus la citation (guillemets droits)",
+     t2.marqueAvantCitation.length === 1 && /Au commencement, Dieu créa/.test(t2.marqueAvantCitation[0].cite),
+     JSON.stringify(t2.marqueAvantCitation));
 
   /* ── 10. T1 + T2 bout à bout : extraction puis comparaison au corpus ── */
   section("10. T1 + T2 bout à bout : la citation extraite est comparée au corpus");
