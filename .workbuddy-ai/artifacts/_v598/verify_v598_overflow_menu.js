@@ -220,6 +220,82 @@ const SIGNATURE = () => {
   ok("aucun contrôle existant ne BOUGE (rects identiques on/off, hors Plus)",
      rectsOn === rectsOff, (rectsOn === rectsOff ? "" : "ON=" + rectsOn.slice(0, 80) + " / OFF=" + rectsOff.slice(0, 80)));
 
+  /* ── 6b. ACCESSIBILITÉ (clavier + ARIA) ── */
+  section("6b. Accessibilité — clavier + ARIA du menu « Plus »");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.waitForTimeout(400);
+  await page.mouse.move(2, 2);
+  await page.waitForTimeout(150);
+  const a11yBtn = await page.evaluate(() => {
+    const b = document.getElementById("v598-plus");
+    return b ? { popup: b.getAttribute("aria-haspopup"), ctl: b.getAttribute("aria-controls"), exp: b.getAttribute("aria-expanded") } : null;
+  });
+  ok("le bouton déclare aria-haspopup=menu", a11yBtn && a11yBtn.popup === "menu", JSON.stringify(a11yBtn));
+  ok("le bouton relie le menu via aria-controls=v598-menu", a11yBtn && a11yBtn.ctl === "v598-menu", JSON.stringify(a11yBtn));
+
+  const ouvertA = await ouvrir();
+  await page.evaluate(() => { const m = document.getElementById("v598-menu"); if (m) m.focus(); });
+  await page.waitForTimeout(180);
+  const a11yMenu = await page.evaluate(() => {
+    const m = document.getElementById("v598-menu");
+    if (!m) return null;
+    return {
+      role: m.getAttribute("role"),
+      labelled: m.getAttribute("aria-labelledby"),
+      tab: m.tabIndex,
+      activedesc: m.getAttribute("aria-activedescendant"),
+      items: Array.prototype.map.call(m.querySelectorAll(".v598-item"), (it) => ({ role: it.getAttribute("role"), id: it.id })),
+      active: window.__v598Overflow.activeIndex(),
+      focusSurMenu: document.activeElement && document.activeElement.id === "v598-menu"
+    };
+  });
+  ok("le menu s'ouvre", ouvertA && !!a11yMenu);
+  ok("le menu porte role=menu + aria-labelledby=v598-plus", a11yMenu && a11yMenu.role === "menu" && a11yMenu.labelled === "v598-plus");
+  ok("les items portent role=menuitem et des id stables v598-item-N",
+     a11yMenu && a11yMenu.items.length > 0 && a11yMenu.items.every((it, i) => it.role === "menuitem" && it.id === "v598-item-" + i),
+     a11yMenu ? a11yMenu.items.length + " items" : "menu absent");
+  ok("à l'ouverture : focus sur le menu, 1er item actif + aria-activedescendant",
+     a11yMenu && a11yMenu.focusSurMenu && a11yMenu.active === 0 && a11yMenu.activedesc === "v598-item-0",
+     "active=" + (a11yMenu ? a11yMenu.active : "?"));
+
+  await page.keyboard.press("ArrowDown"); await page.waitForTimeout(60);
+  let ai = await page.evaluate(() => window.__v598Overflow.activeIndex());
+  ok("FlècheBas → item suivant (0→1)", ai === 1, "active=" + ai);
+  await page.keyboard.press("ArrowUp"); await page.waitForTimeout(60);
+  ai = await page.evaluate(() => window.__v598Overflow.activeIndex());
+  ok("FlècheHaut → 1er item (1→0)", ai === 0, "active=" + ai);
+  await page.keyboard.press("End"); await page.waitForTimeout(60);
+  const lastIdx = await page.evaluate(() => window.__v598Overflow.itemCount() - 1);
+  ai = await page.evaluate(() => window.__v598Overflow.activeIndex());
+  ok("Fin → dernier item", ai === lastIdx, "active=" + ai + " last=" + lastIdx);
+  await page.keyboard.press("Home"); await page.waitForTimeout(60);
+  ai = await page.evaluate(() => window.__v598Overflow.activeIndex());
+  ok("Début → 1er item", ai === 0, "active=" + ai);
+
+  // Entrée sur un sélecteur (item 1 = model-select) : active l'item, ferme le menu, sans modale
+  await page.keyboard.press("ArrowDown"); await page.waitForTimeout(60);
+  await page.keyboard.press("Enter"); await page.waitForTimeout(220);
+  const apresEntree = await page.evaluate(() => ({ open: window.__v598Overflow.isOpen() }));
+  ok("Entrée active l'item et ferme le menu", apresEntree.open === false, JSON.stringify(apresEntree));
+
+  await ouvrir();
+  await page.evaluate(() => { const m = document.getElementById("v598-menu"); if (m) m.focus(); });
+  await page.waitForTimeout(150);
+  await page.keyboard.press("Escape"); await page.waitForTimeout(180);
+  const apresEchap = await page.evaluate(() => ({ open: window.__v598Overflow.isOpen(), focus: document.activeElement ? document.activeElement.id : null }));
+  ok("Échap ferme le menu", apresEchap.open === false, JSON.stringify(apresEchap));
+  ok("Échap rend le focus au bouton #v598-plus", apresEchap.focus === "v598-plus", "focus=" + apresEchap.focus);
+
+  await ouvrir();
+  await page.evaluate(() => { const m = document.getElementById("v598-menu"); if (m) m.focus(); });
+  await page.waitForTimeout(150);
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.waitForTimeout(450);
+  const apresResize = await page.evaluate(() => window.__v598Overflow.isOpen());
+  ok("le menu se ferme au redimensionnement de la fenêtre", apresResize === false, "open=" + apresResize);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.waitForTimeout(300);
+
   /* ── 7. PROPRETÉ ── */
   section("7. Propreté");
   ok("aucune erreur JavaScript", bruit.length === 0, bruit.slice(0, 3).join(" | "));

@@ -1,0 +1,218 @@
+/* v598 — MENU « PLUS » DE LA BANDE D'OUTILS (additif, sans deplacement).
+   v598a : accessibilite clavier + ARIA (role=menu, aria-activedescendant,
+   focus au premier item a l'ouverture, retour focus au bouton a la fermeture,
+   fermeture au redimensionnement). Comportement de debordement INCHANGE. */
+(function () {
+  "use strict";
+  if (window.__v598Overflow) return;
+  var api = (window.__v598Overflow = { _disabled: false, _plus: null, _menu: null, _open: false, _els: [], _items: [], _active: -1 });
+
+  function band() { return document.querySelector(".header-controls"); }
+  function vis(el) { try { return !!el && getComputedStyle(el).display !== "none"; } catch (e) { return false; } }
+
+  function style() {
+    if (document.getElementById("v598-css")) return;
+    var s = document.createElement("style");
+    s.id = "v598-css";
+    s.textContent =
+      "#v598-plus{position:sticky;right:0;flex:0 0 auto;z-index:3;display:none;" +
+      "align-items:center;justify-content:center;min-width:30px;height:30px;margin-left:4px;" +
+      "cursor:pointer;border:1px solid var(--bd,#2a3550);border-radius:6px;" +
+      "background:var(--bg-card,#0d1626);color:var(--cyan,#4f8ef7);font-size:15px;line-height:1;" +
+      "box-shadow:0 0 0 1px rgba(0,0,0,.25)}" +
+      "#v598-plus.v598-vis{display:inline-flex}" +
+      "#v598-plus:hover{background:var(--bg-hover,#15203a)}" +
+      "#v598-plus:focus-visible{outline:2px solid var(--cyan,#4f8ef7);outline-offset:2px}" +
+      ".v598-menu{position:fixed;z-index:9000;min-width:230px;max-height:72vh;overflow:auto;" +
+      "background:var(--bg-pop,#101a30);border:1px solid var(--bd,#2a3550);border-radius:10px;" +
+      "box-shadow:0 10px 34px rgba(0,0,0,.5);padding:6px;font-size:12px;color:var(--txt,#e8eefc)}" +
+      ".v598-menu:focus{outline:none}" +
+      ".v598-item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;" +
+      "cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}" +
+      ".v598-item:hover{background:var(--bg-hover,#15203a)}" +
+      ".v598-item.v598-actif{background:var(--cyan,#4f8ef7);color:#fff}" +
+      ".v598-item:focus-visible{outline:2px solid var(--cyan,#4f8ef7);outline-offset:-2px}" +
+      ".v598-item .v598-l{overflow:hidden;text-overflow:ellipsis}";
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  function makePlus() {
+    var b = document.createElement("button");
+    b.id = "v598-plus"; b.type = "button";
+    b.title = "Toutes les commandes de la barre d'outils";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-controls", "v598-menu");
+    b.setAttribute("aria-expanded", "false");
+    b.textContent = "≫";
+    b.addEventListener("click", function (e) { e.stopPropagation(); toggle(); });
+    return b;
+  }
+
+  function labelFor(el) {
+    if (el.tagName === "SELECT") {
+      var sel = el.options[el.selectedIndex];
+      var v = sel ? sel.textContent : "";
+      var p = el.id === "model-select" ? "Modele" : el.id === "agent-select" ? "Agent" : (el.id || "Select.");
+      return p + (v ? " : " + v : "");
+    }
+    return (el.textContent || "").trim() || el.title || el.id || el.tagName;
+  }
+
+  function run(el) {
+    try {
+      if (el.tagName === "BUTTON") { el.click(); return; }
+      if (el.tagName === "SELECT") {
+        try { el.scrollIntoView({ inline: "nearest", block: "nearest" }); } catch (e) {}
+        el.focus();
+        if (el.showPicker) { try { el.showPicker(); } catch (e2) {} }
+      }
+    } catch (e) { try { if (el.click) el.click(); } catch (e2) {} }
+  }
+
+  function closeMenu() {
+    var hadFocus = api._menu && api._menu.contains(document.activeElement);
+    if (api._menu) { api._menu.remove(); api._menu = null; }
+    api._els = []; api._items = []; api._active = -1;
+    if (api._plus) api._plus.setAttribute("aria-expanded", "false");
+    api._open = false;
+    if (hadFocus && api._plus) { try { api._plus.focus(); } catch (e) {} }
+  }
+
+  function setActive(i) {
+    if (!api._menu || !api._items.length) return;
+    if (i < 0) i = 0;
+    if (i > api._items.length - 1) i = api._items.length - 1;
+    api._active = i;
+    api._items.forEach(function (it, k) { it.classList.toggle("v598-actif", k === i); });
+    api._menu.setAttribute("aria-activedescendant", "v598-item-" + i);
+    try { api._items[i].scrollIntoView({ block: "nearest" }); } catch (e) {}
+  }
+
+  function buildMenu() {
+    closeMenu();
+    var b = band(); if (!b) return;
+    var els = [];
+    Array.prototype.forEach.call(b.children, function (el) {
+      if (el.id === "v598-plus") return;
+      var t = el.tagName;
+      if (t === "BUTTON" || t === "SELECT") els.push(el);
+    });
+    if (!els.length) return;
+    var menu = document.createElement("div");
+    menu.className = "v598-menu"; menu.id = "v598-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-labelledby", "v598-plus");
+    menu.tabIndex = -1;
+    api._els = els;
+    var items = [];
+    els.forEach(function (el, i) {
+      if (i > 0) {
+        var sep = document.createElement("div");
+        sep.setAttribute("role", "separator");
+        sep.style.height = "1px"; sep.style.background = "var(--bd,#2a3550)"; sep.style.margin = "4px 2px";
+        menu.appendChild(sep);
+      }
+      var it = document.createElement("div");
+      it.className = "v598-item"; it.setAttribute("role", "menuitem");
+      it.id = "v598-item-" + i; it.tabIndex = -1;
+      it.dataset.tgt = el.id || "";
+      var l = document.createElement("span"); l.className = "v598-l";
+      l.textContent = labelFor(el);
+      it.title = el.title || l.textContent;
+      it.appendChild(l);
+      it.addEventListener("click", function (e) { e.stopPropagation(); run(el); closeMenu(); });
+      menu.appendChild(it);
+      items.push(it);
+    });
+    api._items = items;
+    document.body.appendChild(menu);
+    api._menu = menu;
+    menu.addEventListener("keydown", onMenuKey);
+  }
+
+  function onMenuKey(e) {
+    if (!api._open || !api._menu) return;
+    var k = e.key;
+    if (k === "ArrowDown") { e.preventDefault(); setActive(api._active < 0 ? 0 : api._active + 1); }
+    else if (k === "ArrowUp") { e.preventDefault(); setActive(api._active <= 0 ? api._items.length - 1 : api._active - 1); }
+    else if (k === "Home") { e.preventDefault(); setActive(0); }
+    else if (k === "End") { e.preventDefault(); setActive(api._items.length - 1); }
+    else if (k === "Enter" || k === " ") {
+      e.preventDefault();
+      var i = api._active; if (i >= 0 && api._els[i]) { run(api._els[i]); closeMenu(); }
+    }
+    else if (k === "Escape") { e.preventDefault(); closeMenu(); }
+    else if (k === "Tab") { closeMenu(); }
+  }
+
+  function positionMenu() {
+    if (!api._menu || !api._plus) return;
+    var r = api._plus.getBoundingClientRect();
+    var m = api._menu;
+    m.style.visibility = "hidden"; m.style.display = "block";
+    var mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = r.right - mw; if (left < 6) left = 6;
+    var top = r.bottom + 4;
+    if (top + mh > window.innerHeight - 6) top = Math.max(6, r.top - mh - 4);
+    m.style.left = left + "px"; m.style.top = top + "px"; m.style.visibility = "visible";
+  }
+
+  function openMenu() {
+    if (api._open || !api._plus) return;
+    buildMenu(); if (!api._menu) return;
+    api._open = true;
+    api._plus.setAttribute("aria-expanded", "true");
+    positionMenu();
+    setActive(0);
+    try { api._menu.focus(); } catch (e) {}
+  }
+  function toggle() { if (api._open) closeMenu(); else openMenu(); }
+
+  function compute() {
+    if (api._disabled) return;
+    var b = band(); if (!b) return;
+    if (!vis(b)) { if (api._plus) { api._plus.remove(); api._plus = null; } closeMenu(); return; }
+    var overflow = b.scrollWidth - b.clientWidth > 1;
+    if (overflow) {
+      if (!api._plus) { style(); api._plus = makePlus(); b.appendChild(api._plus); }
+      api._plus.classList.add("v598-vis");
+    } else if (api._plus) {
+      if (api._open) closeMenu();
+      api._plus.remove(); api._plus = null;
+    }
+  }
+
+  document.addEventListener("click", function (e) {
+    if (!api._open) return;
+    if (api._plus && api._plus.contains(e.target)) return;
+    if (api._menu && api._menu.contains(e.target)) return;
+    closeMenu();
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && api._open) closeMenu(); });
+
+  var to = null;
+  function plan() { if (to) clearTimeout(to); to = setTimeout(function () { to = null; compute(); }, 120); }
+  window.addEventListener("resize", function () { if (api._open) closeMenu(); plan(); });
+  var b0 = band();
+  if (b0) {
+    if (window.ResizeObserver) { try { new ResizeObserver(plan).observe(b0); } catch (e) {} }
+    try { new MutationObserver(plan).observe(b0, { childList: true, subtree: false }); } catch (e) {}
+    b0.addEventListener("scroll", function () { if (api._open) closeMenu(); }, { passive: true });
+  }
+
+  api.disable = function () { api._disabled = true; closeMenu(); if (api._plus) { api._plus.remove(); api._plus = null; } };
+  api.enable = function () { api._disabled = false; compute(); };
+  api.isOpen = function () { return !!api._open; };
+  api.plusVisible = function () { return !!(api._plus && vis(api._plus)); };
+  api.itemCount = function () { return api._menu ? api._items.length : 0; };
+  api.activeIndex = function () { return api._active; };
+  api.openMenu = openMenu;
+  api.closeMenu = closeMenu;
+  api.compute = compute;
+
+  function init() { style(); compute(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
+  setTimeout(compute, 300);
+  setTimeout(compute, 1200);
+})();
