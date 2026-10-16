@@ -90,7 +90,7 @@ function versetCorpus(livre, ch, v) {
     cles: window.__v591CitationsUi ? Object.keys(window.__v591CitationsUi).sort().join(",") : ""
   }));
   ok("window.__v591CitationsUi est exposé", e1.ui === true, JSON.stringify(e1));
-  ok("surface d'API minimale", e1.cles === "demarquer,enFlux,marquerBloc,modeVerif,texteVerset", e1.cles);
+  ok("surface d'API minimale", e1.cles === "demarquer,enFlux,marquerBloc,marquerSumma,modeVerif,texteSumma,texteVerset", e1.cles);
   ok("aucun <style> injecté au chargement", e1.style === false);
   ok("aucune marque au chargement", e1.marques === 0, "n=" + e1.marques);
 

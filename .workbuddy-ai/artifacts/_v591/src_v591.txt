@@ -25,12 +25,13 @@
   if (!C) return;                      /* sans le moteur, il n'y a rien à marquer */
 
   var STYLE_ID = "v591-style";
-  var CLASSE = { conforme: "ok", approximatif: "proche", divergent: "ecart" };
-  var GLYPHE = { conforme: "\u2713", approximatif: "\u2248", divergent: "\u2260" };
+  var CLASSE = { conforme: "ok", approximatif: "proche", divergent: "ecart", deplace: "deplace" };
+  var GLYPHE = { conforme: "\u2713", approximatif: "\u2248", divergent: "\u2260", deplace: "\u21c4" };
   var TITRE = {
     conforme: "Texte cité CONFORME au corpus local",
     approximatif: "Texte cité PROCHE, mais non identique au corpus local",
-    divergent: "Ce texte ne correspond PAS au verset cité"
+    divergent: "Ce texte ne correspond PAS au verset cité",
+    deplace: "Texte présent dans la QUESTION, mais pas dans l'ARTICLE cité"
   };
 
   function modeVerif() {
@@ -47,7 +48,8 @@
       ".v591-cite{margin-left:3px;font-size:.72em;cursor:help;font-weight:700}"
       + ".v591-ok{color:#56d364}"
       + ".v591-proche{color:#f0a020}"
-      + ".v591-ecart{color:#f85149}";
+      + ".v591-ecart{color:#f85149}"
+      + ".v591-deplace{color:#7fb3ff}";
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -77,6 +79,71 @@
       + (v.partiel ? " (citation partielle)" : "");
     c.noeud.parentNode.insertBefore(s, c.noeud.nextSibling);
     return true;
+  }
+
+  /* ═══ T4 — la SOMME (traduction Drioux, domaine public, 613 questions) ═══
+     Le corpus local est une OCR de 1851 : le texte porte des scories de
+     numérisation (« Mar.ière dout Aristolc »). On ne s'en sert donc que pour
+     CONFIRMER, jamais pour accuser — voir marquerSumma. */
+  function texteSumma(qid, artN) {
+    return new Promise(function (res) {
+      if (!window.__ensureSummaFrQuestion) return res(null);
+      window.__ensureSummaFrQuestion(String(qid)).then(function (ok) {
+        if (!ok) return res(null);
+        var q = (window.__summaFrQuestions || {})[String(qid)];
+        if (!q || !q.articles) return res(null);
+        var arts = q.articles;
+        var txt = function (liste) {
+          var out = [];
+          liste.forEach(function (a) {
+            (a.paragraphs || []).forEach(function (p) { out.push(String(p.text || "")); });
+          });
+          return out.join(" ");
+        };
+        var art = artN ? arts.filter(function (a) { return a.n === artN; })[0] : null;
+        res({ lang: q.lang || "fr", titre: q.title || "",
+              article: art ? txt([art]) : null, question: txt(arts) });
+      }, function () { res(null); });
+    });
+  }
+
+  /* Règle, et elle est PROUVABLE : on ne marque QUE ce qu'on a trouvé.
+     ✓  le texte est dans l'ARTICLE cité ;
+     ⇄  le texte est dans la QUESTION mais pas dans l'article cité (mauvaise
+        attribution — un vrai signal, et lui aussi vérifiable) ;
+     rien  introuvable : AUCUNE marque. Le corpus est une OCR de 1851 ; une
+        différence peut venir de la traduction ou de la numérisation, pas
+        d'une erreur du modèle. Accuser à tort une citation magistérielle
+        serait pire que se taire. */
+  function marquerSumma(racine) {
+    var r = racine || document;
+    var refs = r.querySelectorAll("a[data-summa]");
+    if (!refs.length) return Promise.resolve(0);
+    var taches = [];
+    Array.prototype.forEach.call(refs, function (el) {
+      if (el.getAttribute("data-v591") === "1") return;
+      var c = C.citationAssociee(el);
+      if (!c) { el.setAttribute("data-v591", "1"); return; }
+      var qid = el.getAttribute("data-summa");
+      var artN = parseInt(el.getAttribute("data-summa-a"), 10) || null;
+      el.setAttribute("data-v591", "1");
+      taches.push(texteSumma(qid, artN).then(function (res) {
+        if (!res) return;
+        /* On exige la PRÉSENCE CONTIGUË, pas une couverture de vocabulaire :
+           sur un texte long, `comparer` donnait 86 % à une citation d'un
+           AUTRE article de la même question (mesuré par le banc _v593). */
+        var v = null;
+        if (C.contient(res.article, c.cite)) v = { verdict: "conforme", score: 1 };
+        else if (C.contient(res.question, c.cite)) v = { verdict: "deplace", score: 1 };
+        if (!v) return;                       /* introuvable → silence assumé */
+        var mode = modeVerif();
+        if (mode === "off") return;           /* le mode vaut AUSSI pour la Somme */
+        if (mode === "souple" && v.verdict === "conforme") return;
+        assurerStyle();
+        poserMarque(c, v);
+      }));
+    });
+    return Promise.all(taches);
   }
 
   function demarquer(racine) {
@@ -136,6 +203,7 @@
           Promise.all(attentes).then(function () { marquerBloc(r); }, function () {});
         }
       }
+      try { marquerSumma(r); } catch (e2) {}
     } catch (e) { /* jamais bloquant : le marquage est un ornement */ }
     return n;
   }
@@ -164,8 +232,10 @@
 
   window.__v591CitationsUi = {
     marquerBloc: marquerBloc,
+    marquerSumma: marquerSumma,
     demarquer: demarquer,
     texteVerset: texteVerset,
+    texteSumma: texteSumma,
     modeVerif: modeVerif,
     enFlux: enFlux
   };

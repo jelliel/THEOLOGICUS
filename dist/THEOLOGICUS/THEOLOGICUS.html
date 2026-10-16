@@ -65011,7 +65011,11 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
      Seuils calibrés par le banc _v590 ; toute modification doit passer par lui. */
   var SEUILS = { approximatif: 0.8 };
   var MIN_JETONS = 3;      /* en deçà, « conforme » ne prouverait rien */
-  var MAX_CAR = 2000;      /* au-delà, ce n'est plus un verset : on ne compare pas */
+  var MAX_CAR = 2000;      /* au-delà, la CITATION n'est plus un verset : on ne compare pas */
+  var MAX_CORPUS = 40000;  /* borne du texte de RÉFÉRENCE : un article de la Somme est
+                              long (plusieurs milliers de caractères) alors qu'une
+                              citation, elle, reste courte. Le coût réel est en
+                              jetons (sous-séquence), pas en caractères. */
 
   /* Normalisation PARTAGÉE : les deux textes passent par la MÊME fonction.
      Sans elle, les variantes typographiques légitimes (« » vs " ", ’ vs ',
@@ -65049,7 +65053,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   function comparer(cite, reel) {
     var c = normaliser(cite), r = normaliser(reel);
     if (!c || !r) return { verdict: "indetermine", score: 0, motif: "entree-vide" };
-    if (c.length > MAX_CAR || r.length > MAX_CAR) return { verdict: "indetermine", score: 0, motif: "trop-long" };
+    if (c.length > MAX_CAR || r.length > MAX_CORPUS) return { verdict: "indetermine", score: 0, motif: "trop-long" };
     if (c === r) return { verdict: "conforme", score: 1, partiel: false };
     var A = c.split(" "), B = r.split(" ");
     if (A.length < MIN_JETONS) return { verdict: "indetermine", score: 0, motif: "trop-court" };
@@ -65057,6 +65061,19 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     if (couv === 1) return { verdict: "conforme", score: 1, partiel: (A.length < B.length) };
     if (couv >= SEUILS.approximatif) return { verdict: "approximatif", score: R3(couv), partiel: false };
     return { verdict: "divergent", score: R3(couv), partiel: false };
+  }
+
+  /* contient(texte de référence, citation) → la citation est-elle PRÉSENTE,
+     au sens CONTIGU (aux limites de mots près, après normalisation) ?
+     Pourquoi ce n'est pas `comparer` : sur un texte LONG (article de la
+     Somme, ~10 000 caractères), la couverture par sous-séquence devient
+     laxiste — une citation d'un AUTRE article atteignait 86 % simplement
+     parce que les articles partagent le vocabulaire (mesuré par _v593).
+     « Présent » doit vouloir dire : le passage y est VRAIMENT. */
+  function contient(reel, cite) {
+    var c = normaliser(cite), r = normaliser(reel);
+    if (!c || !r) return false;
+    return (" " + r + " ").indexOf(" " + c + " ") !== -1;
   }
 
   /* ═══════════ T2 — appariement référence ↔ texte cité ═══════════
@@ -65210,6 +65227,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
 
   window.__v590Citations = {
     comparer: comparer,
+    contient: contient,
     normaliser: normaliser,
     citationAssociee: citationAssociee,
     citationsDuBloc: citationsDuBloc,
@@ -65217,11 +65235,21 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     SEUILS: SEUILS,
     MIN_JETONS: MIN_JETONS,
     MAX_CAR: MAX_CAR,
+    MAX_CORPUS: MAX_CORPUS,
     PROXIMITE: PROXIMITE,
     MIN_CITE: MIN_CITE
   };
 })();
 </script>
+
+
+
+
+
+
+
+
+
 
 
 
@@ -65253,12 +65281,13 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   if (!C) return;                      /* sans le moteur, il n'y a rien à marquer */
 
   var STYLE_ID = "v591-style";
-  var CLASSE = { conforme: "ok", approximatif: "proche", divergent: "ecart" };
-  var GLYPHE = { conforme: "\u2713", approximatif: "\u2248", divergent: "\u2260" };
+  var CLASSE = { conforme: "ok", approximatif: "proche", divergent: "ecart", deplace: "deplace" };
+  var GLYPHE = { conforme: "\u2713", approximatif: "\u2248", divergent: "\u2260", deplace: "\u21c4" };
   var TITRE = {
     conforme: "Texte cité CONFORME au corpus local",
     approximatif: "Texte cité PROCHE, mais non identique au corpus local",
-    divergent: "Ce texte ne correspond PAS au verset cité"
+    divergent: "Ce texte ne correspond PAS au verset cité",
+    deplace: "Texte présent dans la QUESTION, mais pas dans l'ARTICLE cité"
   };
 
   function modeVerif() {
@@ -65275,7 +65304,8 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       ".v591-cite{margin-left:3px;font-size:.72em;cursor:help;font-weight:700}"
       + ".v591-ok{color:#56d364}"
       + ".v591-proche{color:#f0a020}"
-      + ".v591-ecart{color:#f85149}";
+      + ".v591-ecart{color:#f85149}"
+      + ".v591-deplace{color:#7fb3ff}";
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -65305,6 +65335,71 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
       + (v.partiel ? " (citation partielle)" : "");
     c.noeud.parentNode.insertBefore(s, c.noeud.nextSibling);
     return true;
+  }
+
+  /* ═══ T4 — la SOMME (traduction Drioux, domaine public, 613 questions) ═══
+     Le corpus local est une OCR de 1851 : le texte porte des scories de
+     numérisation (« Mar.ière dout Aristolc »). On ne s'en sert donc que pour
+     CONFIRMER, jamais pour accuser — voir marquerSumma. */
+  function texteSumma(qid, artN) {
+    return new Promise(function (res) {
+      if (!window.__ensureSummaFrQuestion) return res(null);
+      window.__ensureSummaFrQuestion(String(qid)).then(function (ok) {
+        if (!ok) return res(null);
+        var q = (window.__summaFrQuestions || {})[String(qid)];
+        if (!q || !q.articles) return res(null);
+        var arts = q.articles;
+        var txt = function (liste) {
+          var out = [];
+          liste.forEach(function (a) {
+            (a.paragraphs || []).forEach(function (p) { out.push(String(p.text || "")); });
+          });
+          return out.join(" ");
+        };
+        var art = artN ? arts.filter(function (a) { return a.n === artN; })[0] : null;
+        res({ lang: q.lang || "fr", titre: q.title || "",
+              article: art ? txt([art]) : null, question: txt(arts) });
+      }, function () { res(null); });
+    });
+  }
+
+  /* Règle, et elle est PROUVABLE : on ne marque QUE ce qu'on a trouvé.
+     ✓  le texte est dans l'ARTICLE cité ;
+     ⇄  le texte est dans la QUESTION mais pas dans l'article cité (mauvaise
+        attribution — un vrai signal, et lui aussi vérifiable) ;
+     rien  introuvable : AUCUNE marque. Le corpus est une OCR de 1851 ; une
+        différence peut venir de la traduction ou de la numérisation, pas
+        d'une erreur du modèle. Accuser à tort une citation magistérielle
+        serait pire que se taire. */
+  function marquerSumma(racine) {
+    var r = racine || document;
+    var refs = r.querySelectorAll("a[data-summa]");
+    if (!refs.length) return Promise.resolve(0);
+    var taches = [];
+    Array.prototype.forEach.call(refs, function (el) {
+      if (el.getAttribute("data-v591") === "1") return;
+      var c = C.citationAssociee(el);
+      if (!c) { el.setAttribute("data-v591", "1"); return; }
+      var qid = el.getAttribute("data-summa");
+      var artN = parseInt(el.getAttribute("data-summa-a"), 10) || null;
+      el.setAttribute("data-v591", "1");
+      taches.push(texteSumma(qid, artN).then(function (res) {
+        if (!res) return;
+        /* On exige la PRÉSENCE CONTIGUË, pas une couverture de vocabulaire :
+           sur un texte long, `comparer` donnait 86 % à une citation d'un
+           AUTRE article de la même question (mesuré par le banc _v593). */
+        var v = null;
+        if (C.contient(res.article, c.cite)) v = { verdict: "conforme", score: 1 };
+        else if (C.contient(res.question, c.cite)) v = { verdict: "deplace", score: 1 };
+        if (!v) return;                       /* introuvable → silence assumé */
+        var mode = modeVerif();
+        if (mode === "off") return;           /* le mode vaut AUSSI pour la Somme */
+        if (mode === "souple" && v.verdict === "conforme") return;
+        assurerStyle();
+        poserMarque(c, v);
+      }));
+    });
+    return Promise.all(taches);
   }
 
   function demarquer(racine) {
@@ -65364,6 +65459,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
           Promise.all(attentes).then(function () { marquerBloc(r); }, function () {});
         }
       }
+      try { marquerSumma(r); } catch (e2) {}
     } catch (e) { /* jamais bloquant : le marquage est un ornement */ }
     return n;
   }
@@ -65392,8 +65488,10 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
 
   window.__v591CitationsUi = {
     marquerBloc: marquerBloc,
+    marquerSumma: marquerSumma,
     demarquer: demarquer,
     texteVerset: texteVerset,
+    texteSumma: texteSumma,
     modeVerif: modeVerif,
     enFlux: enFlux
   };

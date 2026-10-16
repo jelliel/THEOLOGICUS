@@ -20,7 +20,11 @@
      Seuils calibrés par le banc _v590 ; toute modification doit passer par lui. */
   var SEUILS = { approximatif: 0.8 };
   var MIN_JETONS = 3;      /* en deçà, « conforme » ne prouverait rien */
-  var MAX_CAR = 2000;      /* au-delà, ce n'est plus un verset : on ne compare pas */
+  var MAX_CAR = 2000;      /* au-delà, la CITATION n'est plus un verset : on ne compare pas */
+  var MAX_CORPUS = 40000;  /* borne du texte de RÉFÉRENCE : un article de la Somme est
+                              long (plusieurs milliers de caractères) alors qu'une
+                              citation, elle, reste courte. Le coût réel est en
+                              jetons (sous-séquence), pas en caractères. */
 
   /* Normalisation PARTAGÉE : les deux textes passent par la MÊME fonction.
      Sans elle, les variantes typographiques légitimes (« » vs " ", ’ vs ',
@@ -58,7 +62,7 @@
   function comparer(cite, reel) {
     var c = normaliser(cite), r = normaliser(reel);
     if (!c || !r) return { verdict: "indetermine", score: 0, motif: "entree-vide" };
-    if (c.length > MAX_CAR || r.length > MAX_CAR) return { verdict: "indetermine", score: 0, motif: "trop-long" };
+    if (c.length > MAX_CAR || r.length > MAX_CORPUS) return { verdict: "indetermine", score: 0, motif: "trop-long" };
     if (c === r) return { verdict: "conforme", score: 1, partiel: false };
     var A = c.split(" "), B = r.split(" ");
     if (A.length < MIN_JETONS) return { verdict: "indetermine", score: 0, motif: "trop-court" };
@@ -66,6 +70,19 @@
     if (couv === 1) return { verdict: "conforme", score: 1, partiel: (A.length < B.length) };
     if (couv >= SEUILS.approximatif) return { verdict: "approximatif", score: R3(couv), partiel: false };
     return { verdict: "divergent", score: R3(couv), partiel: false };
+  }
+
+  /* contient(texte de référence, citation) → la citation est-elle PRÉSENTE,
+     au sens CONTIGU (aux limites de mots près, après normalisation) ?
+     Pourquoi ce n'est pas `comparer` : sur un texte LONG (article de la
+     Somme, ~10 000 caractères), la couverture par sous-séquence devient
+     laxiste — une citation d'un AUTRE article atteignait 86 % simplement
+     parce que les articles partagent le vocabulaire (mesuré par _v593).
+     « Présent » doit vouloir dire : le passage y est VRAIMENT. */
+  function contient(reel, cite) {
+    var c = normaliser(cite), r = normaliser(reel);
+    if (!c || !r) return false;
+    return (" " + r + " ").indexOf(" " + c + " ") !== -1;
   }
 
   /* ═══════════ T2 — appariement référence ↔ texte cité ═══════════
@@ -219,6 +236,7 @@
 
   window.__v590Citations = {
     comparer: comparer,
+    contient: contient,
     normaliser: normaliser,
     citationAssociee: citationAssociee,
     citationsDuBloc: citationsDuBloc,
@@ -226,6 +244,7 @@
     SEUILS: SEUILS,
     MIN_JETONS: MIN_JETONS,
     MAX_CAR: MAX_CAR,
+    MAX_CORPUS: MAX_CORPUS,
     PROXIMITE: PROXIMITE,
     MIN_CITE: MIN_CITE
   };

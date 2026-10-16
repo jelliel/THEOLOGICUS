@@ -78,7 +78,7 @@ function versetCorpus(livre, ch, v) {
   });
   ok("window.__v590Citations est exposé", surface.present === true, JSON.stringify(surface));
   ok("surface d'API minimale (T1 comparateur + T2 appariement + localisation)",
-     surface.cles === "MAX_CAR,MIN_CITE,MIN_JETONS,PROXIMITE,SEUILS,citationAssociee,citationsDuBloc,comparer,localiser,normaliser",
+     surface.cles === "MAX_CAR,MAX_CORPUS,MIN_CITE,MIN_JETONS,PROXIMITE,SEUILS,citationAssociee,citationsDuBloc,comparer,contient,localiser,normaliser",
      surface.cles);
   ok("aucun élément DOM injecté par le module", surface.domV590 === 0, "n=" + surface.domV590);
 
@@ -122,6 +122,11 @@ function versetCorpus(livre, ch, v) {
   ok("vide → indetermine (motif entree-vide)", c7a.verdict === "indetermine" && c7a.motif === "entree-vide", JSON.stringify(c7a));
   const c7b = await C("Dieu");
   ok("un seul mot → indetermine (motif trop-court)", c7b.verdict === "indetermine" && c7b.motif === "trop-court", JSON.stringify(c7b));
+  const c7d = await page.evaluate(() => window.__v590Citations.comparer(
+    "Au commencement, Dieu créa le ciel et la terre.",
+    "Au commencement, Dieu créa le ciel et la terre. " + "bla ".repeat(1500)));
+  ok("un texte de RÉFÉRENCE long (article de la Somme) reste comparable",
+     c7d.verdict === "conforme", JSON.stringify({ verdict: c7d.verdict, motif: c7d.motif }));
   const c7c = await C("a".repeat(2100));
   ok("texte trop long → indetermine (motif trop-long)", c7c.verdict === "indetermine" && c7c.motif === "trop-long", JSON.stringify(c7c));
 
@@ -135,6 +140,23 @@ function versetCorpus(livre, ch, v) {
   ok("accents retirés, ponctuation réduite à des espaces", n.a === "ecoute l eternel oui", n.a);
   ok("idempotente", n.a === n.b, n.b);
   ok("null / undefined / nombre ne lèvent pas", n.c === "" && n.d === "" && n.e === "123", JSON.stringify(n));
+
+  /* ── 8bis. contient() : présence CONTIGUË (et non couverture) ── */
+  section("8bis. contient() : la présence doit être CONTIGUË");
+  const ct = await page.evaluate(() => {
+    const C = window.__v590Citations;
+    const reel = "Il semble que Dieu nexiste pas. Car si de deux contraires lun etait infini, lauteur en conclut que le second nexiste pas du tout.";
+    return {
+      contigu: C.contient(reel, "que Dieu nexiste pas"),
+      coupe: C.contient(reel, "Dieu le second"),
+      absent: C.contient(reel, "Zwingli redigea la Confession"),
+      vide: C.contient(reel, "")
+    };
+  });
+  ok("un passage contigu est trouvé", ct.contigu === true, JSON.stringify(ct));
+  ok("des mots présents mais NON contigus ne comptent PAS", ct.coupe === false, JSON.stringify(ct));
+  ok("un passage absent n est pas trouvé", ct.absent === false, JSON.stringify(ct));
+  ok("citation vide → faux", ct.vide === false, JSON.stringify(ct));
 
   /* ── 9. T2 : appariement référence ↔ texte cité ── */
   section("9. T2 — appariement référence ↔ texte cité (règle conservatrice)");

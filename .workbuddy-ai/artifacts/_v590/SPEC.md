@@ -135,9 +135,30 @@ vide. Chaque verdict est affirmé. Le banc échoue si un cas change de verdict.
   - Acceptance : voir le banc `_v591` (24/24).
   - Décision : option (a) de la Q1 — AJOUTER une marque, ne pas changer le sens
     du ✅ déjà livré. Réversible.
-- [ ] **T4 — les références magistérielles** (Somme, CEC, conciles) : il faut
-  un corpus texte pour comparer ; aujourd'hui `theoRefHtml` ne fait qu'un lien.
-  Dépend d'un arbitrage de périmètre (le corpus Somme/CEC est-il complet ?).
+- [x] **T4 — les références magistérielles : la SOMME** (module v591 étendu).
+  Corpus **français** trouvé en local : traduction Drioux (domaine public),
+  `summafr/`, 613 questions, chargée à la demande par `__ensureSummaFrQuestion`.
+  L'app rend déjà `<a class="theo-ref summa-ref" data-summa="1002"
+  data-summa-a="3">` : qid et article sont dans les attributs, rien à re-parser.
+  - **Règle retenue, et elle est prouvable : on ne marque QUE ce qu'on a
+    trouvé.** ✓ le texte est dans l'ARTICLE cité ; ⇄ il est dans la QUESTION
+    mais pas dans l'article cité (mauvaise attribution — signal vérifiable) ;
+    **rien** si introuvable. Le corpus est une **OCR de 1851** (« Mar.ière dout
+    Aristolc ») : une différence peut venir de la traduction ou de la
+    numérisation, pas du modèle. Accuser à tort une citation magistérielle
+    serait pire que se taire.
+  - ⚠️ **Limite assumée** : ni le Catéchisme (CEC) ni les conciles n'ont de
+    corpus texte local — seules les références à la **Somme** sont vérifiables.
+  - Banc `_v593` **17/17**.
+  - 🔴 **Deux correctifs trouvés par le banc** :
+    1. **BUG RÉEL** : `marquerSumma` ne testait pas le mode « off » → il
+       marquait quand même. Corrigé (le mode vaut pour les deux corpus).
+    2. **Faiblesse de conception** : sur un texte LONG (~10 000 caractères),
+       la couverture par sous-séquence est **laxiste** — une citation d'un
+       AUTRE article de la même question atteignait **86 %** (vocabulaire
+       partagé). Ajout de `contient()` dans v590 : « présent » = **contigu**
+       aux limites de mots près. Un test négatif du banc affirme explicitement
+       que des mots présents mais NON contigus ne comptent pas.
 
 ## 11. Constats annexes (trouvés en chemin, NON corrigés ici)
 
