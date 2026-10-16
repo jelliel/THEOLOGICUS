@@ -27,6 +27,9 @@ THEOLOGICUS_signing.pfx
 # Supertonic…) — artifacts d'execution, jamais suivis.
 logs/
 
+# Jar de cookies de session (fuite = usurpation de session) — jamais suivi.
+theologicus_cookiejar.json
+
 # serveur de test temporaire du banc d'assemblage (v458)
 _montage_test_serveur.py
 
