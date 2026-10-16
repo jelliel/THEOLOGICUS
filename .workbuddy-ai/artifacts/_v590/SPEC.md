@@ -144,15 +144,26 @@ vide. Chaque verdict est affirmé. Le banc échoue si un cas change de verdict.
 Ces trois points sont hors périmètre de la tranche en cours. Ils sont notés
 parce qu'ils sont **vérifiés**, pas supposés.
 
-1. 🔴 **`parseRef` ne résout PAS les livres numérotés en abrégé.**
-   Mesuré : `Jn 3,16` → livre 43 ✔ ; `Mt 5,3` → 40 ✔ ; mais `2 Tm 3,16` → **null**,
-   `2Tm 3,16` → **null**, `1 Co 13,4` → **null**. Seule la forme longue marche
-   (`2 Timothée 3,16` → 55). Cause : la clé est reconstruite avec un espace
-   (`"2 tm"`) alors que `BOOK_NUM` ne contient que `"2tm"`, et la regex exige un
-   espace après le chiffre. **Conséquence sur l'existant** : ces références ne
-   reçoivent ni lien ni ✅ — elles passent inaperçues. Correctif possible et
-   petit, mais c'est une **surface partagée** (concordance, graphe, marquage) :
-   à faire dans sa propre tranche, avec son propre banc.
+1. ✅ **CORRIGÉ (v592) — `parseRef` ne résolvait pas les livres numérotés en
+   abrégé.** Mesuré avant : `2 Tm 3,16` → **null**, `2Tm 3,16` → **null**,
+   `1 Co 13,4` → **null** (seule la forme longue marchait). Deux causes : la clé
+   était reconstruite avec un espace (`"2 tm"`) alors que `BOOK_NUM` ne contient
+   que `"2tm"` ; et la regex exigeait un espace après le numéro.
+   Correctif : `\s*` après le numéro + **table dérivée sans espaces** testée en
+   second recours (on ne réécrit pas `BOOK_NUM`, il sert ailleurs).
+   **Second défaut trouvé en écrivant le banc** : la classe de caractères du nom
+   de livre excluait l'ESPACE, donc la clé `'cantique des cantiques'` — pourtant
+   présente dans `BOOK_NUM` — était **inatteignable** : la forme longue n'avait
+   jamais résolu. Corrigé aussi (le garde-fou reste la table : « voir Jean
+   3,16 » → clé « voir jean » → null).
+   Banc `_v592` **15/15** : 15 abréviations numérotées, 13 formes déjà
+   supportées, **11 cas négatifs** (élargir ne doit pas rendre permissif),
+   plages/« : », intégration avec le ✅ existant et avec v590/v591.
+   ⚠️ **Reste à faire** : `BOOK_NUM` a **au moins 3 copies** dans le fichier
+   (`BOOK_NUM` l.26839, `SCH_BOOKS` l.30479, `FR2NUM` l.47235). Seule celle de
+   `parseRef` est corrigée. Les deux autres alimentent d'autres fonctions
+   (schéma, AELF) et portent **la même faiblesse** sur les livres numérotés :
+   à traiter dans une tranche dédiée, et la duplication mérite d'être résorbée.
 2. **Anomalie de corpus** : le texte de `Mt 5,3` (BJ) commence par un guillemet
    droit parasite — `"Heureux ceux qui ont une âme de pauvre…`. À vérifier dans
    la chaîne de fabrication du corpus.

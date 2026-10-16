@@ -26851,6 +26851,15 @@ function initBibleVerseTooltip() {
     't': '56', 'tite': '56', 'phm': '57', 'philémon': '57', 'he': '58', 'hébreux': '58', 'jc': '59', 'jacques': '59', '1p': '60', '1 pierre': '60', '2p': '61', '2 pierre': '61',
     '1jn': '62', '1 jean': '62', '2jn': '63', '2 jean': '63', '3jn': '64', '3 jean': '64', 'jd': '65', 'jude': '65', 'ap': '66', 'apocalypse': '66'
   };
+  /* v592 — table DÉRIVÉE, clés sans espaces. « 2 Tm » produit la clé « 2 tm »,
+     ABSENTE de BOOK_NUM qui ne connaît que « 2tm » : les livres numérotés en
+     abrégé (« 2 Tm 3,16 », « 1 Co 13,4 ») n'étaient donc PAS résolus — ni lien,
+     ni ✅ de l'appareil existant, ni appariement de citation. On teste les deux
+     formes plutôt que de réécrire la table (elle sert ailleurs). */
+  const BOOK_NUM_SANS_ESPACE = {};
+  for (const _k in BOOK_NUM) {
+    if (Object.prototype.hasOwnProperty.call(BOOK_NUM, _k)) BOOK_NUM_SANS_ESPACE[_k.replace(/\s+/g, '')] = BOOK_NUM[_k];
+  }
   const DATA = window.__bibleBooks;   /* v33 : livres charges a la volee */
 
   /* v2.0 — expose le parseur et l'etat de verification pour le marquage
@@ -26870,11 +26879,18 @@ function initBibleVerseTooltip() {
     /* v81 : la forme francaise « Gn 5,1 » est aussi frequente que
        « Gn 5:1 ». Sans elle, une reference colorée dans un schema ne
        resolvait rien au tap. */
-    const m = text.trim().match(/^(?:(\d+)\s+)?([A-Za-zÀ-ÿ.]+?)\s+(\d+)\s*[:,]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/);
+    /* v592 — le numéro du livre peut être COLLÉ à l'abréviation (« 2Tm 3,16 ») :
+       \s* et non \s+ après le numéro. Le nom peut aussi contenir des ESPACES
+       (« Cantique des cantiques ») : la table BOOK_NUM porte cette clé, mais la
+       classe de caractères l'excluait — la forme longue n'a donc jamais résolu.
+       Le garde-fou reste la table : « voir Jean 3,16 » donne la clé
+       « voir jean », absente, donc null. Et la clé est testée AVEC puis SANS
+       espaces, sinon « 2 Tm » (clé « 2 tm ») ne trouvait rien. */
+    const m = text.trim().match(/^(?:(\d+)\s*)?([A-Za-zÀ-ÿ. ]+?)\s*(\d+)\s*[:,]\s*(\d+)(?:\s*[-–]\s*(\d+))?$/);
     if (!m) return null;
     const prefix = m[1] ? m[1] + ' ' : '';
     const bookKey = (prefix + m[2]).toLowerCase().replace(/\./g, '').trim();
-    const num = BOOK_NUM[bookKey];
+    const num = BOOK_NUM[bookKey] || BOOK_NUM_SANS_ESPACE[bookKey.replace(/\s+/g, '')];
     if (!num) return null;
     return { book: num, ch: m[3], v1: parseInt(m[4], 10), v2: m[5] ? parseInt(m[5], 10) : null, ref: text.trim() };
   }
