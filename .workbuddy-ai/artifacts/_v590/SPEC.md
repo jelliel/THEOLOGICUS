@@ -93,6 +93,14 @@ vide. Chaque verdict est affirmé. Le banc échoue si un cas change de verdict.
 
 ## 9. Questions ouvertes (arbitrage humain requis)
 
+> **Décisions prises par défaut pour débloquer T2** (faute d'arbitrage) : la
+> tranche 2 a été construite en prenant **l'option la plus conservatrice** sur
+> Q2 — seules les citations **délimitées** (`« »`, `" "`, `“ ”`) et
+> **adjacentes** (≤ 40 caractères de la référence) sont appariées ; sans
+> citation délimitée, **le module ne dit rien**. Ce choix ne peut pas produire
+> de faux positif. Q1 et Q3 restent **ouvertes** : elles ne bloquent pas T2,
+> mais bloquent T3.
+
 1. **Le ✅ actuel doit-il changer ?** Il porte sur la référence ; une pastille
    verte à côté d'un texte cité se lit comme « citation exacte ». Options :
    (a) garder ✅ pour la référence et ajouter une marque distincte pour le
@@ -100,19 +108,25 @@ vide. Chaque verdict est affirmé. Le banc échoue si un cas change de verdict.
    simple lien vérifié. **Décision nécessaire avant la tranche 3 (UI).**
 2. **Périmètre du texte comparé** : seulement les citations explicitement
    introduites (« il est écrit », « : ») ou tout passage entre guillemets ?
-   Le premier est plus sûr (moins de faux positifs), le second plus complet.
+   → **tranché pour T2** : citations délimitées ET adjacentes (voir ci-dessus).
 3. **Traduction de référence** : le corpus local est la BJ 1998. Faut-il
    comparer aussi aux autres versions embarquées (biblelt, biblegr…) et
-   signaler « conforme dans une autre version » ?
+   signaler « conforme dans une autre version » ? **Ouverte.**
 
 ## 10. Découpage (tranches atomiques)
 
 - [x] **T1 — le comparateur** (pure fonction). Aucune dépendance.
   - Acceptance : verdicts conformes à la section 8.
-  - Verify : banc `_v590`.
+  - Verify : banc `_v590` (21/21).
   - Files : `THEOLOGICUS.html` (1 module), `_v590/verify_v590_citations.js`.
-- [ ] **T2 — l'extracteur** : repérer dans une réponse les passages cités et
-  les apparier à leur référence. Dépend de la Q2.
+- [x] **T2 — l'appariement** référence ↔ texte cité.
+  - Acceptance : citations délimitées + adjacentes appariées ; **aucune**
+    appariée sinon ; deux références dans un même bloc → aucun mélange.
+  - Verify : banc `_v590` (34/34, sections 9 et 10).
+  - Files : `THEOLOGICUS.html` (même module), banc.
+  - Décision : travaille sur les éléments `.bible-ref` **déjà rendus** par
+    l'appareil existant — le module ne re-parse donc pas les références
+    (aucune duplication de `parseRef` / `BOOK_NUM`).
 - [ ] **T3 — l'UI** : marquer chaque citation. Dépend de la Q1.
 - [ ] **T4 — les références magistérielles** (Somme, CEC, conciles) : il faut
   un corpus texte pour comparer ; aujourd'hui `theoRefHtml` ne fait qu'un lien.

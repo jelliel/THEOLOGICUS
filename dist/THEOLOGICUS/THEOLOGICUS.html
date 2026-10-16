@@ -64974,21 +64974,21 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
 </script>
 
 <script id="v590-citations">
-/* v590 — VÉRIFICATION DE FIDÉLITÉ DES CITATIONS (tranche 1 : le comparateur).
+/* v590 — VÉRIFICATION DE FIDÉLITÉ DES CITATIONS.
+   T1 : le comparateur (texte cité ↔ texte réel du corpus).
+   T2 : l'appariement référence ↔ texte cité.
+
    Constat VÉRIFIÉ : initVerifyMarks() (l.27539) marque déjà les références
-   bibliques/coraniques ✅/⚠️/✏️ — mais à partir des SEULS NUMÉROS du verset
-   (window.__bibleVerseCounts). Le ✅ porte donc sur la RÉFÉRENCE, jamais sur
-   le TEXTE CITÉ : une réponse peut écrire « Jn 3,16 : "Dieu a tant aimé le
-   monde qu'il a donné son Fils unique" » et obtenir ✅ avec un texte ALTÉRÉ.
-   Ce module fournit le comparateur manquant : (texte cité, texte réel) →
-   verdict. ADDITIF et PUR : aucun DOM, aucun réseau, aucun minuteur.
-   Comparaison PAR MOTS (sous-séquence commune) et non par caractères : sur un
-   verset long, une similarité de caractères à 99 % laisserait passer un mot
-   substitué — c'est précisément ce qu'on veut attraper. */
+   bibliques/coraniques ✅/⚠️/✏️ — mais à partir des SEULS NUMÉROS du verset.
+   Le ✅ porte donc sur la RÉFÉRENCE, jamais sur le TEXTE CITÉ : une réponse
+   peut écrire « Jn 3,16 : "Dieu a tant aimé le monde qu'il a donné son Fils
+   unique" » et obtenir ✅ avec un texte ALTÉRÉ.
+   ADDITIF et INERTE au chargement : aucun DOM, aucun réseau, aucun minuteur. */
 (function () {
   "use strict";
   if (window.__v590Citations) return;
 
+  /* ═══════════ T1 — comparateur ═══════════ */
   /* conforme = TOUS les mots cités sont dans le verset, dans l'ordre.
      approximatif = la citation reste proche mais un mot diverge.
      divergent = ce n'est pas une citation de ce texte (paraphrase incluse).
@@ -65043,12 +65043,100 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     return { verdict: "divergent", score: R3(couv), partiel: false };
   }
 
+  /* ═══════════ T2 — appariement référence ↔ texte cité ═══════════
+     L'appareil existant travaille sur des éléments `.bible-ref` DÉJÀ rendus :
+     la référence est identifiée et sa POSITION dans le DOM est connue — on ne
+     re-parse donc PAS le texte (pas de duplication du parseur existant).
+     Règle CONSERVATRICE : la citation doit être DÉLIMITÉE (« » " " “ ”) ET
+     commencer à moins de PROXIMITE caractères de la référence. Sans citation
+     délimitée, on ne devine PAS : mieux vaut ne rien dire que se tromper. */
+  var PROXIMITE = 40;
+  var MIN_CITE = 8;
+  var SEP_TETE = /^[\s:;,.\u2014\u2013\u2026()\-]+/;
+  var SEP_QUEUE = /[\s:;,.\u2014\u2013\u2026()\-]+$/;
+  var PAIRES = [["\u00ab", "\u00bb"], ["\u201c", "\u201d"], ["\"", "\""]];
+  var OUVRANTS = {}, FERMANTS = {};
+  for (var _i = 0; _i < PAIRES.length; _i++) { OUVRANTS[PAIRES[_i][0]] = PAIRES[_i][1]; FERMANTS[PAIRES[_i][1]] = PAIRES[_i][0]; }
+
+  /* Texte du même bloc, APRÈS / AVANT l'élément (borné : au-delà de 400
+     caractères ce n'est plus la citation de CETTE référence). */
+  function texteApres(el, max) {
+    var p = el.parentNode; if (!p) return "";
+    try {
+      var r = document.createRange();
+      r.setStartAfter(el);
+      r.setEnd(p, p.childNodes.length);
+      return r.toString().slice(0, max || 400);
+    } catch (e) { return ""; }
+  }
+  function texteAvant(el, max) {
+    var p = el.parentNode; if (!p) return "";
+    try {
+      var r = document.createRange();
+      r.setStart(p, 0);
+      r.setEndBefore(el);
+      var t = r.toString();
+      return t.slice(Math.max(0, t.length - (max || 400)));
+    } catch (e) { return ""; }
+  }
+  /* Citation ouvrante (« … » / " … " / “ … ”) en tête du texte après la
+     référence. Le garde-fou de proximité écarte les citations lointaines. */
+  function citationOuvrante(txt) {
+    var s = String(txt).replace(SEP_TETE, "");
+    if (String(txt).length - s.length > PROXIMITE) return null;
+    var fermant = OUVRANTS[s.charAt(0)];
+    if (!fermant) return null;
+    var fin = s.indexOf(fermant, 1);
+    if (fin < 0) return null;
+    return s.slice(1, fin);
+  }
+  /* Citation fermante (… « ) juste AVANT la référence. */
+  function citationFermante(txt) {
+    var t = String(txt).replace(SEP_QUEUE, "");
+    if (String(txt).length - t.length > PROXIMITE) return null;
+    var c = t.charAt(t.length - 1);
+    var ouvrant = FERMANTS[c];
+    if (!ouvrant) return null;
+    var deb = t.lastIndexOf(ouvrant, t.length - 2);
+    if (deb < 0) return null;
+    return t.slice(deb + 1, t.length - 1);
+  }
+  /* {cite, sens} pour un élément de référence, ou null si rien de sûr. */
+  function citationAssociee(el) {
+    if (!el) return null;
+    var a = citationOuvrante(texteApres(el));
+    if (a) { a = a.trim(); if (a.length >= MIN_CITE) return { cite: a, sens: "apres" }; }
+    var b = citationFermante(texteAvant(el));
+    if (b) { b = b.trim(); if (b.length >= MIN_CITE) return { cite: b, sens: "avant" }; }
+    return null;
+  }
+  /* Toutes les citations appariables d'un conteneur (corps d'un message).
+     La résolution du texte réel du corpus reste à la charge de l'appelant
+     (T3) : elle exige le corpus chargé, ce module n'y touche pas. */
+  function citationsDuBloc(racine) {
+    var out = [];
+    var refs = (racine || document).querySelectorAll("a.bible-ref, span.bible-ref");
+    Array.prototype.forEach.call(refs, function (el) {
+      var c = citationAssociee(el);
+      if (!c) return;
+      var ref = String(el.textContent || "").trim();
+      var p = null;
+      try { p = window.__parseBibleRef ? window.__parseBibleRef(ref) : null; } catch (e) { p = null; }
+      out.push({ el: el, ref: ref, cite: c.cite, sens: c.sens, parse: p });
+    });
+    return out;
+  }
+
   window.__v590Citations = {
     comparer: comparer,
     normaliser: normaliser,
+    citationAssociee: citationAssociee,
+    citationsDuBloc: citationsDuBloc,
     SEUILS: SEUILS,
     MIN_JETONS: MIN_JETONS,
-    MAX_CAR: MAX_CAR
+    MAX_CAR: MAX_CAR,
+    PROXIMITE: PROXIMITE,
+    MIN_CITE: MIN_CITE
   };
 })();
 </script>

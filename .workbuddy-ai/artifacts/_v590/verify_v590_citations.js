@@ -77,8 +77,9 @@ function versetCorpus(livre, ch, v) {
     };
   });
   ok("window.__v590Citations est exposé", surface.present === true, JSON.stringify(surface));
-  ok("surface d'API minimale (comparer, normaliser, seuils, bornes)",
-     surface.cles === "MAX_CAR,MIN_JETONS,SEUILS,comparer,normaliser", surface.cles);
+  ok("surface d'API minimale (T1 comparateur + T2 appariement + bornes)",
+     surface.cles === "MAX_CAR,MIN_CITE,MIN_JETONS,PROXIMITE,SEUILS,citationAssociee,citationsDuBloc,comparer,normaliser",
+     surface.cles);
   ok("aucun élément DOM injecté par le module", surface.domV590 === 0, "n=" + surface.domV590);
 
   /* ── 2. citation exacte ── */
@@ -135,8 +136,75 @@ function versetCorpus(livre, ch, v) {
   ok("idempotente", n.a === n.b, n.b);
   ok("null / undefined / nombre ne lèvent pas", n.c === "" && n.d === "" && n.e === "123", JSON.stringify(n));
 
-  /* ── 9. propreté ── */
-  section("9. Propreté");
+  /* ── 9. T2 : appariement référence ↔ texte cité ── */
+  section("9. T2 — appariement référence ↔ texte cité (règle conservatrice)");
+  const JN316 = versetCorpus(43, 3, 16);
+  const t2 = await page.evaluate(() => {
+    const C = window.__v590Citations;
+    const hote = document.createElement("div");
+    document.body.appendChild(hote);
+    function cas(html) {
+      hote.innerHTML = html;
+      return C.citationsDuBloc(hote).map(function (r) {
+        return { ref: r.ref, cite: r.cite, sens: r.sens, livre: r.parse ? r.parse.book : null };
+      });
+    }
+    const out = {};
+    out.apres = cas('<p>Jésus dit : <span class="bible-ref">Jn 3,16</span> « Dieu a tant aimé le monde qu\'il a donné son Fils unique. »</p>');
+    out.avant = cas('<p>« Au commencement, Dieu créa le ciel et la terre. » (<span class="bible-ref">Gn 1,1</span>)</p>');
+    out.droits = cas('<p><span class="bible-ref">Gn 1,1</span> : "Au commencement, Dieu créa le ciel et la terre."</p>');
+    out.sansCitation = cas('<p>Voir <span class="bible-ref">Jn 3,16</span> pour la suite du raisonnement.</p>');
+    out.nonAdjacente = cas('<p><span class="bible-ref">Jn 3,16</span> — et ici un long développement de plusieurs dizaines de caractères qui éloigne la citation « très loin du verset ».</p>');
+    out.proximite = cas('<p><span class="bible-ref">Jn 3,16</span>' + ' -'.repeat(30) + ' « Dieu a tant aimé le monde. »</p>');
+    out.deux = cas('<p><span class="bible-ref">Gn 1,1</span> « Au commencement, Dieu créa le ciel et la terre. » Puis <span class="bible-ref">Jn 1,1</span> « Au commencement était le Verbe. »</p>');
+    out.nonFermee = cas('<p><span class="bible-ref">Jn 3,16</span> « Dieu a tant aimé le monde</p>');
+    out.courte = cas('<p><span class="bible-ref">Jn 3,16</span> « Dieu »</p>');
+    out.sansRef = cas('<p>« Dieu a tant aimé le monde. » sans référence</p>');
+    hote.remove();
+    return out;
+  });
+  ok("citation APRÈS la référence → appariée",
+     t2.apres.length === 1 && t2.apres[0].sens === "apres" && /Dieu a tant aim/.test(t2.apres[0].cite), JSON.stringify(t2.apres));
+  ok("citation AVANT la référence → appariée (sens « avant »)",
+     t2.avant.length === 1 && t2.avant[0].sens === "avant" && /Au commencement, Dieu créa/.test(t2.avant[0].cite), JSON.stringify(t2.avant));
+  ok("guillemets DROITS → appariés", t2.droits.length === 1 && /Au commencement/.test(t2.droits[0].cite), JSON.stringify(t2.droits));
+  ok("référence sans citation délimitée → RIEN (on ne devine pas)",
+     t2.sansCitation.length === 0, JSON.stringify(t2.sansCitation));
+  ok("citation non adjacente (prose entre les deux) → RIEN",
+     t2.nonAdjacente.length === 0, JSON.stringify(t2.nonAdjacente));
+  ok("garde-fou de PROXIMITÉ (60 car. de séparateurs) → RIEN",
+     t2.proximite.length === 0, JSON.stringify(t2.proximite));
+  ok("deux références, deux citations → aucun mélange",
+     t2.deux.length === 2 && /Dieu créa le ciel/.test(t2.deux[0].cite) && /était le Verbe/.test(t2.deux[1].cite), JSON.stringify(t2.deux));
+  ok("les deux références sont résolues par le parseur existant",
+     t2.deux.length === 2 && t2.deux[0].livre === "1" && t2.deux[1].livre === "43", JSON.stringify(t2.deux.map(x => x.livre)));
+  ok("citation non fermée → RIEN", t2.nonFermee.length === 0, JSON.stringify(t2.nonFermee));
+  ok("citation trop courte (< MIN_CITE) → RIEN", t2.courte.length === 0, JSON.stringify(t2.courte));
+  ok("citation sans référence → RIEN (le module ne balaie pas le texte)", t2.sansRef.length === 0, JSON.stringify(t2.sansRef));
+
+  /* ── 10. T1 + T2 bout à bout : extraction puis comparaison au corpus ── */
+  section("10. T1 + T2 bout à bout : la citation extraite est comparée au corpus");
+  const chaine = await page.evaluate(([reel]) => {
+    const C = window.__v590Citations;
+    const hote = document.createElement("div");
+    hote.innerHTML = '<p>Jésus dit : <span class="bible-ref">Jn 3,16</span> « Dieu a tant aimé le monde qu\'il a donné son Fils unique. »</p>';
+    document.body.appendChild(hote);
+    const r = C.citationsDuBloc(hote)[0];
+    const res = { extrait: r ? r.cite : null, verdict: r ? C.comparer(r.cite, reel) : null };
+    /* même chaîne, mais texte ALTÉRÉ : « le monde » → « les anges » */
+    hote.innerHTML = '<p>Jésus dit : <span class="bible-ref">Jn 3,16</span> « Dieu a tant aimé les anges qu\'il a donné son Fils unique. »</p>';
+    const r2 = C.citationsDuBloc(hote)[0];
+    res.verdictAltere = r2 ? C.comparer(r2.cite, reel) : null;
+    hote.remove();
+    return res;
+  }, [JN316]);
+  ok("la citation extraite est CONFORME au texte du corpus (Jn 3,16)",
+     chaine.verdict && chaine.verdict.verdict === "conforme", JSON.stringify(chaine.verdict));
+  ok("la même citation avec « les anges » au lieu de « le monde » n'est PAS conforme",
+     chaine.verdictAltere && chaine.verdictAltere.verdict !== "conforme", JSON.stringify(chaine.verdictAltere));
+
+  /* ── 11. propreté ── */
+  section("11. Propreté");
   ok("aucune erreur JavaScript", bruit.length === 0, bruit.slice(0, 3).join(" | "));
 
   const bons = resultats.filter(r => r.pass).length;
