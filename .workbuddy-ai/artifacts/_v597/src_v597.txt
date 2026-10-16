@@ -1,0 +1,100 @@
+<script id="v597-bande-debordement">
+/* v597 — RENDRE VISIBLE ET ATTEIGNABLE LE DÉBORDEMENT DE LA BANDE D'OUTILS.
+
+   Constat MESURÉ (aucune déduction) : `.header-controls` contient 12 enfants
+   pour 981 px de contenu dans une boîte de 544 px à 1280 (344 px à 1024). Elle
+   est `overflow-x: auto`, donc RIEN n'est perdu — mais son contenu est ROGNÉ et
+   `scrollbar-width: thin` ne le signale presque pas. L'utilisateur ne peut pas
+   savoir qu'il reste des boutons, et la molette verticale ne fait pas défiler
+   une bande horizontale.
+
+   ⚠️ CE QUE CE MODULE NE FAIT PAS, ET POURQUOI.
+   Une première tentative (v595, RETIRÉE) déplaçait les boutons excédentaires
+   dans le menu « Plus ». Elle a échoué pour deux raisons mesurées :
+     · la boîte est dimensionnée par son CONTENU (parent `flex: 0 1 auto`) :
+       tout critère « retirer jusqu'à ce que ça ne déborde plus » NE CONVERGE
+       PAS — chaque retrait rétrécit la boîte. Mesuré : la barre se vidait.
+     · la bande n'est pas une liste de boutons : elle mêle 6 boutons, 2
+       SÉLECTEURS, 2 boutons-menu et 2 TÉMOINS. Choisir lesquels descendre est
+       une décision PRODUIT, pas technique.
+   Ce module ne déplace donc RIEN. Il ne fait que rendre le débordement lisible
+   et le défilement naturel. Additif, sans effet sur la mise en page.
+
+   🔴 Piège de mesure à garder en tête : `getBoundingClientRect()` ne tient pas
+   compte du rognage d'un ancêtre — un relevé qui s'y fie compte comme
+   « visibles » des éléments hors de la boîte. C'est ce qui avait masqué le
+   défaut au premier audit. */
+(function () {
+  "use strict";
+  if (window.__v597Bande) return;
+
+  var CLS = "v597";
+  function bande() { return document.querySelector(".header-controls"); }
+  function parent() { var b = bande(); return b ? b.parentElement : null; }
+
+  function style() {
+    if (document.getElementById("v597-css")) return;
+    var s = document.createElement("style");
+    s.id = "v597-css";
+    /* `position: relative` SANS décalage ne déplace rien : il ne sert qu'à
+       ancrer le dégradé de bord sur la boîte de la bande. */
+    s.textContent =
+      ".v6-grp." + CLS + "{position:relative}"
+      + ".v6-grp." + CLS + "::after{content:'';position:absolute;top:0;bottom:0;right:0;width:26px;"
+      + "pointer-events:none;opacity:0;transition:opacity .16s ease;"
+      + "background:linear-gradient(to right,rgba(0,0,0,0),var(--bg-card,#0d1626))}"
+      + ".v6-grp." + CLS + ".v597-deborde::after{opacity:1}"
+      /* la barre de défilement reste discrète au repos, lisible au survol */
+      + ".header-controls{scrollbar-width:thin}"
+      + ".v6-grp." + CLS + ":hover .header-controls{scrollbar-width:auto}";
+    (document.head || document.documentElement).appendChild(s);
+  }
+
+  /* L'état « il reste du contenu à droite » : on regarde la POSITION de
+     défilement, pas seulement le débordement — le dégradé doit disparaître
+     quand on est arrivé au bout, sinon il annonce une suite inexistante. */
+  function maj() {
+    var b = bande(), p = parent();
+    if (!b || !p) return null;
+    var reste = b.scrollWidth - b.clientWidth - b.scrollLeft;
+    var deborde = reste > 1;
+    if (deborde) p.classList.add("v597-deborde"); else p.classList.remove("v597-deborde");
+    return { scrollW: b.scrollWidth, clientW: b.clientWidth, scrollLeft: Math.round(b.scrollLeft), reste: Math.round(reste), deborde: deborde };
+  }
+
+  var prevu = null;
+  function planifier() {
+    if (prevu) clearTimeout(prevu);
+    prevu = setTimeout(function () { prevu = null; try { maj(); } catch (e) {} }, 100);
+  }
+
+  function armer() {
+    var b = bande(), p = parent();
+    if (!b || !p) return false;
+    style();
+    p.classList.add(CLS);
+
+    /* 🔴 La molette verticale fait DÉJÀ défiler une bande horizontale :
+       Chromium reporte le défilement vertical sur l'ancêtre horizontal quand
+       il n'y a rien à faire verticalement. MESURÉ sur l'état d'avant :
+       `scrollLeft` passait de 0 à 400 sans une ligne de JS. Un gestionnaire
+       `wheel` serait donc REDONDANT — et son `preventDefault()` risquerait de
+       détourner le défilement de la page. On n'en ajoute pas. */
+
+    b.addEventListener("scroll", planifier, { passive: true });
+    window.addEventListener("resize", planifier);
+    try { new MutationObserver(planifier).observe(b, { childList: true }); } catch (e) {}
+    planifier();
+    return true;
+  }
+
+  /* la barre est construite par un module : on attend qu'elle existe */
+  var essais = 0;
+  var iv = setInterval(function () {
+    if (armer()) { clearInterval(iv); return; }
+    if (++essais > 60) clearInterval(iv);
+  }, 250);
+
+  window.__v597Bande = { maj: maj, planifier: planifier, CLS: CLS };
+})();
+</script>
