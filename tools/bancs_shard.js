@@ -91,8 +91,13 @@ for (const b of tranche) {
     echecs++;
     const err = (r.stderr || '').trim().split('\n').slice(-10).join('\n');
     console.error(`  ÉCHEC (code ${code}) — ${last}`);
-    if (err) console.error('    ' + err.replace(/\n/g, '\n    '));
-    lignes.push(`### ÉCHEC (code ${code}) — ${rel}\n\`\`\`\n${last}\n${err}\n\`\`\``);
+    /* v604 — imprimer aussi la fin du STDOUT : les assertions [ECHEC] des bancs
+       y sont, et sans elles un échec CI est indéboguable (le rapport de shard
+       n'était lisible nulle part). */
+    const out15 = (r.stdout || '').trim().split('\n').slice(-15).join('\n');
+    if (out15) console.error('    ── 15 dernières lignes du banc :\n' + out15.split('\n').map(l => '    ' + l).join('\n'));
+    if (err) console.error('    ── stderr :\n' + err.split('\n').map(l => '    ' + l).join('\n'));
+    lignes.push(`### ÉCHEC (code ${code}) — ${rel}\n\`\`\`\n${last}\n${out15}\n${err}\n\`\`\``);
   }
 }
 

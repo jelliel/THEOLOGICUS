@@ -131,6 +131,18 @@ jobs:
           SHARD_TOTAL: 5
         run: node tools/bancs_shard.js
 
+      # v604 — téléverse les rapports de shard : la porte bancs_gate tourne sur
+      # un AUTRE runner et ne voyait jamais rapport_shard_*.md (le commentaire
+      # de commit n'avait que l'en-tête, sans le détail des échecs).
+      - name: Publier les rapports de shard (artefact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-shard-${{ matrix.shard }}-${{ github.run_id }}
+          path: rapport_shard_*.md
+          if-no-files-found: ignore
+          retention-days: 3
+
   # v599 — PORTE AGREGÉE : les jobs build/windows attendent CETTE porte, pas les
   # shards individuels (sinon un shard vert masquerait un shard rouge). Elle n'échoue
   # que si AU MOINS UN shard a échoué, et publie le détail des échecs en commentaire
@@ -141,6 +153,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Récupérer les rapports de shard
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rapports-shard-*
+          merge-multiple: true
+          path: rapports
       - name: Agréger et publier le détail des échecs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,7 +168,7 @@ jobs:
         run: |
           if [ "${{ needs.bancs.result }}" != "success" ]; then
             { echo "**Bancs : AU MOINS UN SHARD EN ÉCHEC.**"; echo; \
-              for f in rapport_shard_*.md; do [ -f "$f" ] && { echo "──── $f"; cat "$f"; echo; }; done; } > rapport_final.md
+              for f in rapports/rapport_shard_*.md; do [ -f "$f" ] && { echo "──── $f"; cat "$f"; echo; }; done; } > rapport_final.md
             if [ -f rapport_final.md ]; then
               gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
                 -f body="$(cat rapport_final.md)" > /dev/null && echo "détail publié"

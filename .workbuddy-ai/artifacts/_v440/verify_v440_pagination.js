@@ -114,7 +114,7 @@ const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
     });
     ok('CATÉCHISME : filtre « 2611 » → § 2611 affiché, page réinitialisée', c2.v2611 && (c2.barre === '' || c2.barre.startsWith('Page 1 /')));
 
-    ok('aucune erreur JavaScript', errors.length === 0);
+    ok('aucune erreur JavaScript', errors.length === 0, errors.slice(0, 2).join(' | '));
     console.log(`RESULTAT : ${pass}/10`);
     process.exitCode = pass === 10 ? 0 : 1;
   } catch (e) {
