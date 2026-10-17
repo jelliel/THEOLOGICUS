@@ -259,3 +259,41 @@ chapitres entiers (Rm 16, Jn 8). Il applique donc une variante stricte —
 française, puis vérifier un par un que les manques correspondent à une
 omission connue du texte critique. Résultat : **260 chapitres émis sur
 260**, 0 manque inexpliqué, 1 verset écarté (Ap 12,18).
+
+
+## Bibliothèque de code embarquée — pdf-lib (atelier PDF v605)
+
+- Source : https://github.com/Hopding/pdf-lib — version 1.17.1 (fichier
+  `dist/pdf-lib.min.js`), embarquée telle quelle dans `THEOLOGICUS.html`
+  (bloc `<script id="v605-pdflib">`).
+- Rôle : atelier PDF hors-ligne du panneau PDFCraft — ouvrir, combiner,
+  extraire, réordonner et tourner des pages, enregistrer le résultat.
+- Licence : **MIT**.
+
+```
+MIT License
+
+Copyright (c) 2020 Hopding
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+- Inspiration d'interface : le projet PdfCraft (https://github.com/storytold/
+  pdfcraft, Rust, MIT OR Apache-2.0) — aucun code de ce projet n'est embarqué ;
+  seul le nom de l'onglet s'en inspire.

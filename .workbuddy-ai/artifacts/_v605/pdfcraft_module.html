@@ -1,0 +1,338 @@
+<style id="v605-pdfcraft-css">
+/* ═══ v605 — PDFCraft : onglet + atelier PDF hors-ligne ═══
+   Thémé par les jetons (suit les 10 thèmes v602). Fluide : transitions
+   160 ms, désactivées sous prefers-reduced-motion. Accessible : dialog
+   aria-modal, aria-expanded sur l'onglet, Escape, focus géré. */
+#pdfcraft-panel{
+  position:fixed; right:16px; top:64px; bottom:16px; z-index:var(--z-panel,199);
+  width:min(430px, calc(100vw - 32px));
+  display:flex; flex-direction:column;
+  background:var(--bg-hull,#0d1626); color:var(--text,#d5e2f3);
+  border:1px solid var(--wire,rgba(79,142,247,.2)); border-radius:12px;
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+  opacity:0; transform:translateY(8px); pointer-events:none;
+  transition:opacity .16s ease, transform .16s ease;
+}
+#pdfcraft-panel.ouvert{ opacity:1; transform:translateY(0); pointer-events:auto; }
+#pdfcraft-panel .pfc-tete{
+  display:flex; align-items:center; gap:8px; padding:10px 12px;
+  border-bottom:1px solid var(--wire,rgba(79,142,247,.2)); flex:0 0 auto;
+}
+#pdfcraft-panel .pfc-titre{ font-weight:600; font-size:13px; letter-spacing:.5px; flex:1; }
+#pdfcraft-panel .pfc-fermer{ background:none; border:none; color:var(--text-dim,#8fa3b8);
+  font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; }
+#pdfcraft-panel .pfc-fermer:hover{ color:var(--text); background:var(--bg-card-alt,rgba(255,255,255,.05)); }
+#pdfcraft-panel .pfc-outils{ display:flex; flex-wrap:wrap; gap:6px; padding:10px 12px; border-bottom:1px solid var(--wire,rgba(79,142,247,.15)); flex:0 0 auto; }
+#pdfcraft-panel .pfc-btn{
+  font-family:inherit; font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
+  background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
+  border:1px solid var(--wire,rgba(79,142,247,.25)); transition:background .12s ease, border-color .12s ease;
+}
+#pdfcraft-panel .pfc-btn:hover{ border-color:var(--accent); }
+#pdfcraft-panel .pfc-btn:disabled{ opacity:.45; cursor:not-allowed; }
+#pdfcraft-panel .pfc-btn.pfc-primaire{ background:var(--accent); color:var(--bg-hull,#0d1626); border-color:var(--accent); font-weight:700; }
+#pdfcraft-panel .pfc-btn.pfc-primaire:hover{ filter:brightness(1.08); }
+#pdfcraft-panel .pfc-liste{ flex:1 1 auto; overflow:auto; padding:6px 8px; }
+#pdfcraft-panel .pfc-page{
+  display:flex; align-items:center; gap:6px; padding:5px 6px; border-radius:8px;
+  border:1px solid transparent;
+}
+#pdfcraft-panel .pfc-page:hover{ background:var(--bg-card-alt,rgba(255,255,255,.04)); }
+#pdfcraft-panel .pfc-page input[type=checkbox]{ accent-color:var(--accent); width:14px; height:14px; cursor:pointer; }
+#pdfcraft-panel .pfc-page .pfc-nom{ flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#pdfcraft-panel .pfc-page .pfc-nom small{ color:var(--text-dim,#8fa3b8); }
+#pdfcraft-panel .pfc-page button{
+  background:none; border:1px solid transparent; color:var(--text-dim,#8fa3b8);
+  font-size:12px; cursor:pointer; border-radius:5px; padding:2px 5px; line-height:1.4;
+}
+#pdfcraft-panel .pfc-page button:hover{ color:var(--text); border-color:var(--wire,rgba(79,142,247,.3)); }
+#pdfcraft-panel .pfc-page button:disabled{ opacity:.3; cursor:not-allowed; }
+#pdfcraft-panel .pfc-statut{ padding:8px 12px; font-size:11px; color:var(--text-dim,#8fa3b8);
+  border-top:1px solid var(--wire,rgba(79,142,247,.15)); flex:0 0 auto; }
+#pdfcraft-panel .pfc-vide{ padding:22px 16px; font-size:12px; color:var(--text-dim,#8fa3b8); text-align:center; line-height:1.7; }
+#open-pdfcraft{ padding-left:5px; padding-right:5px; font-size:14px; letter-spacing:0; }
+@media (prefers-reduced-motion: reduce){
+  #pdfcraft-panel{ transition:none; }
+}
+</style>
+<script id="v605-pdfcraft">
+/* ═══ v605 — PDFCRAFT : onglet header + atelier PDF hors-ligne ═══
+   Inspiré de PdfCraft (storytold/pdfcraft, Rust — app native non
+   embarquable) : le panneau offre les fonctions transférables à un
+   navigateur hors-ligne via pdf-lib 1.17.1 (MIT, bloc v605-pdflib) :
+   ouvrir des PDF locaux, réordonner, tourner, supprimer des pages,
+   extraire une sélection, enregistrer le résultat (serveur backups/
+   via /save-data, shim mobile natif, ou téléchargement en repli).
+
+   Conformité à la bande de contrôles (leçons v597/v598) : l'onglet est un
+   <button class="hud-btn"> APPENDU EN FIN de .header-controls — ne déplace
+   aucun contrôle existant, repris automatiquement par le menu « Plus »
+   (v598 liste les BUTTON/SELECT). Bande scrollable : aucun chevauchement.
+
+   Accessibilité (schéma v508) : role=dialog + aria-modal=true + aria-label,
+   aria-expanded sur l'onglet, Escape ferme, focus dans le panneau à
+   l'ouverture et rendu à l'onglet à la fermeture. */
+(function(){
+  'use strict';
+  var pc = { docs: [], pages: [] };   /* docs[i]={name,doc}; pages[j]={d:docIdx,p:pageIdx,rot} */
+
+  function h(tag, attrs, texte) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === 'text') el.textContent = attrs[k];
+      else if (k.indexOf('on') === 0) el.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== null && attrs[k] !== undefined) el.setAttribute(k, attrs[k]);
+    });
+    if (texte) el.textContent = texte;
+    return el;
+  }
+
+  /* ── Onglet dans la bande de contrôles ── */
+  function poserOnglet() {
+    var bande = document.querySelector('.header-controls');
+    if (!bande || document.getElementById('open-pdfcraft')) return;
+    var onglet = h('button', {
+      'class': 'hud-btn', id: 'open-pdfcraft', type: 'button',
+      title: "PDFCraft — atelier PDF hors-ligne : ouvrir, réordonner, tourner, extraire et combiner des pages",
+      'aria-label': 'PDFCraft — atelier PDF',
+      'aria-haspopup': 'dialog', 'aria-controls': 'pdfcraft-panel', 'aria-expanded': 'false'
+    });
+    /* v605b — onglet ICÔNE compact : à 1920 px la bande est pleine à ~70 px
+       près (mesuré) ; un onglet textuel ferait déborder la bande et déclencher
+       le fondu v597. L'icône + title + aria-label tiennent en ~26 px. */
+    onglet.textContent = '📄';
+    onglet.addEventListener('click', basculer);
+    bande.appendChild(onglet);
+  }
+
+  /* ── Panneau ── */
+  var el = {};
+  function poserPanneau() {
+    if (document.getElementById('pdfcraft-panel')) return;
+    var p = h('div', { id: 'pdfcraft-panel', role: 'dialog', 'aria-modal': 'true',
+                       'aria-label': 'PDFCraft — atelier PDF' });
+    var tete = h('div', { 'class': 'pfc-tete' });
+    tete.appendChild(h('span', { 'class': 'pfc-titre', text: '📄 PDFCRAFT — atelier PDF' }));
+    el.fermer = h('button', { 'class': 'pfc-fermer', type: 'button',
+      'aria-label': 'Fermer PDFCraft' });
+    el.fermer.textContent = '✕';
+    el.fermer.addEventListener('click', fermer);
+    tete.appendChild(el.fermer);
+    p.appendChild(tete);
+
+    var outils = h('div', { 'class': 'pfc-outils' });
+    el.fichier = h('input', { type: 'file', accept: 'application/pdf,.pdf', multiple: '' });
+    el.fichier.style.display = 'none';
+    el.fichier.addEventListener('change', function () { ouvrirFichiers(Array.from(el.fichier.files || [])); el.fichier.value = ''; });
+    var ouvrir = h('button', { 'class': 'pfc-btn', type: 'button', text: '📂 Ouvrir des PDF' });
+    ouvrir.addEventListener('click', function () { el.fichier.click(); });
+    outils.appendChild(ouvrir);
+    el.extraire = h('button', { 'class': 'pfc-btn', type: 'button', text: '✂ Extraire la sélection' });
+    el.extraire.addEventListener('click', extraireSelection);
+    outils.appendChild(el.extraire);
+    el.enregistrer = h('button', { 'class': 'pfc-btn pfc-primaire', type: 'button', text: '💾 Enregistrer le PDF' });
+    el.enregistrer.addEventListener('click', enregistrer);
+    outils.appendChild(el.enregistrer);
+    p.appendChild(el.fichier);
+    p.appendChild(outils);
+
+    el.liste = h('div', { 'class': 'pfc-liste', role: 'list' });
+    p.appendChild(el.liste);
+    el.statut = h('div', { 'class': 'pfc-statut', 'aria-live': 'polite', text: 'Aucun document ouvert.' });
+    p.appendChild(el.statut);
+
+    document.body.appendChild(p);
+    el.panneau = p;
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && el.panneau.classList.contains('ouvert')) fermer();
+    });
+  }
+
+  function basculer() {
+    if (el.panneau && el.panneau.classList.contains('ouvert')) fermer();
+    else ouvrir();
+  }
+  function ouvrir() {
+    poserPanneau();
+    el._focusAvant = document.activeElement;
+    el.panneau.classList.add('ouvert');
+    var onglet = document.getElementById('open-pdfcraft');
+    if (onglet) onglet.setAttribute('aria-expanded', 'true');
+    el.fermer.focus();
+    if (!pc.pages.length) el.statut.textContent = 'Aucun document ouvert. Cliquez « Ouvrir des PDF ».';
+  }
+  function fermer() {
+    if (!el.panneau) return;
+    el.panneau.classList.remove('ouvert');
+    var onglet = document.getElementById('open-pdfcraft');
+    if (onglet) onglet.setAttribute('aria-expanded', 'false');
+    if (el._focusAvant && el._focusAvant.focus) el._focusAvant.focus();
+  }
+
+  /* ── Ouverture des fichiers ── */
+  async function ouvrirFichiers(files) {
+    if (!window.PDFLib) { toast('Bibliothèque PDF absente — rechargement requis', 'error'); return; }
+    var ajoutes = 0;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      try {
+        var octets = new Uint8Array(await f.arrayBuffer());
+        var doc = await PDFLib.PDFDocument.load(octets, { ignoreEncryption: true });
+        var d = { name: f.name.replace(/\.pdf$/i, ''), doc: doc };
+        pc.docs.push(d);
+        for (var p = 0; p < doc.getPageCount(); p++) pc.pages.push({ d: pc.docs.length - 1, p: p, rot: 0 });
+        ajoutes++;
+      } catch (e) {
+        toast('PDF illisible : ' + f.name, 'error');
+      }
+    }
+    if (ajoutes) toast(ajoutes + ' document(s) ouvert(s)', 'success');
+    rendre();
+  }
+
+  /* ── Rendu de la liste ── */
+  function rendre() {
+    el.liste.textContent = '';
+    if (!pc.pages.length) {
+      el.liste.appendChild(h('div', { 'class': 'pfc-vide',
+        text: 'Aucune page. Ouvrez un ou plusieurs PDF — leurs pages apparaissent ici dans l’ordre, prêtes à être réordonnées, tournées, supprimées, extraites ou enregistrées.' }));
+      majStatut();
+      return;
+    }
+    pc.pages.forEach(function (pg, i) {
+      var nom = (pc.docs[pg.d] && pc.docs[pg.d].name) || 'doc';
+      var ligne = h('div', { 'class': 'pfc-page', role: 'listitem' });
+      var coche = h('input', { type: 'checkbox', 'aria-label': 'Sélectionner ' + nom + ' page ' + (pg.p + 1) });
+      coche.dataset.idx = String(i);
+      ligne.appendChild(coche);
+      var nomEl = h('span', { 'class': 'pfc-nom' });
+      nomEl.textContent = nom + ' ';
+      var petit = h('small', { text: 'p.' + (pg.p + 1) + (pg.rot ? ' · ' + pg.rot + '°' : '') });
+      nomEl.appendChild(petit);
+      ligne.appendChild(nomEl);
+      ligne.appendChild(h('button', { type: 'button', title: 'Monter', 'aria-label': 'Monter la page', disabled: i === 0 ? '' : null }, '↑'));
+      ligne.lastChild.addEventListener('click', function () { deplacer(i, -1); });
+      ligne.appendChild(h('button', { type: 'button', title: 'Descendre', 'aria-label': 'Descendre la page', disabled: i === pc.pages.length - 1 ? '' : null }, '↓'));
+      ligne.lastChild.addEventListener('click', function () { deplacer(i, 1); });
+      ligne.appendChild(h('button', { type: 'button', title: 'Tourner à gauche', 'aria-label': 'Tourner la page à gauche' }, '↺'));
+      ligne.lastChild.addEventListener('click', function () { tourner(i, -90); });
+      ligne.appendChild(h('button', { type: 'button', title: 'Tourner à droite', 'aria-label': 'Tourner la page à droite' }, '↻'));
+      ligne.lastChild.addEventListener('click', function () { tourner(i, 90); });
+      ligne.appendChild(h('button', { type: 'button', title: 'Supprimer la page', 'aria-label': 'Supprimer la page' }, '✕'));
+      ligne.lastChild.addEventListener('click', function () { supprimer(i); });
+      el.liste.appendChild(ligne);
+    });
+    majStatut();
+  }
+
+  function majStatut() {
+    var cochees = el.liste.querySelectorAll('input[type=checkbox]:checked').length;
+    el.statut.textContent = pc.docs.length + ' document(s) · ' + pc.pages.length + ' page(s)' +
+      (cochees ? ' · ' + cochees + ' sélectionnée(s)' : '');
+    el.enregistrer.disabled = !pc.pages.length;
+    el.extraire.disabled = !cochees;
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#pdfcraft-panel') && e.target.type === 'checkbox') majStatut();
+  });
+
+  /* ── Opérations sur le modèle ── */
+  function deplacer(i, delta) {
+    var j = i + delta;
+    if (j < 0 || j >= pc.pages.length) return;
+    var t = pc.pages[i]; pc.pages[i] = pc.pages[j]; pc.pages[j] = t;
+    rendre();
+  }
+  function tourner(i, delta) {
+    pc.pages[i].rot = ((pc.pages[i].rot + delta) % 360 + 360) % 360;
+    rendre();
+  }
+  function supprimer(i) {
+    pc.pages.splice(i, 1);
+    rendre();
+  }
+  function selection() {
+    var idx = [];
+    el.liste.querySelectorAll('input[type=checkbox]:checked').forEach(function (c) {
+      idx.push(parseInt(c.dataset.idx, 10));
+    });
+    return idx;
+  }
+
+  /* ── Assemblage : construit un PDF depuis le modèle de pages ── */
+  async function assembler(indices) {
+    var out = await PDFLib.PDFDocument.create();
+    for (var k = 0; k < indices.length; k++) {
+      var pg = pc.pages[indices[k]];
+      var page = (await out.copyPages(pc.docs[pg.d].doc, [pg.p]))[0];
+      if (pg.rot) page.setRotation(PDFLib.degrees(pg.rot));
+      out.addPage(page);
+    }
+    return out.save();
+  }
+
+  async function extraireSelection() {
+    var idx = selection();
+    if (!idx.length) { toast('Sélectionnez d’abord des pages', 'info'); return; }
+    try {
+      var octets = await assembler(idx);
+      enregistrerOctets(octets, 'PDFCraft-extrait-' + horodatage() + '.pdf');
+    } catch (e) { toast('Extraction impossible : ' + e.message, 'error'); }
+  }
+
+  async function enregistrer() {
+    if (!pc.pages.length) { toast('Aucune page à enregistrer', 'info'); return; }
+    try {
+      var octets = await assembler(pc.pages.map(function (_, i) { return i; }));
+      enregistrerOctets(octets, 'PDFCraft-' + horodatage() + '.pdf');
+    } catch (e) { toast('Enregistrement impossible : ' + e.message, 'error'); }
+  }
+
+  function horodatage() {
+    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+           p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+
+  /* Enregistrement : serveur backups/ (exe + relais), shim mobile natif,
+     repli téléchargement navigateur — même contrat que l'export v442. */
+  async function enregistrerOctets(octets, nom) {
+    var data64 = (function (oct) {
+      var binaire = '', PAS = 0x8000;
+      for (var i = 0; i < oct.length; i += PAS) {
+        binaire += String.fromCharCode.apply(null, oct.subarray(i, i + PAS));
+      }
+      return btoa(binaire);
+    })(octets);
+    var servi = false;
+    try { servi = location.protocol === 'http:' || location.protocol === 'https:'; } catch (e) {}
+    if (servi) {
+      try {
+        var res = await fetch('/save-data', { method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: nom, data64: data64 }) });
+        if (res.ok) {
+          var j = await res.json().catch(function () { return {}; });
+          toast('PDF enregistré' + (j.path ? ' — ' + j.path : ''), 'success');
+          return;
+        }
+      } catch (e) {}
+    }
+    var blob = new Blob([octets], { type: 'application/pdf' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = nom; a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    toast('PDF téléchargé : ' + nom, 'success');
+  }
+
+  /* ── Démarrage ── */
+  function demarrer() {
+    poserOnglet();
+    poserPanneau();
+    rendre();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+})();
+</script>

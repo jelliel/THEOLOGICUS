@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
-const MODULES_ATTENDUS = 123; // synchronisé avec verifier_assets.py (controle_modules)
+const MODULES_ATTENDUS = 125; // synchronisé avec verifier_assets.py (controle_modules)
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé

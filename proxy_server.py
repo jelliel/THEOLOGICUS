@@ -2580,7 +2580,9 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             filename = os.path.basename(filename).replace('\\', '_').replace('/', '_')
             # v589 — le Markdown est un format d'export légitime (lecture et
             # partage) au même titre que le JSON : on l'accepte explicitement.
-            extensions = ('.json', '.md', '.markdown', '.txt')
+            # v605 — le PDF rejoint le Markdown comme format d'export légitime
+            # (sortie de l'atelier PDFCraft).
+            extensions = ('.json', '.md', '.markdown', '.txt', '.pdf')
             if not filename or not filename.lower().endswith(extensions):
                 raise ValueError('nom de fichier invalide')
             data = base64.b64decode(req.get('data64') or b'')
