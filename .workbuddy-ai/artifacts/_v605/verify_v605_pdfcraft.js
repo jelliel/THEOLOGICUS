@@ -113,9 +113,15 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
   section("4. Charger deux PDF (générés par pdf-lib) via l'input fichier");
   const charges = await page.evaluate(async () => {
     const docA = await PDFLib.PDFDocument.create();
-    docA.addPage([595, 842]); docA.addPage([595, 842]);
+    const fontA = await docA.embedFont(PDFLib.StandardFonts.Helvetica);
+    const pa1 = docA.addPage([595, 842]);
+    pa1.drawText("Page A1 — fabrication banc", { x: 60, y: 720, size: 24, font: fontA });
+    const pa2 = docA.addPage([595, 842]);
+    pa2.drawText("Page A2 — fabrication banc", { x: 60, y: 720, size: 24, font: fontA });
     const docB = await PDFLib.PDFDocument.create();
-    docB.addPage([595, 842]);
+    const fontB = await docB.embedFont(PDFLib.StandardFonts.Helvetica);
+    const pb1 = docB.addPage([595, 842]);
+    pb1.drawText("Page B1 — fabrication banc", { x: 60, y: 720, size: 24, font: fontB });
     const octA = await docA.save(), octB = await docB.save();
     const input = document.querySelector("#pdfcraft-panel input[type=file]");
     const dt = new DataTransfer();
@@ -194,38 +200,120 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
     ok("l'extrait contient EXACTEMENT la sélection (1 page)", verif2.pages === 1, verif2.pages + " page(s)");
   }
 
-  /* ── 7b. VISIONNEUSE — « 👁 Voir » assemble et affiche ; Escape la ferme sans fermer le panneau ── */
-  section("7b. Visionneuse — aperçu du modèle courant en plein écran");
-  await page.click("#pfc-voir"); /* 👁 Voir */
-  await page.waitForTimeout(600);
-  const vue = await page.evaluate(() => {
-    const v = document.getElementById("pdfcraft-vue");
-    const f = document.getElementById("pdfcraft-vue iframe") || v.querySelector("iframe");
+  /* ── 7b. VIGNETTES pdf.js — chaque page a un rendu réel ── */
+  section("7b. Vignettes pdf.js — rendu réel paresseux (IntersectionObserver)");
+  await page.waitForTimeout(1500); /* l'observateur rend les vignettes visibles */
+  const vig = await page.evaluate(() => {
+    const cvs = [...document.querySelectorAll("#pdfcraft-panel .pfc-vignette")];
     return {
-      ouvert: !!(v && v.classList.contains("ouvert")),
-      role: v ? v.getAttribute("role") : "",
-      src: f ? String(f.src).slice(0, 30) : "",
-      titre: v ? v.querySelector(".pfcv-titre").textContent : "",
-      panelEncoreOuvert: document.getElementById("pdfcraft-panel").classList.contains("ouvert"),
-      focusVue: v ? v.contains(document.activeElement) : false,
+      nb: cvs.length,
+      rendus: cvs.filter(c => c.__rendu).length,
+      peints: cvs.filter(c => {
+        try {
+          const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+          let nonBlancs = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] !== 0 && !(d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250)) nonBlancs++;
+          }
+          return nonBlancs > 10;
+        } catch (e) { return false; }
+      }).length,
     };
   });
-  ok("la visionneuse est OUVERTE en plein écran", vue.ouvert && vue.role === "dialog", vue.role);
-  ok("l'iframe pointe un blob: local (PDFium natif, hors-ligne)", vue.src.startsWith("blob:"), vue.src);
-  ok("le titre annonce les 3 pages du modèle", /3 page\(s\)/.test(vue.titre), vue.titre);
-  ok("le panneau reste OUVERT dessous", vue.panelEncoreOuvert, "");
-  ok("le focus est dans la visionneuse", vue.focusVue, "");
+  ok("3 vignettes présentes", vig.nb === 3, vig.nb + " vignette(s)");
+  ok("les 3 sont RENDUES par pdf.js (marqueur __rendu)", vig.rendus === 3, vig.rendus + " rendue(s)");
+  ok("les vignettes sont PEINTES (pixels non blancs)", vig.peints === 3, vig.peints + " peinte(s)");
 
+  /* ── 7c. VISIONNEUSE pdf.js — canvas, navigation, zoom ── */
+  section("7c. Visionneuse pdf.js — canvas rendu, navigation, zoom");
+  await page.click("#pfc-voir");
+  await page.waitForTimeout(900);
+  const vue1 = await page.evaluate(() => {
+    const v = document.getElementById("pdfcraft-vue");
+    const cvs = v.querySelectorAll("canvas");
+    const cv = cvs[0] || null;
+    return {
+      nbCanvas: cvs.length,
+      cvW: cv ? cv.width : -1, cvH: cv ? cv.height : -1,
+      renduVue: cv ? !!cv.__renduVue : false,
+      ouvert: v.classList.contains("ouvert"),
+      compte: v.querySelector(".pfcv-compte").textContent,
+      peint: cv && cv.width > 0 && (() => {
+        try {
+          const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
+          let n = 0; for (let i = 0; i < d.length; i += 4) { if (d[i + 3] !== 0 && !(d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250)) n++; }
+          return n > 50;
+        } catch (e) { return false; }
+      })(),
+      largeur: cv ? cv.style.width : "",
+    };
+  });
+  ok("visionneuse OUVERTE avec canvas rendu (page 1 / 3)", vue1.ouvert && vue1.compte === "1 / 3" && vue1.peint, JSON.stringify(vue1));
+  const largeurAvant = parseInt((vue1.largeur || "0").replace("px", ""), 10);
+  await page.click("#pdfcraft-vue .pfcv-btn[aria-label='Page suivante']");
+  await page.waitForTimeout(700);
+  const vue2 = await page.evaluate(() => document.querySelector("#pdfcraft-vue .pfcv-compte").textContent);
+  ok("navigation : Page ▶ -> 2 / 3", vue2 === "2 / 3", vue2);
+  await page.click("#pdfcraft-vue .pfcv-btn[aria-label='Zoom avant']");
+  await page.waitForTimeout(700);
+  const vue3 = await page.evaluate(() => {
+    const cv = document.querySelector("#pdfcraft-vue canvas");
+    return { zoomLbl: document.querySelector("#pdfcraft-vue .pfcv-barre span:nth-of-type(3)").textContent,
+             largeur: parseInt(cv.style.width.replace("px", ""), 10) };
+  });
+  ok("zoom ＋ : le canvas GRANDIT", vue3.largeur > largeurAvant, largeurAvant + " -> " + vue3.largeur + " (" + vue3.zoomLbl + ")");
   await page.keyboard.press("Escape");
   await page.waitForTimeout(250);
-  const vueFermee = await page.evaluate(() => ({
+  const fermeVue1 = await page.evaluate(() => ({
     vueFermee: !document.getElementById("pdfcraft-vue").classList.contains("ouvert"),
-    panelEncoreOuvert: document.getElementById("pdfcraft-panel").classList.contains("ouvert"),
-    focusVoir: document.activeElement === document.getElementById("pfc-voir"),
+    panelOuvert: document.getElementById("pdfcraft-panel").classList.contains("ouvert"),
   }));
-  ok("Escape ferme la VISIONNEUSE", vueFermee.vueFermee, "");
-  ok("le panneau reste ouvert après l'aperçu", vueFermee.panelEncoreOuvert, "");
-  ok("le focus retourne au bouton « Voir »", vueFermee.focusVoir, "");
+  ok("Escape ferme la visionneuse (panneau intact)",
+     fermeVue1.vueFermee && fermeVue1.panelOuvert, "");
+  await page.click("#pfc-voir");
+  await page.waitForTimeout(700);
+
+  /* ── 7d. RECHERCHE dans le texte (pdf.js) — résultats navigables ── */
+  section("7d. Recherche — « Page B1 » trouvée dans le texte, navigable");
+  await page.fill("#pdfcraft-vue .pfcv-recherche input", "Page B1");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => {
+    const r = document.querySelector("#pdfcraft-vue .pfcv-resultats");
+    return r && r.style.display === "block" && r.querySelectorAll("button").length > 0;
+  }, { timeout: 15000 });
+  const recherche = await page.evaluate(() => {
+    const res = [...document.querySelectorAll("#pdfcraft-vue .pfcv-resultats button")];
+    return { nb: res.length, premier: res[0].textContent.slice(0, 60) };
+  });
+  ok("un résultat trouvé (p.3)", recherche.nb >= 1 && /p\.3/.test(recherche.premier), recherche.premier);
+  await page.click("#pdfcraft-vue .pfcv-resultats button");
+  await page.waitForTimeout(700);
+  const nav3 = await page.evaluate(() => document.querySelector("#pdfcraft-vue .pfcv-compte").textContent);
+  ok("cliquer le résultat navigue vers 3 / 3", nav3 === "3 / 3", nav3);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  const fermeVue2 = await page.evaluate(() => ({
+    vueFermee: !document.getElementById("pdfcraft-vue").classList.contains("ouvert"),
+  }));
+  ok("l'aperçu se ferme, le panneau reste", fermeVue2.vueFermee, "");
+
+  /* ── 7e. EXTRACTION DE TEXTE — fichier .txt vérifié ── */
+  section("7e. Extraction de texte — PDFCraft-texte-*.txt contient les pages");
+  const avantTxt = new Set(fichiersPdfCraft());
+  await page.evaluate(() => { const w = document.getElementById("setup-wizard-overlay"); if (w) w.classList.remove("active"); });
+  try { await page.addStyleTag({ content: "#setup-wizard-overlay,#theo-maj-bandeau{display:none !important}" }); } catch (e) {}
+  /* le panneau est déjà ouvert (7d) : PAS de clic sur l'onglet (il fermerait) */
+  await page.waitForTimeout(250);
+  await page.click("#pfc-texte");
+  let nomTxt = null, contenuTxt = null;
+  for (let i = 0; i < 20; i++) {
+    const nouveau = fs.readdirSync(REP_BACKUPS).filter(f => /^PDFCraft-texte-.*\.txt$/.test(f)).find(f => !avantTxt.has(f));
+    if (nouveau) { nomTxt = nouveau; contenuTxt = fs.readFileSync(path.join(REP_BACKUPS, nouveau), "utf8"); break; }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  ok("un fichier texte est écrit", !!nomTxt, nomTxt || "(aucun)");
+  ok("le texte extrait contient les pages A2 et B1",
+     !!contenuTxt && /Page A2/.test(contenuTxt) && /Page B1/.test(contenuTxt), "");
 
   /* ── 8. CONTRÔLE NÉGATIF — panneau à vide (rechargé), pas d'enregistrement ── */
   section("8. Contrôle négatif — panneau à vide : Enregistrer désactivé");

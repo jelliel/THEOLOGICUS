@@ -1,8 +1,9 @@
 <style id="v605-pdfcraft-css">
-/* ═══ v605 — PDFCraft : onglet + atelier PDF hors-ligne ═══
+/* ═══ v605/v606 — PDFCraft : onglet + atelier + visionneuse pdf.js ═══
    Thémé par les jetons (suit les 10 thèmes v602). Fluide : transitions
    160 ms, désactivées sous prefers-reduced-motion. Accessible : dialog
-   aria-modal, aria-expanded sur l'onglet, Escape, focus géré. */
+   aria-modal, aria-expanded sur l'onglet, Escape coordonné, focus géré.
+   v606 : rendu + vignettes + recherche par pdf.js (embarqué). */
 #pdfcraft-panel{
   position:fixed; right:16px; top:64px; bottom:16px; z-index:var(--z-panel,199);
   width:min(430px, calc(100vw - 32px));
@@ -38,7 +39,8 @@
   border:1px solid transparent;
 }
 #pdfcraft-panel .pfc-page:hover{ background:var(--bg-card-alt,rgba(255,255,255,.04)); }
-#pdfcraft-panel .pfc-page input[type=checkbox]{ accent-color:var(--accent); width:14px; height:14px; cursor:pointer; }
+#pdfcraft-panel .pfc-page input[type=checkbox]{ accent-color:var(--accent); width:14px; height:14px; cursor:pointer; flex:0 0 auto; }
+#pdfcraft-panel .pfc-vignette{ flex:0 0 auto; background:#ffffff; border:1px solid var(--wire,rgba(79,142,247,.3)); border-radius:2px; }
 #pdfcraft-panel .pfc-page .pfc-nom{ flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #pdfcraft-panel .pfc-page .pfc-nom small{ color:var(--text-dim,#8fa3b8); }
 #pdfcraft-panel .pfc-page button{
@@ -51,6 +53,8 @@
   border-top:1px solid var(--wire,rgba(79,142,247,.15)); flex:0 0 auto; }
 #pdfcraft-panel .pfc-vide{ padding:22px 16px; font-size:12px; color:var(--text-dim,#8fa3b8); text-align:center; line-height:1.7; }
 #open-pdfcraft{ padding-left:5px; padding-right:5px; font-size:14px; letter-spacing:0; }
+
+/* ── Visionneuse pdf.js (rendu canvas propre à l'app — marche aussi sur Android) ── */
 #pdfcraft-vue{
   position:fixed; inset:0; z-index:var(--z-modal-lg,2000);
   display:none; flex-direction:column;
@@ -63,32 +67,63 @@
   border-bottom:1px solid var(--wire,rgba(79,142,247,.2));
 }
 #pdfcraft-vue .pfcv-titre{ flex:1; font-size:13px; font-weight:600; }
-#pdfcraft-vue iframe{ flex:1 1 auto; border:none; background:#ffffff; }
-#pdfcraft-vue .pfcv-note{ padding:6px 14px; font-size:11px; color:var(--text-dim,#8fa3b8); }
+#pdfcraft-vue .pfcv-corps{ flex:1 1 auto; overflow:auto; display:grid; place-items:center; padding:10px; }
+#pdfcraft-vue canvas{ background:#ffffff; box-shadow:0 6px 30px rgba(0,0,0,.4); max-width:none; }
+#pdfcraft-vue .pfcv-barre{
+  display:flex; align-items:center; gap:6px; padding:8px 14px; flex:0 0 auto; flex-wrap:wrap;
+  background:var(--bg-hull,#0d1626); color:var(--text,#d5e2f3);
+  border-top:1px solid var(--wire,rgba(79,142,247,.2));
+}
+#pdfcraft-vue .pfcv-btn{
+  font-family:inherit; font-size:11px; padding:5px 9px; border-radius:6px; cursor:pointer;
+  background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
+  border:1px solid var(--wire,rgba(79,142,247,.25));
+}
+#pdfcraft-vue .pfcv-btn:hover{ border-color:var(--accent); }
+#pdfcraft-vue .pfcv-btn:disabled{ opacity:.4; cursor:not-allowed; }
+#pdfcraft-vue .pfcv-recherche{ display:flex; gap:4px; align-items:center; }
+#pdfcraft-vue .pfcv-recherche input{
+  font-family:inherit; font-size:11px; padding:5px 8px; border-radius:6px; width:130px;
+  background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
+  border:1px solid var(--wire,rgba(79,142,247,.25));
+}
+#pdfcraft-vue .pfcv-resultats{
+  max-height:150px; overflow:auto; font-size:11px;
+  background:var(--bg-card,#0d1626); border:1px solid var(--wire,rgba(79,142,247,.25)); border-radius:8px;
+  padding:4px; position:absolute; bottom:52px; left:14px; right:14px; z-index:10;
+}
+#pdfcraft-vue .pfcv-resultats button{
+  display:block; width:100%; text-align:left; background:none; border:none; color:var(--text);
+  font-family:inherit; font-size:11px; padding:5px 6px; cursor:pointer; border-radius:5px;
+}
+#pdfcraft-vue .pfcv-resultats button:hover{ background:var(--bg-card-alt,rgba(255,255,255,.06)); }
+#pdfcraft-vue .pfcv-motdepasse{ display:flex; gap:6px; align-items:center; padding:6px 14px; flex:0 0 auto; }
+#pdfcraft-vue .pfcv-motdepasse input{
+  font-family:inherit; font-size:12px; padding:5px 8px; border-radius:6px; flex:1;
+  background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
+  border:1px solid var(--accent);
+}
+#pdfcraft-vue .pfc-fermer{ background:none; border:none; color:var(--text-dim,#8fa3b8);
+  font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; }
+#pdfcraft-vue .pfc-fermer:hover{ color:var(--text); background:var(--bg-card-alt,rgba(255,255,255,.05)); }
 @media (prefers-reduced-motion: reduce){
   #pdfcraft-panel{ transition:none; }
 }
 </style>
 <script id="v605-pdfcraft">
-/* ═══ v605 — PDFCRAFT : onglet header + atelier PDF hors-ligne ═══
+/* ═══ v605/v606 — PDFCRAFT : onglet header + atelier + visionneuse pdf.js ═══
    Inspiré de PdfCraft (storytold/pdfcraft, Rust — app native non
-   embarquable) : le panneau offre les fonctions transférables à un
-   navigateur hors-ligne via pdf-lib 1.17.1 (MIT, bloc v605-pdflib) :
-   ouvrir des PDF locaux, réordonner, tourner, supprimer des pages,
-   extraire une sélection, enregistrer le résultat (serveur backups/
-   via /save-data, shim mobile natif, ou téléchargement en repli).
+   embarquable) : panneau hors-ligne via pdf-lib (bloc v605-pdflib) et
+   rendu/recherche/mot de passe via pdf.js (blocs v606-pdfjs + worker
+   embarqué en text/plain, worker créé par blob URL — fichier unique).
 
-   Conformité à la bande de contrôles (leçons v597/v598) : l'onglet est un
-   <button class="hud-btn"> APPENDU EN FIN de .header-controls — ne déplace
-   aucun contrôle existant, repris automatiquement par le menu « Plus »
-   (v598 liste les BUTTON/SELECT). Bande scrollable : aucun chevauchement.
-
-   Accessibilité (schéma v508) : role=dialog + aria-modal=true + aria-label,
-   aria-expanded sur l'onglet, Escape ferme, focus dans le panneau à
-   l'ouverture et rendu à l'onglet à la fermeture. */
+   Conformité à la bande (v597/v598) : onglet <button class="hud-btn">
+   APPENDU EN FIN de .header-controls — ne déplace aucun contrôle, repris
+   par le menu « Plus ». Accessibilité (v508) : dialog + aria-modal +
+   aria-label, Escape coordonné (aperçu AVANT panneau), focus géré. */
 (function(){
   'use strict';
-  var pc = { docs: [], pages: [] };   /* docs[i]={name,doc}; pages[j]={d:docIdx,p:pageIdx,rot} */
+  var pc = { docs: [], pages: [] };   /* docs[i]={name,doc,pjs}; pages[j]={d:docIdx,p:pageIdx,rot} */
 
   function h(tag, attrs, texte) {
     var el = document.createElement(tag);
@@ -101,13 +136,45 @@
     return el;
   }
 
+  /* ── pdf.js : worker depuis la source embarquée (fichier unique, hors-ligne) ── */
+  var _pdfJsPret = false;
+  function amorcerPdfJs() {
+    if (_pdfJsPret || !window.pdfjsLib) return;
+    try {
+      var source = document.getElementById('v606-worker-src');
+      if (!source) return;
+      var url = URL.createObjectURL(new Blob([source.textContent], { type: 'application/javascript' }));
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = url;
+      _pdfJsPret = true;
+    } catch (e) {}
+  }
+  /* Ouvre un document via pdf.js (rendu/recherche), avec mot de passe si chiffré. */
+  async function ouvrirAvecPdfJs(octets) {
+    amorcerPdfJs();
+    if (!window.pdfjsLib) return null;
+    var motDePasse = '';
+    for (var essai = 0; essai < 3; essai++) {
+      try {
+        var charge = window.pdfjsLib.getDocument({ data: octets.slice(), password: motDePasse });
+        return await charge.promise;
+      } catch (e) {
+        if (e && e.name === 'PasswordException') {
+          motDePasse = window.prompt('PDF chiffré — mot de passe ?') || '';
+          continue;
+        }
+        throw e;
+      }
+    }
+    return null;
+  }
+
   /* ── Onglet dans la bande de contrôles ── */
   function poserOnglet() {
     var bande = document.querySelector('.header-controls');
     if (!bande || document.getElementById('open-pdfcraft')) return;
     var onglet = h('button', {
       'class': 'hud-btn', id: 'open-pdfcraft', type: 'button',
-      title: "PDFCraft — atelier PDF hors-ligne : ouvrir, réordonner, tourner, extraire et combiner des pages",
+      title: "PDFCraft — atelier PDF hors-ligne : ouvrir, visualiser, réordonner, tourner, extraire, rechercher et combiner des pages",
       'aria-label': 'PDFCraft — atelier PDF',
       'aria-haspopup': 'dialog', 'aria-controls': 'pdfcraft-panel', 'aria-expanded': 'false'
     });
@@ -147,6 +214,9 @@
     el.extraire = h('button', { 'class': 'pfc-btn', id: 'pfc-extraire', type: 'button', text: '✂ Extraire la sélection' });
     el.extraire.addEventListener('click', extraireSelection);
     outils.appendChild(el.extraire);
+    el.texte = h('button', { 'class': 'pfc-btn', id: 'pfc-texte', type: 'button', text: '📝 Texte' });
+    el.texte.addEventListener('click', extraireTexte);
+    outils.appendChild(el.texte);
     el.enregistrer = h('button', { 'class': 'pfc-btn pfc-primaire', id: 'pfc-enregistrer', type: 'button', text: '💾 Enregistrer le PDF' });
     el.enregistrer.addEventListener('click', enregistrer);
     outils.appendChild(el.enregistrer);
@@ -199,7 +269,10 @@
       try {
         var octets = new Uint8Array(await f.arrayBuffer());
         var doc = await PDFLib.PDFDocument.load(octets, { ignoreEncryption: true });
-        var d = { name: f.name.replace(/\.pdf$/i, ''), doc: doc };
+        var d = { name: f.name.replace(/\.pdf$/i, ''), doc: doc, pjs: null };
+        /* pdf.js : rendu + recherche — une COPIE des octets (pdf.js transfère
+           le buffer au worker et détache l'original). Chiffré -> mot de passe. */
+        try { d.pjs = await ouvrirAvecPdfJs(octets); } catch (e) { d.pjs = null; }
         pc.docs.push(d);
         for (var p = 0; p < doc.getPageCount(); p++) pc.pages.push({ d: pc.docs.length - 1, p: p, rot: 0 });
         ajoutes++;
@@ -211,18 +284,22 @@
     rendre();
   }
 
-  /* ── Rendu de la liste ── */
+  /* ── Rendu de la liste (avec vignettes pdf.js paresseuses) ── */
   function rendre() {
     el.liste.textContent = '';
     if (!pc.pages.length) {
       el.liste.appendChild(h('div', { 'class': 'pfc-vide',
-        text: 'Aucune page. Ouvrez un ou plusieurs PDF — leurs pages apparaissent ici dans l’ordre, prêtes à être réordonnées, tournées, supprimées, extraites ou enregistrées.' }));
+        text: 'Aucune page. Ouvrez un ou plusieurs PDF — leurs pages apparaissent ici avec vignettes, prêtes à être réordonnées, tournées, supprimées, extraites ou enregistrées.' }));
       majStatut();
       return;
     }
     pc.pages.forEach(function (pg, i) {
       var nom = (pc.docs[pg.d] && pc.docs[pg.d].name) || 'doc';
       var ligne = h('div', { 'class': 'pfc-page', role: 'listitem' });
+      var vignette = h('canvas', { 'class': 'pfc-vignette', width: '40', height: '52',
+        'aria-label': 'Vignette ' + nom + ' page ' + (pg.p + 1) });
+      vignette.__pg = { d: pg.d, p: pg.p };
+      ligne.appendChild(vignette);
       var coche = h('input', { type: 'checkbox', 'aria-label': 'Sélectionner ' + nom + ' page ' + (pg.p + 1) });
       coche.dataset.idx = String(i);
       ligne.appendChild(coche);
@@ -243,7 +320,43 @@
       ligne.lastChild.addEventListener('click', function () { supprimer(i); });
       el.liste.appendChild(ligne);
     });
+    observerVignettes();
     majStatut();
+  }
+
+  /* Vignettes paresseuses : rendu pdf.js quand la ligne devient visible. */
+  var _ioVignettes = null;
+  function observerVignettes() {
+    if (!('IntersectionObserver' in window)) {
+      el.liste.querySelectorAll('canvas.pfc-vignette').forEach(function (cv) { rendreVignette(cv); });
+      return;
+    }
+    if (!_ioVignettes) {
+      _ioVignettes = new IntersectionObserver(function (entrees) {
+        entrees.forEach(function (en) {
+          if (en.isIntersecting) { rendreVignette(en.target); _ioVignettes.unobserve(en.target); }
+        });
+      }, { root: el.liste, rootMargin: '80px' });
+    }
+    el.liste.querySelectorAll('canvas.pfc-vignette').forEach(function (cv) { _ioVignettes.observe(cv); });
+  }
+  function rendreVignette(canvas) {
+    var pg = canvas.__pg;
+    if (!pg || canvas.__rendu) return;
+    var d = pc.docs[pg.d];
+    if (!d || !d.pjs) return; /* pas de pdf.js : vignette vide (l'atelier marche quand même) */
+    canvas.__rendu = true;
+    d.pjs.getPage(pg.p + 1).then(function (page) {
+      var vp0 = page.getViewport({ scale: 1 });
+      var echelle = 50 / vp0.height;
+      var vp = page.getViewport({ scale: echelle });
+      canvas.width = Math.round(vp.width);
+      canvas.height = Math.round(vp.height);
+      canvas.style.width = Math.round(vp.width) + 'px';
+      canvas.style.height = Math.round(vp.height) + 'px';
+      if (pg.rot) canvas.style.transform = 'rotate(' + pg.rot + 'deg)';
+      return page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    }).catch(function () {});
   }
 
   function majStatut() {
@@ -252,6 +365,7 @@
       (cochees ? ' · ' + cochees + ' sélectionnée(s)' : '');
     el.enregistrer.disabled = !pc.pages.length;
     el.voir.disabled = !pc.pages.length;
+    el.texte.disabled = !pc.pages.length;
     el.extraire.disabled = !cochees;
   }
   document.addEventListener('change', function (e) {
@@ -310,6 +424,25 @@
     } catch (e) { toast('Enregistrement impossible : ' + e.message, 'error'); }
   }
 
+  /* Extraction du TEXTE de toutes les pages (pdf.js) -> fichier .txt */
+  async function extraireTexte() {
+    amorcerPdfJs();
+    var morceaux = [];
+    for (var i = 0; i < pc.pages.length; i++) {
+      var pg = pc.pages[i];
+      var d = pc.docs[pg.d];
+      if (!d || !d.pjs) continue;
+      try {
+        var page = await d.pjs.getPage(pg.p + 1);
+        var contenu = await page.getTextContent();
+        var texte = contenu.items.map(function (it) { return it.str; }).join(' ');
+        morceaux.push('──── ' + d.name + ' · p.' + (pg.p + 1) + ' ────\n' + texte.trim());
+      } catch (e) {}
+    }
+    if (!morceaux.length) { toast('Aucun texte extractible', 'info'); return; }
+    enregistrerOctetsTexte(morceaux.join('\n\n'), 'PDFCraft-texte-' + horodatage() + '.txt');
+  }
+
   function horodatage() {
     var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
     return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
@@ -326,6 +459,12 @@
       }
       return btoa(binaire);
     })(octets);
+    await enregistrerBase64(data64, nom);
+  }
+  function enregistrerOctetsTexte(texte, nom) {
+    enregistrerBase64(btoa(unescape(encodeURIComponent(texte))), nom);
+  }
+  async function enregistrerBase64(data64, nom) {
     var servi = false;
     try { servi = location.protocol === 'http:' || location.protocol === 'https:'; } catch (e) {}
     if (servi) {
@@ -335,23 +474,31 @@
           body: JSON.stringify({ filename: nom, data64: data64 }) });
         if (res.ok) {
           var j = await res.json().catch(function () { return {}; });
-          toast('PDF enregistré' + (j.path ? ' — ' + j.path : ''), 'success');
+          toast('Enregistré' + (j.path ? ' — ' + j.path : ''), 'success');
           return;
         }
       } catch (e) {}
     }
-    var blob = new Blob([octets], { type: 'application/pdf' });
+    var blob = new Blob([new Uint8Array(atob(data64).split('').map(function (c) { return c.charCodeAt(0); }))], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url; a.download = nom; a.click();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-    toast('PDF téléchargé : ' + nom, 'success');
+    toast('Téléchargé : ' + nom, 'success');
   }
 
-  /* ── Visionneuse : rendu natif Chromium (PDFium) via iframe blob — hors-ligne. ──
-     Sur Android WebView, les PDF ne se rendent PAS en iframe (limite connue) :
-     la note l'annonce et l'enregistrement reste la voie sur mobile. */
-  var _urlVue = null;
+  /* ── Visionneuse pdf.js : rendu canvas, navigation, zoom, recherche ── */
+  function voirResultat() {
+    if (!pc.pages.length) { toast('Aucune page à afficher', 'info'); return; }
+    poserVue();
+    amorcerPdfJs();
+    el.vueIdx = 0;
+    el.vueResultats.style.display = 'none';
+    el.vue.classList.add('ouvert');
+    el.vueFermer.focus();
+    rendreVue();
+  }
+
   function poserVue() {
     if (document.getElementById('pdfcraft-vue')) return;
     var v = h('div', { id: 'pdfcraft-vue', role: 'dialog', 'aria-modal': 'true',
@@ -364,39 +511,174 @@
     el.vueFermer.addEventListener('click', fermerVue);
     tete.appendChild(el.vueFermer);
     v.appendChild(tete);
-    el.vueFrame = h('iframe', { title: 'Aperçu du PDF' });
-    v.appendChild(el.vueFrame);
-    el.vueNote = h('div', { 'class': 'pfcv-note', text: '' });
-    el.vueNote.style.display = 'none';
-    v.appendChild(el.vueNote);
+
+    el.vueMotDePasse = h('div', { 'class': 'pfcv-motdepasse' });
+    el.vueMotDePasse.style.display = 'none';
+    el.vueMdInput = h('input', { type: 'password', placeholder: 'Mot de passe du PDF chiffré',
+      'aria-label': 'Mot de passe du PDF chiffré' });
+    el.vueMotDePasse.appendChild(el.vueMdInput);
+    var mdOk = h('button', { 'class': 'pfcv-btn', type: 'button', text: 'OK' });
+    mdOk.addEventListener('click', function () {
+      if (el._mdResolve) { var r = el._mdResolve; el._mdResolve = null; r(el.vueMdInput.value); }
+      el.vueMotDePasse.style.display = 'none';
+    });
+    el.vueMotDePasse.appendChild(mdOk);
+    v.appendChild(el.vueMotDePasse);
+
+    el.vueIdx = 0;
+    el.vueZoom = 1; /* 🔴 initialisation OBLIGATOIRE : sans elle, rendreVue multiplie
+       par undefined -> NaN -> canvas 0x0 (diagnostic v606, mesuré) */
+    el.vueCorps = h('div', { 'class': 'pfcv-corps' });
+    el.vueCanvas = h('canvas', { 'aria-label': 'Page du PDF rendue' });
+    el.vueCorps.appendChild(el.vueCanvas);
+    v.appendChild(el.vueCorps);
+
+    var barre = h('div', { 'class': 'pfcv-barre' });
+    el.vuePrec = h('button', { 'class': 'pfcv-btn', type: 'button', text: '◀ Page', 'aria-label': 'Page précédente' });
+    el.vuePrec.addEventListener('click', function () { naviguerVue(-1); });
+    barre.appendChild(el.vuePrec);
+    el.vueCompte = h('span', { 'class': 'pfcv-compte', text: '– / –', 'aria-live': 'polite' });
+    barre.appendChild(el.vueCompte);
+    el.vueSuiv = h('button', { 'class': 'pfcv-btn', type: 'button', text: 'Page ▶', 'aria-label': 'Page suivante' });
+    el.vueSuiv.addEventListener('click', function () { naviguerVue(1); });
+    barre.appendChild(el.vueSuiv);
+    barre.appendChild(h('span', { text: '|' }));
+    el.vueMoins = h('button', { 'class': 'pfcv-btn', type: 'button', text: '－', 'aria-label': 'Zoom arrière' });
+    el.vueMoins.addEventListener('click', function () { changerZoom(1 / 1.25); });
+    barre.appendChild(el.vueMoins);
+    el.vueZoomLbl = h('span', { text: '100%' });
+    barre.appendChild(el.vueZoomLbl);
+    el.vuePlus = h('button', { 'class': 'pfcv-btn', type: 'button', text: '＋', 'aria-label': 'Zoom avant' });
+    el.vuePlus.addEventListener('click', function () { changerZoom(1.25); });
+    barre.appendChild(el.vuePlus);
+    barre.appendChild(h('span', { text: '|' }));
+    var recherche = h('span', { 'class': 'pfcv-recherche' });
+    el.vueRechercheInput = h('input', { type: 'search', placeholder: 'Chercher dans le texte…',
+      'aria-label': 'Chercher dans le texte du PDF' });
+    el.vueRechercheInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') chercher(el.vueRechercheInput.value);
+    });
+    recherche.appendChild(el.vueRechercheInput);
+    var btnCh = h('button', { 'class': 'pfcv-btn', type: 'button', text: '🔍' });
+    btnCh.addEventListener('click', function () { chercher(el.vueRechercheInput.value); });
+    recherche.appendChild(btnCh);
+    barre.appendChild(recherche);
+    el.vueTexte = h('button', { 'class': 'pfcv-btn', type: 'button', text: '📝 Texte', title: 'Extraire le texte en .txt' });
+    el.vueTexte.addEventListener('click', extraireTexte);
+    barre.appendChild(el.vueTexte);
+    var fermerBarre = h('button', { 'class': 'pfcv-btn', type: 'button', text: '✕ Fermer', 'aria-label': 'Fermer l’aperçu' });
+    fermerBarre.addEventListener('click', fermerVue);
+    barre.appendChild(fermerBarre);
+    v.appendChild(barre);
+
+    el.vueResultats = h('div', { 'class': 'pfcv-resultats', role: 'listbox', 'aria-label': 'Résultats de recherche' });
+    el.vueResultats.style.display = 'none';
+    v.appendChild(el.vueResultats);
+
     document.body.appendChild(v);
     el.vue = v;
+    window.addEventListener('resize', function () {
+      if (el.vue && el.vue.classList.contains('ouvert')) rendreVue();
+    });
   }
   function fermerVue() {
     if (!el.vue) return;
     el.vue.classList.remove('ouvert');
-    el.vueFrame.src = 'about:blank';
-    if (_urlVue) { try { URL.revokeObjectURL(_urlVue); } catch (e) {} _urlVue = null; }
-    var btn = document.getElementById('open-pdfcraft');
-    /* le focus retourne au bouton « Voir » du panneau (toujours ouvert dessous) */
-    try { el.voir.focus(); } catch (e) { if (btn) btn.focus(); }
+    el.vueResultats.style.display = 'none';
+    try { el.voir.focus(); } catch (e) {}
   }
-  function voirResultat() {
-    if (!pc.pages.length) { toast('Aucune page à afficher', 'info'); return; }
-    poserVue();
-    var natif = false;
-    try { natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
-    return assembler(pc.pages.map(function (_, i) { return i; })).then(function (octets) {
-      if (_urlVue) { try { URL.revokeObjectURL(_urlVue); } catch (e) {} }
-      var blob = new Blob([octets], { type: 'application/pdf' });
-      _urlVue = URL.createObjectURL(blob);
-      el.vueFrame.src = natif ? 'about:blank' : _urlVue;
-      el.vueTitre.textContent = 'Aperçu — ' + pc.pages.length + ' page(s)';
-      el.vueNote.style.display = natif ? 'block' : 'none';
-      el.vueNote.textContent = natif ? 'Sur mobile, la visionneuse intégrée est indisponible — utilisez « 💾 Enregistrer le PDF » puis ouvrez-le avec votre lecteur.' : '';
-      el.vue.classList.add('ouvert');
-      el.vueFermer.focus();
-    }).catch(function (e) { toast('Aperçu impossible : ' + e.message, 'error'); });
+  function naviguerVue(delta) {
+    var j = el.vueIdx + delta;
+    if (j < 0 || j >= pc.pages.length) return;
+    el.vueIdx = j;
+    rendreVue();
+  }
+  function changerZoom(facteur) {
+    el.vueZoom = Math.max(0.3, Math.min(5, el.vueZoom * facteur));
+    el.vueZoomLbl.textContent = Math.round(el.vueZoom * 100) + '%';
+    rendreVue();
+  }
+  var _tokenVue = 0;
+  async function rendreVue() {
+    var pg = pc.pages[el.vueIdx];
+    if (!pg) return;
+    var d = pc.docs[pg.d];
+    if (!d || !d.pjs) { el.vueCompte.textContent = (el.vueIdx + 1) + ' / ' + pc.pages.length + ' (rendu indisponible)'; return; }
+    var token = ++_tokenVue;
+    try {
+      var page = await d.pjs.getPage(pg.p + 1);
+      if (token !== _tokenVue) return;
+      /* v606 — deux rAF : garantir que le layout de l'overlay posé à l'instant
+         est calculé AVANT de lire clientWidth (sinon dispo=0 -> canvas 0x0,
+         mesuré). Repli sur la largeur du viewport (l'overlay est inset:0). */
+      await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
+      if (token !== _tokenVue) return;
+      var vp0 = page.getViewport({ scale: 1 });
+      var rotation = (vp0.rotation + pg.rot) % 360;
+      var dispo = Math.max(el.vueCorps.clientWidth, window.innerWidth) - 48;
+      var echelleAjuste = rotation % 180 === 0 ? (dispo / vp0.width) : (dispo / vp0.height);
+      var vp = page.getViewport({ scale: Math.max(0.05, echelleAjuste) * (el.vueZoom || 1), rotation: rotation });
+      var dpr = window.devicePixelRatio || 1;
+      if (!isFinite(vp.width) || vp.width < 1) {
+        el.vueCompte.textContent = 'DIAG vpW=' + vp.width + ' rot=' + rotation +
+          ' vp0W=' + vp0.width + ' vp0rot=' + vp0.rotation + ' pgrot=' + pg.rot +
+          ' ech=' + echelleAjuste + ' dispo=' + dispo + ' zoom=' + el.vueZoom;
+        return;
+      }
+      el.vueCanvas.width = Math.max(10, Math.round(vp.width * dpr));
+      el.vueCanvas.height = Math.max(10, Math.round(vp.height * dpr));
+      el.vueCanvas.style.width = Math.round(vp.width) + 'px';
+      el.vueCanvas.style.height = Math.round(vp.height) + 'px';
+      el.vueCanvas.__renduVue = true;
+      var ctx = el.vueCanvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      if (token !== _tokenVue) return;
+      el.vueCompte.textContent = (el.vueIdx + 1) + ' / ' + pc.pages.length;
+    } catch (e) {
+      el.vueCompte.textContent = 'rendu impossible : ' + (e && e.message || e);
+    }
+  }
+  /* Recherche : texte de CHAQUE page du modèle (pdf.js), résultats navigables. */
+  async function chercher(terme) {
+    terme = (terme || '').trim();
+    if (!terme) { el.vueResultats.style.display = 'none'; return; }
+    amorcerPdfJs();
+    el.vueResultats.textContent = '';
+    el.vueResultats.style.display = 'block';
+    el.vueResultats.textContent = 'Recherche…';
+    var resultats = [];
+    var termeN = terme.toLowerCase();
+    for (var i = 0; i < pc.pages.length; i++) {
+      var pg = pc.pages[i];
+      var d = pc.docs[pg.d];
+      if (!d || !d.pjs) continue;
+      try {
+        var page = await d.pjs.getPage(pg.p + 1);
+        var contenu = await page.getTextContent();
+        var texte = contenu.items.map(function (it) { return it.str; }).join(' ').replace(/\s+/g, ' ');
+        var pos = texte.toLowerCase().indexOf(termeN);
+        if (pos >= 0) {
+          var debut = Math.max(0, pos - 30);
+          resultats.push({ idx: i, extrait: texte.slice(debut, pos + terme.length + 40) });
+        }
+      } catch (e) {}
+    }
+    el.vueResultats.textContent = '';
+    if (!resultats.length) {
+      el.vueResultats.textContent = 'Aucun résultat pour « ' + terme + ' ».';
+      return;
+    }
+    resultats.forEach(function (r) {
+      var b = h('button', { type: 'button', role: 'option',
+        text: 'p.' + (r.idx + 1) + ' — …' + r.extrait + '…' });
+      b.addEventListener('click', function () {
+        el.vueIdx = r.idx;
+        el.vueResultats.style.display = 'none';
+        rendreVue();
+      });
+      el.vueResultats.appendChild(b);
+    });
   }
 
   /* ── Démarrage ── */

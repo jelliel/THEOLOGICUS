@@ -297,3 +297,17 @@ SOFTWARE.
 - Inspiration d'interface : le projet PdfCraft (https://github.com/storytold/
   pdfcraft, Rust, MIT OR Apache-2.0) — aucun code de ce projet n'est embarqué ;
   seul le nom de l'onglet s'en inspire.
+
+
+## Bibliothèque de code embarquée — pdf.js (rendu PDF, v606)
+
+- Source : https://github.com/mozilla/pdf.js (pdfjs-dist 3.11.174,
+  fichiers `build/pdf.min.js` et `build/pdf.worker.min.js`), embarqués
+  dans `THEOLOGICUS.html` (blocs `<script id="v606-pdfjs">` et
+  `<script type="text/plain" id="v606-worker-src">` — le worker est
+  instancié via blob URL, jamais exécuté comme script de page).
+- Rôle : rendu fidèle des pages (vignettes + visionneuse), extraction
+  du texte (recherche + export .txt), ouverture des PDF chiffrés
+  (mot de passe).
+- Licence : **Apache License 2.0** — Copyright 2023 Mozilla Foundation.
+  Texte complet : https://www.apache.org/licenses/LICENSE-2.0
