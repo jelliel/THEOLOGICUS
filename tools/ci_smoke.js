@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
-const MODULES_ATTENDUS = 122; // synchronisé avec verifier_assets.py (controle_modules)
+const MODULES_ATTENDUS = 123; // synchronisé avec verifier_assets.py (controle_modules)
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé
@@ -19,6 +19,7 @@ const MODULES_ATTENDUS = 122; // synchronisé avec verifier_assets.py (controle_
 const ANCRES = [
   'window.__v598Overflow',          // menu « Plus » (débordement de la bande)
   'window.callLLMStream',           // cerveau Adeodat
+  'window.sauvegardeFermeture',     // v604 backup conversations à la fermeture
   'IndexedDB',                      // stockage canonique
 ];
 

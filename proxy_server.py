@@ -34,6 +34,31 @@ _fla = {"proc": None, "external": False, "last_error": ""}
 # Répertoire servi pour les fichiers statiques (surchargeable par app.py en mode exe)
 SERVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# v604 — dossier des BACKUPS surchargeable : les bancs isolent leurs écritures
+# dans un dossier temporaire au lieu du dépôt. 🔴 FONCTION, pas une constante :
+# app.py redéfinit proxy_server.SERVE_DIR APRÈS import (mode exe) — une
+# constante calculée à l'import pointerait vers le dossier temporaire
+# PyInstaller. Par défaut : SERVE_DIR/backups (inchangé en production).
+def _backups_dir():
+    return os.environ.get('THEO_BACKUPS_DIR') or os.path.join(SERVE_DIR, 'backups')
+
+def purger_backups_conversations(backup_dir, garder=30):
+    """v604 — ne garde que les `garder` plus récents des backups AUTOMATIQUES
+    de conversations (THEOLOGICUS-conversations-*.json, écrits à chaque
+    fermeture). Les exports manuels (autres noms de fichiers) ne sont jamais
+    touchés. Retourne le nombre de fichiers supprimés."""
+    import glob
+    motif = os.path.join(backup_dir, 'THEOLOGICUS-conversations-*.json')
+    fichiers = sorted(glob.glob(motif), key=os.path.getmtime, reverse=True)
+    supprimes = 0
+    for f in fichiers[garder:]:
+        try:
+            os.remove(f)
+            supprimes += 1
+        except OSError:
+            pass
+    return supprimes
+
 # v147d — POT À COOKIES du relais /proxy/. Les sites servis en mode lecteur
 # n'ont aucun contexte navigateur : sans jar, chaque requête arrive sans
 # session ni consentement et beaucoup répondent « cookies are disabled »,
@@ -2561,13 +2586,19 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             data = base64.b64decode(req.get('data64') or b'')
             if not data:
                 raise ValueError('contenu vide')
-            backup_dir = os.path.join(SERVE_DIR, 'backups')
+            backup_dir = _backups_dir()  # v604 — surchargeable (bancs)
             os.makedirs(backup_dir, exist_ok=True)
             out_path = os.path.join(backup_dir, filename)
             tmp_path = out_path + '.tmp'
             with open(tmp_path, 'wb') as f:
                 f.write(data)
             os.replace(tmp_path, out_path)  # écriture atomique
+            # v604 — purge des backups automatiques de conversations (garder 30)
+            if filename.startswith('THEOLOGICUS-conversations-'):
+                try:
+                    purger_backups_conversations(backup_dir, garder=30)
+                except Exception:
+                    pass
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -2590,7 +2621,7 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         pouvoir MONTRER ce dossier, sinon l'utilisateur cherche un fichier qui
         n'est jamais arrivé dans « Téléchargements ».
         """
-        dossier = os.path.join(SERVE_DIR, 'backups')
+        dossier = _backups_dir()  # v604 — surchargeable (bancs)
         try:
             os.makedirs(dossier, exist_ok=True)
             # « ?dry=1 » : on ne fait que RÉPONDRE (pas d'ouverture de fenêtre).
