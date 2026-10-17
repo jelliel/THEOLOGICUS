@@ -58,27 +58,40 @@ for (const b of tranche) {
   const rel = path.relative(ROOT, b);
   console.log(`───── ${rel}`);
   const t0 = Date.now();
+  const lancerBanc = () => spawnSync(process.execPath, [b], {
+    cwd: ROOT,
+    env: { ...process.env, PY_BIN: process.env.PY_BIN || 'python3' },
+    timeout: PER_BENCH_TIMEOUT * 1000,
+    encoding: 'utf8',
+  });
   let r;
   try {
-    r = spawnSync(process.execPath, [b], {
-      cwd: ROOT,
-      env: { ...process.env, PY_BIN: process.env.PY_BIN || 'python3' },
-      timeout: PER_BENCH_TIMEOUT * 1000,
-      encoding: 'utf8',
-    });
+    r = lancerBanc();
   } catch (e) {
     echecs++;
     console.error(`  ERREUR D'EXÉCUTION — ${e.message}`);
     lignes.push(`### ERREUR D'EXÉCUTION — ${rel}\n\`\`\`\n${e.message}\n\`\`\``);
     continue;
   }
+  /* v604 — RELANCE UNIQUE sur échec rapide : les bancs minutés (traces IDB en
+     millisecondes, comptages de pagination) peuvent trébucher sous la charge
+     des 5 shards PARALLÈLES — échecs qui BOUGENT d'un banc à l'autre d'un run
+     à l'autre (v440 puis v537_instrumente, mesuré). Un banc flaky a droit à
+     une SECONDE chance ; une vraie régression échoue DEUX fois et bloque.
+     Les dépassements de délai ne sont PAS relancés (2 × 300 s = trop long). */
+  let relance = false;
+  if (r.status !== 0 && r.status !== 77 && r.signal !== 'SIGTERM' && r.status !== null) {
+    relance = true;
+    console.log('  relance unique (flaky probable sous charge parallèle)…');
+    try { r = lancerBanc(); } catch (e) { /* on garde le premier résultat */ }
+  }
   const s = ((Date.now() - t0) / 1000).toFixed(0);
   const code = r.status; // null si tué par timeout (SIGTERM → status null, signal 'SIGTERM')
   const last = (r.stdout || '').trim().split('\n').pop() || '(sans sortie)';
   if (code === 0) {
     ok++;
-    console.log(`  OK (${s}s) — ${last}`);
-    lignes.push(`### OK — ${rel}`);
+    console.log(`  OK (${s}s)${relance ? ' — flaky, passé à la relance' : ''} — ${last}`);
+    lignes.push(`### OK${relance ? ' (flaky — passé à la relance)' : ''} — ${rel}`);
   } else if (code === 77) {
     ignores++;
     console.log(`  IGNORÉ (prérequis absent) — ${last}`);
@@ -86,7 +99,11 @@ for (const b of tranche) {
   } else if (r.signal === 'SIGTERM' || code === null) {
     echecs++;
     console.error(`  DÉPASSEMENT DE DÉLAI (${PER_BENCH_TIMEOUT} s) — banc bloqué`);
-    lignes.push(`### DÉPASSEMENT DE DÉLAI (${PER_BENCH_TIMEOUT} s) — ${rel}`);
+    /* v604 — sur timeout aussi, imprimer la fin du stdout : sans elle, on ne
+       sait PAS où le banc pendait (section sans sortie). */
+    const outT = (r.stdout || '').trim().split('\n').slice(-15).join('\n');
+    if (outT) console.error('    ── 15 dernières lignes du banc :\n' + outT.split('\n').map(l => '    ' + l).join('\n'));
+    lignes.push(`### DÉPASSEMENT DE DÉLAI (${PER_BENCH_TIMEOUT} s) — ${rel}\n\`\`\`\n${outT}\n\`\`\``);
   } else {
     echecs++;
     const err = (r.stderr || '').trim().split('\n').slice(-10).join('\n');
