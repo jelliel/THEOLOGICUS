@@ -149,7 +149,7 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
   /* ── 6. Enregistrer — le PDF serveur est relu et vérifié ── */
   section("6. Enregistrer — le PDF résultat est relu et vérifié");
   const avantSet = new Set(fichiersPdfCraft());
-  await page.click("#pdfcraft-panel .pfc-btn.pfc-primaire");
+  await page.click("#pfc-enregistrer");
   let nomPdf = null, octets = null;
   for (let i = 0; i < 20; i++) {
     const nouveau = fichiersPdfCraft().find(f => !avantSet.has(f));
@@ -175,7 +175,7 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
     c[0].dispatchEvent(new Event("change", { bubbles: true }));
   });
   const avant2Set = new Set(fichiersPdfCraft());
-  await page.click("#pdfcraft-panel .pfc-btn:nth-child(2)"); /* ✂ Extraire la sélection */
+  await page.click("#pfc-extraire"); /* ✂ Extraire la sélection */
   let nomExtrait = null, octetsExtrait = null;
   for (let i = 0; i < 20; i++) {
     const nouveau = fichiersPdfCraft().find(f => !avant2Set.has(f));
@@ -194,6 +194,39 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
     ok("l'extrait contient EXACTEMENT la sélection (1 page)", verif2.pages === 1, verif2.pages + " page(s)");
   }
 
+  /* ── 7b. VISIONNEUSE — « 👁 Voir » assemble et affiche ; Escape la ferme sans fermer le panneau ── */
+  section("7b. Visionneuse — aperçu du modèle courant en plein écran");
+  await page.click("#pfc-voir"); /* 👁 Voir */
+  await page.waitForTimeout(600);
+  const vue = await page.evaluate(() => {
+    const v = document.getElementById("pdfcraft-vue");
+    const f = document.getElementById("pdfcraft-vue iframe") || v.querySelector("iframe");
+    return {
+      ouvert: !!(v && v.classList.contains("ouvert")),
+      role: v ? v.getAttribute("role") : "",
+      src: f ? String(f.src).slice(0, 30) : "",
+      titre: v ? v.querySelector(".pfcv-titre").textContent : "",
+      panelEncoreOuvert: document.getElementById("pdfcraft-panel").classList.contains("ouvert"),
+      focusVue: v ? v.contains(document.activeElement) : false,
+    };
+  });
+  ok("la visionneuse est OUVERTE en plein écran", vue.ouvert && vue.role === "dialog", vue.role);
+  ok("l'iframe pointe un blob: local (PDFium natif, hors-ligne)", vue.src.startsWith("blob:"), vue.src);
+  ok("le titre annonce les 3 pages du modèle", /3 page\(s\)/.test(vue.titre), vue.titre);
+  ok("le panneau reste OUVERT dessous", vue.panelEncoreOuvert, "");
+  ok("le focus est dans la visionneuse", vue.focusVue, "");
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  const vueFermee = await page.evaluate(() => ({
+    vueFermee: !document.getElementById("pdfcraft-vue").classList.contains("ouvert"),
+    panelEncoreOuvert: document.getElementById("pdfcraft-panel").classList.contains("ouvert"),
+    focusVoir: document.activeElement === document.getElementById("pfc-voir"),
+  }));
+  ok("Escape ferme la VISIONNEUSE", vueFermee.vueFermee, "");
+  ok("le panneau reste ouvert après l'aperçu", vueFermee.panelEncoreOuvert, "");
+  ok("le focus retourne au bouton « Voir »", vueFermee.focusVoir, "");
+
   /* ── 8. CONTRÔLE NÉGATIF — panneau à vide (rechargé), pas d'enregistrement ── */
   section("8. Contrôle négatif — panneau à vide : Enregistrer désactivé");
   await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
@@ -205,8 +238,8 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
   await page.click("#open-pdfcraft");
   await page.waitForTimeout(250);
   const neg = await page.evaluate(() => ({
-    disabled: document.querySelector("#pdfcraft-panel .pfc-btn.pfc-primaire").disabled,
-    extrait: document.querySelector("#pdfcraft-panel .pfc-outils .pfc-btn:nth-child(2)").disabled,
+    disabled: document.getElementById("pfc-enregistrer").disabled,
+    extrait: document.getElementById("pfc-voir").disabled,
     statut: document.querySelector("#pdfcraft-panel .pfc-statut").textContent,
   }));
   ok("à vide, Enregistrer est désactivé (garde anti-fichier vide)", neg.disabled, neg.statut);

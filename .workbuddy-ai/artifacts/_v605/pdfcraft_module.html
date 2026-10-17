@@ -51,6 +51,20 @@
   border-top:1px solid var(--wire,rgba(79,142,247,.15)); flex:0 0 auto; }
 #pdfcraft-panel .pfc-vide{ padding:22px 16px; font-size:12px; color:var(--text-dim,#8fa3b8); text-align:center; line-height:1.7; }
 #open-pdfcraft{ padding-left:5px; padding-right:5px; font-size:14px; letter-spacing:0; }
+#pdfcraft-vue{
+  position:fixed; inset:0; z-index:var(--z-modal-lg,2000);
+  display:none; flex-direction:column;
+  background:var(--bg-void,#0a0e17);
+}
+#pdfcraft-vue.ouvert{ display:flex; }
+#pdfcraft-vue .pfcv-tete{
+  display:flex; align-items:center; gap:10px; padding:8px 14px; flex:0 0 auto;
+  background:var(--bg-hull,#0d1626); color:var(--text,#d5e2f3);
+  border-bottom:1px solid var(--wire,rgba(79,142,247,.2));
+}
+#pdfcraft-vue .pfcv-titre{ flex:1; font-size:13px; font-weight:600; }
+#pdfcraft-vue iframe{ flex:1 1 auto; border:none; background:#ffffff; }
+#pdfcraft-vue .pfcv-note{ padding:6px 14px; font-size:11px; color:var(--text-dim,#8fa3b8); }
 @media (prefers-reduced-motion: reduce){
   #pdfcraft-panel{ transition:none; }
 }
@@ -127,10 +141,13 @@
     var ouvrir = h('button', { 'class': 'pfc-btn', type: 'button', text: '📂 Ouvrir des PDF' });
     ouvrir.addEventListener('click', function () { el.fichier.click(); });
     outils.appendChild(ouvrir);
-    el.extraire = h('button', { 'class': 'pfc-btn', type: 'button', text: '✂ Extraire la sélection' });
+    el.voir = h('button', { 'class': 'pfc-btn', id: 'pfc-voir', type: 'button', text: '👁 Voir' });
+    el.voir.addEventListener('click', voirResultat);
+    outils.appendChild(el.voir);
+    el.extraire = h('button', { 'class': 'pfc-btn', id: 'pfc-extraire', type: 'button', text: '✂ Extraire la sélection' });
     el.extraire.addEventListener('click', extraireSelection);
     outils.appendChild(el.extraire);
-    el.enregistrer = h('button', { 'class': 'pfc-btn pfc-primaire', type: 'button', text: '💾 Enregistrer le PDF' });
+    el.enregistrer = h('button', { 'class': 'pfc-btn pfc-primaire', id: 'pfc-enregistrer', type: 'button', text: '💾 Enregistrer le PDF' });
     el.enregistrer.addEventListener('click', enregistrer);
     outils.appendChild(el.enregistrer);
     p.appendChild(el.fichier);
@@ -144,7 +161,11 @@
     document.body.appendChild(p);
     el.panneau = p;
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && el.panneau.classList.contains('ouvert')) fermer();
+      if (e.key !== 'Escape') return;
+      /* v605c — la VISIONNEUSE passe avant : Escape la ferme SANS fermer le
+         panneau resté ouvert dessous. */
+      if (el.vue && el.vue.classList.contains('ouvert')) { fermerVue(); return; }
+      if (el.panneau.classList.contains('ouvert')) fermer();
     });
   }
 
@@ -230,6 +251,7 @@
     el.statut.textContent = pc.docs.length + ' document(s) · ' + pc.pages.length + ' page(s)' +
       (cochees ? ' · ' + cochees + ' sélectionnée(s)' : '');
     el.enregistrer.disabled = !pc.pages.length;
+    el.voir.disabled = !pc.pages.length;
     el.extraire.disabled = !cochees;
   }
   document.addEventListener('change', function (e) {
@@ -324,6 +346,57 @@
     a.href = url; a.download = nom; a.click();
     setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     toast('PDF téléchargé : ' + nom, 'success');
+  }
+
+  /* ── Visionneuse : rendu natif Chromium (PDFium) via iframe blob — hors-ligne. ──
+     Sur Android WebView, les PDF ne se rendent PAS en iframe (limite connue) :
+     la note l'annonce et l'enregistrement reste la voie sur mobile. */
+  var _urlVue = null;
+  function poserVue() {
+    if (document.getElementById('pdfcraft-vue')) return;
+    var v = h('div', { id: 'pdfcraft-vue', role: 'dialog', 'aria-modal': 'true',
+                       'aria-label': 'Aperçu du PDF' });
+    var tete = h('div', { 'class': 'pfcv-tete' });
+    el.vueTitre = h('span', { 'class': 'pfcv-titre', text: 'Aperçu' });
+    tete.appendChild(el.vueTitre);
+    el.vueFermer = h('button', { 'class': 'pfc-fermer', type: 'button', 'aria-label': 'Fermer l’aperçu' });
+    el.vueFermer.textContent = '✕';
+    el.vueFermer.addEventListener('click', fermerVue);
+    tete.appendChild(el.vueFermer);
+    v.appendChild(tete);
+    el.vueFrame = h('iframe', { title: 'Aperçu du PDF' });
+    v.appendChild(el.vueFrame);
+    el.vueNote = h('div', { 'class': 'pfcv-note', text: '' });
+    el.vueNote.style.display = 'none';
+    v.appendChild(el.vueNote);
+    document.body.appendChild(v);
+    el.vue = v;
+  }
+  function fermerVue() {
+    if (!el.vue) return;
+    el.vue.classList.remove('ouvert');
+    el.vueFrame.src = 'about:blank';
+    if (_urlVue) { try { URL.revokeObjectURL(_urlVue); } catch (e) {} _urlVue = null; }
+    var btn = document.getElementById('open-pdfcraft');
+    /* le focus retourne au bouton « Voir » du panneau (toujours ouvert dessous) */
+    try { el.voir.focus(); } catch (e) { if (btn) btn.focus(); }
+  }
+  function voirResultat() {
+    if (!pc.pages.length) { toast('Aucune page à afficher', 'info'); return; }
+    poserVue();
+    var natif = false;
+    try { natif = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) {}
+    return assembler(pc.pages.map(function (_, i) { return i; })).then(function (octets) {
+      if (_urlVue) { try { URL.revokeObjectURL(_urlVue); } catch (e) {} }
+      var blob = new Blob([octets], { type: 'application/pdf' });
+      _urlVue = URL.createObjectURL(blob);
+      el.vueFrame.src = natif ? 'about:blank' : _urlVue;
+      el.vueTitre.textContent = 'Aperçu — ' + pc.pages.length + ' page(s)';
+      el.vueNote.style.display = natif ? 'block' : 'none';
+      el.vueNote.textContent = natif ? 'Sur mobile, la visionneuse intégrée est indisponible — utilisez « 💾 Enregistrer le PDF » puis ouvrez-le avec votre lecteur.' : '';
+      el.vue.classList.add('ouvert');
+      el.vueFermer.focus();
+    }).catch(function (e) { toast('Aperçu impossible : ' + e.message, 'error'); });
   }
 
   /* ── Démarrage ── */
