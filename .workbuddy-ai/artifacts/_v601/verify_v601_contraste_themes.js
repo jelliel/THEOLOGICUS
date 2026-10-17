@@ -28,11 +28,12 @@ function ok(label, cond, detail) {
   console.log((cond ? "  [OK]   " : "  [ECHEC]") + " " + label + (detail ? " — " + detail : ""));
 }
 
-/* Baseline pré-tokenisation (c23ecb8), MESURÉE avec la composition corrigée
-   (texte translucide composé sur son fond effectif — la première mesure, qui
-   composait sur du blanc, sous-comptait les thèmes sombres : watermark non vu).
-   Mesurée le 2026-10-17, vue post-connexion. Les coupables (watermark ×6,
-   tooltips cachés, badge v8-ring, archive-item-title…) sont PRÉ-EXISTANTS. */
+/* Baselines mesurées avec la composition corrigée (texte translucide composé
+   sur son fond effectif). Les 7 thèmes d'ORIGINE : mesurées sur l'état
+   pré-tokenisation (c23ecb8) le 2026-10-17 — l'état tokenisé mesure identique.
+   Les 3 thèmes v602 (parchemin/vitral/manuscrit) : mesurés à la création ;
+   leurs coupables sont les mêmes défauts PRÉ-EXISTANTS que les thèmes
+   apparentés (watermark, tooltips cachés, badge v8-ring, mem-tab). */
 const THEMES = [
   { nom: "glass",     max: 7,  accent: "#4f8ef7" },
   { nom: "cyber",     max: 7,  accent: "#4f8ef7" },
@@ -41,6 +42,9 @@ const THEMES = [
   { nom: "v6-light",  max: 14, accent: "#185fa5" },
   { nom: "v6-glass",  max: 7,  accent: "#00e5ff" },
   { nom: "v6-cyber",  max: 7,  accent: "#ff2d95" },
+  { nom: "parchemin", max: 13, accent: "#8a6d3b" },
+  { nom: "vitral",    max: 7,  accent: "#e5c15a" },
+  { nom: "manuscrit", max: 7,  accent: "#c9a227" },
 ];
 
 /* Retourne la liste triée des textes visibles sous 3:1 (méthode v596 généralisée). */
@@ -134,6 +138,28 @@ const OFFENDERS = () => {
     ok("thème " + t.nom + " : --accent = " + t.accent, val === t.accent, val);
   }
 
+  /* ── 2b. Chemin UI RÉEL : les 3 habillages v602 sont sélectionnables ── */
+  section("2b. Chemin UI réel — parchemin sélectionnable dans #theme-select");
+  const optPresente = await page.evaluate(() => {
+    const s = document.getElementById("theme-select");
+    if (!s) return { err: "select absent" };
+    return { valeurs: Array.prototype.map.call(s.options, o => o.value) };
+  });
+  ok("les 3 options v602 existent dans le select",
+     (optPresente.valeurs || []).includes("parchemin") &&
+     (optPresente.valeurs || []).includes("vitral") &&
+     (optPresente.valeurs || []).includes("manuscrit"),
+     (optPresente.valeurs || []).join(","));
+  await page.selectOption("#theme-select", "parchemin");
+  await page.waitForTimeout(400);
+  const applique = await page.evaluate(() => ({
+    theme: document.documentElement.dataset.theme,
+    accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(),
+  }));
+  ok("sélectionner PARCHEMIN dans le select applique le thème (chemin UI + persistance)",
+     applique.theme === "parchemin" && applique.accent === "#8a6d3b",
+     JSON.stringify(applique));
+
   /* ── 3. CONTRÔLE NÉGATIF : la mesure détecte un thème rendu illisible ── */
   section("3. Contrôle négatif — forcer TOUT le texte transparent doit faire exploser le compte");
   await page.evaluate(th => { document.documentElement.dataset.theme = th; }, "glass");
@@ -156,7 +182,7 @@ const OFFENDERS = () => {
 
   /* ── 4. Propreté ── */
   section("4. Propreté");
-  ok("aucune erreur JavaScript pendant les 7 changements de thème", bruit.length === 0,
+  ok("aucune erreur JavaScript pendant les 10 changements de thème", bruit.length === 0,
      bruit.slice(0, 2).join(" | "));
 
   await browser.close();

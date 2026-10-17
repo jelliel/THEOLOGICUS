@@ -1,0 +1,160 @@
+<style id="v602-themes-pvm-css">
+/* ═══ v602 — Trois habillages : PARCHEMIN (clair chaud), VITRAL (bleu profond
+   + or), MANUSCRIT (sépia sombre). Schéma v33/v34 : tokens racine + tokens
+   coque (leçon v132 : .tpai-shell masque l'héritage) + body + surcharges
+   !important des composants à couleurs codées. --accent et --accent-rgb
+   voyagent TOUJOURS ensemble (leçon v601 : sinon texte du thème sur teintes
+   restées par défaut). ═══ */
+
+/* ---- PARCHEMIN : crème #f4ecdc, encre #3b2f22, accent noyer #8a6d3b ---- */
+html[data-theme="parchemin"]{
+  --bg-void:#f4ecdc; --bg-deep:#efe4cf; --bg-hull:#fffdf7; --bg-plate:#f8f2e5;
+  --accent:#8a6d3b; --accent-rgb:138,109,59; --accent-soft:rgba(138,109,59,0.14);
+  --accent-dim:rgba(138,109,59,0.12); --accent-light:#b08b4f; --neon:#8a6d3b;
+  --text:#3b2f22; --text-bright:#2a2118; --text-dim:#6f6249; --text-code:#8a6d3b;
+  --cyan:#8a6d3b; --cyan-dim:rgba(138,109,59,0.12); --cyan-glow:rgba(138,109,59,0.30);
+  --border-cyan:1px solid rgba(138,109,59,0.35);
+  --hull:#fffdf7; --bg-card:#fffdf7; --bg-card-alt:rgba(74,53,32,0.05);
+  --glass-bg:rgba(255,253,247,0.80); --glass-border:rgba(74,53,32,0.16);
+  --hud-border:1px solid rgba(74,53,32,0.16); --border:1px solid rgba(74,53,32,0.16);
+  --text-primary:#2a2118; --text-secondary:#5a4326;
+  --wire:rgba(74,53,32,0.16); --ok:#4a7c3f; --danger:#b03a2e;
+  --gold:#9a7b1e; --success:#4a7c3f;
+  --chat-user:rgba(138,109,59,0.12); --chat-assistant:#fffdf7;
+  --deep:#efe4cf; color-scheme:light;
+}
+html[data-theme="parchemin"] .tpai-shell{
+  --bg-void:#f4ecdc; --bg-deep:#efe4cf; --bg-hull:#fffdf7; --bg-plate:#f8f2e5;
+  --accent:#8a6d3b; --accent-rgb:138,109,59; --accent-soft:rgba(138,109,59,0.14);
+  --accent-dim:rgba(138,109,59,0.12); --neon:#8a6d3b;
+  --text:#3b2f22; --text-bright:#2a2118; --text-dim:#6f6249;
+  --text-primary:#2a2118; --text-secondary:#5a4326; --text-code:#8a6d3b;
+  --cyan:#8a6d3b; --cyan-dim:rgba(138,109,59,0.12); --cyan-glow:rgba(138,109,59,0.30);
+  --border-cyan:1px solid rgba(138,109,59,0.35);
+  --hull:#fffdf7; --bg-card:#fffdf7; --bg-card-alt:rgba(74,53,32,0.05);
+  --glass-bg:rgba(255,253,247,0.80); --glass-border:rgba(74,53,32,0.16);
+  --hud-border:1px solid rgba(74,53,32,0.16); --border:1px solid rgba(74,53,32,0.16);
+  --wire:rgba(74,53,32,0.16); --ok:#4a7c3f; --danger:#b03a2e;
+  background: linear-gradient(180deg,#f8f2e5 0%,#f4ecdc 100%) !important;
+}
+html[data-theme="parchemin"] body{ background:#f4ecdc !important; color:#3b2f22 !important; }
+html[data-theme="parchemin"] #input-area{
+  background:#fffdf7 !important; border-top:1px solid rgba(74,53,32,0.16) !important;
+  box-shadow:0 -1px 0 rgba(74,53,32,0.06) !important;
+}
+html[data-theme="parchemin"] .v12-sug{
+  background:#fffdf7 !important; border-color:rgba(74,53,32,0.18) !important; color:#3b2f22 !important;
+}
+html[data-theme="parchemin"] .v12-sug small{ color:#8a7a63 !important; }
+html[data-theme="parchemin"] .v12-sug:hover{ background:rgba(138,109,59,0.08) !important; border-color:rgba(138,109,59,0.5) !important; }
+html[data-theme="parchemin"] .status-pill{ background:#fffdf7 !important; border-color:rgba(74,53,32,0.18) !important; color:#8a7a63 !important; }
+html[data-theme="parchemin"] .status-pill.active{ background:rgba(138,109,59,0.10) !important; border-color:rgba(138,109,59,0.4) !important; color:#8a6d3b !important; }
+html[data-theme="parchemin"] .archive-fav-btn,
+html[data-theme="parchemin"] .archive-item-rename,
+html[data-theme="parchemin"] .archive-item-export,
+html[data-theme="parchemin"] .archive-item-del{
+  background:#fffdf7 !important; border-color:rgba(74,53,32,0.18) !important; color:#5a4326 !important;
+}
+html[data-theme="parchemin"] .archive-item-del{ color:#b03a2e !important; border-color:rgba(176,58,46,0.4) !important; }
+html[data-theme="parchemin"] .archive-item-del:hover{ background:rgba(176,58,46,0.12) !important; }
+html[data-theme="parchemin"] .modal-overlay{ background:rgba(50,35,20,0.38) !important; }
+html[data-theme="parchemin"] .modal-box{ background:#fffdf7 !important; border-color:rgba(74,53,32,0.18) !important; box-shadow:0 30px 80px rgba(50,35,20,0.28) !important; }
+html[data-theme="parchemin"] #v6-palette{ background:rgba(255,253,247,0.98) !important; border-color:rgba(74,53,32,0.20) !important; box-shadow:0 30px 80px rgba(50,35,20,0.25) !important; }
+html[data-theme="parchemin"] #v6-palette input{ border-bottom-color:rgba(74,53,32,0.20) !important; color:#3b2f22 !important; }
+html[data-theme="parchemin"] .v6-pitem:hover{ background:rgba(74,53,32,0.06) !important; }
+html[data-theme="parchemin"] .message{ border-color:rgba(74,53,32,0.12) !important; }
+html[data-theme="parchemin"] .message.user{ background:rgba(138,109,59,0.12) !important; }
+html[data-theme="parchemin"] .message.assistant{ background:#fffdf7 !important; }
+html[data-theme="parchemin"] ::-webkit-scrollbar-thumb{ background:rgba(74,53,32,0.28) !important; }
+/* v602b — boutons a fond translucide : composite PALE sur creme -> texte sombre (schema v131/v33). */
+html[data-theme="parchemin"] #tpai-arch-new#tpai-arch-new,
+html[data-theme="parchemin"] #wizard-step2-next#wizard-step2-next{ color:#3b2f22 !important; }
+html[data-theme="parchemin"] .message.user .msg-label{ color:rgba(74,53,32,0.85); }
+
+/* ---- VITRAL : bleu profond #0d1626, lumière #d5e2f3, accent or #e5c15a ---- */
+html[data-theme="vitral"]{
+  --bg-void:#0d1626; --bg-deep:#0f1a2e; --bg-hull:#14213a; --bg-plate:#1b2c4a;
+  --accent:#e5c15a; --accent-rgb:229,193,90; --accent-soft:rgba(229,193,90,0.14);
+  --accent-dim:rgba(229,193,90,0.12); --accent-light:#f0d488; --neon:#e5c15a;
+  --text:#d5e2f3; --text-bright:#eef4fb; --text-dim:#8fa3b8; --text-code:#e5c15a;
+  --cyan:#85b7eb; --cyan-dim:rgba(133,183,235,0.12); --cyan-glow:rgba(229,193,90,0.38);
+  --border-cyan:1px solid rgba(229,193,90,0.35);
+  --hull:#14213a; --bg-card:#14213a; --bg-card-alt:rgba(229,193,90,0.06);
+  --glass-bg:rgba(20,33,58,0.66); --glass-border:rgba(229,193,90,0.20);
+  --hud-border:1px solid rgba(229,193,90,0.20); --border:1px solid rgba(229,193,90,0.20);
+  --text-primary:#eef4fb; --text-secondary:#b8c9e0;
+  --wire:rgba(229,193,90,0.20); --ok:#34c759; --danger:#ff453a;
+  --gold:#ffd166; --plasma:#ff8a4c; --violet:#a78bfa; --success:#34c759;
+  --chat-user:rgba(229,193,90,0.10); --chat-assistant:#0f1a2e;
+  --deep:#0f1a2e; color-scheme:dark;
+}
+html[data-theme="vitral"] .tpai-shell{
+  --bg-void:#0d1626; --bg-deep:#0f1a2e; --bg-hull:#14213a; --bg-plate:#1b2c4a;
+  --accent:#e5c15a; --accent-rgb:229,193,90; --accent-soft:rgba(229,193,90,0.14);
+  --accent-dim:rgba(229,193,90,0.12); --neon:#e5c15a;
+  --text:#d5e2f3; --text-bright:#eef4fb; --text-dim:#8fa3b8;
+  --text-primary:#eef4fb; --text-secondary:#b8c9e0; --text-code:#e5c15a;
+  --cyan:#85b7eb; --cyan-dim:rgba(133,183,235,0.12); --cyan-glow:rgba(229,193,90,0.38);
+  --border-cyan:1px solid rgba(229,193,90,0.35);
+  --hull:#14213a; --bg-card:#14213a; --bg-card-alt:rgba(229,193,90,0.06);
+  --glass-bg:rgba(20,33,58,0.66); --glass-border:rgba(229,193,90,0.20);
+  --hud-border:1px solid rgba(229,193,90,0.20); --border:1px solid rgba(229,193,90,0.20);
+  --wire:rgba(229,193,90,0.20);
+  background: linear-gradient(180deg,#0f1a2e 0%,#0d1626 100%) !important;
+}
+html[data-theme="vitral"] body{ background:#0d1626 !important; color:#d5e2f3 !important; }
+
+/* ---- MANUSCRIT : sépia sombre #1c1710, parchemin #e8ddc8, accent or #c9a227 ---- */
+html[data-theme="manuscrit"]{
+  --bg-void:#1c1710; --bg-deep:#221c14; --bg-hull:#2b241a; --bg-plate:#362d1f;
+  --accent:#c9a227; --accent-rgb:201,162,39; --accent-soft:rgba(201,162,39,0.14);
+  --accent-dim:rgba(201,162,39,0.12); --accent-light:#dfb945; --neon:#c9a227;
+  --text:#e8ddc8; --text-bright:#f5ecd8; --text-dim:#a3947a; --text-code:#c9a227;
+  --cyan:#c9a227; --cyan-dim:rgba(201,162,39,0.12); --cyan-glow:rgba(201,162,39,0.40);
+  --border-cyan:1px solid rgba(201,162,39,0.35);
+  --hull:#2b241a; --bg-card:#2b241a; --bg-card-alt:rgba(201,162,39,0.06);
+  --glass-bg:rgba(43,36,26,0.68); --glass-border:rgba(201,162,39,0.20);
+  --hud-border:1px solid rgba(201,162,39,0.20); --border:1px solid rgba(201,162,39,0.20);
+  --text-primary:#f5ecd8; --text-secondary:#c9b48a;
+  --wire:rgba(201,162,39,0.20); --ok:#6b8e4e; --danger:#e08a76;
+  --gold:#ffd166; --plasma:#d07845; --violet:#a78bfa; --success:#6b8e4e;
+  --chat-user:rgba(201,162,39,0.10); --chat-assistant:#221c14;
+  --deep:#221c14; color-scheme:dark;
+}
+html[data-theme="manuscrit"] .tpai-shell{
+  --bg-void:#1c1710; --bg-deep:#221c14; --bg-hull:#2b241a; --bg-plate:#362d1f;
+  --accent:#c9a227; --accent-rgb:201,162,39; --accent-soft:rgba(201,162,39,0.14);
+  --accent-dim:rgba(201,162,39,0.12); --neon:#c9a227;
+  --text:#e8ddc8; --text-bright:#f5ecd8; --text-dim:#a3947a;
+  --text-primary:#f5ecd8; --text-secondary:#c9b48a; --text-code:#c9a227;
+  --cyan:#c9a227; --cyan-dim:rgba(201,162,39,0.12); --cyan-glow:rgba(201,162,39,0.40);
+  --border-cyan:1px solid rgba(201,162,39,0.35);
+  --hull:#2b241a; --bg-card:#2b241a; --bg-card-alt:rgba(201,162,39,0.06);
+  --glass-bg:rgba(43,36,26,0.68); --glass-border:rgba(201,162,39,0.20);
+  --hud-border:1px solid rgba(201,162,39,0.20); --border:1px solid rgba(201,162,39,0.20);
+  --wire:rgba(201,162,39,0.20);
+  background: linear-gradient(180deg,#221c14 0%,#1c1710 100%) !important;
+}
+html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 !important; }
+</style>
+<script id="v602-themes-pvm-js">
+/* v602 — ajoute les trois habillages aux selects de theme (desktop + mobile).
+   Pas de whitelist : le handler existant (dataset.theme + db) suffit,
+   exactement comme v34. */
+(function(){
+  function addOpt(selId, val, label){
+    var s = document.getElementById(selId); if(!s) return;
+    for(var i=0;i<s.options.length;i++){ if(s.options[i].value===val) return; }
+    var o = document.createElement('option'); o.value=val; o.textContent=label;
+    var custom=null;
+    for(var j=0;j<s.options.length;j++){ if(s.options[j].value==='custom'){ custom=s.options[j]; break; } }
+    if(custom) s.insertBefore(o, custom); else s.appendChild(o);
+  }
+  addOpt('theme-select','parchemin','◈ PARCHEMIN');
+  addOpt('theme-select','vitral','◈ VITRAL');
+  addOpt('theme-select','manuscrit','◈ MANUSCRIT');
+  addOpt('theme-select-mob','parchemin','◈ PARCHEMIN');
+  addOpt('theme-select-mob','vitral','◈ VITRAL');
+  addOpt('theme-select-mob','manuscrit','◈ MANUSCRIT');
+})();
+</script>

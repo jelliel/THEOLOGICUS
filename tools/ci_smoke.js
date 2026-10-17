@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
-const MODULES_ATTENDUS = 121; // synchronisé avec verifier_assets.py (controle_modules)
+const MODULES_ATTENDUS = 122; // synchronisé avec verifier_assets.py (controle_modules)
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé
@@ -57,13 +57,16 @@ for (const a of ANCRES) {
 }
 
 // Sanity minimale CRLF (un fichier en LF pur casse le hot-deploy Windows).
-const lfSeul = (html.match(/\r\n/g) || []).length;
+// 🔴 Détecter les DEUX dérives : CR solitaires ET LF solitaires (une lecture
+// Python en mode texte convertit tout en LF — attrapé par verifier_assets,
+// pas par la première version de cette fumée, v602).
+const lfSeul = (html.match(/(?<!\r)\n/g) || []).length;
 const crSeul = (html.match(/\r(?!\n)/g) || []).length;
-if (crSeul > 0) {
-  console.error(`SMOKE ÉCHEC : ${crSeul} CR solitaires (pas CRLF) — normalisation requise.`);
+if (crSeul > 0 || lfSeul > 0) {
+  console.error(`SMOKE ÉCHEC : fins de ligne mixtes — ${lfSeul} LF solitaires, ${crSeul} CR solitaires (CRLF requis partout).`);
   ok = false;
 } else {
-  console.log(`SMOKE OK : CRLF cohérent (${lfSeul} fins de ligne).`);
+  console.log(`SMOKE OK : CRLF cohérent (${lfSeul === 0 ? (html.match(/\r\n/g) || []).length : '?'} fins de ligne).`);
 }
 
 if (!ok) {
