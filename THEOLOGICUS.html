@@ -12456,7 +12456,9 @@ async function throwApiError(res, model) {
     const text = await res.text();
     try {
       const j = JSON.parse(text);
-      serverMsg = (j && (j.error?.message || j.message)) || (typeof j?.error === 'string' ? j.error : '');
+      // v603 — « {"details":"Invalid API Key"} » (Mistral) n'a ni error.message ni message :
+      // le corps brut partait tel quel dans la conversation.
+      serverMsg = (j && (j.error?.message || j.message || j.details)) || (typeof j?.error === 'string' ? j.error : '');
     } catch(e) { serverMsg = text; }
   } catch(e) {}
   const err = new Error(status ? (serverMsg || ('HTTP ' + status)) : (serverMsg || 'Connexion au serveur impossible'));
@@ -12469,12 +12471,24 @@ async function throwApiError(res, model) {
   try {
     const pm = _providerModelId(model);
     if (pm) { err.providerId = pm.prov.id; err.providerLabel = pm.prov.label; }
+    else if (typeof MODELS !== 'undefined' && MODELS.some(function(m){ return m.id === model; })) {
+      // v603 — modèle Mistral nu : nomme quand même le fournisseur.
+      err.providerId = 'mistral'; err.providerLabel = 'Mistral';
+    }
   } catch(e) {}
+  // v603 — 401/403 = la clé PART mais est refusée : message actionnable,
+  // corps JSON brut banni de la conversation.
+  if (status === 401 || status === 403 || /invalid api key/i.test(serverMsg || '')) {
+    err.cleRefusee = true;
+    err.message = 'Clé API refusée par ' + (err.providerLabel || 'le fournisseur') +
+      ' (HTTP ' + (status || 401) + '). Vérifiez ou collez une clé valide : PARAMÈTRES ⚙ > Modèle.';
+  }
   throw err;
 }
 
 // Version courte (toast)
 function formatApiErrorShort(e) {
+  if (e && e.cleRefusee) return e.message; // v603
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
@@ -12493,6 +12507,7 @@ function formatApiErrorShort(e) {
 
 // Version complète (message dans la conversation)
 function formatApiErrorForChat(e) {
+  if (e && e.cleRefusee) return e.message; // v603
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const serverMsg = (e && (e.apiMessage || e.message) || '').trim();
@@ -12525,6 +12540,15 @@ function appendApiErrorMessage(err) {
   state.messages.push({ role:"assistant", content: formatApiErrorForChat(err), ts:now() });
   markChatDirty();
   renderMessages();
+  // v603 — clé refusée : ouvre directement l'écran de saisie (1 fois / 8 s).
+  try {
+    if (err && err.cleRefusee) {
+      if (Date.now() - (window.__theoModaleCleTs || 0) > 8000) {
+        window.__theoModaleCleTs = Date.now();
+        openApiKeyModal();
+      }
+    }
+  } catch(e2) {}
 }
 
 // ── Non-streaming call (legacy / fallback) ──
@@ -12755,7 +12779,7 @@ async function callLLMStream(cfg, messages, opts, onChunk) {
     headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: cfg.model, messages: messages, temperature: temp, max_tokens: maxTok, top_p: 0.95, stream: true })
   });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) await throwApiError(res, cfg.model); // v603 — même traduction que les autres chemins
   _theoNoteRouted(res);
   const reader = res.body.getReader();
   let full = '';
