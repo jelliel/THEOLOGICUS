@@ -430,6 +430,155 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
   ok("à vide, Enregistrer est désactivé (garde anti-fichier vide)", neg.disabled, neg.statut);
   ok("à vide, Extraire la sélection est désactivé aussi", neg.extrait, "");
 
+  /* ── 8b. FORMULAIRES — champs listés, remplis, enregistrés, relus ── */
+  section("8b. Formulaires — fixture AcroForm créée par pdf-lib, remplie via l'UI");
+  await page.evaluate(async () => {
+    const doc = await PDFLib.PDFDocument.create();
+    const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const page = doc.addPage([595, 842]);
+    page.drawText("Formulaire de test", { x: 60, y: 780, size: 20, font });
+    const form = doc.getForm();
+    const champTexte = form.createTextField("Nom");
+    champTexte.addToPage(page, { x: 200, y: 700, width: 250, height: 28 });
+    const champCase = form.createCheckBox("Accepte");
+    champCase.addToPage(page, { x: 200, y: 650, width: 22, height: 22 });
+    const champListe = form.createDropdown("Langue");
+    champListe.addOptions(["FR", "EN", "AR"]);
+    champListe.addToPage(page, { x: 200, y: 600, width: 150, height: 26 });
+    const octets = await doc.save();
+    const input = document.querySelector("#pdfcraft-panel input[type=file]");
+    const dt = new DataTransfer();
+    dt.items.add(new File([octets], "formulaire.pdf", { type: "application/pdf" }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(1200);
+  const formulaire = await page.evaluate(() => {
+    const section = document.getElementById("pfc-formulaires");
+    return {
+      visible: section.style.display === "block",
+      textes: section.querySelectorAll("input[type=text]").length,
+      cases: section.querySelectorAll(".pfc-champ input[type=checkbox]").length,
+      listes: section.querySelectorAll("select").length,
+    };
+  });
+  ok("la section Formulaires apparaît (3 champs éditables)",
+     formulaire.visible && formulaire.textes === 1 && formulaire.cases >= 1 && formulaire.listes >= 1,
+     JSON.stringify(formulaire));
+  await page.evaluate(() => {
+    const inp = document.querySelector("#pfc-formulaires .pfc-champ input[type=text]");
+    inp.value = "Dupont";
+    inp.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.evaluate(() => {
+    const cb = document.querySelector("#pfc-formulaires .pfc-champ input[type=checkbox]");
+    cb.checked = true;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const avant8b = new Set(fichiersPdfCraft());
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("#pfc-formulaires .pfc-btn")]
+      .find(b => /Enregistrer/.test(b.title + b.textContent));
+    btn.click();
+  });
+  let nomRempli = null, octetsRempli = null;
+  for (let i = 0; i < 20; i++) {
+    const nouveau = fichiersPdfCraft().find(f => !avant8b.has(f));
+    if (nouveau) { nomRempli = nouveau; octetsRempli = lireFichier(nouveau); break; }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  ok("le formulaire rempli est enregistré", !!nomRempli, nomRempli || "(aucun)");
+  const relire = await page.evaluate(async (b64) => {
+    const bin = atob(b64);
+    const octets = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) octets[i] = bin.charCodeAt(i);
+    const doc = await PDFLib.PDFDocument.load(octets);
+    const form = doc.getForm();
+    return {
+      nom: form.getTextField("Nom").getText(),
+      accepte: form.getCheckBox("Accepte").isChecked(),
+    };
+  }, octetsRempli.toString("base64"));
+  ok("les valeurs sont PERSISTÉES dans le fichier (Dupont + case cochée)",
+     relire.nom === "Dupont" && relire.accepte === true, JSON.stringify(relire));
+
+  /* aplatir : les champs deviennent du texte figé */
+  const avantFl = new Set(fichiersPdfCraft());
+  await page.evaluate(() => {
+    const caseAplatir = [...document.querySelectorAll("#pfc-formulaires .pfc-form-tete input[type=checkbox]")][0];
+    caseAplatir.checked = true;
+    const btn = [...document.querySelectorAll("#pfc-formulaires .pfc-btn")]
+      .find(b => /Enregistrer/.test(b.title + b.textContent));
+    btn.click();
+  });
+  let octetsFl = null;
+  for (let i = 0; i < 20; i++) {
+    const nouveau = fichiersPdfCraft().find(f => !avantFl.has(f));
+    if (nouveau) { octetsFl = lireFichier(nouveau); break; }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  const aplati = await page.evaluate(async (b64) => {
+    const bin = atob(b64);
+    const octets = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) octets[i] = bin.charCodeAt(i);
+    const doc = await PDFLib.PDFDocument.load(octets);
+    return { champs: doc.getForm().getFields().length };
+  }, octetsFl.toString("base64"));
+  ok("APLATI : le fichier rechargé n'a plus aucun champ", aplati.champs === 0, aplati.champs + " champ(s)");
+
+  /* ── 8c. ANNOTATIONS — fixture créée via l'API bas niveau de pdf-lib ── */
+  section("8c. Annotations — une note est listée dans la visionneuse");
+  const annot = await page.evaluate(async () => {
+    const doc = await PDFLib.PDFDocument.create();
+    const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const page = doc.addPage([595, 842]);
+    page.drawText("Document annoté", { x: 60, y: 760, size: 18, font });
+    /* API bas niveau : une annotation Texte attachée à la page */
+    /* 🔴 doc.context.obj() convertit les CHAÎNES en PDFName — pour un /Contents
+       lisible il faut PDFLib.PDFString.of() explicitement. */
+    const annot = doc.context.obj({
+      Type: PDFLib.PDFName.of("Annot"), Subtype: PDFLib.PDFName.of("Text"),
+      Rect: [120, 620, 260, 660],
+      Contents: PDFLib.PDFString.of("Note de test banc v608"),
+      M: PDFLib.PDFString.of("D:20261018"),
+    });
+    const refAnnot = doc.context.register(annot);
+    page.node.set(PDFLib.PDFName.of("Annots"), doc.context.obj([refAnnot]));
+    const octets = await doc.save();
+    const input = document.querySelector("#pdfcraft-panel input[type=file]");
+    const dt = new DataTransfer();
+    dt.items.add(new File([octets], "annote.pdf", { type: "application/pdf" }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(1200);
+  await page.click("#pfc-voir");
+  await page.waitForTimeout(900);
+  /* la page 1 du modèle est le formulaire (0 annotation hors widgets) :
+     naviguer vers la page 2 (annote.pdf) avant de vérifier le badge */
+  await page.click("#pdfcraft-vue .pfcv-btn[aria-label='Page suivante']");
+  await page.waitForTimeout(900);
+  const annotVue = await page.evaluate(() => {
+    const v = document.getElementById("pdfcraft-vue");
+    const badge = [...v.querySelectorAll(".pfcv-btn")].find(b => /🏷/.test(b.textContent));
+    return { badgeVisible: !!badge && badge.style.display !== "none",
+             texte: badge ? badge.textContent.trim() : "" };
+  });
+  ok("le badge annotations affiche 1 annotation (widgets exclus)",
+     annotVue.badgeVisible && /1/.test(annotVue.texte), annotVue.texte);
+  await page.click('#pdfcraft-vue .pfcv-btn:has-text("🏷")');
+  await page.waitForTimeout(250);
+  const listeA = await page.evaluate(() => {
+    const r = document.getElementById("pdfcraft-vue").querySelector(".pfcv-resultats");
+    return { visible: r.style.display === "block", texte: r.textContent.slice(0, 90) };
+  });
+  ok("la liste affiche la note (Text — Note de test banc v608)",
+     listeA.visible && /Text/.test(listeA.texte) && /Note de test/.test(listeA.texte), listeA.texte);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  const fermeA = await page.evaluate(() => !document.getElementById("pdfcraft-vue").classList.contains("ouvert"));
+  ok("Escape ferme l'aperçu annoté", fermeA, "");
+
   /* ── 9. Propreté ── */
   section("9. Propreté");
   ok("aucune erreur JavaScript", bruit.length === 0, bruit.slice(0, 2).join(" | "));

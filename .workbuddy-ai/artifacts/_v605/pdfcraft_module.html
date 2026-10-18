@@ -109,6 +109,18 @@
 #pdfcraft-vue .pfc-fermer{ background:none; border:none; color:var(--text-dim,#8fa3b8);
   font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; }
 #pdfcraft-vue .pfc-fermer:hover{ color:var(--text); background:var(--bg-card-alt,rgba(255,255,255,.05)); }
+#pfc-formulaires{ flex:0 0 auto; border-top:1px solid var(--wire,rgba(79,142,247,.15));
+  max-height:40%; overflow:auto; padding:4px 8px; }
+#pfc-formulaires .pfc-form{ margin:4px 0; border:1px solid var(--wire,rgba(79,142,247,.2)); border-radius:8px; padding:4px 6px; }
+#pfc-formulaires .pfc-form-tete{ display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; padding:2px 0; }
+#pfc-formulaires .pfc-form-tete span{ flex:1; }
+#pfc-formulaires .pfc-champ{ display:flex; align-items:center; gap:6px; padding:3px 0; }
+#pfc-formulaires .pfc-champ-nom{ flex:0 0 34%; font-size:10.5px; color:var(--text-dim,#8fa3b8); overflow:hidden; text-overflow:ellipsis; }
+#pfc-formulaires .pfc-champ input[type=text], #pfc-formulaires .pfc-champ select{
+  flex:1; font-family:inherit; font-size:11px; padding:4px 6px; border-radius:5px;
+  background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
+  border:1px solid var(--wire,rgba(79,142,247,.25)); }
+#pfc-formulaires .pfc-champ input[type=checkbox]{ accent-color:var(--accent); }
 @media (prefers-reduced-motion: reduce){
   #pdfcraft-panel{ transition:none; }
 }
@@ -260,6 +272,10 @@
 
     el.liste = h('div', { 'class': 'pfc-liste', role: 'list' });
     p.appendChild(el.liste);
+    /* v608 — section FORMULAIRES (visible seulement si un doc en a un) */
+    el.formulaires = h('div', { id: 'pfc-formulaires' });
+    el.formulaires.style.display = 'none';
+    p.appendChild(el.formulaires);
     el.statut = h('div', { 'class': 'pfc-statut', 'aria-live': 'polite', text: 'Aucun document ouvert.' });
     p.appendChild(el.statut);
 
@@ -311,7 +327,9 @@
       try {
         var octets = new Uint8Array(await f.arrayBuffer());
         var doc = await PDFLib.PDFDocument.load(octets, { ignoreEncryption: true });
-        var d = { name: f.name.replace(/\.pdf$/i, ''), doc: doc, pjs: null };
+        var d = { name: f.name.replace(/\.pdf$/i, ''), doc: doc, pjs: null, champs: [] };
+        /* v608 — champs de formulaire (AcroForm) via pdf-lib */
+        try { d.form = doc.getForm(); d.champs = d.form.getFields() || []; } catch (e) { d.champs = []; }
         /* pdf.js : rendu + recherche — une COPIE des octets (pdf.js transfère
            le buffer au worker et détache l'original). Chiffré -> mot de passe. */
         try { d.pjs = await ouvrirAvecPdfJs(octets); } catch (e) { d.pjs = null; }
@@ -325,6 +343,7 @@
     if (ajoutes) toast(ajoutes + ' document(s) ouvert(s)', 'success');
     pousserHistoire();
     rendre();
+    rendreFormulaires();
   }
 
   /* ── Rendu de la liste (avec vignettes pdf.js paresseuses) ── */
@@ -492,9 +511,11 @@
   }
 
   function horodatage() {
-    var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; };
+    var d = new Date(), p = function (n, l) { var s = '' + n; while (s.length < (l || 2)) s = '0' + s; return s; };
+    /* v608 — millisecondes : deux enregistrements dans la même seconde
+       écrasaient le premier (fichier identique — mesuré au banc 8b). */
     return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
-           p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+           p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + p(d.getMilliseconds(), 3);
   }
 
   /* Enregistrement : serveur backups/ (exe + relais), shim mobile natif,
@@ -601,6 +622,10 @@
     el.vuePlus.addEventListener('click', function () { changerZoom(1.25); });
     barre.appendChild(el.vuePlus);
     barre.appendChild(h('span', { text: '|' }));
+    el.vueAnnotsBtn = h('button', { 'class': 'pfcv-btn', type: 'button', text: '🏷 0',
+      title: 'Annotations de la page affichée', style: 'display:none' });
+    el.vueAnnotsBtn.addEventListener('click', function () { basculerListeAnnotations(); });
+    barre.appendChild(el.vueAnnotsBtn);
     var recherche = h('span', { 'class': 'pfcv-recherche' });
     el.vueRechercheInput = h('input', { type: 'search', placeholder: 'Chercher dans le texte…',
       'aria-label': 'Chercher dans le texte du PDF' });
@@ -642,6 +667,19 @@
     window.addEventListener('resize', function () {
       if (el.vue && el.vue.classList.contains('ouvert')) rendreVue();
     });
+  }
+  function basculerListeAnnotations() {
+    if (!el.vueAnnotsListe || !el.vueAnnotsListe.length) return;
+    if (el.vueResultats.style.display === 'block') { el.vueResultats.style.display = 'none'; return; }
+    el.vueResultats.textContent = '';
+    el.vueAnnotsListe.forEach(function (a) {
+      /* v608 — pdf.js 3.x expose le contenu sous contentsObj.str (objet structuré) */
+      var contenu = ((a.contentsObj && a.contentsObj.str) || a.contents || '').trim() || '(sans contenu)';
+      var b = h('button', { type: 'button', role: 'option',
+        text: (a.subtype || '?') + ' — ' + contenu.slice(0, 80) });
+      el.vueResultats.appendChild(b);
+    });
+    el.vueResultats.style.display = 'block';
   }
   function fermerVue() {
     if (!el.vue) return;
@@ -709,6 +747,17 @@
       el.vueCompte.textContent = pg2
         ? (el.vueIdx + 1) + '-' + (el.vueIdx + 2) + ' / ' + pc.pages.length
         : (el.vueIdx + 1) + ' / ' + pc.pages.length;
+      /* v608 — annotations de la page affichée (badge + liste sur clic) */
+      try {
+        var annots = await page.getAnnotations();
+        if (token !== _tokenVue) return;
+        /* v608 — les WIDGETS (champs de formulaire) sont des annotations PDF
+           mais déjà gérées par la section Formulaires : on les exclut du badge. */
+        el.vueAnnotsListe = annots.filter(function (a) { return a.subtype !== 'Widget'; });
+        el.vueAnnotsBtn.textContent = '🏷 ' + el.vueAnnotsListe.length;
+        el.vueAnnotsBtn.style.display = el.vueAnnotsListe.length ? '' : 'none';
+        el.vueResultats.style.display = 'none';
+      } catch (e) {}
     } catch (e) {
       el.vueCompte.textContent = 'rendu impossible : ' + (e && e.message || e);
     }
@@ -802,6 +851,87 @@
       }, 50);
     } catch (e) {}
     setTimeout(function () { try { cadre.remove(); } catch (e) {} }, 60000);
+  }
+
+  /* ── Formulaires : édition des champs (pdf-lib), enregistrement direct du
+     document (les champs vivent au niveau du doc — l'assemblage par copyPages
+     ne les conserve pas). Aplatir = les champs deviennent du texte figé. ── */
+  function rendreFormulaires() {
+    el.formulaires.textContent = '';
+    var groupes = [];
+    pc.docs.forEach(function (d, idx) {
+      if (d.champs && d.champs.length) groupes.push({ d: d, idx: idx, champs: d.champs });
+    });
+    if (!groupes.length) { el.formulaires.style.display = 'none'; return; }
+    el.formulaires.style.display = 'block';
+    groupes.forEach(function (g) {
+      var groupe = h('div', { 'class': 'pfc-form' });
+      var tete = h('div', { 'class': 'pfc-form-tete' });
+      tete.appendChild(h('span', { text: '📝 ' + g.d.name + ' — ' + g.champs.length + ' champ(s)' }));
+      var aplatir = h('input', { type: 'checkbox', title: 'Aplatir (les champs deviennent du texte figé)',
+        'aria-label': 'Aplatir le formulaire de ' + g.d.name });
+      tete.appendChild(aplatir);
+      var enreg = h('button', { 'class': 'pfc-btn', type: 'button', text: '💾',
+        title: 'Enregistrer ce formulaire rempli' });
+      enreg.addEventListener('click', function () { enregistrerFormulaire(g.idx, aplatir.checked); });
+      tete.appendChild(enreg);
+      groupe.appendChild(tete);
+      g.champs.forEach(function (champ) {
+        var nom = String(champ.getName() || '(sans nom)');
+        /* 🔴 NE PAS utiliser champ.constructor.name : pdf-lib est MINIFIÉ, les
+           noms de classes sont manglés. instanceof window.PDFLib est fiable. */
+        var L = window.PDFLib;
+        var estTexte = champ instanceof L.PDFTextField;
+        var estCase = champ instanceof L.PDFCheckBox;
+        var estListe = champ instanceof L.PDFDropdown || champ instanceof L.PDFRadioGroup ||
+                       champ instanceof L.PDFOptionList;
+        var ligne = h('div', { 'class': 'pfc-champ' });
+        ligne.appendChild(h('span', { 'class': 'pfc-champ-nom', text: nom, title: nom }));
+        if (estTexte) {
+          var valeur = '';
+          try { valeur = champ.getText() || ''; } catch (e) {}
+          var inp = h('input', { type: 'text', value: valeur, 'aria-label': nom });
+          inp.addEventListener('change', function () {
+            try { champ.setText(inp.value); } catch (e) { toast('Champ refusé : ' + e.message, 'error'); }
+          });
+          ligne.appendChild(inp);
+        } else if (estCase) {
+          var cb = h('input', { type: 'checkbox', 'aria-label': nom });
+          try { cb.checked = !!champ.isChecked(); } catch (e) {}
+          cb.addEventListener('change', function () {
+            try { cb.checked ? champ.check() : champ.uncheck(); }
+            catch (e) { toast('Case refusée : ' + e.message, 'error'); }
+          });
+          ligne.appendChild(cb);
+        } else if (estListe) {
+          var sel = h('select', { 'aria-label': nom });
+          var options = [];
+          try { options = champ.getOptions() || []; } catch (e) {}
+          options.forEach(function (o) { sel.appendChild(h('option', { value: o, text: o })); });
+          try { var sel0 = champ.getSelected()[0]; if (sel0) sel.value = sel0; } catch (e) {}
+          sel.addEventListener('change', function () {
+            try { champ.select(sel.value); } catch (e) { toast('Choix refusé : ' + e.message, 'error'); }
+          });
+          ligne.appendChild(sel);
+        } else {
+          ligne.appendChild(h('span', { 'class': 'pfc-champ-nom', text: '(non éditable)' }));
+        }
+        groupe.appendChild(ligne);
+      });
+      el.formulaires.appendChild(groupe);
+    });
+  }
+  async function enregistrerFormulaire(docIdx, aplatir) {
+    var d = pc.docs[docIdx];
+    if (!d) return;
+    try {
+      if (aplatir) {
+        try { d.form.flatten(); }
+        catch (e) { toast('Aplatissement impossible : ' + e.message, 'error'); return; }
+      }
+      var octets = await d.doc.save();
+      enregistrerOctets(octets, 'PDFCraft-' + d.name + '-formulaire-' + horodatage() + '.pdf');
+    } catch (e) { toast('Enregistrement impossible : ' + e.message, 'error'); }
   }
 
   /* ── Démarrage ── */
