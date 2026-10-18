@@ -28813,7 +28813,7 @@ initTafsirVerseTooltip();
     return el;
   }
   /* DEBUG HOOK (temporaire) */
-  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner };  function insertFigureAt(target, item){
+  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner, insertFigureAt: insertFigureAt };  function insertFigureAt(target, item){
     const msg = (state.messages || []).find(m => m.ts === target.msgTs);
     if (!msg) { toast('Message introuvable', 'error'); return; }
     const box = document.getElementById('mc-' + target.msgTs);

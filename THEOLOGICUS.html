@@ -28214,7 +28214,7 @@ initTafsirVerseTooltip();
         }
         if (act.dataset.act === 'insert') {
           hideBubble();
-          openInsertMenuAt({ msgTs: s.msgTs, selRect: s.rect, clientX: (s.rect ? s.rect.left + s.rect.width/2 : 10), clientY: (s.rect ? s.rect.top + s.rect.height/2 : 10) });
+          openInsertMenuAt({ msgTs: s.msgTs, selRect: s.rect, range: s.range, texte: s.text, clientX: (s.rect ? s.rect.left + s.rect.width/2 : 10), clientY: (s.rect ? s.rect.top + s.rect.height/2 : 10) });
           return;
         }
         if (act.dataset.act === 'speak') {
@@ -28410,7 +28410,7 @@ initTafsirVerseTooltip();
         var s = window._atcSel;
         if (!s || !s.msgTs) return;        /* l'encadrement exige un message */
         hideBubble();
-        openInsertMenuAt({ msgTs: s.msgTs, selRect: s.rect,
+        openInsertMenuAt({ msgTs: s.msgTs, selRect: s.rect, range: s.range, texte: s.text,
           clientX: (s.rect ? s.rect.left + s.rect.width / 2 : 10),
           clientY: (s.rect ? s.rect.top + s.rect.height / 2 : 10) });
         /* le timer selectionchange peut rafficher la bulle juste apres */
@@ -28813,7 +28813,7 @@ initTafsirVerseTooltip();
     return el;
   }
   /* DEBUG HOOK (temporaire) */
-  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner };  function insertFigureAt(target, item){
+  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner, insertFigureAt: insertFigureAt };  function insertFigureAt(target, item){
     const msg = (state.messages || []).find(m => m.ts === target.msgTs);
     if (!msg) { toast('Message introuvable', 'error'); return; }
     const box = document.getElementById('mc-' + target.msgTs);
@@ -28831,10 +28831,25 @@ initTafsirVerseTooltip();
       y = target.clientY - br.top + box.scrollTop;
     }
     const id = 'fg-' + Date.now();
+    /* v609 — ANCRAGE TEXTE : l'encadré est lié aux OFFSETS de la sélection
+       (computeOffsetInBoxFiltre, textes des encadrés exclus) et non aux
+       pixels : au re-rendu ET au redémarrage, applyShapes repositionne le
+       cadre sur le MÊME texte. Déplacer/redimensionner à la main supprime
+       l'ancre (la position manuelle prime). */
+    var ancreFig = null;
+    if (target.selRect && target.range) {
+      try {
+        const _ab = document.getElementById('mc-' + target.msgTs);
+        const _off = _ab ? computeOffsetInBoxFiltre(_ab, target.range) : null;
+        if (_off) ancreFig = { start: _off.start, end: _off.end,
+          texte: (target.texte || (target.range ? target.range.toString() : '') || '').slice(0, 200) };
+      } catch (e) {}
+    }
     const f = { id: id, x: x, y: y, w: w, h: h, shape: item.n, color: color, text: '', svg: item.svg,
       weight: window._atcFigWeight || 1.2,
       fill: window._atcFigFill || '',
-      rot: window._atcFigRot || 0 };
+      rot: window._atcFigRot || 0,
+      ancre: ancreFig };
     msg.shapes = msg.shapes || [];
     msg.shapes.push(f);
     if (typeof markChatDirty === 'function') markChatDirty();
@@ -28844,6 +28859,9 @@ initTafsirVerseTooltip();
   }
   function persistFig(f, fb){
     f.x = fb.offsetLeft; f.y = fb.offsetTop; f.w = fb.offsetWidth; f.h = fb.offsetHeight;
+    /* v609 — déplacement/retaille MANUELS : l'ancre texte est retirée (la
+       position manuelle prime sur le ré-ancrage automatique). */
+    if (f.ancre) { delete f.ancre; }
     if (typeof markChatDirty === 'function') markChatDirty();
     atcPersist();
   }
@@ -28860,6 +28878,48 @@ initTafsirVerseTooltip();
     renderMessagesSafe();
     toast('✓ Figure supprimée · Enregistré', 'success');
   }
+  /* ── v609 — accumulation FILTRÉE pour les encadrés : les textes des
+     encadrés eux-mêmes (.atc-figbox : libellé, croix) sont EXCLUS, sinon
+     l'ajout d'un 2e encadré décalerait les offsets du 1er. Les marques
+     (spans) n'ajoutent aucun texte : elles restent incluses. ── */
+  function noeudsTexteVisibles(box){
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        const pp = n.parentElement;
+        if (pp && pp.closest && pp.closest('.atc-figbox')) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes = []; let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    return nodes;
+  }
+  function computeOffsetInBoxFiltre(box, range){
+    const nodes = noeudsTexteVisibles(box);
+    let acc = 0, start = null, end = null;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      if (n === range.startContainer) start = acc + range.startOffset;
+      if (n === range.endContainer) end = acc + range.endOffset;
+      acc += n.nodeValue.length;
+    }
+    if (start === null || end === null || end <= start) return null;
+    return { start: start, end: end };
+  }
+  function locateInBoxFiltre(container, pos, inclusive){
+    if (inclusive === undefined) inclusive = true;
+    const nodes = noeudsTexteVisibles(container);
+    let acc = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      const len = n.nodeValue.length;
+      const cmp = inclusive ? (pos <= acc + len) : (pos < acc + len);
+      if (cmp) return { node: n, off: pos - acc };
+      acc += len;
+    }
+    if (nodes.length) return { node: nodes[nodes.length - 1], off: nodes[nodes.length - 1].nodeValue.length };
+    return null;
+  }
   function applyShapes(){
     const msgs = (typeof state !== 'undefined' && state && state.messages) || [];
     msgs.forEach(function(m){
@@ -28868,8 +28928,41 @@ initTafsirVerseTooltip();
       if (!box) return;
       m.shapes.forEach(function(f){
         if (!f || !f.id) return;
-        if (box.querySelector('[data-fig-id="' + f.id + '"]')) return;
-        box.appendChild(buildFigEl(f));
+        const dejaLa = box.querySelector('[data-fig-id="' + f.id + '"]');
+        if (dejaLa) return;
+        const figEl = buildFigEl(f);
+        box.appendChild(figEl);
+        /* v609 — RÉ-ANCRAGE : si l'encadré a une ancre texte, il est
+           repositionné sur le MÊME texte dans la mise en page ACTUELLE
+           (largeur de fenêtre, polices, repli) — le bug « change de place au
+           redémarrage ». Les valeurs persistées sont mises à jour si elles
+           bougent de plus d'1 px (fidélité export/stockage). */
+        if (f.ancre && typeof locateInBoxFiltre === 'function') {
+          try {
+            const a = locateInBoxFiltre(box, f.ancre.start, false);
+            const b = locateInBoxFiltre(box, f.ancre.end, true);
+            if (a && b) {
+              const rng = document.createRange();
+              rng.setStart(a.node, a.off); rng.setEnd(b.node, b.off);
+              const rr = rng.getBoundingClientRect();
+              if (rr && rr.width > 2) {
+                const br = box.getBoundingClientRect();
+                const nx = rr.left - br.left + box.scrollLeft - 8;
+                const ny = rr.top - br.top + box.scrollTop - 6;
+                const nw = Math.max(rr.width + 16, 90);
+                const nh = Math.max(rr.height + 16, 44);
+                if (Math.abs(nx - f.x) > 1 || Math.abs(ny - f.y) > 1 ||
+                    Math.abs(nw - f.w) > 1 || Math.abs(nh - f.h) > 1) {
+                  f.x = Math.round(nx); f.y = Math.round(ny);
+                  f.w = Math.round(nw); f.h = Math.round(nh);
+                  figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
+                  figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
+                  if (typeof markChatDirty === 'function') markChatDirty();
+                }
+              }
+            }
+          } catch (e) {}
+        }
       });
     });
   }
@@ -34154,6 +34247,7 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
   background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
   border:1px solid var(--wire,rgba(79,142,247,.25)); }
 #pfc-formulaires .pfc-champ input[type=checkbox]{ accent-color:var(--accent); }
+#pdfcraft-vue.mesure canvas{ cursor:crosshair; }
 @media (prefers-reduced-motion: reduce){
   #pdfcraft-panel{ transition:none; }
 }
@@ -34629,7 +34723,10 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
 
     el.vueIdx = 0;
     el.vueZoom = 1;
-    el.vueDeux = false; /* 🔴 initialisation OBLIGATOIRE : sans elle, rendreVue multiplie
+    el.vueDeux = false;
+    el.vueMesuresMode = false;
+    el.vueMesures = {};
+    el._pointsMesure = []; /* 🔴 initialisation OBLIGATOIRE : sans elle, rendreVue multiplie
        par undefined -> NaN -> canvas 0x0 (diagnostic v606, mesuré) */
     el.vueCorps = h('div', { 'class': 'pfcv-corps' });
     el.vueCanvas = h('canvas', { 'aria-label': 'Page du PDF rendue' });
@@ -34659,6 +34756,19 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       title: 'Annotations de la page affichée', style: 'display:none' });
     el.vueAnnotsBtn.addEventListener('click', function () { basculerListeAnnotations(); });
     barre.appendChild(el.vueAnnotsBtn);
+    el.vueMesurerBtn = h('button', { 'class': 'pfcv-btn', type: 'button', text: '📏 Mesurer',
+      title: 'Mesurer : cliquez DEUX points sur la page — distance en points et centimètres',
+      'aria-pressed': 'false' });
+    el.vueMesurerBtn.addEventListener('click', basculerMesure);
+    barre.appendChild(el.vueMesurerBtn);
+    el.vueEffacerM = h('button', { 'class': 'pfcv-btn', type: 'button', text: '🧹',
+      title: 'Effacer les mesures de la page affichée', 'aria-label': 'Effacer les mesures' });
+    el.vueEffacerM.addEventListener('click', function () {
+      el.vueMesures[el.vueIdx] = [];
+      el._pointsMesure = [];
+      dessinerMesures();
+    });
+    barre.appendChild(el.vueEffacerM);
     var recherche = h('span', { 'class': 'pfcv-recherche' });
     el.vueRechercheInput = h('input', { type: 'search', placeholder: 'Chercher dans le texte…',
       'aria-label': 'Chercher dans le texte du PDF' });
@@ -34700,6 +34810,8 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     window.addEventListener('resize', function () {
       if (el.vue && el.vue.classList.contains('ouvert')) rendreVue();
     });
+    el.vueCorps.addEventListener('click', clicMesure);
+    window.listerMesures = function () { return el.vueMesures[el.vueIdx] || []; };
   }
   function basculerListeAnnotations() {
     if (!el.vueAnnotsListe || !el.vueAnnotsListe.length) return;
@@ -34713,6 +34825,53 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       el.vueResultats.appendChild(b);
     });
     el.vueResultats.style.display = 'block';
+  }
+  /* ── v609 — MESURE : deux clics = un segment ; distance en points PDF
+     (1 pt = 1/72 pouce) et centimètres. Stocké en COORDONNÉES PDF -> les
+     mesures survivent au zoom et à la navigation. ── */
+  function basculerMesure() {
+    el.vueMesuresMode = !el.vueMesuresMode;
+    el.vueMesurerBtn.classList.toggle('actif', el.vueMesuresMode);
+    el.vueMesurerBtn.setAttribute('aria-pressed', el.vueMesuresMode ? 'true' : 'false');
+    el.vue.classList.toggle('mesure', el.vueMesuresMode);
+    el._pointsMesure = [];
+    if (el.vueMesuresMode) toast('Mesure : cliquez DEUX points sur la page', 'info');
+  }
+  function distancePt(a, b) {
+    return Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+  }
+  function dessinerMesures() {
+    el.vueCorps.querySelectorAll('canvas').forEach(function (cv) {
+      var mi = cv.__modelIdx;
+      if (mi === undefined || !cv.__vp) return;
+      var ctx = cv.getContext('2d');
+      var dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      (el.vueMesures[mi] || []).forEach(function (seg) {
+        var p1 = cv.__vp.convertToViewportPoint(seg.x1, seg.y1);
+        var p2 = cv.__vp.convertToViewportPoint(seg.x2, seg.y2);
+        var d = distancePt({ x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 });
+        ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+        var cm = (d / 72 * 2.54).toFixed(2);
+        ctx.font = '12px sans-serif'; ctx.fillStyle = '#ff3b30';
+        ctx.fillText(d.toFixed(1) + ' pt (' + cm + ' cm)', (p1[0] + p2[0]) / 2 + 6, (p1[1] + p2[1]) / 2 - 6);
+      });
+    });
+  }
+  function clicMesure(e) {
+    if (!el.vueMesuresMode) return;
+    var cv = e.target;
+    if (!cv || cv.tagName !== 'CANVAS' || !cv.__vp) return;
+    var r = cv.getBoundingClientRect();
+    var pt = cv.__vp.convertToPdfPoint(e.clientX - r.left, e.clientY - r.top);
+    el._pointsMesure.push({ x: pt[0], y: pt[1] });
+    if (el._pointsMesure.length >= 2) {
+      var a = el._pointsMesure[0], b = el._pointsMesure[1];
+      (el.vueMesures[el.vueIdx] = el.vueMesures[el.vueIdx] || []).push({ x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+      el._pointsMesure = [];
+    }
+    dessinerMesures();
   }
   function fermerVue() {
     if (!el.vue) return;
@@ -34771,12 +34930,15 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
         canvas.style.width = Math.round(vp.width) + 'px';
         canvas.style.height = Math.round(vp.height) + 'px';
         conteneur.appendChild(canvas);
+        canvas.__vp = vp;
+        canvas.__modelIdx = el.vueIdx + k;
         var ctx = canvas.getContext('2d');
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         rendus.push(page.render({ canvasContext: ctx, viewport: vp }).promise);
       }
       await Promise.all(rendus);
       if (token !== _tokenVue) return;
+      if (el.vueMesuresMode) dessinerMesures();
       el.vueCompte.textContent = pg2
         ? (el.vueIdx + 1) + '-' + (el.vueIdx + 2) + ' / ' + pc.pages.length
         : (el.vueIdx + 1) + ' / ' + pc.pages.length;
