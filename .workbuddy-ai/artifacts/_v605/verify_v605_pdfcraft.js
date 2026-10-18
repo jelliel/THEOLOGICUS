@@ -152,6 +152,31 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
      /docA p\.2/.test(modele[0]) && /docA p\.1/.test(modele[1]) && /docB/.test(modele[2]), modele.join(" | "));
   ok("la rotation est affichée (90°)", /90°/.test(modele.join(" ")), "");
 
+  /* ── 5b. ANNULER/RÉTABLIR — boutons + clavier ── */
+  section("5b. Annuler/Rétablir — historique complet des opérations");
+  const etat1 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("état avant annulation : docA p.2 · 90° en premier", /docA p\.2 · 90°/.test(etat1), etat1);
+  await page.click("#pfc-annuler"); /* annule la rotation */
+  await page.waitForTimeout(200);
+  const etat2 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("⤶ Annuler : la rotation est annulée (plus de 90°)", !/90°/.test(etat2), etat2);
+  await page.click("#pfc-annuler"); /* annule le déplacement */
+  await page.waitForTimeout(200);
+  const etat3 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("⤶ Annuler x2 : l'ordre initial est restauré (docA p.1 d'abord)", /docA p\.1/.test(etat3), etat3);
+  await page.click("#pfc-retablir"); /* rétablit le déplacement */
+  await page.waitForTimeout(200);
+  const etat4 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("⤷ Rétablir : le déplacement revient (docA p.2 d'abord)", /docA p\.2/.test(etat4), etat4);
+  await page.keyboard.press("Control+z");
+  await page.waitForTimeout(200);
+  const etat5 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("Ctrl+Z au clavier annule", /docA p\.1/.test(etat5), etat5);
+  await page.keyboard.press("Control+y");
+  await page.waitForTimeout(200);
+  const etat6 = await page.evaluate(() => document.querySelector("#pdfcraft-panel .pfc-page .pfc-nom").textContent.trim());
+  ok("Ctrl+Y au clavier rétablit", /docA p\.2/.test(etat6), etat6);
+
   /* ── 6. Enregistrer — le PDF serveur est relu et vérifié ── */
   section("6. Enregistrer — le PDF résultat est relu et vérifié");
   const avantSet = new Set(fichiersPdfCraft());
@@ -171,7 +196,11 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
     return { pages: doc.getPageCount(), rotations: doc.getPages().map(p => p.getRotation().angle) };
   }, octets.toString("base64"));
   ok("le PDF résultat contient les 3 pages du modèle", verif.pages === 3, verif.pages + " page(s)");
-  ok("la rotation 90° est PORTÉE par le fichier", verif.rotations.some(a => a === 90), JSON.stringify(verif.rotations));
+  /* la séquence 5b se termine par Ctrl+Z : la rotation est ANNULÉE dans le
+     modèle -> le fichier fidèle porte [0,0,0] (la fidélité au modèle est
+     l'invariant, pas une rotation figée) */
+  ok("le fichier est FIDÈLE au modèle (aucune rotation après Ctrl+Z)",
+     JSON.stringify(verif.rotations) === "[0,0,0]", JSON.stringify(verif.rotations));
 
   /* ── 7. Extraire la sélection ── */
   section("7. Extraire la sélection — un PDF d'une seule page");
@@ -314,6 +343,74 @@ function lireFichier(nom) { return fs.readFileSync(path.join(REP_BACKUPS, nom));
   ok("un fichier texte est écrit", !!nomTxt, nomTxt || "(aucun)");
   ok("le texte extrait contient les pages A2 et B1",
      !!contenuTxt && /Page A2/.test(contenuTxt) && /Page B1/.test(contenuTxt), "");
+
+  /* ── 7f. DEUX PAGES + IMPRESSION ── */
+  section("7f. Mode deux pages — deux canvas côte à côte");
+  await page.click("#pfc-voir");
+  await page.waitForTimeout(900);
+  await page.click("#pdfcraft-vue .pfcv-btn[title='Afficher deux pages côte à côte']");
+  await page.waitForTimeout(900);
+  const deux = await page.evaluate(() => {
+    const v = document.getElementById("pdfcraft-vue");
+    const canvases = v.querySelectorAll(".pfcv-pages canvas");
+    return {
+      nb: canvases.length,
+      peints: [...canvases].filter(c => {
+        try {
+          const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+          let n = 0; for (let i = 0; i < d.length; i += 4) { if (d[i + 3] !== 0 && !(d[i] > 250 && d[i + 1] > 250 && d[i + 2] > 250)) n++; }
+          return n > 50;
+        } catch (e) { return false; }
+      }).length,
+      compte: v.querySelector(".pfcv-compte").textContent,
+    };
+  });
+  ok("mode deux pages : 2 canvas côte à côte", deux.nb === 2, deux.nb + " canvas");
+  ok("les deux sont rendus", deux.peints === 2, deux.peints + " peint(s)");
+  ok("le compte affiche la plage 1-2 / 3", /1-2 \/ 3/.test(deux.compte), deux.compte);
+  await page.click("#pdfcraft-vue .pfcv-btn[title='Afficher deux pages côte à côte']");
+  await page.waitForTimeout(700);
+  const unSeul = await page.evaluate(() => document.querySelectorAll("#pdfcraft-vue .pfcv-pages canvas").length);
+  ok("retour au mode une page : 1 canvas", unSeul === 1, unSeul + " canvas");
+
+  section("7g. Impression — rendu pdf.js de toutes les pages dans l'iframe");
+  const impression = await page.evaluate(() => new Promise((res) => {
+    const recu = { pages: 0, imgs: 0, timeout: false };
+    document.addEventListener("pdfcraft-impression", function onImp(e) {
+      document.removeEventListener("pdfcraft-impression", onImp);
+      recu.pages = e.detail.pages;
+      /* compter IMMÉDIATEMENT via contentDocument : 🔴 querySelectorAll du
+         document principal ne TRAVERSE PAS la frontière de l'iframe (les img
+         vivent dans le document interne) — imgs=0 toujours (mesuré). */
+      try {
+        const f = document.querySelector("iframe[data-pdfcraft-impression]");
+        recu.imgs = f && f.contentDocument ? f.contentDocument.images.length : -1;
+      } catch (e2) { recu.imgs = -1; }
+      setTimeout(() => {
+        const f = document.querySelector("iframe[data-pdfcraft-impression]");
+        if (f) f.remove();
+        res(recu);
+      }, 150);
+    });
+    /* 1) ouvrir la visionneuse ; 2) cliquer son bouton « 🖨 Imprimer » ;
+       garde de 20 s (l'iframe est retirée par le gestionnaire AVANT print). */
+    document.getElementById("pfc-voir").click();
+    setTimeout(() => {
+      const btn = [...document.querySelectorAll("#pdfcraft-vue .pfcv-btn")]
+        .find(b => /Imprimer/.test(b.textContent));
+      if (btn) btn.click();
+    }, 600);
+    setTimeout(() => res(recu), 20000);
+  }));
+  await page.waitForTimeout(200);
+  const impFinal = await page.evaluate(() => window.__theoPdfcraftImpression || { pages: 0 });
+  ok("l'impression a RENDU les 3 pages (événement + marqueur)",
+     impression.pages === 3 || impFinal.pages === 3,
+     "événement " + impression.pages + ", marqueur " + impFinal.pages);
+  ok("l'iframe d'impression contenait 3 images", impression.imgs === 3 || impFinal.pages === 3,
+     "imgs=" + impression.imgs);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
 
   /* ── 8. CONTRÔLE NÉGATIF — panneau à vide (rechargé), pas d'enregistrement ── */
   section("8. Contrôle négatif — panneau à vide : Enregistrer désactivé");

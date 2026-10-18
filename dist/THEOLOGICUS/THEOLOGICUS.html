@@ -34136,6 +34136,9 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
   background:var(--bg-card-alt,rgba(255,255,255,.05)); color:var(--text);
   border:1px solid var(--accent);
 }
+#pdfcraft-vue .pfcv-pages{ display:flex; gap:12px; align-items:center; justify-content:center; }
+#pdfcraft-vue .pfcv-pages canvas{ box-shadow:0 6px 30px rgba(0,0,0,.4); }
+#pdfcraft-vue .pfcv-btn.actif{ background:var(--accent); color:var(--bg-hull,#0d1626); border-color:var(--accent); font-weight:700; }
 #pdfcraft-vue .pfc-fermer{ background:none; border:none; color:var(--text-dim,#8fa3b8);
   font-size:16px; cursor:pointer; padding:4px 8px; border-radius:6px; }
 #pdfcraft-vue .pfc-fermer:hover{ color:var(--text); background:var(--bg-card-alt,rgba(255,255,255,.05)); }
@@ -34157,6 +34160,30 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
 (function(){
   'use strict';
   var pc = { docs: [], pages: [] };   /* docs[i]={name,doc,pjs}; pages[j]={d:docIdx,p:pageIdx,rot} */
+  /* v607 — historique d'annulation (instantanés JSON du modèle de pages,
+     ~150 o/page : bon marché) + mode DEUX PAGES de la visionneuse. */
+  var _histo = [], _histoIdx = -1;
+  function pousserHistoire() {
+    var capture = JSON.stringify(pc.pages);
+    if (_histoIdx >= 0 && _histo[_histoIdx] === capture) return;
+    _histo = _histo.slice(0, _histoIdx + 1);
+    _histo.push(capture);
+    if (_histo.length > 60) { _histo.shift(); }
+    _histoIdx = _histo.length - 1;
+  }
+  function restaurerHistoire(idx) {
+    _histoIdx = idx;
+    pc.pages = JSON.parse(_histo[_histoIdx]);
+    rendre();
+  }
+  function annuler() {
+    if (_histoIdx <= 0) { toast('Rien à annuler', 'info'); return; }
+    restaurerHistoire(_histoIdx - 1);
+  }
+  function retablir() {
+    if (_histoIdx >= _histo.length - 1) { toast('Rien à rétablir', 'info'); return; }
+    restaurerHistoire(_histoIdx + 1);
+  }
 
   function h(tag, attrs, texte) {
     var el = document.createElement(tag);
@@ -34241,6 +34268,14 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     var ouvrir = h('button', { 'class': 'pfc-btn', type: 'button', text: '📂 Ouvrir des PDF' });
     ouvrir.addEventListener('click', function () { el.fichier.click(); });
     outils.appendChild(ouvrir);
+    el.annuler = h('button', { 'class': 'pfc-btn', id: 'pfc-annuler', type: 'button',
+      text: '⤶ Annuler', title: 'Annuler la dernière opération sur les pages (Ctrl+Z)' });
+    el.annuler.addEventListener('click', annuler);
+    outils.appendChild(el.annuler);
+    el.retablir = h('button', { 'class': 'pfc-btn', id: 'pfc-retablir', type: 'button',
+      text: '⤷ Rétablir', title: 'Rétablir (Ctrl+Y)' });
+    el.retablir.addEventListener('click', retablir);
+    outils.appendChild(el.retablir);
     el.voir = h('button', { 'class': 'pfc-btn', id: 'pfc-voir', type: 'button', text: '👁 Voir' });
     el.voir.addEventListener('click', voirResultat);
     outils.appendChild(el.voir);
@@ -34269,6 +34304,13 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
          panneau resté ouvert dessous. */
       if (el.vue && el.vue.classList.contains('ouvert')) { fermerVue(); return; }
       if (el.panneau.classList.contains('ouvert')) fermer();
+    });
+    document.addEventListener('keydown', function (e) {
+      /* v607 — annuler/rétablir au clavier, actifs quand l'atelier est ouvert. */
+      if (!el.panneau || !el.panneau.classList.contains('ouvert')) return;
+      var touche = (e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && touche === 'z' && !e.shiftKey) { e.preventDefault(); annuler(); }
+      else if ((e.ctrlKey || e.metaKey) && (touche === 'y' || (touche === 'z' && e.shiftKey))) { e.preventDefault(); retablir(); }
     });
   }
 
@@ -34314,6 +34356,7 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       }
     }
     if (ajoutes) toast(ajoutes + ' document(s) ouvert(s)', 'success');
+    pousserHistoire();
     rendre();
   }
 
@@ -34400,6 +34443,8 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     el.voir.disabled = !pc.pages.length;
     el.texte.disabled = !pc.pages.length;
     el.extraire.disabled = !cochees;
+    el.annuler.disabled = _histoIdx <= 0;
+    el.retablir.disabled = _histoIdx >= _histo.length - 1;
   }
   document.addEventListener('change', function (e) {
     if (e.target && e.target.closest && e.target.closest('#pdfcraft-panel') && e.target.type === 'checkbox') majStatut();
@@ -34410,14 +34455,17 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     var j = i + delta;
     if (j < 0 || j >= pc.pages.length) return;
     var t = pc.pages[i]; pc.pages[i] = pc.pages[j]; pc.pages[j] = t;
+    pousserHistoire();
     rendre();
   }
   function tourner(i, delta) {
     pc.pages[i].rot = ((pc.pages[i].rot + delta) % 360 + 360) % 360;
+    pousserHistoire();
     rendre();
   }
   function supprimer(i) {
     pc.pages.splice(i, 1);
+    pousserHistoire();
     rendre();
   }
   function selection() {
@@ -34559,7 +34607,8 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     v.appendChild(el.vueMotDePasse);
 
     el.vueIdx = 0;
-    el.vueZoom = 1; /* 🔴 initialisation OBLIGATOIRE : sans elle, rendreVue multiplie
+    el.vueZoom = 1;
+    el.vueDeux = false; /* 🔴 initialisation OBLIGATOIRE : sans elle, rendreVue multiplie
        par undefined -> NaN -> canvas 0x0 (diagnostic v606, mesuré) */
     el.vueCorps = h('div', { 'class': 'pfcv-corps' });
     el.vueCanvas = h('canvas', { 'aria-label': 'Page du PDF rendue' });
@@ -34599,6 +34648,19 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     el.vueTexte = h('button', { 'class': 'pfcv-btn', type: 'button', text: '📝 Texte', title: 'Extraire le texte en .txt' });
     el.vueTexte.addEventListener('click', extraireTexte);
     barre.appendChild(el.vueTexte);
+    el.vueDeuxBtn = h('button', { 'class': 'pfcv-btn', type: 'button', text: '📑 Deux pages',
+      title: 'Afficher deux pages côte à côte', 'aria-pressed': 'false' });
+    el.vueDeuxBtn.addEventListener('click', function () {
+      el.vueDeux = !el.vueDeux;
+      el.vueDeuxBtn.classList.toggle('actif', el.vueDeux);
+      el.vueDeuxBtn.setAttribute('aria-pressed', el.vueDeux ? 'true' : 'false');
+      rendreVue();
+    });
+    barre.appendChild(el.vueDeuxBtn);
+    el.vueImprimer = h('button', { 'class': 'pfcv-btn', type: 'button', text: '🖨 Imprimer',
+      title: 'Imprimer toutes les pages du modèle (rendu pdf.js)' });
+    el.vueImprimer.addEventListener('click', imprimerTout);
+    barre.appendChild(el.vueImprimer);
     var fermerBarre = h('button', { 'class': 'pfcv-btn', type: 'button', text: '✕ Fermer', 'aria-label': 'Fermer l’aperçu' });
     fermerBarre.addEventListener('click', fermerVue);
     barre.appendChild(fermerBarre);
@@ -34639,35 +34701,47 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     if (!d || !d.pjs) { el.vueCompte.textContent = (el.vueIdx + 1) + ' / ' + pc.pages.length + ' (rendu indisponible)'; return; }
     var token = ++_tokenVue;
     try {
-      var page = await d.pjs.getPage(pg.p + 1);
-      if (token !== _tokenVue) return;
-      /* v606 — deux rAF : garantir que le layout de l'overlay posé à l'instant
+      var pg2 = (el.vueDeux && pc.pages[el.vueIdx + 1]) ? pc.pages[el.vueIdx + 1] : null;
+      var cible = pg2 ? 2 : 1;
+      /* v607 — deux rAF : garantir que le layout de l'overlay posé à l'instant
          est calculé AVANT de lire clientWidth (sinon dispo=0 -> canvas 0x0,
          mesuré). Repli sur la largeur du viewport (l'overlay est inset:0). */
       await new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); });
       if (token !== _tokenVue) return;
-      var vp0 = page.getViewport({ scale: 1 });
-      var rotation = (vp0.rotation + pg.rot) % 360;
-      var dispo = Math.max(el.vueCorps.clientWidth, window.innerWidth) - 48;
-      var echelleAjuste = rotation % 180 === 0 ? (dispo / vp0.width) : (dispo / vp0.height);
-      var vp = page.getViewport({ scale: Math.max(0.05, echelleAjuste) * (el.vueZoom || 1), rotation: rotation });
-      var dpr = window.devicePixelRatio || 1;
-      if (!isFinite(vp.width) || vp.width < 1) {
-        el.vueCompte.textContent = 'DIAG vpW=' + vp.width + ' rot=' + rotation +
-          ' vp0W=' + vp0.width + ' vp0rot=' + vp0.rotation + ' pgrot=' + pg.rot +
-          ' ech=' + echelleAjuste + ' dispo=' + dispo + ' zoom=' + el.vueZoom;
-        return;
+      var dispo = Math.max(el.vueCorps.clientWidth, window.innerWidth) - 48 - (cible === 2 ? 12 : 0);
+      el.vueCorps.textContent = '';
+      var conteneur = h('div', { 'class': 'pfcv-pages' });
+      el.vueCorps.appendChild(conteneur);
+      var aRendre = [pg]; if (pg2) aRendre.push(pg2);
+      var rendus = [];
+      for (var k = 0; k < aRendre.length; k++) {
+        var item = aRendre[k];
+        var di = pc.docs[item.d];
+        if (!di || !di.pjs) continue;
+        var page = await di.pjs.getPage(item.p + 1);
+        if (token !== _tokenVue) return;
+        var vp0 = page.getViewport({ scale: 1 });
+        var rotation = (vp0.rotation + item.rot) % 360;
+        var base = rotation % 180 === 0 ? vp0.width : vp0.height;
+        var echelleAjuste = (dispo / cible) / base;
+        var vp = page.getViewport({ scale: Math.max(0.05, echelleAjuste) * (el.vueZoom || 1), rotation: rotation });
+        var dpr = window.devicePixelRatio || 1;
+        if (!isFinite(vp.width) || vp.width < 1) continue;
+        var canvas = h('canvas', { 'aria-label': 'Page du PDF rendue' });
+        canvas.width = Math.max(10, Math.round(vp.width * dpr));
+        canvas.height = Math.max(10, Math.round(vp.height * dpr));
+        canvas.style.width = Math.round(vp.width) + 'px';
+        canvas.style.height = Math.round(vp.height) + 'px';
+        conteneur.appendChild(canvas);
+        var ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        rendus.push(page.render({ canvasContext: ctx, viewport: vp }).promise);
       }
-      el.vueCanvas.width = Math.max(10, Math.round(vp.width * dpr));
-      el.vueCanvas.height = Math.max(10, Math.round(vp.height * dpr));
-      el.vueCanvas.style.width = Math.round(vp.width) + 'px';
-      el.vueCanvas.style.height = Math.round(vp.height) + 'px';
-      el.vueCanvas.__renduVue = true;
-      var ctx = el.vueCanvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      await Promise.all(rendus);
       if (token !== _tokenVue) return;
-      el.vueCompte.textContent = (el.vueIdx + 1) + ' / ' + pc.pages.length;
+      el.vueCompte.textContent = pg2
+        ? (el.vueIdx + 1) + '-' + (el.vueIdx + 2) + ' / ' + pc.pages.length
+        : (el.vueIdx + 1) + ' / ' + pc.pages.length;
     } catch (e) {
       el.vueCompte.textContent = 'rendu impossible : ' + (e && e.message || e);
     }
@@ -34712,6 +34786,55 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       });
       el.vueResultats.appendChild(b);
     });
+  }
+
+  /* ── Impression : rendu pdf.js de chaque page -> images -> iframe print. ──
+     Événement « pdfcraft-impression » émis AVANT print() : les bancs
+     l'interceptent (window.print est un no-op en headless). */
+  async function imprimerTout() {
+    if (!pc.pages.length) { toast('Aucune page à imprimer', 'info'); return; }
+    amorcerPdfJs();
+    toast('Préparation de l’impression…', 'info');
+    var imgs = [];
+    for (var i = 0; i < pc.pages.length; i++) {
+      var pg = pc.pages[i];
+      var d = pc.docs[pg.d];
+      if (!d || !d.pjs) continue;
+      try {
+        var page = await d.pjs.getPage(pg.p + 1);
+        var vp0 = page.getViewport({ scale: 1 });
+        var rotation = (vp0.rotation + pg.rot) % 360;
+        var vp = page.getViewport({ scale: 2, rotation: rotation });
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+        await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+        imgs.push('<img src="' + cv.toDataURL('image/jpeg', 0.92) + '">');
+      } catch (e) {}
+    }
+    if (!imgs.length) { toast('Rien à imprimer', 'error'); return; }
+    var cadre = document.createElement('iframe');
+    cadre.setAttribute('data-pdfcraft-impression', String(imgs.length));
+    cadre.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(cadre);
+    var doc = cadre.contentDocument;
+    doc.open();
+    doc.write('<html><head><title>THEOLOGICUS — PDFCraft</title><style>' +
+      '@page{margin:0} body{margin:0} img{display:block;width:100%;page-break-after:always}' +
+      'img:last-child{page-break-after:auto}</style></head><body>' +
+      imgs.join('') + '</body></html>');
+    doc.close();
+    try {
+      document.dispatchEvent(new CustomEvent('pdfcraft-impression', { detail: { pages: imgs.length } }));
+      window.__theoPdfcraftImpression = { pages: imgs.length };
+      /* v607 — print() DIFFÉRÉ de 50 ms avec garde isConnected : les bancs
+         retirent l'iframe sur l'événement (print() sur iframe détachée
+         CRASHE le renderer headless — mesuré « Target crashed »). En
+         production l'iframe reste 60 s et l'impression part normalement. */
+      setTimeout(function () {
+        try { if (cadre.isConnected) { cadre.contentWindow.focus(); cadre.contentWindow.print(); } } catch (e) {}
+      }, 50);
+    } catch (e) {}
+    setTimeout(function () { try { cadre.remove(); } catch (e) {} }, 60000);
   }
 
   /* ── Démarrage ── */
