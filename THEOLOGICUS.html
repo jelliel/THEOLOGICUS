@@ -12470,6 +12470,16 @@ function _httpStatusLabel(status) {
 // Lève une erreur enrichie (status HTTP + message du serveur) à partir d'une réponse
 async function throwApiError(res, model) {
   let status = res && res.status ? res.status : 0;
+  /* v612 — QUI a répondu ? Les en-têtes d'edge distinguent Cloudflare
+     (server / cf-ray / cf-mitigated) du fournisseur lui-même. Sans eux un 403
+     reste indéchiffrable : région ? clé ? anti-robot ? modèle ? */
+  var _eh = res && res.headers;
+  var _hdr = function (n) { try { return _eh ? String(_eh.get(n) || '') : ''; } catch (e) { return ''; } };
+  var edgeServer = _hdr('server'), edgeRay = _hdr('cf-ray'), edgeMit = _hdr('cf-mitigated');
+  var _tr403 = window.__dernierTransport || null;
+  var viaTransport = (_tr403 && _tr403.utilise === 'natif')
+    ? ('transport NATIF ' + (_tr403.pont || ''))
+    : (_tr403 && _tr403.erreurNatif ? 'direct (natif en échec)' : 'direct');
   let serverMsg = '';
   try {
     const text = await res.text();
@@ -12532,16 +12542,27 @@ async function throwApiError(res, model) {
       '. Vérifiez le modèle choisi et ses options (PARAMÈTRES ⚙ > Modèle).';
   } else if (status === 403) {
     err.accesRefuse = true;
+    err.edge = { server: edgeServer, ray: edgeRay, mitigated: edgeMit, transport: viaTransport };
     var detail403 = String(serverMsg || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    var edgeBits = [];
+    if (edgeServer) edgeBits.push('serveur ' + edgeServer);
+    if (edgeRay) edgeBits.push('cf-ray ' + edgeRay);
+    if (edgeMit) edgeBits.push('cf-mitigated ' + edgeMit);
+    var edgeTxt = ' [via ' + viaTransport + (edgeBits.length ? ' ; ' + edgeBits.join(' ; ') : '') + ']';
     if (/origine non locale/i.test(msgMin)) {
       err.message = 'Le RELAIS LOCAL a refusé la requête (HTTP 403, origine non locale) — la clé n\'a PAS été testée. Ouvrez l\'app sur la machine du relais (127.0.0.1) ou via l\'adresse exacte du serveur.';
+    } else if (/challenge|just a moment|cf-mitigated/i.test(msgMin + ' ' + edgeMit)) {
+      /* v612 — défi anti-robot : AUCUN réglage de l'app ne le fait passer. */
+      err.message = 'Défi anti-robot du fournisseur (HTTP 403' + edgeTxt + ') — la clé est probablement VALIDE. ' +
+        'Cet appareil ne peut pas résoudre le défi : utilisez un autre réseau (Wi-Fi plutôt que données mobiles, ou l\'inverse), ' +
+        'ou passez par le relais du PC sur le même Wi-Fi.';
     } else if (/cloudflare|attention required|cf-error|access denied|blocked/i.test(msgMin)) {
       err.message = 'Accès refusé par ' + (err.providerLabel || 'le fournisseur') +
-        ' (HTTP 403, blocage WAF/proxy) — la clé peut être VALIDE. Détail : ' + (detail403 || '(page de blocage)') +
+        ' (HTTP 403, blocage WAF/proxy' + edgeTxt + ') — la clé peut être VALIDE. Détail : ' + (detail403 || '(page de blocage)') +
         '. Si l\'app est ouverte en fichier direct, passez par le relais local (exe ou THEOLOGICUS.bat).';
     } else {
       err.message = 'Accès refusé par ' + (err.providerLabel || 'le fournisseur') +
-        ' (HTTP 403) — la clé peut être VALIDE : région, permissions ou modèle non autorisé. Détail : ' +
+        ' (HTTP 403' + edgeTxt + ') — la clé peut être VALIDE : région, permissions ou modèle non autorisé. Détail : ' +
         (detail403 || '(sans détail)') + '. Testez la clé : PARAMÈTRES ⚙ > Modèle > 🔍 TESTER.';
     }
   }

@@ -311,7 +311,31 @@ const MOCK_CAPACITOR = () => {
   ok("le formateur de conversation rend ce message tel quel",
      /Paramètres refusés/.test(String(r422.formate || "")), String(r422.formate).slice(0, 80));
 
-  section("12. Aucune erreur JavaScript");
+  /* ── 12. 403 : QUI répond (edge) + transport ── */
+  section("12. HTTP 403 — l'en-tête d'edge et le transport sont nommés");
+  const r403 = await page.evaluate(async () => {
+    const res = new Response(JSON.stringify({ detail: "Forbidden" }), {
+      status: 403,
+      headers: { "server": "cloudflare", "cf-ray": "8f2a1c-AMS", "content-type": "application/json" }
+    });
+    try { await window.throwApiError(res, "mistral-small-latest"); return { jete: false }; }
+    catch (e) { return { jete: true, msg: e.message, edge: e.edge || null }; }
+  });
+  ok("le 403 nomme l'edge (serveur cloudflare + cf-ray)",
+     /serveur cloudflare/.test(r403.msg) && /cf-ray/.test(r403.msg), String(r403.msg).slice(0, 140));
+  ok("le transport utilisé est indiqué", /\[via /.test(r403.msg), String(r403.msg).slice(0, 90));
+  ok("l'edge est structuré pour le diagnostic",
+     !!(r403.edge && r403.edge.server === "cloudflare" && r403.edge.ray), JSON.stringify(r403.edge));
+
+  const rChal = await page.evaluate(async () => {
+    const res = new Response("challenge", { status: 403, headers: { "cf-mitigated": "challenge" } });
+    try { await window.throwApiError(res, "mistral-small-latest"); return { msg: "" }; }
+    catch (e) { return { msg: e.message }; }
+  });
+  ok("un défi anti-robot est annoncé comme tel (et non « clé invalide »)",
+     /anti-robot/.test(rChal.msg), String(rChal.msg).slice(0, 140));
+
+  section("13. Aucune erreur JavaScript");
   ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(" | "));
 
   const passes = resultats.filter(r => r.pass).length;
