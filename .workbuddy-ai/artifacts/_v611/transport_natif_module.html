@@ -5,17 +5,26 @@
    renvoie donc l'URL directe du fournisseur, et la requête part du WebView
    (Origin « https://localhost », User-Agent WebView, en-têtes Sec-Fetch-*).
    Le WAF de certains fournisseurs refuse ces requêtes par 403 alors que la
-   clé API est parfaitement valide — d'où « ça ne passe pas » sur mobile,
-   même avec la bonne clé et le bon modèle.
+   clé API est parfaitement valide — d'où « ça ne passe pas » sur mobile.
 
-   REMÈDE : rejouer la requête via le PONT NATIF (CapacitorHttp, sinon
-   NetBridge.httpRequest ajouté en v611 — HttpURLConnection côté Java).
-   Aucun en-tête de navigateur n'est transmis : plus de blocage WAF ni CORS.
+   REMÈDE : rejouer la requête via le PONT NATIF. Aucun en-tête de navigateur
+   n'est transmis : plus de blocage WAF ni CORS.
+
+   🔴 v611b — CONTRATS DE PONT (le bug 422) : CapacitorHttp lit le corps dans
+   `data` et renvoie la réponse dans `data` — PAS `body`. Envoyer `body` à
+   CapacitorHttp produit un POST SANS corps -> le fournisseur répond 422
+   (« field required »), ce qui n'arrivait jamais avant. NetBridge (notre
+   plugin) utilise `body`. Chaque pont déclare donc sa propre traduction.
+
+   🔴 Un 4xx SANS corps n'est pas une réponse du fournisseur : c'est un
+   transport qui n'a rien envoyé. Il est traité comme un ÉCHEC du pont, et si
+   aucun pont ne produit de réponse utilisable on rend la réponse DIRECTE
+   d'origine (le 403) — jamais un 422 trompeur.
 
    🔴 Le repli ne s'active QUE si le direct échoue (réseau/CORS) ou répond
    403 : la voie directe reste prioritaire tant qu'elle marche, donc le
    STREAMING normal (jeton par jeton) n'est pas dégradé. Un 401 (clé
-   invalide) ne déclenche AUCUN repli : c'est un vrai problème de clé.
+   invalide) ne déclenche AUCUN repli.
 */
 (function () {
   'use strict';
@@ -32,20 +41,41 @@
     } catch (e) { return false; }
   }
 
-  /* Le pont natif disponible : CapacitorHttp (plugin coeur) d'abord, puis
-     NetBridge.httpRequest (notre plugin, toujours présent dans l'APK). */
-  function pontHttp() {
+  /* Ponts disponibles, dans l'ordre de préférence. NetBridge d'abord : c'est
+     NOTRE implémentation (contrat simple, corps écrit tel quel). CapacitorHttp
+     ensuite, avec SA traduction de champs (`data`). */
+  function pontsDisponibles() {
+    var out = [];
     try {
       var P = window.Capacitor && window.Capacitor.Plugins;
-      if (!P) return null;
-      if (P.CapacitorHttp && typeof P.CapacitorHttp.request === 'function') {
-        return { nom: 'CapacitorHttp', req: function (o) { return P.CapacitorHttp.request(o); } };
-      }
+      if (!P) return out;
       if (P.NetBridge && typeof P.NetBridge.httpRequest === 'function') {
-        return { nom: 'NetBridge', req: function (o) { return P.NetBridge.httpRequest(o); } };
+        out.push({
+          nom: 'NetBridge',
+          appel: function (o) { return P.NetBridge.httpRequest(o); },
+          params: function (p) {
+            return { url: p.url, method: p.method, headers: p.headers, body: p.body, timeout: p.timeout };
+          },
+          corps: function (r) { return (r && r.body != null) ? r.body : (r && r.data != null ? r.data : ''); }
+        });
+      }
+      if (P.CapacitorHttp && typeof P.CapacitorHttp.request === 'function') {
+        out.push({
+          nom: 'CapacitorHttp',
+          appel: function (o) { return P.CapacitorHttp.request(o); },
+          params: function (p) {
+            /* CapacitorHttp : `data` (et non `body`), responseType texte */
+            return {
+              url: p.url, method: p.method, headers: p.headers,
+              data: p.body, responseType: 'text',
+              connectTimeout: p.timeout, readTimeout: p.timeout
+            };
+          },
+          corps: function (r) { return (r && r.data != null) ? r.data : (r && r.body != null ? r.body : ''); }
+        });
       }
     } catch (e) {}
-    return null;
+    return out;
   }
 
   /* init.headers peut être un objet, un tableau [k,v] ou un Headers. */
@@ -75,12 +105,18 @@
     return undefined; /* undefined = non rejouable */
   }
 
-  function reponseDepuisNatif(r) {
-    var status = Number(r && r.status) || 0;
-    if (!(status >= 200 && status <= 599)) return null;
-    var corps = (r && r.body != null) ? String(r.body) : '';
+  /* Une réponse native n'est UTILISABLE que si elle porte quelque chose.
+     Un 4xx au corps VIDE signifie « on n'a rien envoyé » (bug de transport),
+     pas un refus du fournisseur. */
+  function utilisable(status, corps) {
+    if (!(status >= 200 && status <= 599)) return false;
+    if (status >= 400 && !String(corps || '').trim()) return false;
+    return true;
+  }
+
+  function reponseDepuisNatif(status, corps, entetesBruts) {
     var entetes = {};
-    var brut = (r && r.headers) || {};
+    var brut = entetesBruts || {};
     Object.keys(brut).forEach(function (k) {
       var v = brut[k];
       if (v == null) return;
@@ -89,7 +125,6 @@
       entetes[k] = String(v);
     });
     try {
-      /* 204/205/304 : un corps est interdit par la spec Response */
       if (status === 204 || status === 205 || status === 304) {
         return new Response(null, { status: status, headers: entetes });
       }
@@ -97,37 +132,63 @@
     } catch (e) { return null; }
   }
 
-  function rejouerNatif(url, init, pont, diag) {
+  /* Essaie les ponts DANS L'ORDRE ; s'arrête au premier utilisable. */
+  function rejouerNatif(url, init, ponts, diag) {
     init = init || {};
     var method = String(init.method || 'GET').toUpperCase();
     var corps = corpsTexte(init.body);
     if (corps === undefined) return Promise.resolve(null); /* corps non rejouable */
     if (init.signal && init.signal.aborted) return Promise.resolve(null);
 
-    var t0 = Date.now();
-    var params = {
-      url: url,
-      method: method,
+    var base = {
+      url: url, method: method,
       headers: entetesObjet(init.headers),
       timeout: 60000
     };
-    if (corps !== null) params.body = corps;
+    if (corps !== null) base.body = corps;
 
-    return pont.req(params).then(function (r) {
-      var reponse = reponseDepuisNatif(r);
-      window.__dernierTransport = {
-        url: url, methode: method, utilise: 'natif', pont: pont.nom,
-        statut: (r && r.status) || 0, ms: Date.now() - t0,
-        direct: diag, extrait: String((r && r.body) || '').slice(0, 240)
-      };
-      return reponse;
-    }, function (e) {
-      window.__dernierTransport = {
-        url: url, methode: method, utilise: 'direct', pont: pont.nom,
-        erreurNatif: String((e && e.message) || e), direct: diag
-      };
-      return null;
-    });
+    var tentatives = [];
+    var i = 0;
+
+    function essayer(pont) {
+      var t0 = Date.now();
+      var params;
+      try { params = pont.params(base); } catch (e) { params = base; }
+      return pont.appel(params).then(function (r) {
+        var status = Number(r && r.status) || 0;
+        var brut = pont.corps(r);
+        var corpsRep = String(brut == null ? '' : brut);
+        var ok = utilisable(status, corpsRep);
+        tentatives.push({ pont: pont.nom, statut: status, corpsVide: !corpsRep.trim() });
+        window.__dernierTransport = {
+          url: url, methode: method, utilise: ok ? 'natif' : 'direct',
+          pont: pont.nom, statut: status, ms: Date.now() - t0,
+          direct: diag, tentatives: tentatives.slice(),
+          extrait: corpsRep.slice(0, 240)
+        };
+        if (!ok) return null;
+        return reponseDepuisNatif(status, corpsRep, r && r.headers);
+      }, function (e) {
+        tentatives.push({ pont: pont.nom, erreur: String((e && e.message) || e) });
+        window.__dernierTransport = {
+          url: url, methode: method, utilise: 'direct', pont: pont.nom,
+          erreurNatif: String((e && e.message) || e), direct: diag,
+          tentatives: tentatives.slice()
+        };
+        return null;
+      });
+    }
+
+    function suivant() {
+      if (i >= ponts.length) return Promise.resolve(null);
+      var pont = ponts[i++];
+      return essayer(pont).then(function (res) {
+        if (res) return res;
+        return suivant();
+      });
+    }
+
+    return suivant();
   }
 
   /**
@@ -137,24 +198,24 @@
    */
   function theoFetchReseau(url, init) {
     init = init || {};
-    var pont = estNatif() ? pontHttp() : null;
-    if (!pont) return _direct.call(window, url, init);
+    var ponts = estNatif() ? pontsDisponibles() : [];
+    if (!ponts.length) return _direct.call(window, url, init);
 
     return _direct.call(window, url, init).then(function (res) {
       if (res.status !== 403) return res;
       /* 403 : le WebView a probablement été bloqué (WAF). On garde le corps
          direct pour le diagnostic, puis on rejoue en natif. */
       return res.clone().text().then(function (corpsDirect) {
-        return rejouerNatif(url, init, pont, {
+        return rejouerNatif(url, init, ponts, {
           statut: res.status, extrait: String(corpsDirect || '').slice(0, 240)
         }).then(function (res2) { return res2 || res; });
       }, function () {
-        return rejouerNatif(url, init, pont, { statut: res.status })
+        return rejouerNatif(url, init, ponts, { statut: res.status })
           .then(function (res2) { return res2 || res; });
       });
     }, function (err) {
       /* échec réseau / CORS : le natif n'a pas ces contraintes */
-      return rejouerNatif(url, init, pont, {
+      return rejouerNatif(url, init, ponts, {
         erreurDirect: String((err && err.message) || err)
       }).then(function (res2) {
         if (res2) return res2;
@@ -165,8 +226,8 @@
 
   window.theoFetchReseau = theoFetchReseau;
   window.__theoTransportDisponible = function () {
-    var p = estNatif() ? pontHttp() : null;
-    return p ? p.nom : null;
+    var p = estNatif() ? pontsDisponibles() : [];
+    return p.length ? p.map(function (x) { return x.nom; }).join(',') : null;
   };
 
   /* 🔴 AUTONOMIE : le wrapper de fetch de l'app n'existe que si le plugin
