@@ -49226,11 +49226,17 @@ window.continueTradApart = async function (msgId) {
   var _snap = {};        /* dernière valeur locale connue (anti-rebond push) */
   var _chatSnap = {};    /* id -> JSON déjà poussé (conversations) */
   var _dirty = {};       /* clés en attente d'envoi (localStorage ET conversations) */
+  var _dirtyTs = {};     /* v616 — horodatage RÉEL par entrée en attente (voir queue) */
   var _dirtyTimer = null;
   var _applying = false; /* vrai pendant l'application d'un pull : ne rien repousser */
 
-  function queue(k, v){
+  /* v616 — `ts` optionnel : une conversation doit être poussée avec SA date de
+     modification, pas avec « maintenant ». Le serveur arbitre par ts : estampiller
+     now faisait qu'une copie locale ANCIENNE écrasait la version récente d'un
+     autre appareil. Une suppression, elle, est un ÉVÉNEMENT : ts = maintenant. */
+  function queue(k, v, ts){
     _dirty[k] = (v === null || v === undefined) ? null : String(v);
+    _dirtyTs[k] = (v === null || v === undefined) ? nowMs() : (parseFloat(ts) || nowMs());
     if (_dirtyTimer) return;
     _dirtyTimer = setTimeout(flush, 600);
   }
@@ -49239,9 +49245,11 @@ window.continueTradApart = async function (msgId) {
     var entries = [], k;
     for (k in _dirty){
       if (!Object.prototype.hasOwnProperty.call(_dirty, k)) continue;
-      TS[k] = nowMs();
-      entries.push({ k: k, v: _dirty[k], ts: TS[k] });
+      var _t = _dirtyTs[k] || nowMs();
+      TS[k] = _t;
+      entries.push({ k: k, v: _dirty[k], ts: _t });
       delete _dirty[k];
+      delete _dirtyTs[k];
     }
     if (!entries.length) return;
     tsSave();
@@ -49285,7 +49293,11 @@ window.continueTradApart = async function (msgId) {
     var v = JSON.stringify(chat);
     if (_chatSnap[k] === v) return;
     _chatSnap[k] = v;
-    queue(k, v);
+    /* v616 — ts = date de modification de la conversation (secondes ou ms). */
+    var _ts = chat.updated;
+    if (typeof _ts !== "number") _ts = _ts ? Date.parse(_ts) : 0;
+    if (_ts > 0 && _ts < 1e12) _ts = _ts * 1000;   /* secondes -> millisecondes */
+    queue(k, v, _ts > 0 ? _ts : nowMs());
   }
   function patchDb(){
     try {
@@ -49445,7 +49457,15 @@ window.continueTradApart = async function (msgId) {
     try { var p = document.getElementById('v189-pan'); if (p && p.classList.contains('open') && window.__v189Render) window.__v189Render(); } catch(e){}
     try { if (document.querySelector('#v167-pat.open') && window.__v167RenderPanel) window.__v167RenderPanel(); } catch(e){}
     try { if (document.querySelector('#v183-pat.open') && window.__v183RenderBody) window.__v183RenderBody(); } catch(e){}
-    if (chatChanged){ try { if (typeof renderMessages === 'function') renderMessages(); } catch(e){} }
+    if (chatChanged){
+      try { if (typeof renderMessages === 'function') renderMessages(); } catch(e){}
+      /* v616 — le « nombre de conversations » ne suivait pas : un pull écrivait
+         bien les conversations dans IndexedDB mais l'interface n'était jamais
+         reconstruite (seuls les messages l'étaient). On rend la LISTE et les
+         compteurs. */
+      try { if (typeof renderArchives === 'function') renderArchives(); } catch(e){}
+      try { if (typeof computeStats === 'function') computeStats(); } catch(e){}
+    }
   }
 
   /* ── Amorçage LÉGER (v403b) ──
@@ -49475,11 +49495,44 @@ window.continueTradApart = async function (msgId) {
       .catch(function(){});
   }
 
+  /* ── v616 — AMORÇAGE DES CONVERSATIONS ──
+     patchDb() ne pousse que les conversations ÉCRITES pendant la session : les
+     conversations déjà présentes dans IndexedDB n'atteignaient donc JAMAIS le
+     magasin serveur, et l'autre appareil n'en voyait qu'une partie. On pousse
+     ici les plus récentes, une fois par session, bornées (60 / 8 Mo) pour ne
+     pas saturer le magasin partagé. Le ts envoyé est celui de la conversation :
+     le serveur garde la plus récente, donc un appareil en retard ne peut pas
+     écraser une version fraîche. */
+  var _initiauxFaits = false;
+  function pushChatsInitiaux(){
+    if (_initiauxFaits || !enabled()) return;
+    if (typeof db === 'undefined' || !db || !db.getAll) return;
+    _initiauxFaits = true;
+    var p;
+    try { p = db.getAll('chats'); } catch (e) { return; }
+    Promise.resolve(p).then(function (liste) {
+      var chats = (liste || []).filter(function (c) { return c && c.id; });
+      chats.sort(function (a, b) { return (b.updated || 0) - (a.updated || 0); });
+      var octets = 0, n = 0;
+      chats.forEach(function (c) {
+        if (n >= 60 || octets >= 8000000) return;
+        var k = 'chat::' + c.id;
+        if (_chatSnap[k] !== undefined) return;      /* déjà poussé / reçu */
+        var v = '';
+        try { v = JSON.stringify(c); } catch (e) { return; }
+        octets += v.length;
+        n++;
+        setTimeout(function () { pushChat(c); }, n * 120);
+      });
+    }).catch(function(){});
+  }
+
   function boot(){
     patchDb();
     miroirElaguer();   /* répare un localStorage saturé par une version antérieure */
     seed();
     setTimeout(pull, 800);
+    setTimeout(pushChatsInitiaux, 3000);   /* v616 — les conversations existantes partent aussi */
     setInterval(scanLocal, PUSH_MS);
     setInterval(pull, PULL_MS);
     /* IndexedDB peut s'ouvrir APRÈS nous : on (re)patche jusqu'à réussite. */
@@ -49498,7 +49551,9 @@ window.continueTradApart = async function (msgId) {
     miroir: function(){
       return { octets: miroirTotal(), budget: MIROIR_BUDGET, plafond: MIROIR_MAX_CLE, arrete: _miroirStop };
     },
-    elaguer: miroirElaguer
+    elaguer: miroirElaguer,
+    pushChatsInitiaux: pushChatsInitiaux,   /* v616 */
+    _chatSnap: _chatSnap
   };
 })();
 </script>
