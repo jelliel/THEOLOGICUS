@@ -384,6 +384,14 @@ const MOCK_CAPACITOR = () => {
      Array.isArray(rListe.modeles) && rListe.modeles.length === 2, JSON.stringify(rListe.modeles));
   ok("le modèle actif absent de la liste est signalé (ok=true mais liste != actif)",
      rListe.ok === true && rListe.modeles.indexOf("codestral-2508") < 0, JSON.stringify(rListe.modeles));
+  const rDet = await page.evaluate(() => {
+    const sel = document.getElementById("model-select");
+    const opt = sel ? [...sel.querySelectorAll("option")].find(o => o.value === "mistral-small-latest") : null;
+    const g = opt ? opt.closest("optgroup") : null;
+    return { present: !!opt, groupe: g ? g.label : "(aucun)" };
+  });
+  ok("un modèle autorisé ABSENT du catalogue devient sélectionnable",
+     rDet.present && /Détectés/.test(rDet.groupe), rDet.groupe);
   await page.unroute("**/v1/models*");
 
   section("14. Aucune erreur JavaScript");

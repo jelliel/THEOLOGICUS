@@ -11855,6 +11855,30 @@ function refreshModelSelect() {
       });
       sel.appendChild(og);
     }
+    /* v613b — MODÈLES DÉTECTÉS : /v1/models renvoie la liste AUTORISÉE par la
+       clé. Si un identifiant autorisé manque au catalogue de l'app, il est
+       ajouté ici — sinon l'utilisateur verrait « choisis un modèle autorisé »
+       sans pouvoir en choisir un. resolveModelConfig retombe proprement sur
+       l'endpoint Mistral pour un identifiant inconnu. */
+    try {
+      var detectes = JSON.parse(localStorage.getItem('theo_modeles_detectes') || '[]') || [];
+      var dejaLa = {};
+      t.forEach(function (m) { dejaLa[String(m.value)] = 1; });
+      (state.customModels || []).forEach(function (m) { dejaLa[String(m.uid)] = 1; });
+      var manquants = detectes.filter(function (id) { return id && !dejaLa[String(id)]; });
+      if (manquants.length) {
+        var ogd = document.createElement('optgroup');
+        ogd.label = '🔎 Détectés (ma clé)';
+        manquants.slice(0, 40).forEach(function (id) {
+          var od = document.createElement("option");
+          od.value = id;
+          od.textContent = '🔎 ' + id + (estModeleIndisponible(id) ? ' ⛔ (abonnement)' : '');
+          od.title = 'Modèle listé par /v1/models pour votre clé';
+          ogd.appendChild(od);
+        });
+        sel.appendChild(ogd);
+      }
+    } catch (e) {}
     // Modèle enregistré absent de la liste (fournisseur retiré, identifiant
     // renommé) : on l'ajoute pour que le <select> ne retombe pas silencieusement
     // sur la première option — ce qui changerait de modèle sans le dire.
@@ -12663,6 +12687,12 @@ async function testerCleApi() {
       } catch (e3) {}
       window.__theoModelesDisponibles = ids;
       window.__dernierTestCle.modeles = ids;
+      /* v613b — la liste autorisée devient sélectionnable (même si le
+         catalogue de l'app ne la contient pas). */
+      try {
+        if (ids.length) localStorage.setItem('theo_modeles_detectes', JSON.stringify(ids.slice(0, 60)));
+        if (typeof refreshModelSelect === 'function') refreshModelSelect();
+      } catch (e4) {}
       var actuel = (typeof state !== 'undefined' && state && state.model) || '';
       if (ids.length && actuel && ids.indexOf(actuel) < 0) {
         toast('✅ Clé valide — MAIS le modèle « ' + actuel + ' » n\'est pas dans ta liste (' + ids.length + ' autorisés). Ex. : ' + ids.slice(0, 4).join(', '), 'error');
