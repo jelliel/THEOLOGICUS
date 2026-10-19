@@ -427,7 +427,25 @@ const MOCK_CAPACITOR = () => {
      fb.avant === fb.apres, fb.avant + " -> " + fb.apres);
   ok("402 n'est pas dans les codes basculables", fb.retriable === -1, String(fb.retriable));
 
-  section("15. Aucune erreur JavaScript");
+  /* ── 15. Le repli ignore un cache de jauge PÉRIMÉ ── */
+  section("15. Bascule — un cache de jauge périmé n'est plus utilisé");
+  const rCache = await page.evaluate(() => {
+    state.apiKey = "fake-key-banc";
+    state.keys = state.keys || {}; state.keys.mistral = "fake-key-banc";
+    const res = [{ k: 0, v: "open-mistral-nemo", ms: 120 }];
+    /* périmé : mesuré il y a 1 h */
+    localStorage.setItem("theologicus_gauge_last", JSON.stringify({ ts: Date.now() - 3600000, res }));
+    const perime = (typeof window.__theoFindFallback === "function") ? window.__theoFindFallback("codestral-2508") : "absent";
+    /* frais : mesuré à l'instant */
+    localStorage.setItem("theologicus_gauge_last", JSON.stringify({ ts: Date.now(), res }));
+    const frais = (typeof window.__theoFindFallback === "function") ? window.__theoFindFallback("codestral-2508") : "absent";
+    return { perime, frais };
+  });
+  ok("cache périmé (1 h) -> AUCUN repli proposé", rCache.perime === null, JSON.stringify(rCache.perime));
+  ok("cache frais -> le repli fonctionne encore", !!(rCache.frais && rCache.frais.v === "open-mistral-nemo"),
+     JSON.stringify(rCache.frais));
+
+  section("16. Aucune erreur JavaScript");
   ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(" | "));
 
   const passes = resultats.filter(r => r.pass).length;

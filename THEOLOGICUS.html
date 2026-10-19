@@ -41586,11 +41586,19 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
      donne l'impression que l'app « choisit un autre modèle ». */
   var TJ_RETRIABLE = [401, 403, 404, 429, 500, 502, 503, 504];
   window.__theoTjRetriable = TJ_RETRIABLE;   /* v614 — codes qui déclenchent une bascule */
+  window.__theoFindFallback = findFallback;  /* v615 — vérifiable (fraîcheur du cache) */
 
   function findFallback(failedId) {
     var cache = null;
     try { cache = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null'); } catch (e) {}
     if (!cache || !cache.res) return null;
+    /* v615 — le cache porte un `ts` mais il n'était JAMAIS lu : un modèle vert
+       d'il y a une semaine (crédit encore présent) restait « vert » pour le
+       repli, qui basculait donc sur un modèle en réalité indisponible — d'où
+       « la jauge dit accessible mais j'ai 402 ». Au-delà de 10 min, on ne
+       bascule plus sur une mesure périmée : on rend la main à l'utilisateur. */
+    var age = Date.now() - Number(cache.ts || 0);
+    if (!cache.ts || !isFinite(age) || age > 10 * 60 * 1000) return null;
     var best = null;
     cache.res.forEach(function (x) {
       if (x.k !== 0 || x.v === failedId) return;
