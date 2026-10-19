@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
-const MODULES_ATTENDUS = 126; // +pdf.js et +worker (text/plain, non compté comme module exécutable) // synchronisé avec verifier_assets.py (controle_modules)
+const MODULES_ATTENDUS = 127; // +pdf.js et +worker (text/plain, non compté comme module exécutable) // synchronisé avec verifier_assets.py (controle_modules)
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé
@@ -21,6 +21,7 @@ const ANCRES = [
   'window.callLLMStream',           // cerveau Adeodat
   'window.sauvegardeFermeture',     // v604 backup conversations à la fermeture
   'window.pdfjsLib',                // v606 pdf.js embarqué (rendu, recherche)
+  'window.theoFetchReseau',         // v611 transport natif de secours (APK)
   'IndexedDB',                      // stockage canonique
 ];
 

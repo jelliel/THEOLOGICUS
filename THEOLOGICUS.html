@@ -355,6 +355,10 @@
     }
     attempt();
   }
+  /* v611 — le transport natif de secours doit appeler le fetch d'ORIGINE
+     (window.fetch est remplacé ci-dessous : l'appeler depuis le module
+     provoquerait une récursion). */
+  window.__theoFetchDirect = _origFetch;
   window.fetch = function (input, init) {
     try {
       var url = typeof input === 'string' ? input : (input && input.url) || '';
@@ -374,6 +378,17 @@
         return new Promise(function (resolve) { saveData(init, resolve); });
       }
     } catch (e) { /* tout échec retombe sur le fetch normal */ }
+    /* v611 — hôtes EXTERNES : repli natif si le WebView est bloqué (403) ou
+       si la requête échoue (CORS/réseau). Les URL locales (/save-data,
+       /theologicus-keys, relais 127.0.0.1) ne passent JAMAIS par le natif. */
+    try {
+      var urlExt = typeof input === 'string' ? input : (input && input.url) || '';
+      if (/^https?:\/\//i.test(urlExt) &&
+          !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(urlExt) &&
+          typeof window.theoFetchReseau === 'function') {
+        return window.theoFetchReseau(urlExt, init);
+      }
+    } catch (e) {}
     return _origFetch.apply(window, arguments);
   };
 })();
@@ -12542,17 +12557,24 @@ async function testerCleApi() {
   var cle = (cfg && cfg.apiKey) || (state && state.apiKey) || '';
   if (!cle) { toast('Aucune clé à tester — collez-la d\'abord', 'error'); return; }
   var via = url.indexOf('/proxy/') >= 0 ? 'le relais local' : 'un appel direct';
+  window.__dernierTransport = null;
   try {
     var r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + cle } });
     var texte = await r.text();
     var court = texte.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
-    window.__dernierTestCle = { ok: r.ok, status: r.status, via: via, detail: court };
-    if (r.ok) toast('✅ Clé VALIDE — HTTP ' + r.status + ' via ' + via, 'success');
-    else if (r.status === 401) toast('❌ Clé INVALIDE (401) via ' + via + ' : ' + court, 'error');
-    else if (r.status === 403) toast('⚠️ ACCÈS REFUSÉ (403) via ' + via + ' — la clé n\'est pas forcément en cause : ' + court, 'error');
-    else toast('⚠️ HTTP ' + r.status + ' via ' + via + ' : ' + court, 'error');
+    /* v611 — le transport RÉELLEMENT utilisé (direct ou natif) : sur APK un
+       403 du WebView bascule sur le pont natif, et le verdict doit le dire. */
+    var tr = window.__dernierTransport || null;
+    var natif = !!(tr && tr.utilise === 'natif');
+    var viaReel = natif ? ('le transport NATIF ' + (tr.pont || '')) : via;
+    window.__dernierTestCle = { ok: r.ok, status: r.status, via: viaReel, detail: court, transport: tr };
+    if (r.ok) toast('✅ Clé VALIDE — HTTP ' + r.status + ' via ' + viaReel, 'success');
+    else if (r.status === 401) toast('❌ Clé INVALIDE (401) via ' + viaReel + ' : ' + court, 'error');
+    else if (r.status === 403) toast('⚠️ ACCÈS REFUSÉ (403) via ' + viaReel + ' — la clé n\'est pas forcément en cause : ' + court, 'error');
+    else toast('⚠️ HTTP ' + r.status + ' via ' + viaReel + ' : ' + court, 'error');
   } catch (e) {
-    toast('Test impossible (' + via + ') : ' + e.message, 'error');
+    var trErr = window.__dernierTransport || null;
+    toast('Test impossible (' + (trErr && trErr.pont ? 'natif ' + trErr.pont : via) + ') : ' + e.message, 'error');
   }
 }
 window.__testerCleApi = testerCleApi;
@@ -67470,6 +67492,197 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   else init();
   setTimeout(compute, 300);
   setTimeout(compute, 1200);
+})();
+</script>
+<script id="v611-transport-natif">
+/* ═══ v611 — TRANSPORT NATIF DE SECOURS (APK Android) ═══
+
+   PROBLÈME MESURÉ : sur l'APK il n'existe AUCUN relais local — apiEndpoint()
+   renvoie donc l'URL directe du fournisseur, et la requête part du WebView
+   (Origin « https://localhost », User-Agent WebView, en-têtes Sec-Fetch-*).
+   Le WAF de certains fournisseurs refuse ces requêtes par 403 alors que la
+   clé API est parfaitement valide — d'où « ça ne passe pas » sur mobile,
+   même avec la bonne clé et le bon modèle.
+
+   REMÈDE : rejouer la requête via le PONT NATIF (CapacitorHttp, sinon
+   NetBridge.httpRequest ajouté en v611 — HttpURLConnection côté Java).
+   Aucun en-tête de navigateur n'est transmis : plus de blocage WAF ni CORS.
+
+   🔴 Le repli ne s'active QUE si le direct échoue (réseau/CORS) ou répond
+   403 : la voie directe reste prioritaire tant qu'elle marche, donc le
+   STREAMING normal (jeton par jeton) n'est pas dégradé. Un 401 (clé
+   invalide) ne déclenche AUCUN repli : c'est un vrai problème de clé.
+*/
+(function () {
+  'use strict';
+
+  /* fetch d'origine : capturé par le wrapper FS avant que window.fetch ne
+     soit remplacé. Si le wrapper n'existe pas (pas de plugin Filesystem),
+     window.fetch est encore le fetch natif du navigateur. */
+  var _direct = window.__theoFetchDirect || window.fetch;
+
+  function estNatif() {
+    try {
+      return !!(window.Capacitor && window.Capacitor.isNativePlatform &&
+                window.Capacitor.isNativePlatform());
+    } catch (e) { return false; }
+  }
+
+  /* Le pont natif disponible : CapacitorHttp (plugin coeur) d'abord, puis
+     NetBridge.httpRequest (notre plugin, toujours présent dans l'APK). */
+  function pontHttp() {
+    try {
+      var P = window.Capacitor && window.Capacitor.Plugins;
+      if (!P) return null;
+      if (P.CapacitorHttp && typeof P.CapacitorHttp.request === 'function') {
+        return { nom: 'CapacitorHttp', req: function (o) { return P.CapacitorHttp.request(o); } };
+      }
+      if (P.NetBridge && typeof P.NetBridge.httpRequest === 'function') {
+        return { nom: 'NetBridge', req: function (o) { return P.NetBridge.httpRequest(o); } };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  /* init.headers peut être un objet, un tableau [k,v] ou un Headers. */
+  function entetesObjet(h) {
+    var out = {};
+    if (!h) return out;
+    try {
+      if (typeof Headers !== 'undefined' && h instanceof Headers) {
+        h.forEach(function (v, k) { out[k] = v; });
+        return out;
+      }
+      if (Array.isArray(h)) {
+        h.forEach(function (paire) { if (paire && paire.length >= 2) out[String(paire[0])] = String(paire[1]); });
+        return out;
+      }
+      Object.keys(h).forEach(function (k) { if (h[k] != null) out[k] = String(h[k]); });
+    } catch (e) {}
+    return out;
+  }
+
+  /* Seuls les corps TEXTUELS sont rejouables (les appels LLM le sont) ;
+     FormData/Blob/ReadableStream ne le sont pas sans les sérialiser. */
+  function corpsTexte(body) {
+    if (body == null) return null;
+    if (typeof body === 'string') return body;
+    try { if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return body.toString(); } catch (e) {}
+    return undefined; /* undefined = non rejouable */
+  }
+
+  function reponseDepuisNatif(r) {
+    var status = Number(r && r.status) || 0;
+    if (!(status >= 200 && status <= 599)) return null;
+    var corps = (r && r.body != null) ? String(r.body) : '';
+    var entetes = {};
+    var brut = (r && r.headers) || {};
+    Object.keys(brut).forEach(function (k) {
+      var v = brut[k];
+      if (v == null) return;
+      /* l'en-tête content-length du natif ne correspond plus au corps décodé */
+      if (String(k).toLowerCase() === 'content-length') return;
+      entetes[k] = String(v);
+    });
+    try {
+      /* 204/205/304 : un corps est interdit par la spec Response */
+      if (status === 204 || status === 205 || status === 304) {
+        return new Response(null, { status: status, headers: entetes });
+      }
+      return new Response(corps, { status: status, headers: entetes });
+    } catch (e) { return null; }
+  }
+
+  function rejouerNatif(url, init, pont, diag) {
+    init = init || {};
+    var method = String(init.method || 'GET').toUpperCase();
+    var corps = corpsTexte(init.body);
+    if (corps === undefined) return Promise.resolve(null); /* corps non rejouable */
+    if (init.signal && init.signal.aborted) return Promise.resolve(null);
+
+    var t0 = Date.now();
+    var params = {
+      url: url,
+      method: method,
+      headers: entetesObjet(init.headers),
+      timeout: 60000
+    };
+    if (corps !== null) params.body = corps;
+
+    return pont.req(params).then(function (r) {
+      var reponse = reponseDepuisNatif(r);
+      window.__dernierTransport = {
+        url: url, methode: method, utilise: 'natif', pont: pont.nom,
+        statut: (r && r.status) || 0, ms: Date.now() - t0,
+        direct: diag, extrait: String((r && r.body) || '').slice(0, 240)
+      };
+      return reponse;
+    }, function (e) {
+      window.__dernierTransport = {
+        url: url, methode: method, utilise: 'direct', pont: pont.nom,
+        erreurNatif: String((e && e.message) || e), direct: diag
+      };
+      return null;
+    });
+  }
+
+  /**
+   * theoFetchReseau(url, init) — même contrat que fetch, avec repli natif.
+   * À utiliser pour les hôtes EXTERNES uniquement (jamais pour /save-data,
+   * /theologicus-keys ni le relais local).
+   */
+  function theoFetchReseau(url, init) {
+    init = init || {};
+    var pont = estNatif() ? pontHttp() : null;
+    if (!pont) return _direct.call(window, url, init);
+
+    return _direct.call(window, url, init).then(function (res) {
+      if (res.status !== 403) return res;
+      /* 403 : le WebView a probablement été bloqué (WAF). On garde le corps
+         direct pour le diagnostic, puis on rejoue en natif. */
+      return res.clone().text().then(function (corpsDirect) {
+        return rejouerNatif(url, init, pont, {
+          statut: res.status, extrait: String(corpsDirect || '').slice(0, 240)
+        }).then(function (res2) { return res2 || res; });
+      }, function () {
+        return rejouerNatif(url, init, pont, { statut: res.status })
+          .then(function (res2) { return res2 || res; });
+      });
+    }, function (err) {
+      /* échec réseau / CORS : le natif n'a pas ces contraintes */
+      return rejouerNatif(url, init, pont, {
+        erreurDirect: String((err && err.message) || err)
+      }).then(function (res2) {
+        if (res2) return res2;
+        throw err;
+      });
+    });
+  }
+
+  window.theoFetchReseau = theoFetchReseau;
+  window.__theoTransportDisponible = function () {
+    var p = estNatif() ? pontHttp() : null;
+    return p ? p.nom : null;
+  };
+
+  /* 🔴 AUTONOMIE : le wrapper de fetch de l'app n'existe que si le plugin
+     Filesystem est présent (c'est lui qui le pose). Si ce n'est pas le cas,
+     on installe ICI un routeur minimal pour les hôtes EXTERNES — le repli
+     natif ne doit dépendre d'aucun autre module. */
+  if (!window.__theoFetchDirect) {
+    var _base = window.fetch;
+    window.__theoFetchDirect = _base;
+    window.fetch = function (input, init) {
+      try {
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        if (/^https?:\/\//i.test(u) &&
+            !/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])/i.test(u)) {
+          return theoFetchReseau(u, init);
+        }
+      } catch (e) {}
+      return _base.apply(window, arguments);
+    };
+  }
 })();
 </script>
 </body>
