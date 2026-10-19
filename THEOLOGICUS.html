@@ -11769,6 +11769,35 @@ function loadCustomModels() {
 function saveCustomModels() {
   setCookie('customModels', JSON.stringify(state.customModels || []));
 }
+/* v613 — MÉMOIRE DES MODÈLES HORS ABONNEMENT.
+   Mistral répond 403 « This model is not available in your subscription
+   tier » : le modèle existe mais n'est pas inclus dans le palier. On le
+   retient pour l'afficher ⛔ dans le sélecteur, au lieu de laisser
+   l'utilisateur retomber dessus et relire la même erreur. */
+function _modelesIndisponibles() {
+  try { return JSON.parse(localStorage.getItem('theo_modeles_indisponibles') || '{}') || {}; }
+  catch (e) { return {}; }
+}
+function estModeleIndisponible(id) {
+  if (!id) return false;
+  return !!_modelesIndisponibles()[String(id)];
+}
+function marquerModeleIndisponible(id) {
+  if (!id) return;
+  try {
+    var o = _modelesIndisponibles();
+    o[String(id)] = Date.now();
+    localStorage.setItem('theo_modeles_indisponibles', JSON.stringify(o));
+  } catch (e) {}
+}
+function oublierModeleIndisponible(id) {
+  try {
+    var o = _modelesIndisponibles();
+    delete o[String(id)];
+    localStorage.setItem('theo_modeles_indisponibles', JSON.stringify(o));
+  } catch (e) {}
+}
+
 function refreshModelSelect() {
   const sel = $("#model-select");
   const msel = $("#model-select-mob");
@@ -11805,8 +11834,11 @@ function refreshModelSelect() {
       og.label = g.nom + (sansCle ? ' — clé manquante' : '');
       g.items.forEach(m => {
         const o = document.createElement("option");
-        o.value = m.value; o.textContent = m.label;
-        o.title = m.label + (sansCle ? ' • clé ' + g.nom + ' non renseignée' : '');
+        const horsAbo = estModeleIndisponible(m.value);
+        o.value = m.value;
+        o.textContent = m.label + (horsAbo ? ' ⛔ (abonnement)' : '');
+        o.title = m.label + (sansCle ? ' • clé ' + g.nom + ' non renseignée' : '') +
+                  (horsAbo ? ' • refusé par l\'abonnement (403) — choisissez-en un autre' : '');
         og.appendChild(o);
       });
       sel.appendChild(og);
@@ -12549,7 +12581,14 @@ async function throwApiError(res, model) {
     if (edgeRay) edgeBits.push('cf-ray ' + edgeRay);
     if (edgeMit) edgeBits.push('cf-mitigated ' + edgeMit);
     var edgeTxt = ' [via ' + viaTransport + (edgeBits.length ? ' ; ' + edgeBits.join(' ; ') : '') + ']';
-    if (/origine non locale/i.test(msgMin)) {
+    if (/subscription tier|not available in your subscription|not available in your plan/i.test(msgMin)) {
+      /* v613 — cause EXACTE remontée par Mistral : le modèle existe mais n'est
+         pas inclus dans le palier. Rien à voir avec la clé ni le réseau. */
+      err.modeleIndisponible = true;
+      try { marquerModeleIndisponible(model); if (typeof refreshModelSelect === 'function') refreshModelSelect(); } catch (e2) {}
+      err.message = 'Le modèle « ' + (model || 'sélectionné') + ' » n\'est pas inclus dans ton abonnement Mistral (HTTP 403). ' +
+        'Choisis un autre modèle dans le sélecteur ⬡ en haut — 🔍 TESTER (PARAMÈTRES ⚙ > Modèle) liste ceux que ta clé autorise.';
+    } else if (/origine non locale/i.test(msgMin)) {
       err.message = 'Le RELAIS LOCAL a refusé la requête (HTTP 403, origine non locale) — la clé n\'a PAS été testée. Ouvrez l\'app sur la machine du relais (127.0.0.1) ou via l\'adresse exacte du serveur.';
     } else if (/challenge|just a moment|cf-mitigated/i.test(msgMin + ' ' + edgeMit)) {
       /* v612 — défi anti-robot : AUCUN réglage de l'app ne le fait passer. */
@@ -12571,7 +12610,7 @@ async function throwApiError(res, model) {
 
 // Version courte (toast)
 function formatApiErrorShort(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses)) return e.message; // v603/v610/v611b
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible)) return e.message; // v603/v610/v611b/v613
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
@@ -12613,7 +12652,24 @@ async function testerCleApi() {
     var natif = !!(tr && tr.utilise === 'natif');
     var viaReel = natif ? ('le transport NATIF ' + (tr.pont || '')) : via;
     window.__dernierTestCle = { ok: r.ok, status: r.status, via: viaReel, detail: court, transport: tr };
-    if (r.ok) toast('✅ Clé VALIDE — HTTP ' + r.status + ' via ' + viaReel, 'success');
+    if (r.ok) {
+      /* v613 — /v1/models est la liste AUTORISÉE par la clé. Si le modèle
+         actif n'y figure pas, c'est exactement le 403 « subscription tier » :
+         autant le dire ici, avant que l'utilisateur relance un chat. */
+      var ids = [];
+      try {
+        var jm = JSON.parse(texte);
+        ids = (jm.data || jm.models || []).map(function (x) { return x && (x.id || x.name); }).filter(Boolean);
+      } catch (e3) {}
+      window.__theoModelesDisponibles = ids;
+      window.__dernierTestCle.modeles = ids;
+      var actuel = (typeof state !== 'undefined' && state && state.model) || '';
+      if (ids.length && actuel && ids.indexOf(actuel) < 0) {
+        toast('✅ Clé valide — MAIS le modèle « ' + actuel + ' » n\'est pas dans ta liste (' + ids.length + ' autorisés). Ex. : ' + ids.slice(0, 4).join(', '), 'error');
+      } else {
+        toast('✅ Clé VALIDE — HTTP ' + r.status + ' via ' + viaReel + (ids.length ? ' — ' + ids.length + ' modèle(s) autorisé(s)' : ''), 'success');
+      }
+    }
     else if (r.status === 401) toast('❌ Clé INVALIDE (401) via ' + viaReel + ' : ' + court, 'error');
     else if (r.status === 403) toast('⚠️ ACCÈS REFUSÉ (403) via ' + viaReel + ' — la clé n\'est pas forcément en cause : ' + court, 'error');
     else toast('⚠️ HTTP ' + r.status + ' via ' + viaReel + ' : ' + court, 'error');
@@ -12625,7 +12681,7 @@ async function testerCleApi() {
 window.__testerCleApi = testerCleApi;
 
 function formatApiErrorForChat(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses)) return e.message; // v603/v610/v611b
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible)) return e.message; // v603/v610/v611b/v613
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const serverMsg = (e && (e.apiMessage || e.message) || '').trim();

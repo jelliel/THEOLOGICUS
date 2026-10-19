@@ -335,7 +335,58 @@ const MOCK_CAPACITOR = () => {
   ok("un défi anti-robot est annoncé comme tel (et non « clé invalide »)",
      /anti-robot/.test(rChal.msg), String(rChal.msg).slice(0, 140));
 
-  section("13. Aucune erreur JavaScript");
+  /* ── 13. 403 « subscription tier » : modèle hors abonnement ── */
+  section("13. HTTP 403 « not available in your subscription tier » — modèle hors abonnement");
+  const rAbo = await page.evaluate(async () => {
+    const corps = JSON.stringify({ detail: "This model is not available in your subscription tier." });
+    const res = new Response(corps, { status: 403, headers: { "content-type": "application/json" } });
+    try { await window.throwApiError(res, "codestral-2508"); return { jete: false }; }
+    catch (e) {
+      return {
+        jete: true, msg: e.message, flag: !!e.modeleIndisponible,
+        marque: (typeof estModeleIndisponible === "function") ? estModeleIndisponible("codestral-2508") : null
+      };
+    }
+  });
+  ok("le message nomme le modèle et l'abonnement",
+     rAbo.jete && /codestral-2508/.test(rAbo.msg) && /abonnement/.test(rAbo.msg), String(rAbo.msg).slice(0, 130));
+  ok("le message n'accuse NI la clé NI la région",
+     !/région, permissions/.test(rAbo.msg) && !/Clé API refusée/.test(rAbo.msg), String(rAbo.msg).slice(0, 80));
+  ok("le modèle est mémorisé comme indisponible", rAbo.flag === true && rAbo.marque === true, String(rAbo.marque));
+
+  const rMarque = await page.evaluate(() => {
+    if (typeof refreshModelSelect === "function") refreshModelSelect();
+    const sel = document.getElementById("model-select");
+    const opt = sel ? [...sel.querySelectorAll("option")].find(o => o.value === "codestral-2508") : null;
+    return { texte: opt ? opt.textContent : "(option absente)", titre: opt ? opt.title : "" };
+  });
+  ok("le sélecteur affiche ⛔ (abonnement) sur ce modèle",
+     /⛔/.test(rMarque.texte) && /abonnement/.test(rMarque.texte), rMarque.texte.slice(0, 70));
+
+  const rTest = await page.evaluate(async () => {
+    state.model = "codestral-2508";
+    state.keys = state.keys || {}; state.keys.mistral = "fake-key-banc";
+    state.apiKey = "fake-key-banc";   /* la garde « aucune clé » lit AUSSI ce champ */
+    window.__dernierTestCle = null;
+    return true;
+  });
+  await page.route("**/v1/models*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ data: [{ id: "mistral-small-latest" }, { id: "open-mistral-nemo" }] })
+  }));
+  const rListe = await page.evaluate(async () => {
+    window.__dernierTestCle = null;
+    window.__testerCleApi();
+    for (let i = 0; i < 40 && !window.__dernierTestCle; i++) await new Promise(r => setTimeout(r, 100));
+    return window.__dernierTestCle || {};
+  });
+  ok("TESTER récupère la liste des modèles autorisés",
+     Array.isArray(rListe.modeles) && rListe.modeles.length === 2, JSON.stringify(rListe.modeles));
+  ok("le modèle actif absent de la liste est signalé (ok=true mais liste != actif)",
+     rListe.ok === true && rListe.modeles.indexOf("codestral-2508") < 0, JSON.stringify(rListe.modeles));
+  await page.unroute("**/v1/models*");
+
+  section("14. Aucune erreur JavaScript");
   ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(" | "));
 
   const passes = resultats.filter(r => r.pass).length;
