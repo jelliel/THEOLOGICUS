@@ -9090,6 +9090,7 @@ window.__ensureTafsirSurah = function(p){
       </div>
       <div class="btn-row" style="margin-top:0;padding-top:0;border-top:none;margin-bottom:20px">
         <button class="btn-ghost" id="close-api-modal-2">Annuler</button>
+        <button class="btn-ghost" id="test-api-key" onclick="window.__testerCleApi && window.__testerCleApi()" title="Teste la clé sur /v1/models : distingue clé invalide (401), accès refusé (403), blocage WAF ou refus du relais local">🔍 TESTER</button>
         <button class="btn-ghost danger" id="delete-api-key" style="border-color:rgba(255,51,102,0.3);color:var(--danger)">🗑 SUPPRIMER</button>
         <button class="btn-primary" id="save-api-key">💾 ENREGISTRER ET ACTIVER</button>
       </div>
@@ -12461,7 +12462,9 @@ async function throwApiError(res, model) {
       const j = JSON.parse(text);
       // v603 — « {"details":"Invalid API Key"} » (Mistral) n'a ni error.message ni message :
       // le corps brut partait tel quel dans la conversation.
-      serverMsg = (j && (j.error?.message || j.message || j.details)) || (typeof j?.error === 'string' ? j.error : '');
+      /* v610 — j.erreur : corps du RELAIS local ({ok:false, erreur:...}) —
+         sans cette clé, son 403 « origine non locale » restait sans détail. */
+      serverMsg = (j && (j.error?.message || j.message || j.details || j.erreur)) || (typeof j?.error === 'string' ? j.error : '');
     } catch(e) { serverMsg = text; }
   } catch(e) {}
   const err = new Error(status ? (serverMsg || ('HTTP ' + status)) : (serverMsg || 'Connexion au serveur impossible'));
@@ -12479,19 +12482,36 @@ async function throwApiError(res, model) {
       err.providerId = 'mistral'; err.providerLabel = 'Mistral';
     }
   } catch(e) {}
-  // v603 — 401/403 = la clé PART mais est refusée : message actionnable,
-  // corps JSON brut banni de la conversation.
-  if (status === 401 || status === 403 || /invalid api key/i.test(serverMsg || '')) {
+  // v610 — 401 ≠ 403 : un 401 est une CLÉ invalide ; un 403 est un ACCÈS
+  // refusé (la clé peut être valide : WAF/Cloudflare, région, permissions,
+  // modèle non autorisé, ou le RELAIS local qui refuse l'origine). Ranger
+  // 403 avec « clé refusée » (v603) était trompeur — corrigé, 4 cas distincts.
+  var msgMin = String(serverMsg || '').toLowerCase();
+  if (status === 401 || /invalid api key/i.test(msgMin)) {
     err.cleRefusee = true;
     err.message = 'Clé API refusée par ' + (err.providerLabel || 'le fournisseur') +
       ' (HTTP ' + (status || 401) + '). Vérifiez ou collez une clé valide : PARAMÈTRES ⚙ > Modèle.';
+  } else if (status === 403) {
+    err.accesRefuse = true;
+    var detail403 = String(serverMsg || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    if (/origine non locale/i.test(msgMin)) {
+      err.message = 'Le RELAIS LOCAL a refusé la requête (HTTP 403, origine non locale) — la clé n\'a PAS été testée. Ouvrez l\'app sur la machine du relais (127.0.0.1) ou via l\'adresse exacte du serveur.';
+    } else if (/cloudflare|attention required|cf-error|access denied|blocked/i.test(msgMin)) {
+      err.message = 'Accès refusé par ' + (err.providerLabel || 'le fournisseur') +
+        ' (HTTP 403, blocage WAF/proxy) — la clé peut être VALIDE. Détail : ' + (detail403 || '(page de blocage)') +
+        '. Si l\'app est ouverte en fichier direct, passez par le relais local (exe ou THEOLOGICUS.bat).';
+    } else {
+      err.message = 'Accès refusé par ' + (err.providerLabel || 'le fournisseur') +
+        ' (HTTP 403) — la clé peut être VALIDE : région, permissions ou modèle non autorisé. Détail : ' +
+        (detail403 || '(sans détail)') + '. Testez la clé : PARAMÈTRES ⚙ > Modèle > 🔍 TESTER.';
+    }
   }
   throw err;
 }
 
 // Version courte (toast)
 function formatApiErrorShort(e) {
-  if (e && e.cleRefusee) return e.message; // v603
+  if (e && (e.cleRefusee || e.accesRefuse)) return e.message; // v603/v610
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
@@ -12509,8 +12529,36 @@ function formatApiErrorShort(e) {
 }
 
 // Version complète (message dans la conversation)
+/* v610 — TEST DE CLÉ : appelle /v1/models via le MÊME routage que le chat
+   (relais local ou direct) et DIT laquelle des causes c'est : clé invalide
+   (401), accès refusé (403 : WAF/région/permissions), ou relais qui refuse
+   l'origine. Sans ce test, un 403 est indéchiffrable côté utilisateur. */
+async function testerCleApi() {
+  var cfg = null;
+  try { cfg = resolveModelConfig(state.model); } catch (e) {}
+  var endpoint = (cfg && cfg.endpoint) ? String(cfg.endpoint) : 'https://api.mistral.ai/v1/chat/completions';
+  var base = endpoint.replace(/\/chat\/completions\/?$/, '');
+  var url = apiEndpoint(base + '/models');
+  var cle = (cfg && cfg.apiKey) || (state && state.apiKey) || '';
+  if (!cle) { toast('Aucune clé à tester — collez-la d\'abord', 'error'); return; }
+  var via = url.indexOf('/proxy/') >= 0 ? 'le relais local' : 'un appel direct';
+  try {
+    var r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + cle } });
+    var texte = await r.text();
+    var court = texte.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+    window.__dernierTestCle = { ok: r.ok, status: r.status, via: via, detail: court };
+    if (r.ok) toast('✅ Clé VALIDE — HTTP ' + r.status + ' via ' + via, 'success');
+    else if (r.status === 401) toast('❌ Clé INVALIDE (401) via ' + via + ' : ' + court, 'error');
+    else if (r.status === 403) toast('⚠️ ACCÈS REFUSÉ (403) via ' + via + ' — la clé n\'est pas forcément en cause : ' + court, 'error');
+    else toast('⚠️ HTTP ' + r.status + ' via ' + via + ' : ' + court, 'error');
+  } catch (e) {
+    toast('Test impossible (' + via + ') : ' + e.message, 'error');
+  }
+}
+window.__testerCleApi = testerCleApi;
+
 function formatApiErrorForChat(e) {
-  if (e && e.cleRefusee) return e.message; // v603
+  if (e && (e.cleRefusee || e.accesRefuse)) return e.message; // v603/v610
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const serverMsg = (e && (e.apiMessage || e.message) || '').trim();
