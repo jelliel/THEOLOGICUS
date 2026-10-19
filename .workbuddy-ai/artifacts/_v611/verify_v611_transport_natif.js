@@ -394,7 +394,40 @@ const MOCK_CAPACITOR = () => {
      rDet.present && /Détectés/.test(rDet.groupe), rDet.groupe);
   await page.unroute("**/v1/models*");
 
-  section("14. Aucune erreur JavaScript");
+  /* ── 14. 402 : crédit épuisé, et AUCUNE bascule de modèle ── */
+  section("14. HTTP 402 — crédit épuisé : message exact, pas de changement de modèle");
+  const r402 = await page.evaluate(async () => {
+    const res = new Response(JSON.stringify({ detail: "Payment Required" }), { status: 402 });
+    try { await window.throwApiError(res, "codestral-2508"); return { jete: false }; }
+    catch (e) { return { msg: e.message, flag: !!e.creditEpuise }; }
+  });
+  ok("402 -> « Crédit API épuisé » + la notion de SOLDE",
+     /Crédit API épuisé/.test(r402.msg) && /solde/.test(r402.msg), String(r402.msg).slice(0, 150));
+  ok("le 402 n'accuse pas la clé", !/Clé API refusée/.test(r402.msg), String(r402.msg).slice(0, 70));
+
+  const autoDef = await page.evaluate(() => {
+    localStorage.removeItem("theologicus_gauge_autofb");
+    return (typeof window.__theoAutoFbEnabled === "function") ? window.__theoAutoFbEnabled() : "absent";
+  });
+  ok("la bascule automatique est DÉSACTIVÉE par défaut", autoDef === false, String(autoDef));
+
+  const fb = await page.evaluate(() => {
+    /* même en FORÇANT la bascule auto et en fournissant un modèle 🟢 de repli */
+    localStorage.setItem("theologicus_gauge_autofb", "1");
+    localStorage.setItem("theologicus_gauge_last", JSON.stringify({ res: [{ k: 0, v: "open-mistral-nemo", ms: 120 }] }));
+    state.model = "codestral-2508";
+    const avant = state.model;
+    try { window.__theoInjectFallback({ status: 402, model: "codestral-2508" }); } catch (e) {}
+    return {
+      avant, apres: state.model,
+      retriable: Array.isArray(window.__theoTjRetriable) ? window.__theoTjRetriable.indexOf(402) : "absent"
+    };
+  });
+  ok("même bascule activée, un 402 ne remplace PAS le modèle choisi",
+     fb.avant === fb.apres, fb.avant + " -> " + fb.apres);
+  ok("402 n'est pas dans les codes basculables", fb.retriable === -1, String(fb.retriable));
+
+  section("15. Aucune erreur JavaScript");
   ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(" | "));
 
   const passes = resultats.filter(r => r.pass).length;

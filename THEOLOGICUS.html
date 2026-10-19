@@ -12587,6 +12587,15 @@ async function throwApiError(res, model) {
     err.cleRefusee = true;
     err.message = 'Clé API refusée par ' + (err.providerLabel || 'le fournisseur') +
       ' (HTTP ' + (status || 401) + '). Vérifiez ou collez une clé valide : PARAMÈTRES ⚙ > Modèle.';
+  } else if (status === 402) {
+    /* v614 — 402 = le COMPTE n'a plus de crédit (ou pas de moyen de paiement).
+       Ce n'est pas un problème de modèle : le message doit le dire, sinon on
+       croit que l'app choisit un mauvais modèle. */
+    err.creditEpuise = true;
+    err.message = 'Crédit API épuisé chez ' + (err.providerLabel || 'le fournisseur') +
+      ' (HTTP 402). Aucun modèle ne peut répondre tant que le solde est à zéro : recharge ton compte ' +
+      '(console.mistral.ai > Billing) ou utilise un fournisseur avec du crédit. ' +
+      'La jauge teste la DISPONIBILITÉ des modèles, pas le SOLDE.';
   } else if (status === 422) {
     /* v611b — 422 = le CORPS est refusé (champ manquant/invalide), pas la clé.
        Message dédié + détail du serveur : sans lui, impossible de savoir quel
@@ -12634,7 +12643,7 @@ async function throwApiError(res, model) {
 
 // Version courte (toast)
 function formatApiErrorShort(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible)) return e.message; // v603/v610/v611b/v613
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise)) return e.message; // v603/v610/v611b/v613/v614
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
@@ -12711,7 +12720,7 @@ async function testerCleApi() {
 window.__testerCleApi = testerCleApi;
 
 function formatApiErrorForChat(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible)) return e.message; // v603/v610/v611b/v613
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise)) return e.message; // v603/v610/v611b/v613/v614
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const serverMsg = (e && (e.apiMessage || e.message) || '').trim();
@@ -41461,6 +41470,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }
   /* v152 — le duel met aussi à jour le badge après un changement de modèle */
   window.__theoProbeActive = probeActive;
+  /* v614 — exposés : la bascule auto est un comportement sensible (elle change
+     le modèle de l'utilisateur) — on doit pouvoir la vérifier. */
+  window.__theoAutoFbEnabled = autoFbEnabled;
+  window.__theoInjectFallback = injectFallback;
 
   /* ── v151e — RE-TEST AUTOMATIQUE : toutes les 60 s tant que le panneau
      est ouvert (désactivable via la case « auto 60s », persistée). Une
@@ -41494,7 +41507,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
   }
 
   function autoFbEnabled() {
-    try { return localStorage.getItem('theologicus_gauge_autofb') !== '0'; } catch (e) { return true; }
+    /* v614 — OPT-IN, et non plus opt-out : changer le modèle de l'utilisateur
+       sans qu'il l'ait demandé (et le PERSISTER) est une surprise, pas une
+       aide. Le bouton manuel « Basculer sur … » reste disponible. */
+    try { return localStorage.getItem('theologicus_gauge_autofb') === '1'; } catch (e) { return false; }
   }
 
   function countUsage(modelId, inChars, outChars, usage) {
@@ -41565,7 +41581,11 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
      message d'erreur. Le clic change de modèle (même persistance que le
      sélecteur), retire l'échange échoué (message d'erreur + message user)
      et repasse par sendMessage() — le pipeline habituel, rien de parallèle. */
-  var TJ_RETRIABLE = [401, 402, 403, 404, 429, 500, 502, 503, 504];
+  /* v614 — 402 (crédit épuisé) n'est PAS basculable : le solde est lié au
+     COMPTE, pas au modèle. Changer de modèle ne fait que déplacer l'échec et
+     donne l'impression que l'app « choisit un autre modèle ». */
+  var TJ_RETRIABLE = [401, 403, 404, 429, 500, 502, 503, 504];
+  window.__theoTjRetriable = TJ_RETRIABLE;   /* v614 — codes qui déclenchent une bascule */
 
   function findFallback(failedId) {
     var cache = null;
@@ -41609,8 +41629,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       var isLoop = prev && prev.text === uta && (Date.now() - prev.ts) < 120000;
       if (uta && !isLoop) {
         window.__theoFbAuto = { text: uta, ts: Date.now() };
-        toast('🔄 Bascule automatique vers ' + fallbackLabel(fb.v) + '…');
-        setTimeout(function () { fbRetry(fb.v, null); }, 900);
+        toast('🔄 Bascule automatique TEMPORAIRE vers ' + fallbackLabel(fb.v) + '…');
+        /* v614 — 3e argument false : la bascule AUTO ne réécrit PAS le modèle
+           enregistré (l'utilisateur retrouve son choix au prochain démarrage). */
+        setTimeout(function () { fbRetry(fb.v, null, false); }, 900);
         return;
       }
     }
@@ -41627,11 +41649,13 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     cont.appendChild(box);
   }
 
-  function fbRetry(newModel, box) {
+  function fbRetry(newModel, box, manuel) {
     try {
       state.model = newModel;
-      try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: newModel }).catch(function () {}); } catch (e1) {}
-      try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+      if (manuel !== false) {
+        try { if (typeof db !== 'undefined' && db && db.put) db.put('settings', { id: 'model', value: newModel }).catch(function () {}); } catch (e1) {}
+        try { if (typeof saveAppConfig === 'function') saveAppConfig(); } catch (e2) {}
+      }
       var sel = document.getElementById('model-select'); if (sel) sel.value = newModel;
       var selM = document.getElementById('model-select-mob'); if (selM) selM.value = newModel;
       var sys = (state.messages || []).find(function (x) { return x.role === 'system'; });
