@@ -28373,10 +28373,36 @@ initTafsirVerseTooltip();
   document.addEventListener('mousedown', function(e){ if (!e.target.closest || !e.target.closest('#atc-color-menu')){ const m = document.getElementById('atc-color-menu'); if (m) m.style.display = 'none'; } });
 
   /* ── Sauvegarde immédiate + confirmation visuelle ── */
-  async function atcPersist(){
+  /* v624 — ANTI-LAG figures : les sliders/couleurs de figure émettent des
+     dizaines d'événements `input`/s. L'ancien atcPersist refaisait un
+     buildChatPayload() + localStorage.setItem SYNCHRONE (flushChatNow) à
+     CHAQUE appel -> écriture bloquante -> lag puis freeze quand on insère ou
+     modifie des figures. THROTTLE leading+trailing (350 ms) :
+     - 1re demande = sauvegarde immédiate (comportement discret identique,
+       aucune régression sur surlignage/insertion/suppression) ;
+     - demandes répétées dans la fenêtre = coalescées en 1 seule sauvegarde
+       finale. L'état mémoire est déjà à jour, rien n'est perdu ; le
+     beforeunload fait flushChatNow() synchronement en dernier recours. */
+  let _atcPersistTO = null;
+  let _atcPersistRunning = false;
+  let _atcPersistPromise = null;
+  async function _atcPersistRun(){
     try { if (typeof flushChatNow === 'function') flushChatNow(); } catch(e) {}
     try { if (typeof saveChat === 'function') await saveChat(); } catch(e) {}
     try { if (typeof markChatDirty === 'function') markChatDirty(); } catch(e) {}
+  }
+  function atcPersist(){
+    if (_atcPersistTO) return _atcPersistPromise;            // trailing déjà planifié
+    if (!_atcPersistRunning) {                              // leading : 1re sauvegarde immédiate
+      _atcPersistRunning = true;
+      _atcPersistPromise = _atcPersistRun().then(function(){ _atcPersistRunning = false; });
+      return _atcPersistPromise;
+    }
+    if (_atcPersistTO) clearTimeout(_atcPersistTO);
+    _atcPersistPromise = new Promise(function(res){
+      _atcPersistTO = setTimeout(function(){ _atcPersistTO = null; _atcPersistRun().finally(res); }, 350);
+    });
+    return _atcPersistPromise;
   }
   function atcSavedToast(msg){
     try { if (typeof toast === 'function') toast(msg || '✓ Enregistré', 'success'); } catch(e) {}
@@ -29175,7 +29201,9 @@ initTafsirVerseTooltip();
     msg.shapes.push(f);
     if (typeof markChatDirty === 'function') markChatDirty();
     atcPersist();
-    box.appendChild(buildFigEl(f));
+    window.__atcApplying = true;
+    try { box.appendChild(buildFigEl(f)); } catch(e) {}
+    setTimeout(function(){ window.__atcApplying = false; }, 0);
     toast('✓ Figure insérée (' + item.n + ') · glissez pour déplacer, poignées ◻ pour redimensionner, double-clic pour le texte ; cliquez-la pour tourner ↻ et remplir ▨', 'success');
   }
   function persistFig(f, fb, origine){
@@ -29375,15 +29403,17 @@ initTafsirVerseTooltip();
   });
   /* ── Barre d'outils flottante au-dessus de la figure sélectionnée ── */
   let figToolsEl = null;
+  let _figEdTO = null;
+  function _figEditing(){ window.__atcFigEditing = true; if (_figEdTO) clearTimeout(_figEdTO); _figEdTO = setTimeout(function(){ window.__atcFigEditing = false; }, 140); }
   function hideFigTools(){ if (figToolsEl) { figToolsEl.remove(); figToolsEl = null; } }
   function showFigTools(fb, f, ts){
     hideFigTools();
     const t = document.createElement('div'); t.className = 'fig-tools';
     const col = document.createElement('input'); col.type = 'color'; col.className = 'ft-color'; col.value = f.color || '#4f8ef7'; col.title = 'Couleur du cadre';
-    col.addEventListener('input', function(){ f.color = col.value; refreshFigVisual(fb, f); atcPersist(); });
+    col.addEventListener('input', function(){ f.color = col.value; refreshFigVisual(fb, f); _figEditing(); atcPersist(); });
     const rng = document.createElement('input'); rng.type = 'range'; rng.min = '0.5'; rng.max = '4'; rng.step = '0.1'; rng.value = String(f.weight || 1.2); rng.title = 'Épaisseur du cadre';
     const wv = document.createElement('span'); wv.className = 'ft-wval'; wv.textContent = (f.weight || 1.2).toFixed(1);
-    rng.addEventListener('input', function(){ f.weight = parseFloat(rng.value); refreshFigVisual(fb, f); wv.textContent = f.weight.toFixed(1); atcPersist(); });
+    rng.addEventListener('input', function(){ f.weight = parseFloat(rng.value); refreshFigVisual(fb, f); wv.textContent = f.weight.toFixed(1); _figEditing(); atcPersist(); });
     const sep1 = document.createElement('span'); sep1.className = 'ft-sep';
     /* v127 — REMPLISSAGE de l'intérieur (flèches, polygones, bulles, formes
        fermées) : une couleur, ou « ∅ » pour revenir au contour seul. */
@@ -29394,8 +29424,8 @@ initTafsirVerseTooltip();
     fill.title = 'Couleur de remplissage (intérieur des flèches et des formes fermées)';
     const fillOff = document.createElement('button'); fillOff.className = 'ft-filloff' + (fillOn() ? '' : ' on');
     fillOff.textContent = '∅'; fillOff.title = 'Aucun remplissage (contour seul)';
-    fill.addEventListener('input', function(){ f.fill = fill.value; fillOff.classList.remove('on'); refreshFigVisual(fb, f); atcPersist(); });
-    fillOff.addEventListener('click', function(){ f.fill = ''; fillOff.classList.add('on'); refreshFigVisual(fb, f); atcPersist(); });
+    fill.addEventListener('input', function(){ f.fill = fill.value; fillOff.classList.remove('on'); refreshFigVisual(fb, f); _figEditing(); atcPersist(); });
+    fillOff.addEventListener('click', function(){ f.fill = ''; fillOff.classList.add('on'); refreshFigVisual(fb, f); _figEditing(); atcPersist(); });
     /* v127 — ROTATION : proposée pour les figures TRACÉES (flèches, polygones,
        chemins). Les 4 formes « basiques » sont peintes par la bordure CSS de la
        boîte : les tourner demanderait de faire tourner la boîte elle-même, donc
@@ -29410,9 +29440,9 @@ initTafsirVerseTooltip();
       rot.className = 'ft-rot';
       rot.value = String(r0); rot.title = 'Rotation de la figure (0–359°)';
       rv = document.createElement('span'); rv.className = 'ft-rval'; rv.textContent = r0 + '°';
-      rot.addEventListener('input', function(){ f.rot = parseInt(rot.value, 10) || 0; rv.textContent = f.rot + '°'; refreshFigVisual(fb, f); atcPersist(); });
+      rot.addEventListener('input', function(){ f.rot = parseInt(rot.value, 10) || 0; rv.textContent = f.rot + '°'; refreshFigVisual(fb, f); _figEditing(); atcPersist(); });
       rotZero = document.createElement('button'); rotZero.textContent = '↺'; rotZero.title = 'Remettre la rotation à 0°';
-      rotZero.addEventListener('click', function(){ f.rot = 0; rot.value = '0'; rv.textContent = '0°'; refreshFigVisual(fb, f); atcPersist(); });
+      rotZero.addEventListener('click', function(){ f.rot = 0; rot.value = '0'; rv.textContent = '0°'; refreshFigVisual(fb, f); _figEditing(); atcPersist(); });
     }
     /* v618 — ANNOTER L'ENCADRÉ. Le cadre recouvre le texte : impossible de
        sélectionner ce qu'il entoure. Ces deux boutons rendent l'annotation
@@ -29440,7 +29470,9 @@ initTafsirVerseTooltip();
       const nf = JSON.parse(JSON.stringify(f));
       nf.id = 'fg-' + Date.now(); nf.x = (f.x || 0) + 24; nf.y = (f.y || 0) + 24;
       msg.shapes.push(nf);
-      fb.parentElement.appendChild(buildFigEl(nf));
+      window.__atcApplying = true;
+      try { fb.parentElement.appendChild(buildFigEl(nf)); } catch(e) {}
+      setTimeout(function(){ window.__atcApplying = false; }, 0);
       if (typeof markChatDirty === 'function') markChatDirty();
       atcPersist();
       toast('✓ Figure dupliquée · Enregistrée', 'success');
@@ -30403,9 +30435,52 @@ const idx = fullM.norm.indexOf(txtM.norm);
     console.log('[DIAG] applyHighlights: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' alreadyWrapped=' + totalSkipped + ' realigned=' + totalRealigne + ' noBox=' + totalNoBox + ' noText=' + totalNoText);
   }
 
+  /* v623 — GARDIEN D'ALIGNEMENT DES MARQUES (surlignages ✏️).
+     Comme _hlAlign pour les annotations, une marque doit suivre le TEXTE
+     surligné, pas un offset périmé. Si l'offset mémorisé pointe sur un
+     autre mot (rendu changé entre la capture et la réapplication, ou marque
+     ancienne sans offset fiable), on défait et on ré-ancre par recherche
+     texte à la BONNE occurrence. Vérifié par verify_marks_drift_recovery.js
+     (contrôle négatif : sans ce gardien, la marque reste sur le mauvais mot). */
+  function _mkConcat(box, id){
+    let s = '';
+    box.querySelectorAll('[data-mark-id="' + id + '"]').forEach(function (sp) { s += sp.textContent || ''; });
+    return s;
+  }
+  function _mkUnwrap(box, id){
+    box.querySelectorAll('[data-mark-id="' + id + '"]').forEach(function (sp) {
+      try { if (sp.parentNode) sp.parentNode.replaceChild(document.createTextNode(sp.textContent || ''), sp); } catch (e) {}
+    });
+  }
+  function _mkAlign(box, mk){
+    const want = _hlNorm(mk.text);
+    if (!want) return true;
+    return _hlNorm(_mkConcat(box, mk.id)) === want;
+  }
+  /* Ré-ancre une marque par recherche texte tolérante, en ESSAYANT chaque
+     occurrence jusqu'à ce que le texte enveloppé soit exactement le texte
+     surligné (utile si le mot est répété). */
+  function _mkWrapByText(box, mk){
+    const norm = function (s){ return (s || '').normalize('NFKC').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ''); };
+    const wn = norm(mk.text);
+    if (!wn) return false;
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, null);
+    let full = ''; const nodes = []; let n;
+    while ((n = walker.nextNode())) { nodes.push({ node: n, start: full.length }); full += n.nodeValue; }
+    const fn = norm(full);
+    const occs = []; let k = 0;
+    while ((k = fn.indexOf(wn, k)) !== -1) { occs.push(k); k += wn.length; }
+    for (let o = 0; o < occs.length; o++) {
+      if (wrapNth(box, mk.text, o, mk.id, 'atc-mark')) {
+        if (_mkAlign(box, mk)) return true;
+        _mkUnwrap(box, mk.id);
+      }
+    }
+    return wrapOnce(box, mk.text, mk.id, 'atc-mark');
+  }
   function applyMarks(){
     const msgs = (typeof state !== 'undefined' && state && state.messages) || [];
-    let totalFound = 0, totalApplied = 0, totalOffset = 0;
+    let totalFound = 0, totalApplied = 0, totalOffset = 0, totalRealign = 0, totalText = 0;
     msgs.forEach(function(m){
       if (!m.marks || !Array.isArray(m.marks)) return;
       const box = document.getElementById('mc-' + m.ts);
@@ -30418,13 +30493,16 @@ const idx = fullM.norm.indexOf(txtM.norm);
         let ok = false;
         if (typeof mk.start === 'number' && typeof mk.end === 'number') {
           ok = wrapByOffset(box, mk.start, mk.end, mk.id, 'atc-mark');
+          /* v623 — l'offset peut être périmé : on vérifie que le texte
+             enveloppé est bien le texte surligné ; sinon on ré-ancre. */
+          if (ok && !_mkAlign(box, mk)) { _mkUnwrap(box, mk.id); ok = false; totalRealign++; }
           if (ok) totalOffset++;
         }
-        if (!ok) ok = wrapOnce(box, mk.text, mk.id, 'atc-mark');
+        if (!ok) { ok = _mkWrapByText(box, mk); if (ok) totalText++; }
         if (ok) totalApplied++;
       });
     });
-    if (totalFound > 0) console.log('[DIAG] applyMarks: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset);
+    if (totalFound > 0) console.log('[DIAG] applyMarks: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' realigned=' + totalRealign + ' byText=' + totalText);
   }
 
   let _atcMoT = null;
@@ -30432,7 +30510,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
     const mo = new MutationObserver(function(){
       /* v149 — ignorer aussi nos PROPREs mutations (unwrap/re-wrap
          d'applyHighlights) : c'était le flicker du surlignage. */
-      if (window.__atcStreaming || window.__atcApplying) return;
+      if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
       clearTimeout(_atcMoT);
       _atcMoT = setTimeout(function(){
         window.__atcApplying = true;
