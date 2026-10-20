@@ -30499,20 +30499,53 @@ const idx = fullM.norm.indexOf(txtM.norm);
      `.atc-hl` placé dessous, donc son commentaire restait invisible. On
      retrouve les annotations par CHEVAUCHEMENT D'OFFSETS avec l'ancre du
      cadre — la même référence que le ré-ancrage v609. */
-  function annsDansCadre(msg, f){
-    if (!msg || !f || !f.ancre) return [];
-    const a0 = Number(f.ancre.start), a1 = Number(f.ancre.end);
-    if (!(a1 > a0)) return [];
-    return (msg.annotations || []).filter(function(an){
-      if (!an) return false;
-      const s0 = Number(an.start), e0 = Number(an.end);
-      if (!(e0 > s0)) return false;
-      return s0 < a1 && e0 > a0;      /* chevauchement, pas égalité stricte */
-    });
+  function annsDansCadre(msg, f, fb){
+    if (!msg) return [];
+    const anns = msg.annotations || [];
+    const out = [], vus = {};
+    const ajouter = function(an){ if (!an || !an.id || vus[an.id]) return; vus[an.id] = 1; out.push(an); };
+    /* 1. par OFFSETS (précis) — seulement si le cadre a une ancre texte. */
+    if (f && f.ancre) {
+      const a0 = Number(f.ancre.start), a1 = Number(f.ancre.end);
+      if (a1 > a0) {
+        anns.forEach(function(an){
+          const s0 = Number(an && an.start), e0 = Number(an && an.end);
+          if (!(e0 > s0)) return;
+          if (s0 < a1 && e0 > a0) ajouter(an);   /* chevauchement, pas égalité */
+        });
+      }
+    }
+    /* 2. par GÉOMÉTRIE — un cadre dessiné à la main (ou créé sans sélection)
+       n'a AUCUNE ancre : sans ce repli, le survol ne montrait rien alors que
+       le commentaire existait bel et bien (constaté sur vidéo). On AJOUTE
+       (union) : une ancre périmée ne doit pas masquer un commentaire visible. */
+    if (fb && fb.isConnected) {
+      let rf = null;
+      try { rf = fb.getBoundingClientRect(); } catch (e) {}
+      if (rf && rf.width && rf.height) {
+        anns.forEach(function(an){
+          if (!an || !an.id || vus[an.id]) return;
+          let spans;
+          try { spans = document.querySelectorAll('.atc-hl[data-hl-id="' + an.id + '"]'); } catch (e) { return; }
+          for (let i = 0; i < spans.length; i++) {
+            const r = spans[i].getBoundingClientRect();
+            if (!r.width || !r.height) continue;
+            /* Le CENTRE du surlignage doit tomber DANS le cadre. Une simple
+               intersection prenait l'annotation VOISINE (banc v619 : « beta »
+               pour un cadre sur « gamma »). */
+            const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+            if (cx >= rf.left && cx <= rf.right && cy >= rf.top && cy <= rf.bottom) {
+              ajouter(an); break;
+            }
+          }
+        });
+      }
+    }
+    return out;
   }
 
   function showTipForFig(fb, f, msg){
-    const anns = annsDansCadre(msg, f);
+    const anns = annsDansCadre(msg, f, fb);
     const note = (f && f.note) ? String(f.note) : '';
     if (!anns.length && !note) return false;
     closeAtcTip();

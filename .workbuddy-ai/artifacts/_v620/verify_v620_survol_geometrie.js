@@ -1,0 +1,170 @@
+/* ═══════════════════════════════════════════════════════════════
+   Banc v620 — SURVOL D'UN CADRE SANS ANCRE (repli GÉOMÉTRIQUE).
+
+   Constat sur vidéo : un cadre dessiné à la main (ou créé sans sélection) n'a
+   pas d'ancre texte. v619 cherchait les commentaires par OFFSETS : rien
+   trouvé, donc rien affiché — alors que le commentaire existait et
+   s'affichait hors cadre.
+
+   Ce banc prouve :
+   1. cadre SANS ancre posé sur un commentaire -> l'infobulle s'affiche ;
+   2. contrôle NÉGATIF : le même cadre déplacé loin -> rien ;
+   3. non-régression : cadre AVEC ancre (chemin v619) ;
+   4. note du cadre + commentaire recouvert -> les deux dans l'infobulle ;
+   5. zéro erreur JS.
+   ════════════════════════════════════════════════════════════════ */
+const H = require("../../../tools/bench_common.js");
+const path = require("path"), os = require("os");
+const resultats = [];
+function section(t) { console.log("\n■ " + t); }
+function ok(label, cond, detail) {
+  resultats.push({ label, pass: !!cond });
+  console.log((cond ? "  [OK]   " : "  [ECHEC]") + " " + label + (detail ? " — " + detail : ""));
+}
+
+const TS = 1700000000000;
+
+(async () => {
+  const port = await H.pickFreePort();
+  const relais = await H.spawnRelay({ port, localAppData: path.join(os.tmpdir(), "theo_v620_" + Date.now()) });
+  const browser = await H.launchBrowser();
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const bruit = [];
+  page.on("pageerror", e => bruit.push(String(e).slice(0, 200)));
+  await page.goto("http://127.0.0.1:" + port + "/THEOLOGICUS.html", { waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForTimeout(2200);
+
+  await page.evaluate(() => {
+    const ov = document.getElementById('auth-overlay');
+    if (ov) { ov.classList.add('hidden'); ov.style.setProperty('display', 'none', 'important'); }
+    const b = Array.prototype.find.call(document.querySelectorAll('button'), x => /UTILISER SANS CL/i.test(x.textContent || ''));
+    if (b) b.click();
+    try { if (window.tpaiSetView) window.tpaiSetView('chat'); } catch (e) {}
+  });
+  await page.waitForTimeout(300);
+
+  section("0. Message + commentaire, cadre SANS ancre posé dessus");
+  const prep = await page.evaluate((ts) => {
+    const CONTENU = 'Thèse : Kyrios s\'applique aux trois Personnes de la Trinité, mais avec une hiérarchie d\'économie.';
+    const MOT = 'hiérarchie d\'économie';
+    /* offsets RÉELS du mot dans le contenu (un offset faux fait disparaître
+       le surlignage au re-rendu : le banc mesurerait alors un fantôme). */
+    const _st = CONTENU.indexOf(MOT);
+    window.__v620st = _st; window.__v620len = MOT.length;
+    state.messages = [{
+      role: 'assistant',
+      content: CONTENU,
+      ts: ts,
+      annotations: [{ id: 'hl-v620', text: MOT,
+        a: 'Commentaire sur la hiérarchie d\'économie.', start: _st, end: _st + MOT.length }],
+      marks: []
+    }];
+    if (typeof renderMessages === 'function') renderMessages();
+    if (window.__applyHighlights) window.__applyHighlights();
+    const box = document.getElementById('mc-' + ts);
+    const hl = document.querySelector('.atc-hl[data-hl-id="hl-v620"]');
+    if (!box || !hl) return { ok: false };
+    const rb = box.getBoundingClientRect(), rh = hl.getBoundingClientRect();
+    /* cadre SANS ancre, posé autour du surlignage */
+    const f = { id: 'fg-sans-ancre', shape: 'Rectangle', color: '#ff00aa', weight: 1.4,
+      text: '', svg: '<rect/>',
+      x: Math.round(rh.left - rb.left - 10), y: Math.round(rh.top - rb.top - 8),
+      w: Math.round(rh.width + 20), h: Math.round(rh.height + 16) };
+    state.messages[0].shapes = [f];
+    if (window.__applyShapes) window.__applyShapes();
+    return { ok: true, ancre: !!f.ancre };
+  }, TS);
+  await page.waitForTimeout(400);
+  ok("cadre posé SANS ancre", prep.ok === true && prep.ancre === false, JSON.stringify(prep));
+
+  async function survoler(sel) {
+    const r = await page.evaluate((s) => {
+      const el = document.querySelector(s);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, sel);
+    if (!r) return null;
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(120);
+    await page.mouse.move(r.x, r.y);
+    await page.waitForTimeout(350);
+    return r;
+  }
+  async function lireTip() {
+    return await page.evaluate(() => {
+      const t = document.getElementById('atc-tip');
+      if (!t) return { present: false };
+      const cs = getComputedStyle(t), rect = t.getBoundingClientRect();
+      return { present: true, texte: t.textContent.replace(/\s+/g, ' ').trim().slice(0, 200),
+        visible: cs.display !== 'none' && rect.width > 100 && rect.height > 20 };
+    });
+  }
+
+  section("1. Survol du cadre SANS ancre -> le commentaire s'affiche");
+  await survoler('[data-fig-id="fg-sans-ancre"]');
+  const t1 = await lireTip();
+  ok("une infobulle apparaît", t1.present === true, String(t1.present));
+  ok("elle est visible", t1.visible === true, String(t1.visible));
+  ok("elle contient le commentaire recouvert", /Commentaire sur la hiérarchie/.test(String(t1.texte)),
+     String(t1.texte).slice(0, 120));
+
+  section("2. Contrôle NÉGATIF : le même cadre déplacé loin du commentaire");
+  await page.evaluate((ts) => {
+    const f = state.messages[0].shapes[0];
+    f.y = f.y + 260;                    /* loin du texte */
+    const fb = document.querySelector('[data-fig-id="fg-sans-ancre"]');
+    if (fb) { fb.style.top = f.y + 'px'; }
+  }, TS);
+  await page.waitForTimeout(200);
+  await survoler('[data-fig-id="fg-sans-ancre"]');
+  const t2 = await lireTip();
+  ok("AUCUNE infobulle quand le cadre ne recouvre plus rien", t2.present === false,
+     t2.present ? String(t2.texte).slice(0, 80) : "(rien)");
+
+  section("3. Non-régression : cadre AVEC ancre (chemin v619)");
+  const r3 = await page.evaluate((ts) => {
+    const box = document.getElementById('mc-' + ts);
+    const hl = document.querySelector('.atc-hl[data-hl-id="hl-v620"]');
+    const rb = box.getBoundingClientRect(), rh = hl.getBoundingClientRect();
+    state.messages[0].shapes = [{ id: 'fg-avec-ancre', shape: 'Rectangle', color: '#4f8ef7',
+      weight: 1.4, text: '', svg: '<rect/>',
+      x: Math.round(rh.left - rb.left - 10), y: Math.round(rh.top - rb.top - 8),
+      w: Math.round(rh.width + 20), h: Math.round(rh.height + 16),
+      ancre: { start: window.__v620st, end: window.__v620st + window.__v620len,
+               texte: 'hiérarchie d\'économie' } }];
+    document.querySelectorAll('.atc-figbox').forEach(function (e) { e.remove(); });
+    if (window.__applyHighlights) window.__applyHighlights();
+    if (window.__applyShapes) window.__applyShapes();
+    return { ancre: !!state.messages[0].shapes[0].ancre,
+             hl: !!document.querySelector('.atc-hl[data-hl-id="hl-v620"]') };
+  }, TS);
+  await page.waitForTimeout(350);
+  await survoler('[data-fig-id="fg-avec-ancre"]');
+  const t3 = await lireTip();
+  ok("cadre ancré : infobulle toujours affichée", r3.ancre === true && t3.present === true,
+     String(t3.texte || '').slice(0, 90));
+
+  section("4. Note du cadre + commentaire recouvert : les deux");
+  await page.evaluate((ts) => {
+    const f = state.messages[0].shapes[0];
+    f.note = 'Note propre au cadre.';
+    document.querySelectorAll('.atc-figbox').forEach(function (e) { e.remove(); });
+    if (window.__applyShapes) window.__applyShapes();
+  }, TS);
+  await page.waitForTimeout(300);
+  await survoler('[data-fig-id="fg-avec-ancre"]');
+  const t4 = await lireTip();
+  ok("le commentaire y est", /Commentaire sur la hiérarchie/.test(String(t4.texte)), String(t4.texte).slice(0, 110));
+  ok("la note du cadre y est aussi", /Note propre au cadre/.test(String(t4.texte)), String(t4.texte).slice(0, 140));
+
+  section("5. Aucune erreur JavaScript");
+  ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(' | '));
+
+  const passes = resultats.filter(r => r.pass).length;
+  console.log("\nRESULTAT : " + passes + "/" + resultats.length);
+  if (passes !== resultats.length) resultats.filter(r => !r.pass).forEach(r => console.log("  ÉCHEC : " + r.label));
+  await browser.close();
+  relais.child.kill();
+  process.exit(passes === resultats.length ? 0 : 1);
+})().catch(e => { console.error("EXCEPTION :", e && e.stack || e); process.exit(1); });
