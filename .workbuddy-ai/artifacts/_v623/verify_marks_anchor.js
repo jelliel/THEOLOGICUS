@@ -170,7 +170,7 @@ async function surligner(page, ts, mot, occ, couleur) {
   });
   await new Promise(r => serveur.listen(PORT, "127.0.0.1", r));
 
-  const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  const browser = await chromium.launch(Object.assign({ args: ["--no-sandbox", "--disable-dev-shm-usage"] }, process.env.PW_DIR ? { executablePath: CHROME } : {}));
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const erreurs = [];
