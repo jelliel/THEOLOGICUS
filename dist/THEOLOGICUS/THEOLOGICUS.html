@@ -9106,6 +9106,7 @@ window.__ensureTafsirSurah = function(p){
       <div class="btn-row" style="margin-top:0;padding-top:0;border-top:none;margin-bottom:20px">
         <button class="btn-ghost" id="close-api-modal-2">Annuler</button>
         <button class="btn-ghost" id="test-api-key" onclick="window.__testerCleApi && window.__testerCleApi()" title="Teste la clé sur /v1/models : distingue clé invalide (401), accès refusé (403), blocage WAF ou refus du relais local">🔍 TESTER</button>
+        <button class="btn-ghost" id="diag-reseau" onclick="window.__theoDiagAfficher && window.__theoDiagAfficher()" title="Rapport copiable : version, plateforme, transport, endpoint, modèle, dernier statut HTTP et corps exact du fournisseur — aucune clé n'y figure">🧪 DIAGNOSTIC</button>
         <button class="btn-ghost danger" id="delete-api-key" style="border-color:rgba(255,51,102,0.3);color:var(--danger)">🗑 SUPPRIMER</button>
         <button class="btn-primary" id="save-api-key">💾 ENREGISTRER ET ACTIVER</button>
       </div>
@@ -12536,6 +12537,7 @@ async function throwApiError(res, model) {
   var viaTransport = (_tr403 && _tr403.utilise === 'natif')
     ? ('transport NATIF ' + (_tr403.pont || ''))
     : (_tr403 && _tr403.erreurNatif ? 'direct (natif en échec)' : 'direct');
+  var viaTxt = ' [via ' + viaTransport + ']';   /* v617 */
   let serverMsg = '';
   try {
     const text = await res.text();
@@ -12567,6 +12569,7 @@ async function throwApiError(res, model) {
   err.status = status;
   err.apiMessage = serverMsg ? String(serverMsg).slice(0, 400) : '';
   err.model = model || '';
+  err.transport = viaTransport;   /* v617 — nommé dans le diagnostic */
   // v118 — mémorise le fournisseur pour que le message d'erreur le nomme.
   // Un 401 sur « agnes:agnes-2.5-flash » doit dire Agnes, pas laisser croire
   // que la clé Mistral est en cause.
@@ -12578,6 +12581,15 @@ async function throwApiError(res, model) {
       err.providerId = 'mistral'; err.providerLabel = 'Mistral';
     }
   } catch(e) {}
+  /* v617 — le diagnostic doit contenir l'erreur MÊME quand elle n'a pas
+     transité par un rejeu (401, 402, 429, 5xx rendus par le chemin direct). */
+  try {
+    if (window.__theoJournalReseauAjout) window.__theoJournalReseauAjout({
+      type: 'api', statut: status, modele: model || '', transport: viaTransport,
+      edge: edgeServer || '', extrait: String(serverMsg || '').slice(0, 200)
+    });
+  } catch (e) {}
+
   // v610 — 401 ≠ 403 : un 401 est une CLÉ invalide ; un 403 est un ACCÈS
   // refusé (la clé peut être valide : WAF/Cloudflare, région, permissions,
   // modèle non autorisé, ou le RELAIS local qui refuse l'origine). Ranger
@@ -12605,6 +12617,20 @@ async function throwApiError(res, model) {
     err.message = 'Paramètres refusés par ' + (err.providerLabel || 'le fournisseur') +
       ' (HTTP 422) — ' + (detail422 || 'aucun détail renvoyé') +
       '. Vérifiez le modèle choisi et ses options (PARAMÈTRES ⚙ > Modèle).';
+  } else if (status === 408 || status === 429 || (status >= 500 && status <= 599)) {
+    /* v617 — ces codes dépendent du CHEMIN (edge surchargé, réseau mobile) et
+       non de la clé : le message doit le dire et proposer le diagnostic. */
+    err.reseauInstable = true;
+    var dNet = String(serverMsg || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    var quoi = (status === 408) ? 'délai dépassé'
+             : (status === 429) ? 'trop de requêtes (limitation de débit)'
+             : 'erreur du serveur ou de l\'edge';
+    err.message = 'Le fournisseur n\'a pas pu traiter la requête — HTTP ' + status + ' (' + quoi + ')' + viaTxt +
+      (dNet ? '. Détail : ' + dNet : '') +
+      (status === 429
+        ? '. Attends quelques secondes, puis réessaie (quota de la clé).'
+        : '. Réessaie dans un instant ; si ça se répète, change de réseau (Wi-Fi ↔ données mobiles).') +
+      ' 🧪 Diagnostic : PARAMÈTRES ⚙ > Modèle > 🧪 DIAGNOSTIC.';
   } else if (status === 403) {
     err.accesRefuse = true;
     err.edge = { server: edgeServer, ray: edgeRay, mitigated: edgeMit, transport: viaTransport };
@@ -12643,7 +12669,8 @@ async function throwApiError(res, model) {
 
 // Version courte (toast)
 function formatApiErrorShort(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise)) return e.message; // v603/v610/v611b/v613/v614
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise || e.reseauInstable)) return e.message; // v603/v610/v611b/v613/v614
+  if (e && e.delaiExpire) return 'Réseau muet : aucune réponse dans le délai (ni direct, ni natif). Change de réseau (Wi-Fi ↔ données mobiles) puis réessaie. 🧪 Diagnostic : PARAMÈTRES ⚙ > Modèle > 🧪 DIAGNOSTIC.';
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const base = status ? 'Erreur API (' + status + ')' : 'Erreur API';
@@ -12720,7 +12747,8 @@ async function testerCleApi() {
 window.__testerCleApi = testerCleApi;
 
 function formatApiErrorForChat(e) {
-  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise)) return e.message; // v603/v610/v611b/v613/v614
+  if (e && (e.cleRefusee || e.accesRefuse || e.parametresRefuses || e.modeleIndisponible || e.creditEpuise || e.reseauInstable)) return e.message; // v603/v610/v611b/v613/v614
+  if (e && e.delaiExpire) return 'Réseau muet : aucune réponse dans le délai (ni direct, ni natif). Change de réseau (Wi-Fi ↔ données mobiles) puis réessaie. 🧪 Diagnostic : PARAMÈTRES ⚙ > Modèle > 🧪 DIAGNOSTIC.';
   const status = e && e.status ? e.status : 0;
   const label = _httpStatusLabel(status);
   const serverMsg = (e && (e.apiMessage || e.message) || '').trim();
@@ -67819,6 +67847,46 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
     return undefined; /* undefined = non rejouable */
   }
 
+  /* ═══ v617 — RÉSILIENCE + DIAGNOSTIC ═══
+     Deux manques mesurés sur APK :
+       1. AUCUN délai sur le chemin direct : un réseau mobile qui ne coupe pas
+          la connexion (ou un WAF qui ne répond jamais) laissait l'interface
+          tourner indéfiniment — « souci HTTP » sans message ni issue.
+       2. Le repli natif ne se déclenchait QUE sur 403 ou échec réseau : un
+          502/520/522/524 (edge) ou un 408 laissait l'appel mourir alors
+          qu'un autre chemin réseau pouvait aboutir.
+     Aucun rejeu sur 401/402/422 : ce sont des verdicts du fournisseur, les
+     rejouer ne les change pas et une génération rejouée coûte des jetons. */
+  var DELAI_ENTETES_MS = 45000;
+  /* réponse NON streamée : les en-têtes n'arrivent qu'avec le corps. */
+  var DELAI_CORPS_MS = 180000;
+
+  function doitRejouer(status) {
+    if (!status) return true;
+    if (status === 403 || status === 408 || status === 425) return true;
+    if (status >= 500 && status <= 599) return true;
+    return false;
+  }
+
+  /* Journal borné : les 12 derniers événements de transport, avec le CORPS
+     exact du fournisseur. C'est la pièce qui manquait à chaque diagnostic. */
+  var JOURNAL_MAX = 12;
+  function journaliser(ev) {
+    try {
+      var j = window.__theoJournalReseau;
+      if (!j) { j = window.__theoJournalReseau = []; }
+      ev.ts = Date.now();
+      j.push(ev);
+      while (j.length > JOURNAL_MAX) j.shift();
+      try { sessionStorage.setItem('theo_journal_reseau', JSON.stringify(j.slice(-6))); } catch (e2) {}
+    } catch (e) {}
+  }
+  window.__theoJournalReseauAjout = journaliser;
+  try {
+    var _j0 = JSON.parse(sessionStorage.getItem('theo_journal_reseau') || '[]');
+    if (_j0 && _j0.length) window.__theoJournalReseau = _j0;
+  } catch (e) {}
+
   /* Une réponse native n'est UTILISABLE que si elle porte quelque chose.
      Un 4xx au corps VIDE signifie « on n'a rien envoyé » (bug de transport),
      pas un refus du fournisseur. */
@@ -67913,36 +67981,217 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
   function theoFetchReseau(url, init) {
     init = init || {};
     var ponts = estNatif() ? pontsDisponibles() : [];
-    if (!ponts.length) return _direct.call(window, url, init);
 
-    return _direct.call(window, url, init).then(function (res) {
-      if (res.status !== 403) return res;
-      /* 403 : le WebView a probablement été bloqué (WAF). On garde le corps
-         direct pour le diagnostic, puis on rejoue en natif. */
-      return res.clone().text().then(function (corpsDirect) {
-        return rejouerNatif(url, init, ponts, {
-          statut: res.status, extrait: String(corpsDirect || '').slice(0, 240)
-        }).then(function (res2) { return res2 || res; });
-      }, function () {
-        return rejouerNatif(url, init, ponts, { statut: res.status })
-          .then(function (res2) { return res2 || res; });
+    /* v617 — délai d'attente des EN-TÊTES, appliqué MÊME sans pont natif :
+       mieux vaut une erreur claire qu'une interface qui tourne sans fin.
+       · stream:true -> les en-têtes arrivent au PREMIER jeton (45 s suffisent) ;
+       · sinon       -> les en-têtes arrivent AVEC le corps : une génération
+                        non streamée peut être longue (180 s) ;
+       · __theoDelaiMs force la valeur (bancs, appels courts). */
+    var delai = DELAI_CORPS_MS;
+    try { if (/"stream"\s*:\s*true/.test(String(init.body || ''))) delai = DELAI_ENTETES_MS; } catch (e) {}
+    if (Number(init.__theoDelaiMs) > 0) delai = Number(init.__theoDelaiMs);
+
+    var ctrl = null, minuteur = null, initDirect = init;
+    try {
+      if (typeof AbortController !== 'undefined') {
+        ctrl = new AbortController();
+        if (init.signal && typeof init.signal.addEventListener === 'function') {
+          init.signal.addEventListener('abort', function () { try { ctrl.abort(); } catch (e) {} });
+        }
+        initDirect = {};
+        for (var k in init) { if (Object.prototype.hasOwnProperty.call(init, k)) initDirect[k] = init[k]; }
+        initDirect.signal = ctrl.signal;
+        minuteur = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, delai);
+      }
+    } catch (e) { ctrl = null; minuteur = null; initDirect = init; }
+
+    function finMinuteur() { if (minuteur) { clearTimeout(minuteur); minuteur = null; } }
+    function abandonAppelant() { return !!(init.signal && init.signal.aborted); }
+    function erreurDelai() {
+      var duree = (delai >= 1000) ? (Math.round(delai / 1000) + ' s') : (Math.round(delai) + ' ms');
+      var e2 = new Error('Aucune réponse après ' + duree +
+        (ponts.length ? ' : ni le chemin direct ni le transport natif n\'ont répondu.'
+                      : ' — le réseau n\'a rien renvoyé.'));
+      e2.delaiExpire = true;
+      return e2;
+    }
+
+    return _direct.call(window, url, initDirect).then(function (res) {
+      finMinuteur();
+      if (!ponts.length) return res;
+      if (!doitRejouer(res.status)) {
+        /* un 2xx n'apprend rien : on ne garde que les échecs, sinon douze
+           succès chassent la panne du journal borné. */
+        if (res.status >= 400) journaliser({ type: 'direct', url: url, statut: res.status, rejoue: false });
+        return res;
+      }
+      /* 403 / 408 / 5xx : le CHEMIN peut être en cause -> rejeu natif. */
+      var diag = { statut: res.status };
+      var apresLecture = function (txt) {
+        diag.extrait = String(txt || '').slice(0, 240);
+        return rejouerNatif(url, init, ponts, diag).then(function (res2) {
+          if (res2) {
+            journaliser({ type: 'rejeu', url: url, statutDirect: res.status, statutNatif: res2.status,
+                          pont: (window.__dernierTransport || {}).pont });
+            return res2;
+          }
+          journaliser({ type: 'direct', url: url, statut: res.status, rejoue: 'echec' });
+          return res;
+        });
+      };
+      return res.clone().text().then(apresLecture, function () {
+        return rejouerNatif(url, init, ponts, diag).then(function (res2) { return res2 || res; });
       });
     }, function (err) {
-      /* échec réseau / CORS : le natif n'a pas ces contraintes */
+      finMinuteur();
+      /* abandon VOLONTAIRE de l'appelant : aucun rejeu, aucune erreur réécrite */
+      if (abandonAppelant()) throw err;
+      var expire = !!(err && err.name === 'AbortError');
+      var cause = expire ? 'delai' : 'reseau';
+      if (!ponts.length) {
+        journaliser({ type: 'echec', url: url, cause: cause, erreur: String((err && err.message) || err) });
+        if (expire) throw erreurDelai();
+        throw err;
+      }
       return rejouerNatif(url, init, ponts, {
-        erreurDirect: String((err && err.message) || err)
+        erreurDirect: String((err && err.message) || err),
+        delaiExpire: expire ? delai : 0
       }).then(function (res2) {
-        if (res2) return res2;
+        if (res2) {
+          journaliser({ type: 'rejeu', url: url, cause: cause, statutNatif: res2.status });
+          return res2;
+        }
+        journaliser({ type: 'echec', url: url, cause: cause, erreur: String((err && err.message) || err) });
+        if (expire) throw erreurDelai();
         throw err;
       });
     });
   }
-
   window.theoFetchReseau = theoFetchReseau;
   window.__theoTransportDisponible = function () {
     var p = estNatif() ? pontsDisponibles() : [];
     return p.length ? p.map(function (x) { return x.nom; }).join(',') : null;
   };
+
+  /* ═══ v617 — DIAGNOSTIC RÉSEAU ═══
+     Rapport lisible et copiable : version, plateforme, ponts disponibles,
+     endpoint RÉELLEMENT appelé, modèle, dernier statut, corps exact du
+     fournisseur et journal des tentatives. AUCUNE clé n'y figure. */
+  function _diagVersion() {
+    try { if (window.THEO_VERSION) return String(window.THEO_VERSION); } catch (e) {}
+    try { if (window.__APK_VERSION__) return String(window.__APK_VERSION__); } catch (e) {}
+    return '(inconnue)';
+  }
+
+  function _diagPlateforme() {
+    var p = 'web';
+    try {
+      if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') p = window.Capacitor.getPlatform();
+    } catch (e) {}
+    return p + (estNatif() ? ' (coque native)' : ' (navigateur)');
+  }
+
+  function _diagCible() {
+    var out = { modele: '', endpoint: '', relais: 'non' };
+    try { out.modele = (typeof state !== 'undefined' && state && state.model) || ''; } catch (e) {}
+    try {
+      var cfg = resolveModelConfig(out.modele);
+      out.endpoint = cfg && cfg.endpoint ? String(cfg.endpoint) : '';
+      out.relais = (apiEndpoint(out.endpoint) !== out.endpoint) ? 'oui' : 'non';
+    } catch (e) {}
+    return out;
+  }
+
+  function diagReseau() {
+    var L = [];
+    var cible = _diagCible();
+    var ponts = estNatif()
+      ? (pontsDisponibles().map(function (p) { return p.nom; }).join(', ') || 'aucun')
+      : 'aucun (pas de coque native)';
+    L.push('THEOLOGICUS — DIAGNOSTIC RÉSEAU');
+    L.push('version      : ' + _diagVersion());
+    L.push('plateforme   : ' + _diagPlateforme());
+    L.push('navigateur   : ' + String((typeof navigator !== 'undefined' && navigator.userAgent) || ''));
+    L.push('transport    : ' + ponts);
+    L.push('modele       : ' + (cible.modele || '(aucun)'));
+    L.push('endpoint     : ' + (cible.endpoint || '(aucun)'));
+    L.push('relais local : ' + cible.relais);
+    L.push('delai repli  : ' + Math.round(DELAI_ENTETES_MS / 1000) + ' s');
+    L.push('');
+    L.push('DERNIER TRANSPORT : ' + (window.__dernierTransport ? JSON.stringify(window.__dernierTransport) : '(aucun)'));
+    var j = window.__theoJournalReseau || [];
+    L.push('');
+    L.push('JOURNAL (' + j.length + ' événement(s), le plus récent en dernier) :');
+    if (!j.length) L.push('  (vide)');
+    j.forEach(function (ev) {
+      var d = new Date(ev.ts || 0);
+      var hh = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
+      var copie = {};
+      Object.keys(ev).forEach(function (k) { if (k !== 'ts') copie[k] = ev[k]; });
+      L.push('  ' + hh + ' ' + JSON.stringify(copie));
+    });
+    return L.join('\n');
+  }
+  window.__theoDiagReseau = diagReseau;
+
+  function afficherDiagReseau() {
+    try {
+      var vieux = document.getElementById('theo-diag-reseau');
+      if (vieux && vieux.parentNode) vieux.parentNode.removeChild(vieux);
+      var txt = diagReseau();
+      var ech = function (s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      };
+      var ov = document.createElement('div');
+      ov.id = 'theo-diag-reseau';
+      /* 🔴 `.modal-overlay` est en display:none : sans `active` le panneau
+         existe dans le DOM mais reste INVISIBLE (attrapé à la capture).
+         On garde le z-index du design system (--z-overlay), comme toutes
+         les autres modales : la porte d'accès doit rester au-dessus. */
+      ov.className = 'modal-overlay active';
+      ov.innerHTML =
+        '<div class="modal-box" style="max-width:780px">' +
+          '<div class="modal-header">' +
+            '<div class="modal-title">🧪 DIAGNOSTIC RÉSEAU</div>' +
+            '<button class="modal-close" data-fermer>✕</button>' +
+          '</div>' +
+          '<div class="modal-body">' +
+            '<pre id="theo-diag-texte" style="white-space:pre-wrap;word-break:break-word;font-family:var(--font-mono);font-size:11px;line-height:1.55;max-height:52vh;overflow:auto;user-select:text;-webkit-user-select:text;background:rgba(127,127,127,0.10);padding:12px;border-radius:8px">' + ech(txt) + '</pre>' +
+            '<div class="btn-row">' +
+              '<button class="btn-ghost" data-fermer>FERMER</button>' +
+              '<button class="btn-primary" data-copier>📋 COPIER</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(ov);
+      var fermer = function () { try { if (ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {} };
+      Array.prototype.forEach.call(ov.querySelectorAll('[data-fermer]'), function (b) { b.onclick = fermer; });
+      ov.addEventListener('click', function (e) { if (e.target === ov) fermer(); });
+      var btn = ov.querySelector('[data-copier]');
+      if (btn) btn.onclick = function () {
+        var fini = function (ok) {
+          btn.textContent = ok ? '✅ COPIÉ' : '⚠️ SÉLECTIONNE ET COPIE';
+          setTimeout(function () { btn.textContent = '📋 COPIER'; }, 1800);
+        };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(function () { fini(true); }, function () { fini(false); });
+            return;
+          }
+        } catch (e) {}
+        try {
+          var pre = document.getElementById('theo-diag-texte');
+          var r = document.createRange(); r.selectNodeContents(pre);
+          var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+          fini(document.execCommand('copy'));
+        } catch (e) { fini(false); }
+      };
+    } catch (e) {
+      try { if (typeof toast === 'function') toast('Diagnostic impossible : ' + e.message, 'error'); } catch (e2) {}
+    }
+  }
+  window.__theoDiagAfficher = afficherDiagReseau;
 
   /* 🔴 AUTONOMIE : le wrapper de fetch de l'app n'existe que si le plugin
      Filesystem est présent (c'est lui qui le pose). Si ce n'est pas le cas,
