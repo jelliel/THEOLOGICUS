@@ -30547,87 +30547,24 @@ const idx = fullM.norm.indexOf(txtM.norm);
      `.atc-hl` placé dessous, donc son commentaire restait invisible. On
      retrouve les annotations par CHEVAUCHEMENT D'OFFSETS avec l'ancre du
      cadre — la même référence que le ré-ancrage v609. */
-  function annsDansCadre(msg, f, fb){
-    if (!msg) return [];
-    const anns = msg.annotations || [];
-    const out = [], vus = {};
-    const ajouter = function(an){ if (!an || !an.id || vus[an.id]) return; vus[an.id] = 1; out.push(an); };
-    /* 1. par OFFSETS (précis) — seulement si le cadre a une ancre texte. */
-    if (f && f.ancre) {
-      const a0 = Number(f.ancre.start), a1 = Number(f.ancre.end);
-      if (a1 > a0) {
-        anns.forEach(function(an){
-          const s0 = Number(an && an.start), e0 = Number(an && an.end);
-          if (!(e0 > s0)) return;
-          if (s0 < a1 && e0 > a0) ajouter(an);   /* chevauchement, pas égalité */
-        });
-      }
-    }
-    /* 2. par GÉOMÉTRIE — un cadre dessiné à la main (ou créé sans sélection)
-       n'a AUCUNE ancre : sans ce repli, le survol ne montrait rien alors que
-       le commentaire existait bel et bien (constaté sur vidéo). On AJOUTE
-       (union) : une ancre périmée ne doit pas masquer un commentaire visible. */
-    if (fb && fb.isConnected) {
-      let rf = null;
-      try { rf = fb.getBoundingClientRect(); } catch (e) {}
-      if (rf && rf.width && rf.height) {
-        anns.forEach(function(an){
-          if (!an || !an.id || vus[an.id]) return;
-          let spans;
-          try { spans = document.querySelectorAll('.atc-hl[data-hl-id="' + an.id + '"]'); } catch (e) { return; }
-          for (let i = 0; i < spans.length; i++) {
-            const r = spans[i].getBoundingClientRect();
-            if (!r.width || !r.height) continue;
-            /* Le CENTRE du surlignage doit tomber DANS le cadre. Une simple
-               intersection prenait l'annotation VOISINE (banc v619 : « beta »
-               pour un cadre sur « gamma »). */
-            const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-            if (cx >= rf.left && cx <= rf.right && cy >= rf.top && cy <= rf.bottom) {
-              ajouter(an); break;
-            }
-          }
-        });
-      }
-    }
-    return out;
-  }
-
-  function showTipForFig(fb, f, msg){
-    const anns = annsDansCadre(msg, f, fb);
+  /* v622 — le survol d'un CADRE n'affiche QUE sa note propre. Les commentaires
+     des passages qu'il recouvre ont chacun LEUR fiche, déclenchée par le
+     survol du surlignage lui-même (le cadre est traversant depuis v621).
+     Lister tous les commentaires du cadre était illisible dès qu'il y en avait
+     plusieurs — et le mauvais commentaire pouvait être lu à la place du bon. */
+  function showTipForFig(fb, f){
     const note = (f && f.note) ? String(f.note) : '';
-    if (!anns.length && !note) return false;
+    if (!note) return false;
     closeAtcTip();
     const tip = document.createElement('div');
     tip.id = 'atc-tip';
     tip._forFig = fb;
-    let html = '';
-    if (anns.length === 1 && !note) {
-      /* un seul commentaire : la fiche complète, boutons compris */
-      html = buildTipHTML(anns[0]);
-    } else {
-      const n = anns.length + (note ? 1 : 0);
-      html = '<div class="atc-tip-tag">💬 ' + n + ' annotation' + (n > 1 ? 's' : '') +
-             ' dans cet encadré</div>';
-      anns.forEach(function(an){
-        const corps = an.loading ? '⏳ Le modèle rédige le commentaire…'
-                    : (an.error ? '✗ ' + esc(an.error)
-                    : esc(an.a || an.note || '(vide)'));
-        html += '<div style="border-top:1px solid rgba(79,195,247,.18);padding-top:8px;margin-top:8px">'
-              + '<div class="atc-tip-q">« ' + esc(an.text) + ' »</div>'
-              + '<div class="atc-tip-a">' + corps + '</div></div>';
-      });
-      if (note) {
-        html += '<div style="border-top:1px solid rgba(255,213,79,.28);padding-top:8px;margin-top:8px">'
-              + '<div class="atc-tip-tag">💬 Note de l\'encadré</div>'
-              + '<div class="atc-tip-a">' + esc(note) + '</div></div>';
-      }
-    }
-    tip.innerHTML = html;
+    tip.innerHTML = '<div class="atc-tip-tag">💬 Note de l\'encadré</div>'
+                  + '<div class="atc-tip-a">' + esc(note) + '</div>';
     tip.addEventListener('mouseenter', function(){ clearTimeout(tip._hideT); });
     tip.addEventListener('mouseleave', function(){ closeAtcTip(); });
     document.body.appendChild(tip);
     positionTip(tip, fb.getBoundingClientRect());
-    if (anns.length === 1 && !note) wireTipActions(tip, anns[0], anns[0].id);
     return true;
   }
 
@@ -30664,6 +30601,14 @@ const idx = fullM.norm.indexOf(txtM.norm);
     if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) return;
     if (e.buttons) return;                       /* glissement ou sélection en cours */
     try { const sel = window.getSelection(); if (sel && !sel.isCollapsed) return; } catch (err) {}
+    /* v622 — le pointeur est SUR un commentaire : c'est SA fiche qui doit
+       s'afficher (survol du surlignage, v619), jamais celle du cadre. */
+    if (e.target && e.target.closest && e.target.closest('.atc-hl')) {
+      const t0 = document.getElementById('atc-tip');
+      if (t0 && t0._forFig) closeAtcTip();
+      _mvFigCible = null;
+      return;
+    }
     /* Le cadre sous le pointeur, calculé AVANT le throttle : changer de cadre
        doit réagir tout de suite, sinon un déplacement rapide de la souris
        n'affiche jamais l'infobulle (mesuré au banc v619). */
@@ -30691,7 +30636,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
     const msg = (state.messages || []).find(function(m){ return m.ts === ts; });
     const f = (msg && msg.shapes) ? msg.shapes.find(function(x){ return x.id === cible.dataset.figId; }) : null;
     if (!f) return;
-    if (!showTipForFig(cible, f, msg) && deja && deja._forFig) closeAtcTip();
+    if (!showTipForFig(cible, f) && deja && deja._forFig) closeAtcTip();
   }, { passive: true });
 
   cc && cc.addEventListener('mouseout', function(e){
@@ -30764,10 +30709,15 @@ const idx = fullM.norm.indexOf(txtM.norm);
     const hl = e.target.closest ? e.target.closest('.atc-hl') : null;
     if (hl && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.atc-hl'))) {
       const tip = document.getElementById('atc-tip');
+      /* v622 — ne fermer QUE l'infobulle du surlignage quitté. Sans cette
+         identité, un timer différé de 350 ms fermait l'infobulle créée APRÈS
+         coup (note du cadre, autre commentaire) : elle disparaissait sous le
+         curseur sans raison. */
+      if (!tip || tip._forHl !== hl) return;
       // laisser le temps d'entrer dans le tooltip pour copier
       setTimeout(function(){
         const t = document.getElementById('atc-tip');
-        if (t && !t.matches(':hover')) closeAtcTip();
+        if (t && t === tip && !t.matches(':hover')) closeAtcTip();
       }, 350);
     }
   });

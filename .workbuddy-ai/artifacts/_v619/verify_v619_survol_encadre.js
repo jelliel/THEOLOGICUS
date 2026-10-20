@@ -98,6 +98,21 @@ const TS = 1700000000000;
     await page.waitForTimeout(350);
     return r;
   }
+  async function survolerTexte(hlId) {
+    const r = await page.evaluate((id) => {
+      const el = document.querySelector('.atc-hl[data-hl-id="' + id + '"]');
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, hlId);
+    if (!r) return null;
+    await page.evaluate(() => { const t = document.getElementById('atc-tip'); if (t) t.remove(); });
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(180);
+    await page.mouse.move(r.x, r.y);
+    await page.waitForTimeout(380);
+    return r;
+  }
   async function lireTip() {
     return await page.evaluate(() => {
       const t = document.getElementById('atc-tip');
@@ -111,15 +126,17 @@ const TS = 1700000000000;
     });
   }
 
-  section("1. Survol d'un encadré qui recouvre un commentaire");
+  section("1. Survol du COMMENTAIRE : sa fiche, et rien d'autre");
   await poser(CADRE_A);
-  await survoler('[data-fig-id="fg-a"]');
+  await survolerTexte('hl-1');
   const t1 = await lireTip();
   ok("une infobulle apparaît", t1.present === true, String(t1.present));
   ok("elle est VISIBLE (surface réelle)", t1.visible === true, JSON.stringify(t1.visible));
   ok("elle contient le commentaire de l'annotation", /Commentaire sur Alpha/.test(String(t1.texte)),
      String(t1.texte).slice(0, 120));
   ok("elle rappelle le passage annoté", /Alpha/.test(String(t1.texte)), String(t1.texte).slice(0, 80));
+  ok("elle ne liste PAS l'autre commentaire", !/Commentaire sur beta/.test(String(t1.texte)),
+     String(t1.texte).slice(0, 120));
 
   section("2. Sortie de la souris — l'infobulle se ferme");
   await page.mouse.move(5, 5);
@@ -127,13 +144,19 @@ const TS = 1700000000000;
   const t2 = await lireTip();
   ok("l'infobulle est fermée", t2.present === false, String(t2.present));
 
-  section("3. Un encadré qui porte une NOTE (v618) l'affiche au survol");
+  section("3. Le cadre avec note : la NOTE au survol du cadre, le COMMENTAIRE au survol du mot");
   await poser(CADRE_C);
   await survoler('[data-fig-id="fg-c"]');
   const t3 = await lireTip();
   ok("la note du cadre apparaît", /Note propre au cadre C/.test(String(t3.texte)), String(t3.texte).slice(0, 120));
-  ok("le commentaire de l'annotation « beta » y figure aussi",
-     /Commentaire sur beta/.test(String(t3.texte)), String(t3.texte).slice(0, 140));
+  ok("aucun commentaire n'est listé sous la note (v622)",
+     !/Commentaire sur beta/.test(String(t3.texte)), String(t3.texte).slice(0, 140));
+  await survolerTexte('hl-2');
+  const t3b = await lireTip();
+  ok("le commentaire de « beta » s'affiche sur SON survol",
+     /Commentaire sur beta/.test(String(t3b.texte)), String(t3b.texte).slice(0, 120));
+  ok("la note du cadre n'y figure pas", !/Note propre au cadre C/.test(String(t3b.texte)),
+     String(t3b.texte).slice(0, 120));
 
   section("4. Contrôle NÉGATIF : cadre sans annotation chevauchante");
   await poser(CADRE_B);

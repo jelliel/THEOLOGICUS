@@ -94,6 +94,21 @@ const TS = 1700000000000;
     await page.waitForTimeout(350);
     return r;
   }
+  async function survolerTexte(hlId) {
+    const r = await page.evaluate((id) => {
+      const el = document.querySelector('.atc-hl[data-hl-id="' + id + '"]');
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, hlId);
+    if (!r) return null;
+    await page.evaluate(() => { const tp = document.getElementById('atc-tip'); if (tp) tp.remove(); });
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(180);
+    await page.mouse.move(r.x, r.y);
+    await page.waitForTimeout(380);
+    return r;
+  }
   async function lireTip() {
     return await page.evaluate(() => {
       const t = document.getElementById('atc-tip');
@@ -104,13 +119,14 @@ const TS = 1700000000000;
     });
   }
 
-  section("1. Survol du cadre SANS ancre -> le commentaire s'affiche");
-  await survoler('[data-fig-id="fg-sans-ancre"]');
+  section("1. Le commentaire s'affiche au survol de SON MOT, même dans un cadre sans ancre");
+  await survolerTexte('hl-v620');
   const t1 = await lireTip();
   ok("une infobulle apparaît", t1.present === true, String(t1.present));
   ok("elle est visible", t1.visible === true, String(t1.visible));
   ok("elle contient le commentaire recouvert", /Commentaire sur la hiérarchie/.test(String(t1.texte)),
      String(t1.texte).slice(0, 120));
+
 
   section("2. Contrôle NÉGATIF : le même cadre déplacé loin du commentaire");
   await page.evaluate((ts) => {
@@ -143,12 +159,13 @@ const TS = 1700000000000;
              hl: !!document.querySelector('.atc-hl[data-hl-id="hl-v620"]') };
   }, TS);
   await page.waitForTimeout(350);
-  await survoler('[data-fig-id="fg-avec-ancre"]');
+  await survolerTexte('hl-v620');
   const t3 = await lireTip();
-  ok("cadre ancré : infobulle toujours affichée", r3.ancre === true && t3.present === true,
+  ok("cadre ancré : le commentaire s'affiche au survol du mot",
+     r3.ancre === true && /Commentaire sur la hiérarchie/.test(String(t3.texte)),
      String(t3.texte || '').slice(0, 90));
 
-  section("4. Note du cadre + commentaire recouvert : les deux");
+  section("4. Note du cadre (au survol du cadre) et commentaire (au survol du mot)");
   await page.evaluate((ts) => {
     const f = state.messages[0].shapes[0];
     f.note = 'Note propre au cadre.';
@@ -158,8 +175,11 @@ const TS = 1700000000000;
   await page.waitForTimeout(300);
   await survoler('[data-fig-id="fg-avec-ancre"]');
   const t4 = await lireTip();
-  ok("le commentaire y est", /Commentaire sur la hiérarchie/.test(String(t4.texte)), String(t4.texte).slice(0, 110));
-  ok("la note du cadre y est aussi", /Note propre au cadre/.test(String(t4.texte)), String(t4.texte).slice(0, 140));
+  ok("la note du cadre s'affiche au survol du cadre", /Note propre au cadre/.test(String(t4.texte)),
+     String(t4.texte).slice(0, 110));
+  ok("le commentaire n'y est PAS (v622)", !/Commentaire sur la hiérarchie/.test(String(t4.texte)),
+     String(t4.texte).slice(0, 140));
+
 
   section("5. Aucune erreur JavaScript");
   ok("zéro erreur JS", bruit.length === 0, bruit.slice(0, 2).join(' | '));
