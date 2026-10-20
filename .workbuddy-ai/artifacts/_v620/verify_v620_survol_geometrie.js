@@ -85,8 +85,11 @@ const TS = 1700000000000;
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     }, sel);
     if (!r) return null;
+    /* l'infobulle précédente est un panneau FIXE : elle peut couvrir le cadre
+       et intercepter la souris (le survol ne l'atteindrait jamais). */
+    await page.evaluate(() => { const tp = document.getElementById('atc-tip'); if (tp) tp.remove(); });
     await page.mouse.move(5, 5);
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(160);
     await page.mouse.move(r.x, r.y);
     await page.waitForTimeout(350);
     return r;

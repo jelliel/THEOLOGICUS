@@ -1025,6 +1025,29 @@
 .atc-figbox .fb-note:hover{transform:scale(1.15)}
 /* au doigt, 18 px est trop petit : le badge doit être touchable. */
 @media (pointer:coarse){.atc-figbox .fb-note{width:24px;height:24px;line-height:22px;font-size:12px;top:-12px;left:-12px}}
+/* ═══ v621 — LE CADRE EST CREUX ═══
+   Le texte qu'il entoure redevient SÉLECTIONNABLE (donc surlignable et
+   commentable). Le cadre ne capte plus la souris que par ses BORDS, sa
+   POIGNÉE et ses boutons — sans quoi il ne serait plus déplaçable. */
+.atc-figbox{pointer-events:none}
+.atc-figbox .fb-edge{
+  position:absolute; pointer-events:auto; cursor:move; z-index:10;
+}
+/* 🔴 Les bords restent DANS la boîte : `.message-content` a `overflow:hidden`,
+   un bord posé à -4 px est rogné et n'est plus hit-testé (cadre impossible à
+   déplacer — mesuré au banc). 8 px suffisent pour saisir à la souris. */
+.atc-figbox .fb-edge[data-bord="t"]{left:0;right:0;top:0;height:8px}
+.atc-figbox .fb-edge[data-bord="b"]{left:0;right:0;bottom:0;height:8px}
+.atc-figbox .fb-edge[data-bord="l"]{top:0;bottom:0;left:0;width:8px}
+.atc-figbox .fb-edge[data-bord="r"]{top:0;bottom:0;right:0;width:8px}
+.atc-figbox .fb-grip{
+  position:absolute; left:50%; top:1px; transform:translateX(-50%);
+  width:26px; height:7px; border-radius:4px; pointer-events:auto; cursor:move;
+  background:rgba(13,22,38,.9); border:1px solid var(--fc); z-index:12;
+  opacity:0; transition:opacity .12s;
+}
+.atc-figbox:hover .fb-grip, .atc-figbox.sel .fb-grip{opacity:.9}
+.atc-figbox .fb-x, .atc-figbox .h, .atc-figbox .fb-note{pointer-events:auto}
 #atc-fig-note{
   position:fixed; z-index:100000; width:min(340px,92vw); background:#15171c; color:#e8e6df;
   border:1px solid #2c2f37; border-radius:10px; padding:12px;
@@ -29092,6 +29115,18 @@ initTafsirVerseTooltip();
       const h = document.createElement('span'); h.className = 'h'; h.dataset.dir = dir;
       el.appendChild(h);
     });
+    /* v621 — la boîte est TRAVERSANTE (pointer-events:none) pour laisser
+       sélectionner le texte : on rend le cadre saisissable par ses BORDS et
+       par une POIGNÉE, sinon il ne serait plus déplaçable. */
+    ['t','b','l','r'].forEach(function(bord){
+      const e = document.createElement('span');
+      e.className = 'fb-edge'; e.dataset.bord = bord;
+      e.title = 'Glisser pour déplacer le cadre';
+      el.appendChild(e);
+    });
+    const grip = document.createElement('span');
+    grip.className = 'fb-grip'; grip.title = 'Déplacer le cadre';
+    el.appendChild(grip);
     return el;
   }
   /* DEBUG HOOK (temporaire) */
@@ -29108,6 +29143,10 @@ initTafsirVerseTooltip();
       y = target.selRect.top - br.top + box.scrollTop - 6;
       w = Math.max(target.selRect.width + 16, 90);
       h = Math.max(target.selRect.height + 16, 44);
+      /* v621 — le cadre doit rester DANS le contenu : `.message-content` a
+         overflow:hidden, et un bord rogné n'est plus saisissable. */
+      x = Math.min(Math.max(0, x), Math.max(0, box.clientWidth - w));
+      y = Math.min(Math.max(0, y), Math.max(0, box.clientHeight - h));
     } else {
       x = target.clientX - br.left + box.scrollLeft;
       y = target.clientY - br.top + box.scrollTop;
@@ -29139,12 +29178,17 @@ initTafsirVerseTooltip();
     box.appendChild(buildFigEl(f));
     toast('✓ Figure insérée (' + item.n + ') · glissez pour déplacer, poignées ◻ pour redimensionner, double-clic pour le texte ; cliquez-la pour tourner ↻ et remplir ▨', 'success');
   }
-  function persistFig(f, fb){
+  function persistFig(f, fb, origine){
     const nx = fb.offsetLeft, ny = fb.offsetTop, nw = fb.offsetWidth, nh = fb.offsetHeight;
-    /* v618 — un CLIC (down+up sans mouvement) appelle aussi persistFig : il ne
-       doit PAS retirer l'ancre, sinon le cadre cesse de suivre son texte après
-       un simple appui (le correctif v609 était annulé sans qu'on le voie). */
-    const aBouge = (nx !== f.x || ny !== f.y || nw !== f.w || nh !== f.h);
+    /* v618/v621 — un CLIC (down+up sans mouvement) appelle aussi persistFig :
+       il ne doit PAS retirer l'ancre, sinon le cadre cesse de suivre son texte
+       après un simple appui (le correctif v609 était annulé sans qu'on le voie).
+       🔴 La comparaison se fait avec la géométrie du DÉBUT du geste, pas avec
+       f.x/f.y : ceux-ci peuvent être périmés par rapport au DOM (ré-ancrage,
+       borne au contenu), et un simple clic « bougeait » alors de 10 px. */
+    const o = origine || { l: f.x, t: f.y, w: f.w, h: f.h };
+    const aBouge = (Math.abs(nx - o.l) > 1 || Math.abs(ny - o.t) > 1 ||
+                    Math.abs(nw - o.w) > 1 || Math.abs(nh - o.h) > 1);
     f.x = nx; f.y = ny; f.w = nw; f.h = nh;
     /* v609 — déplacement/retaille MANUELS : l'ancre texte est retirée (la
        position manuelle prime sur le ré-ancrage automatique). */
@@ -29238,9 +29282,13 @@ initTafsirVerseTooltip();
                 const ny = rr.top - br.top + box.scrollTop - 6;
                 const nw = Math.max(rr.width + 16, 90);
                 const nh = Math.max(rr.height + 16, 44);
-                if (Math.abs(nx - f.x) > 1 || Math.abs(ny - f.y) > 1 ||
+                /* v621 — même borne qu'à la création : le cadre reste dans
+                   la zone visible, sinon ses bords sont rognés. */
+                const bx = Math.min(Math.max(0, Math.round(nx)), Math.max(0, box.clientWidth - Math.round(nw)));
+                const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, box.clientHeight - Math.round(nh)));
+                if (Math.abs(bx - f.x) > 1 || Math.abs(by - f.y) > 1 ||
                     Math.abs(nw - f.w) > 1 || Math.abs(nh - f.h) > 1) {
-                  f.x = Math.round(nx); f.y = Math.round(ny);
+                  f.x = bx; f.y = by;
                   f.w = Math.round(nw); f.h = Math.round(nh);
                   figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
                   figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
@@ -29318,7 +29366,7 @@ initTafsirVerseTooltip();
       document.removeEventListener('mousemove', mv);
       document.removeEventListener('mouseup', up);
       fb.classList.remove('dragging');
-      persistFig(f, fb);
+      persistFig(f, fb, { l: ol, t: ot, w: ow, h: oh });
       if (fb.classList.contains('sel')) showFigTools(fb, f, ts);
     }
     fb.classList.add('dragging');
@@ -30604,6 +30652,48 @@ const idx = fullM.norm.indexOf(txtM.norm);
        précédent (elle restait affichée pendant le survol du suivant). */
     if (!showTipForFig(fb, f, msg)) closeAtcTip();
   });
+  /* v621 — le cadre est traversant : son INTÉRIEUR ne reçoit plus la souris
+     (c'est ce qui rend le texte sélectionnable). Le `mouseover` du cadre ne
+     peut donc plus déclencher l'infobulle ; on la retrouve au `mousemove`,
+     quand le pointeur est dans son rectangle et qu'aucune sélection ni
+     glissement n'est en cours. */
+  var _mvFigT = 0, _mvFigCible = null;
+  /* Écouteur sur DOCUMENT : le pointeur sort souvent de #chat-container (barre
+     latérale, en-tête) et l'infobulle restait alors affichée indéfiniment. */
+  document.addEventListener('mousemove', function(e){
+    if (window.__THEO_TOUCH_UI && window.__THEO_TOUCH_UI()) return;
+    if (e.buttons) return;                       /* glissement ou sélection en cours */
+    try { const sel = window.getSelection(); if (sel && !sel.isCollapsed) return; } catch (err) {}
+    /* Le cadre sous le pointeur, calculé AVANT le throttle : changer de cadre
+       doit réagir tout de suite, sinon un déplacement rapide de la souris
+       n'affiche jamais l'infobulle (mesuré au banc v619). */
+    let cible = null;
+    const cadres = document.querySelectorAll('.atc-figbox');
+    for (let i = 0; i < cadres.length; i++) {
+      const r = cadres[i].getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        cible = cadres[i]; break;
+      }
+    }
+    const t = Date.now();
+    if (cible === _mvFigCible && (t - _mvFigT) < 400) return;
+    _mvFigT = t; _mvFigCible = cible;
+    const deja = document.getElementById('atc-tip');
+    if (!cible) {
+      /* ne pas fermer quand le pointeur est SUR l'infobulle (boutons) */
+      const surTip = e.target && e.target.closest && e.target.closest('#atc-tip');
+      if (!surTip && deja && deja._forFig) closeAtcTip();
+      return;
+    }
+    if (deja && deja._forFig === cible) return;
+    const msgEl = cible.closest('.message');
+    const ts = msgEl ? parseInt(msgEl.dataset.msgId, 10) : null;
+    const msg = (state.messages || []).find(function(m){ return m.ts === ts; });
+    const f = (msg && msg.shapes) ? msg.shapes.find(function(x){ return x.id === cible.dataset.figId; }) : null;
+    if (!f) return;
+    if (!showTipForFig(cible, f, msg) && deja && deja._forFig) closeAtcTip();
+  }, { passive: true });
+
   cc && cc.addEventListener('mouseout', function(e){
     const fb = e.target.closest ? e.target.closest('.atc-figbox') : null;
     if (!fb) return;

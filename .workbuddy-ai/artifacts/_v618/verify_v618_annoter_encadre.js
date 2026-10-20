@@ -40,6 +40,14 @@ const TS = 1700000000000;
   page.on("pageerror", e => bruit.push(String(e).slice(0, 200)));
   await page.goto("http://127.0.0.1:" + port + "/THEOLOGICUS.html", { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(2200);
+  /* v621 — les surcouches de démarrage (porte, assistant) couvrent l'app :
+     un clic à la souris ne peut pas les traverser. On les neutralise. */
+  await page.evaluate(() => {
+    const ov = document.getElementById('auth-overlay');
+    if (ov) { ov.classList.add('hidden'); ov.style.setProperty('display', 'none', 'important'); }
+    const w = document.getElementById('setup-wizard-overlay');
+    if (w) { w.classList.remove('active'); w.style.setProperty('display', 'none', 'important'); }
+  });
 
   /* La porte d'accès (z 999999) couvre tout : on la retire pour le banc. */
   await page.evaluate(() => {
@@ -78,8 +86,20 @@ const TS = 1700000000000;
     const fb = document.querySelector('[data-fig-id="fg-banc"]');
     return fb ? fb.getBoundingClientRect().toJSON() : null;
   });
-  if (rect) {
-    const cx = rect.x + rect.width / 2, cy = rect.y + rect.height / 2;
+  /* v621 — le centre du cadre est TRAVERSANT : on saisit le cadre par son
+     bord gauche (le centre sert désormais à sélectionner le texte). */
+  const bord = await page.evaluate((ts) => {
+    const fb = document.querySelector('[data-fig-id="fg-banc"]');
+    const box = document.getElementById('mc-' + ts);
+    if (!fb || !box) return null;
+    const r = fb.getBoundingClientRect(), b = box.getBoundingClientRect();
+    /* le cadre peut déborder du contenu (rogné) : on vise la PARTIE VISIBLE
+       de son bord gauche, pas son milieu géométrique. */
+    const top = Math.max(r.top, b.top), bot = Math.min(r.bottom, b.bottom);
+    return { x: Math.max(r.left, b.left) + 4, y: (top + bot) / 2 };
+  }, TS);
+  if (bord) {
+    const cx = bord.x, cy = bord.y;
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     await page.mouse.up();
