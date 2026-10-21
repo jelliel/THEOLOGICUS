@@ -11,7 +11,7 @@ const path = require('path');
 
 const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
-const MODULES_ATTENDUS = 127; // +pdf.js et +worker (text/plain, non compté comme module exécutable) // synchronisé avec verifier_assets.py (controle_modules)
+const MODULES_ATTENDUS = 128; // +pdf.js et +worker (text/plain, non compté comme module exécutable) // synchronisé avec verifier_assets.py (controle_modules) ; +1 v626 (v626nav — navigation des surlignages)
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé
