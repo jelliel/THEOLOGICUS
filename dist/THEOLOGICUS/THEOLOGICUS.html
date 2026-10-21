@@ -68923,6 +68923,185 @@ body.theo-read #atc-nav-bar{display:none !important}
 /* v630 — badge de commentaire RÉSOLU : pastille verte distincte du 💬 */
 .atc-figbox .fb-note.note-resolu{ background:#1b5e20; color:#eafbe7; }
 </style>
+<style id="v631media-css">
+#media-open-btn{ width:32px;height:32px;border-radius:8px;border:1px solid transparent;
+  background:transparent;color:var(--text-dim);display:grid;place-items:center;cursor:pointer;font-size:15px;line-height:1}
+#media-open-btn:hover{ border-color:var(--accent);color:var(--accent);background:var(--accent-dim) }
+#media-modal{ position:fixed;inset:0;z-index:130000;display:none;align-items:center;justify-content:center;
+  background:rgba(2,6,12,.75);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px) }
+#media-modal.active{ display:flex }
+#media-modal .media-panel{ width:min(860px,94vw);max-height:88vh;overflow:auto;background:var(--bg-card,#10161f);
+  color:var(--text-primary,#eaf4ff);border:1px solid var(--glass-border,rgba(255,255,255,.14));border-radius:14px;
+  box-shadow:0 24px 80px rgba(0,0,0,.6) }
+#media-modal .media-head{ display:flex;align-items:center;gap:10px;padding:14px 18px;position:sticky;top:0;
+  background:var(--bg-card,#10161f);border-bottom:1px solid var(--glass-border,rgba(255,255,255,.12));z-index:2 }
+#media-modal .media-head h2{ margin:0;font-size:17px;flex:1 }
+#media-modal .media-close{ background:none;border:none;color:var(--text-primary,#eaf4ff);font-size:18px;cursor:pointer }
+#media-modal .media-body{ padding:14px 18px 20px }
+#media-modal .media-desc{ font-size:13px;line-height:1.6;opacity:.92 }
+#media-modal .media-chip{ display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:99px;font-size:12px;
+  border:1px solid var(--glass-border,rgba(255,255,255,.2));margin:2px 4px 2px 0 }
+#media-modal .media-chip.ok{ color:#8ff0a4;border-color:#2e7d32 }
+#media-modal .media-chip.ko{ color:#ffb4ab;border-color:#8c3a34 }
+#media-modal .media-pre{ display:flex;flex-wrap:wrap;gap:4px 0;margin:8px 0 }
+#media-modal .media-acts{ display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 }
+#media-modal .media-btn{ background:rgba(var(--accent-rgb,79,142,247),.14);border:1px solid rgba(var(--accent-rgb,79,142,247),.4);
+  color:var(--text-primary,#eaf4ff);border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer }
+#media-modal .media-btn:hover{ background:rgba(var(--accent-rgb,79,142,247),.3) }
+#media-modal .media-btn[disabled]{ opacity:.45;cursor:wait }
+#media-modal .media-log{ width:100%;min-height:120px;max-height:260px;overflow:auto;background:#0a0f16;color:#c9f2d0;
+  font-family:Consolas,monospace;font-size:11.5px;line-height:1.5;border:1px solid var(--glass-border,rgba(255,255,255,.15));
+  border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap;word-break:break-word;display:none }
+#media-modal h3.media-t{ margin:16px 0 6px;font-size:14px;color:var(--accent,#4f8ef7) }
+#media-modal .media-pipes{ display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:6px }
+#media-modal .media-pipe{ border:1px solid var(--glass-border,rgba(255,255,255,.14));border-radius:9px;padding:7px 10px;font-size:12px }
+#media-modal .media-pipe b{ display:block;font-size:12.5px }
+#media-modal .media-note{ font-size:12px;opacity:.75;line-height:1.55;margin-top:10px }
+#media-modal .media-prompts .mp{ border-left:3px solid var(--accent,#4f8ef7);padding:4px 10px;margin:6px 0;font-size:12.5px;
+  font-style:italic;opacity:.9 }
+</style>
+<script id="v631media">
+(function(){
+  if (window.__v631Media) return; window.__v631Media = true;
+  var PIPELINES = [
+    ["Animated Explainer","Explainer IA : recherche, narration, visuels, musique"],
+    ["Animation","Motion graphics, typographie cinétique, séquences animées"],
+    ["Avatar Spokesperson","Vidéos présentateur pilotées par avatar"],
+    ["Cinematic","Trailers, teasers et montages à ambiance"],
+    ["Clip Factory","Lot de clips courts classés depuis une source longue"],
+    ["Documentary Montage","Montage documentaire depuis archives libres (Archive.org, NASA, Wikimedia, Pexels)"],
+    ["Hybrid","Footage réel + visuels générés en support"],
+    ["Localization & Dub","Sous-titres, doublage, traduction d'une vidéo"],
+    ["Podcast Repurpose","Extras de podcast en vidéo"],
+    ["Screen Demo","Captures d'écran logicielles soignées, démos pas-à-pas"],
+    ["Talking Head","Vidéos intervenant filmé (présentations, vlogs)"]
+  ];
+  var PROMPTS = [
+    "Make a 60-second animated explainer about how neural networks learn",
+    "Make a 75-second documentary montage about city life in the rain. Use real footage only, no narration, elegiac tone, with music.",
+    "Turn this YouTube video into 3 ranked short clips for social media"
+  ];
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; }
+  /* ── appels serveur (relatifs : même origine que l'app) ── */
+  function api(route, opts){
+    return fetch(route, Object.assign({ headers: { "Content-Type": "application/json" } }, opts || {}))
+      .then(function(r){ return r.json(); });
+  }
+  function logClear(){ var l = $("media-log"); l.style.display = "block"; l.textContent = ""; }
+  function logAdd(s){ var l = $("media-log"); l.style.display = "block"; l.textContent += (l.textContent ? "\n" : "") + s; l.scrollTop = l.scrollHeight; }
+  function busy(on){
+    ["media-act-env","media-act-clone","media-act-deps","media-act-run"].forEach(function(id){
+      var b = $(id); if (b) b.disabled = !!on;
+    });
+  }
+  function afficherStatus(st){
+    var zone = $("media-statut"); if (!zone) return;
+    var chips = [];
+    chips.push('<span class="media-chip ' + (st.installe ? "ok" : "ko") + '">'
+      + (st.installe ? "✔ Installé : " + esc(st.install_dir) : "Non installé") + "</span>");
+    var ordre = ["python","git","ffmpeg","node"];
+    ordre.forEach(function(k){
+      var t = (st.tools || {})[k] || {};
+      chips.push('<span class="media-chip ' + (t.ok ? "ok" : "ko") + '">' + k + " : "
+        + esc(t.version || "absent") + "</span>");
+    });
+    zone.innerHTML = chips.join("");
+  }
+  function refreshStatus(){
+    return api("/media/status").then(function(st){
+      if (st && st.ok) afficherStatus(st);
+      else logAdd("Réponse status inattendue.");
+    }).catch(function(){
+      logAdd("Serveur local indisponible — lancez THEOLOGICUS (exe) pour piloter OpenMontage depuis cet onglet.");
+    });
+  }
+  function action(route, corps, libelle){
+    busy(true); logClear(); logAdd("⏳ " + libelle + " — en cours, patientez…");
+    return api(route, corps).then(function(r){
+      if (r && r.log) logAdd(r.log);
+      if (r && r.erreur) logAdd("⚠ " + r.erreur);
+      if (r && r.ok && route === "/media/status") afficherStatus(r);
+      if (r && r.ok && (route === "/media/clone" || route === "/media/deps")) {
+        logAdd(route === "/media/clone" ? "✔ Clonage terminé." : "✔ Dépendances installées.");
+        refreshStatus();
+      }
+      if (r && r.ok && route === "/media/clone") logAdd("Étape suivante : « Installer les dépendances ».");
+    }).catch(function(){
+      logAdd("Serveur local indisponible (cette action requiert l'application exe sur PC).");
+    }).then(function(){ busy(false); });
+  }
+  /* ── modal ── */
+  function buildModal(){
+    var m = $("media-modal"); if (m) return m;
+    m = document.createElement("div"); m.id = "media-modal";
+    var pipes = PIPELINES.map(function(p){
+      return '<div class="media-pipe"><b>' + esc(p[0]) + "</b>" + esc(p[1]) + "</div>";
+    }).join("");
+    var prompts = PROMPTS.map(function(p){ return '<div class="mp">« ' + esc(p) + " »</div>"; }).join("");
+    m.innerHTML =
+      '<div class="media-panel">' +
+        '<div class="media-head"><h2>🎬 Media</h2><button class="media-close" title="Fermer">✕</button></div>' +
+        '<div class="media-body">' +
+          '<div class="media-desc"><b>OpenMontage</b> — premier système open-source de production vidéo '< +
+          '« agentique » (AGPL-3.0). Décrivez une vidéo en langage naturel : l'agent gère recherche, script, '< +
+          'génération d'assets, montage et composition finale. <a href="https://github.com/calesthio/OpenMontage" '< +
+          'target="_blank" rel="noopener">Dépôt GitHub ↗</a> · 12 pipelines · 100+ outils.</div>' +
+          '<h3 class="media-t">État & prérequis</h3>' +
+          '<div id="media-statut" class="media-pre"><span class="media-chip">Chargement…</span></div>' +
+          '<div class="media-acts">' +
+            '<button class="media-btn" id="media-act-env">🔎 Vérifier l\'environnement</button>' +
+            '<button class="media-btn" id="media-act-clone">⬇ Cloner OpenMontage</button>' +
+            '<button class="media-btn" id="media-act-deps">📦 Installer les dépendances</button>' +
+            '<button class="media-btn" id="media-act-run">🧪 Tester les capacités</button>' +
+          "</div>" +
+          '<pre id="media-log" class="media-log"></pre>' +
+          '<h3 class="media-t">Les pipelines</h3>' +
+          '<div class="media-pipes">' + pipes + "</div>" +
+          '<h3 class="media-t">Exemples de prompts</h3>' +
+          '<div class="media-prompts">' + prompts + "</div>" +
+          '<div class="media-note">ℹ️ <b>Périmètre réel :</b> l'exécution se fait sur <b>PC</b> '< +
+          '(Python 3.10+, FFmpeg, Node 18+ requis). L'orchestration créative est confiée à un '< +
+          'assistant IA (Claude Code, Cursor…) — THEOLOGICUS installe le dépôt, lance ses outils et '< +
+          'affiche les journaux. Sur APK Android : vitrine seule. Les clés API de génération se '< +
+          'configurent dans le fichier <code>.env</code> du dépôt cloné.</div>' +
+        "</div>" +
+      "</div>";
+    document.body.appendChild(m);
+    m.addEventListener("mousedown", function(e){ e.stopPropagation(); });
+    m.querySelector(".media-close").addEventListener("click", function(){ m.classList.remove("active"); });
+    m.addEventListener("click", function(e){ if (e.target === m) m.classList.remove("active"); });
+    $("media-act-env").addEventListener("click", function(){ refreshStatus(); });
+    $("media-act-clone").addEventListener("click", function(){ action("/media/clone", { method: "POST" }, "Clonage du dépôt"); });
+    $("media-act-deps").addEventListener("click", function(){ action("/media/deps", { method: "POST" }, "Installation des dépendances (plusieurs minutes)"); });
+    $("media-act-run").addEventListener("click", function(){ action("/media/run", { method: "POST", body: JSON.stringify({ action: "envelope" }) }, "Test de l'enveloppe de capacités"); });
+    return m;
+  }
+  function ouvrir(){
+    buildModal().classList.add("active");
+    logClear();
+    refreshStatus();
+  }
+  /* ── bouton dans la topbar v6 (poll : la topbar est créée par un module antérieur) ── */
+  var essais = 0;
+  var timer = setInterval(function(){
+    essais++;
+    var grp = document.getElementById("v6-right-grp");
+    if (grp && !document.getElementById("media-open-btn")) {
+      var b = document.createElement("button");
+      b.id = "media-open-btn"; b.className = "v6-iconbtn"; b.type = "button";
+      b.title = "Media — OpenMontage"; b.setAttribute("aria-label", "Media");
+      b.innerHTML = "🎬";
+      b.addEventListener("click", ouvrir);
+      grp.insertBefore(b, grp.firstChild);
+      clearInterval(timer);
+    } else if (essais > 50 || document.getElementById("media-open-btn")) {
+      clearInterval(timer);
+    }
+  }, 200);
+  window.__mediaOuvrir = ouvrir;
+})();
+</script>
 </body>
 </html>
 </html>
