@@ -29101,6 +29101,7 @@ initTafsirVerseTooltip();
     el.style.left = (f.x||10) + 'px'; el.style.top = (f.y||10) + 'px';
     el.style.width = (f.w||150) + 'px'; el.style.height = (f.h||90) + 'px';
     el.style.setProperty('--fc', f.color || '#4f8ef7');
+    if (f.z != null) el.style.zIndex = String(f.z);
     const wgt = Math.max(0.5, parseFloat(f.weight) || 1.2);
     const sh = f.shape || '';
     const BASIC = ['Rectangle','Carré','Rond','Losange'];
@@ -29458,6 +29459,13 @@ initTafsirVerseTooltip();
       : 'Surlignage impossible : ce cadre n\'est pas lié à un texte';
     if (!f.ancre) hlBtn.style.opacity = '0.4';
     hlBtn.addEventListener('click', function(e){ e.stopPropagation(); surlignerFigure(fb, f, ts); });
+    /* v627 — CALQUES : premier plan / arriere-plan. f.z persiste dans la shape. */
+    const frontBtn = document.createElement('button'); frontBtn.textContent = '⤒'; frontBtn.title = 'Premier plan (devant)';
+    const backBtn = document.createElement('button'); backBtn.textContent = '⤓'; backBtn.title = 'Arrière-plan (derrière)';
+    function _figMaxZ(){ var m=(state.messages||[]).find(function(mm){ return mm.ts===ts; }); if(!m||!m.shapes) return 6; var mx=6; (m.shapes||[]).forEach(function(s){ var z=parseInt(s.z,10); if(!isNaN(z)&&z>mx) mx=z; }); return mx; }
+    function _figMinZ(){ var m=(state.messages||[]).find(function(mm){ return mm.ts===ts; }); if(!m||!m.shapes) return 6; var mn=6; (m.shapes||[]).forEach(function(s){ var z=parseInt(s.z,10); if(!isNaN(z)&&z<mn) mn=z; }); return mn; }
+    frontBtn.addEventListener('click', function(e){ e.stopPropagation(); var nz=_figMaxZ()+1; f.z=nz; fb.style.zIndex=String(nz); _figEditing(); atcPersist(); });
+    backBtn.addEventListener('click', function(e){ e.stopPropagation(); var nz=_figMinZ()-1; f.z=nz; fb.style.zIndex=String(nz); _figEditing(); atcPersist(); });
     const dup = document.createElement('button'); dup.textContent = '⧉'; dup.title = 'Dupliquer la figure';
     const sep2 = document.createElement('span'); sep2.className = 'ft-sep';
     const del = document.createElement('button'); del.textContent = '🗑'; del.title = 'Supprimer la figure';
@@ -29482,6 +29490,7 @@ initTafsirVerseTooltip();
     t.appendChild(fillL); t.appendChild(fill); t.appendChild(fillOff);
     if (rotOk) { t.appendChild(sepR); t.appendChild(rot); t.appendChild(rv); t.appendChild(rotZero); }
     t.appendChild(noteBtn); t.appendChild(hlBtn);
+    t.appendChild(frontBtn); t.appendChild(backBtn);
     t.appendChild(sep2); t.appendChild(dup); t.appendChild(del);
     fb.parentElement.appendChild(t);
     /* v127 — le panneau est plus large qu'avant (remplissage + rotation) et
