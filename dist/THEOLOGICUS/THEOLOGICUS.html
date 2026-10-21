@@ -20103,7 +20103,7 @@ function exportBuildMsgMD(m){
   md+=content+'\n\n';
   (m.shapes||[]).forEach(s=>{ if(s&&s.text) md+='> 📦 **Encadré** : '+s.text+'\n\n'; });
   /* v618 — le commentaire d'un encadré est exporté AVEC lui. */
-  (m.shapes||[]).forEach(s=>{ if(s&&s.note) md+='> 💬 **Note de l\'encadré** : '+String(s.note).replace(/\n+/g,' ')+'\n\n'; });
+  (m.shapes||[]).forEach(s=>{ if(s&&s.note) md+='> 💬 **Note de l\'encadré**'+(s.noteResolu?' ✅':'')+' : '+String(s.note).replace(/\n+/g,' ')+'\n\n'; });
   return md;
 }
 
@@ -29133,9 +29133,10 @@ initTafsirVerseTooltip();
        sans qu'il faille survoler (au doigt, le survol n'existe pas). */
     if (f.note) {
       const nb = document.createElement('span');
-      nb.className = 'fb-note'; nb.textContent = '💬';
+      nb.className = 'fb-note' + (f.noteResolu ? ' note-resolu' : '');
+      nb.textContent = f.noteResolu ? '✓' : '💬';
       nb.setAttribute('data-note-fig', f.id);
-      nb.title = 'Commentaire : ' + String(f.note).slice(0, 300);
+      nb.title = (f.noteResolu ? '[Résolu] ' : '') + 'Commentaire : ' + String(f.note).slice(0, 300);
       el.appendChild(nb);
     }
     ['nw','ne','sw','se'].forEach(function(dir){
@@ -29554,6 +29555,7 @@ initTafsirVerseTooltip();
       '<div class="fn-row">' +
         '<button data-ann>Annuler</button>' +
         (f.note ? '<button data-sup>🗑 Supprimer</button>' : '') +
+        (f.note ? '<button data-res>' + (f.noteResolu ? '↺ Rouvrir' : '✓ Résolu') + '</button>' : '') +
         '<button class="fn-ok" data-save>💾 Enregistrer</button>' +
       '</div>' +
       '<div class="fn-aide">Ctrl+Entrée pour enregistrer · Échap pour fermer</div>';
@@ -29577,9 +29579,11 @@ initTafsirVerseTooltip();
       if (!fb) return;
       let b = fb.querySelector('.fb-note');
       if (f.note) {
-        if (!b) { b = document.createElement('span'); b.className = 'fb-note'; b.textContent = '💬'; fb.appendChild(b); }
+        if (!b) { b = document.createElement('span'); fb.appendChild(b); }
+        b.className = 'fb-note' + (f.noteResolu ? ' note-resolu' : '');
+        b.textContent = f.noteResolu ? '✓' : '💬';
         b.setAttribute('data-note-fig', f.id);
-        b.title = 'Commentaire : ' + String(f.note).slice(0, 300);
+        b.title = (f.noteResolu ? '[Résolu] ' : '') + 'Commentaire : ' + String(f.note).slice(0, 300);
       } else if (b) { b.remove(); }
     }
     function enregistrer(){
@@ -29602,6 +29606,16 @@ initTafsirVerseTooltip();
       majBadge();
       fermerNoteFigure();
       toast('✓ Commentaire supprimé', 'success');
+    };
+    /* v630 — statut RÉSOLU du commentaire : bascule persistée, badge mis à jour. */
+    const res = p.querySelector('[data-res]');
+    if (res) res.onclick = function(){
+      if (f.noteResolu) delete f.noteResolu; else f.noteResolu = true;
+      if (typeof markChatDirty === 'function') markChatDirty();
+      atcPersist();
+      majBadge();
+      res.textContent = f.noteResolu ? '↺ Rouvrir' : '✓ Résolu';
+      toast(f.noteResolu ? '✓ Commentaire marqué résolu' : '↺ Commentaire rouvert', 'success');
     };
     ta.addEventListener('keydown', function(e){
       if (e.key === 'Escape') { e.preventDefault(); fermerNoteFigure(); }
@@ -68870,7 +68884,7 @@ window.__v585Frames = {"colombe": {"idle": 3, "thinking": 2, "happy": 2, "wave":
 #theo-read-toggle.on{background:rgba(var(--accent-rgb),.5);border-color:var(--accent)}
 /* v629 — MODE LECTURE : masquer le décor. Le style est en FIN de document
    (gagne l'ordre à spécificité égale) et !important face aux règles de shell. */
-body.theo-read header.tpai-header{display:none !important}
+body.theo-read #v6-topbar{display:none !important}
 body.theo-read #v584-pet{display:none !important}
 body.theo-read #atc-nav-bar{display:none !important}
 </style>
@@ -68905,6 +68919,10 @@ body.theo-read #atc-nav-bar{display:none !important}
   window.__theoLectureSet = set;
 })();
 </script>
+<style id="v630note-css">
+/* v630 — badge de commentaire RÉSOLU : pastille verte distincte du 💬 */
+.atc-figbox .fb-note.note-resolu{ background:#1b5e20; color:#eafbe7; }
+</style>
 </body>
 </html>
 </html>
