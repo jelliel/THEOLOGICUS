@@ -30505,18 +30505,31 @@ const idx = fullM.norm.indexOf(txtM.norm);
     if (totalFound > 0) console.log('[DIAG] applyMarks: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' realigned=' + totalRealign + ' byText=' + totalText);
   }
 
-  let _atcMoT = null;
-  if (cc) {
-    const mo = new MutationObserver(function(){
-      /* v149 — ignorer aussi nos PROPREs mutations (unwrap/re-wrap
-         d'applyHighlights) : c'était le flicker du surlignage. */
-      if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
-      clearTimeout(_atcMoT);
-      _atcMoT = setTimeout(function(){
+  let _atcMoRaf = null;
+  function _atcScheduleApply(){
+    if (_atcMoRaf) return;                       // deja planifie cette frame
+    if (typeof requestAnimationFrame === 'function') {
+      _atcMoRaf = requestAnimationFrame(function(){
+        _atcMoRaf = null;
+        window.__atcApplying = true;
+        try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
+        setTimeout(function(){ window.__atcApplying = false; }, 0);
+      });
+    } else {
+      setTimeout(function(){
         window.__atcApplying = true;
         try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
         setTimeout(function(){ window.__atcApplying = false; }, 0);
       }, 60);
+    }
+  }
+  if (cc) {
+    const mo = new MutationObserver(function(){
+      /* v149 — ignorer nos PROPREs mutations (unwrap/re-wrap d'applyHighlights) :
+         c'était le flicker du surlignage. v625 : coalescence par requestAnimationFrame
+         (aligne sur le paint, plus fluide au scroll que setTimeout 60ms). */
+      if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
+      _atcScheduleApply();
     });
     mo.observe(cc, { childList: true, subtree: true });
   }
