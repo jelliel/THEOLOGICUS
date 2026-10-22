@@ -29174,6 +29174,8 @@ initTafsirVerseTooltip();
     noeuds: function(b){ return noeudsTexteVisibles(b); },
     norm: function(s){ return _ancNorm(s); },
     shapes: function(){ try { return applyShapes(); } catch (e) { return String(e); } },
+    zone: function(b){ return _ancHauteurZone(b); },
+    stable: function(){ return window.__atcStable; },
   };
   function insertFigureAt(target, item){
     const msg = (state.messages || []).find(m => m.ts === target.msgTs);
@@ -29207,7 +29209,8 @@ initTafsirVerseTooltip();
       /* v621 — le cadre doit rester DANS le contenu : `.message-content` a
          overflow:hidden, et un bord rogné n'est plus saisissable. */
       x = Math.min(Math.max(0, x), Math.max(0, box.clientWidth - w));
-      y = Math.min(Math.max(0, y), Math.max(0, box.clientHeight - h));
+      /* v635 — borne sur le CONTENU (voir _ancHauteurZone). */
+      y = Math.min(Math.max(0, y), Math.max(0, _ancHauteurZone(box) - h));
     } else {
       x = target.clientX - br.left + box.scrollLeft;
       y = target.clientY - br.top + box.scrollTop;
@@ -29283,6 +29286,15 @@ initTafsirVerseTooltip();
     return true;
   };
   function persistFig(f, fb, origine){
+    /* ═══ v635 — PAS DE PERSISTANCE SUR UNE MISE EN PAGE MOUVANTE ═══
+       Un cadre deplace ou redimensionne a la main pendant que le contenu
+       s'insere encore enregistrerait une position provisoire (la hauteur de
+       zone a change depuis le debut du cycle). On l'ignore : le prochain
+       passage, sur contenu stable, fera foi. */
+    if (window.__atcStable === false && origine !== 'creation-manuelle') {
+      try { if (typeof markChatDirty === 'function') markChatDirty(); } catch (e) {}
+      return;
+    }
     const nx = fb.offsetLeft, ny = fb.offsetTop, nw = fb.offsetWidth, nh = fb.offsetHeight;
     /* v618/v621 — un CLIC (down+up sans mouvement) appelle aussi persistFig :
        il ne doit PAS retirer l'ancre, sinon le cadre cesse de suivre son texte
@@ -29553,8 +29565,41 @@ initTafsirVerseTooltip();
       const _r0 = _ancRect(box, st2, st2 + txt2.length);
       f.ancre = { start: st2, end: st2 + txt2.length, texte: txt2.slice(0, 200) };
       if (_r0) {
-        f.ancre.ow = (typeof f.w === 'number' && f.w > 0) ? f.w : (_r0.w + 16);
-        f.ancre.oh = (typeof f.h === 'number' && f.h > 0) ? f.h : (_r0.h + 16);
+        /* ═══ v636 — LA TAILLE DU CADRE EST LA SIENNE ═══
+           🔴 La regle v634 `Math.max(_w0, min(_r0.w + 16, clientWidth))`
+           elargissait le cadre a la largeur du BLOC DE TEXTE des que l'ancre
+           couvrait plusieurs lignes (`_r0.w` = largeur du conteneur). Mesure :
+           une figure de 420 px devenait 974 ; sur le store reel 447 -> 1612.
+           Comme la valeur elargie (`f.w`) redevenait `_w0` au demarrage
+           suivant, la largeur montait A CHAQUE REDEMARRAGE : « pire et pire ».
+           Desormais `ow`/`oh` sont ceux du cadre, point. Le texte ne fournit
+           qu'une valeur de REPLI quand le cadre n'a aucune taille, et la borne
+           haute ne peut plus ELARGIR un cadre existant. */
+        /* ═══ v645 — PLANCHER BORNE (voir patch_v645.py) ═══
+           Couvrir son texte OUI, prendre la largeur du bloc NON. On mesure la
+           largeur de la PREMIERE LIGNE de l'ancre, jamais le rect global d'un
+           bloc multi-lignes (qui vaut le conteneur : 971 sur 974 mesures). */
+        var _aW = (_r0 && _r0.w > 0) ? _r0.w : 0;
+        var _aH = (_r0 && _r0.h > 0) ? _r0.h : 0;
+        var _w0 = (typeof f.w === 'number' && f.w > 0) ? f.w : (_aW ? _aW + 16 : 150);
+        var _h0 = (typeof f.h === 'number' && f.h > 0) ? f.h : (_aH ? _aH + 16 : 90);
+        /* largeur de la 1re ligne du texte ancre (mesure par Range sur un
+           seul rang : getClientRects()[0]), plafonnee a 1,6 x le cadre. */
+        var _ligneW = 0;
+        try {
+          var _la = locateInBoxFiltre(box, st2, false);
+          if (_la) {
+            var _rg = document.createRange();
+            _rg.setStart(_la.node, Math.max(0, Math.min(_la.off, _la.node.nodeValue.length)));
+            _rg.setEnd(_la.node, _la.node.nodeValue.length);
+            var _rc = _rg.getClientRects();
+            if (_rc && _rc.length) _ligneW = _rc[0].width || 0;
+          }
+        } catch (e) {}
+        var _plafond = _w0 * 1.6;
+        var _wCible = Math.max(_w0, Math.min(_ligneW + 16, _plafond));
+        f.ancre.ow = Math.max(Math.min(_wCible, box.clientWidth || _wCible), 46);
+        f.ancre.oh = Math.max(Math.min(_h0, 400), 34);
         /* ═══ v633h — PAS DE DECALAGE INVENTE ═══
            `ox = f.x - _r0.x` melangeait une position pixel HERITEE (le store
            contient x = -5, y = 5671) et un rect relatif au conteneur dans la
@@ -29569,6 +29614,18 @@ initTafsirVerseTooltip();
     } catch (e) { return false; }
   }
   /* Position (px, relative au conteneur) du contenu de l'ancre. */
+  /* ═══ v635 — LA ZONE DE DESSIN D'UN CADRE EST LE CONTENU ═══
+     `box.clientHeight` est la hauteur VISIBLE : elle valait 727 au premier
+     passage puis 849, si bien qu'un meme cadre etait borne differemment selon
+     l'instant de la mesure, et la valeur bornee etait persistee. `scrollHeight`
+     mesure le contenu, seul espace ou une position a un sens — celui dans
+     lequel `_ancRect` renvoie deja `y` (y inclut `box.scrollTop`). */
+  function _ancHauteurZone(box){
+    if (!box) return 0;
+    var h = box.scrollHeight || 0;
+    if (!h) h = box.clientHeight || 0;
+    return h;
+  }
   function _ancRect(box, start, end){
     const a = locateInBoxFiltre(box, start, false);
     const b = locateInBoxFiltre(box, end, true);
@@ -29636,13 +29693,66 @@ initTafsirVerseTooltip();
       return (r.bottom >= -_ATC_VIEW_MARGIN) && (r.top <= vh + _ATC_VIEW_MARGIN) && (r.right >= 0) && (r.left <= vw);
     } catch (e) { return true; }
   }
+  /* ═══ v643 — APPLIQUER JUSQU'A STABILISATION ═══
+     Le contenu des messages grandit APRES la premiere passe (fiches, puces de
+     sources). Rien ne replace les cadres quand l'insertion arrive apres le
+     `setTimeout(...,0)` qui remet `__atcApplying` a false : le cadre reste a
+     sa position provisoire (240 mesure) au lieu de sa position finale (301).
+     On rejoue donc le placement a des instants echelonnes, et on s'arrete des
+     que la geometrie ne bouge plus. Idempotent par construction (v634 :
+     restitution de `ow`/`oh`, jamais recalcul) : une passe de plus ne peut
+     pas deplacer un cadre deja correct.
+     Cout : 3 rAF + 2 timeouts courts, UNE fois par rendu — jamais sur un flux
+     d'evenements (regle anti-lag v624). */
+  var _atcSettleTO = [];
+  function _atcSettle(){
+    for (var i = 0; i < _atcSettleTO.length; i++) { try { clearTimeout(_atcSettleTO[i]); } catch (e) {} }
+    _atcSettleTO = [];
+    var passe = function(){
+      /* ═══ v646 — NE JAMAIS DEFAire UN GESTE ═══
+         Un glissement/redimensionnement deplace le cadre et persiste sa
+         position ; une passe de stabilisation qui arrive ensuite le replace
+         sur son ancre et ANNULE le geste. Mesure : banc v621 13/14, la passe
+         de 400 ms tombait apres la fin de `__atcFigEditing` (140 ms).
+         On s'abstient donc si une edition est en cours OU si un geste a eu
+         lieu depuis le debut de cette sequence de stabilisation. */
+      if (window.__atcFigEditing) return;
+      if (window.__atcGeste && window.__atcGeste > _seq0) return;
+      window.__atcApplying = true;
+      try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
+      setTimeout(function(){ window.__atcApplying = false; }, 0);
+    };
+    var _seq0 = Date.now();
+    passe();
+    _atcSettleTO.push(setTimeout(passe, 120));
+    _atcSettleTO.push(setTimeout(passe, 400));
+    _atcSettleTO.push(setTimeout(passe, 900));
+  }
+  window.__atcSettle = _atcSettle;
+
   function applyShapes(){
+    /* ═══ v635 — MISE EN PAGE STABILISEE ? ═══
+       `.message-content` grandit APRES le rendu (fiches Wikipedia, puces de
+       sources). Tant que sa hauteur bouge, une geometrie mesuree n'est que
+       provisoire : la persister fige une position fausse, que le demarrage
+       suivant reprendra comme reference. On compare donc la hauteur de zone
+       du debut de cycle a celle de chaque passage : egales => stabilisee. */
+    window.__atcHauteurCycle = window.__atcHauteurCycle || {};
     const msgs = (typeof state !== 'undefined' && state && state.messages) || [];
     msgs.forEach(function(m){
       if (!m.shapes || !Array.isArray(m.shapes)) return;
       const box = document.getElementById('mc-' + m.ts);
       if (!box) return;
       if (!_atcBoxNear(box)) return; /* v628 lazy */
+      /* ═══ v639 — ON OBSERVE LA GEOMETRIE, PAS LA HAUTEUR ═══
+         v635 (difference de hauteur) puis v638 (compteur de passages) ont
+         toutes deux OSCILLE, parce que `applyShapes` est appele plusieurs fois
+         par mise en page et qu'une invocation tombe pendant une transition.
+         Mesure decisive : la hauteur du conteneur vaut 849 a TOUS les
+         passages — le drapeau etait faux, pas la mise en page.
+         Le seul critere qui ait un sens pour une POSITION : la position
+         calculee est-elle la meme qu'a la mesure precedente ? */
+      window.__atcGeo = window.__atcGeo || {};
       m.shapes.forEach(function(f){
         if (!f || !f.id) return;
         const dejaLa = box.querySelector('[data-fig-id="' + f.id + '"]');
@@ -29707,11 +29817,14 @@ initTafsirVerseTooltip();
       var nx, ny, nw, nh;
       if (f.ancre.cx && typeof f.ancre.ow === 'number' && typeof f.ancre.oh === 'number') {
         /* v633h — cadre REPARE : centre sur le texte de son ancre.
-           v633i — mais jamais PLUS PETIT que ce texte : un cadre de 200 px
-           autour d'une phrase de 221 px ne peut pas la contenir, il la
-           « respecte » mal. On grandit, on ne retrecit jamais. */
-        nw = Math.max(f.ancre.ow, rr.w + 16, 46);
-        nh = Math.max(f.ancre.oh, rr.h + 16, 34);
+           🔴 v634 — `ow`/`oh` sont IMMUABLES et deja plancheres a la creation
+           de l'ancre. Ici on ne fait QUE restituer : c'est ce qui rend la
+           geometrie stable, independante du nombre de demarrages.
+           (Ne JAMAIS remettre `rr.w + 16` ici : pour une ancre multi-lignes
+           `rr.w` vaut la largeur du conteneur, et le cadre gonflait sans fin —
+           447 -> 1612 px mesures sur le store.) */
+        nw = Math.max(f.ancre.ow, 46);
+        nh = Math.max(f.ancre.oh, 34);
         nx = rr.x + (rr.w - nw) / 2 + _dx;
         ny = rr.y + (rr.h - nh) / 2 + _dy;
       } else if (typeof f.ancre.ow === 'number' && typeof f.ancre.oh === 'number') {
@@ -29727,7 +29840,20 @@ initTafsirVerseTooltip();
       /* v621 — même borne qu'à la création : le cadre reste dans la zone
          visible, sinon ses bords sont rognés. */
       const bx = Math.min(Math.max(0, Math.round(nx)), Math.max(0, box.clientWidth - Math.round(nw)));
-      const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, box.clientHeight - Math.round(nh)));
+      /* v635 — borne sur le CONTENU, pas sur la hauteur visible. */
+      const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, _ancHauteurZone(box) - Math.round(nh)));
+      /* ═══ v639 — CONFIRMATION DU PLACEMENT ═══
+         Meme `bx`/`by` qu'a la mesure precedente => la position ne depend plus
+         de l'instant ou on la lit. Cle = `f.id` seul : dans `_ancPlace` le
+         message n'est PAS en portee (incident v639, voir patch_v639b.py). */
+      const _cleG = f.id;
+      const _geoP = window.__atcGeo[_cleG];
+      if (_geoP && _geoP.x === bx && _geoP.y === by) {
+        window.__atcGeo[_cleG] = { x: bx, y: by, n: _geoP.n + 1 };
+      } else {
+        window.__atcGeo[_cleG] = { x: bx, y: by, n: 1 };
+      }
+      window.__atcStable = (window.__atcGeo[_cleG].n >= 2);
       /* v633d — on compare aussi au DOM : si le style rendu diverge de la
          geometrie calculee (cas x = 0 rendu a 10 px par l'ancien `||10`), il
          faut reecrire le style, sinon l'ecart est fige pour toujours. */
@@ -29735,11 +29861,33 @@ initTafsirVerseTooltip();
       const _dejaBon = (Math.abs(bx - f.x) <= 1 && Math.abs(by - f.y) <= 1 &&
                         Math.abs(nw - f.w) <= 1 && Math.abs(nh - f.h) <= 1 &&
                         Math.abs(_ol - bx) <= 1 && Math.abs(_ot - by) <= 1);
+      if (!_dejaBon) {
+        f.x = bx; f.y = by;
+        f.w = Math.round(nw); f.h = Math.round(nh);
+        figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
+        figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
+      }
+      /* ═══ v642 — LE STORE A-T-IL DEJA LA BONNE POSITION ? ═══
+         La comparaison ne porte PLUS sur `f` (mute juste au-dessus : une
+         valeur comparee a elle-meme vaut toujours zero, d'ou l'echec de
+         v637/v640/v641). On la porte sur `__atcEcrit`, qui ne retient QUE ce
+         qui a ete effectivement remis au store. */
+      window.__atcEcrit = window.__atcEcrit || {};
+      const _ecrit = window.__atcEcrit[_cleG];
+      const _doitEcrire = !_ecrit || _ecrit.x !== bx || _ecrit.y !== by ||
+                          _ecrit.w !== Math.round(nw) || _ecrit.h !== Math.round(nh);
+      if (window.__atcStable !== false && f.ancre && _doitEcrire) {
+        try {
+          if (typeof markChatDirty === 'function') markChatDirty();
+          /* `window.atcPersist` est "undefined" (mesure) : portee de bloc.
+             saveChat/flushChatNow sont les seuls points d'entree prouves. */
+          if (typeof window.saveChat === 'function') window.saveChat();
+          else if (typeof window.flushChatNow === 'function') window.flushChatNow();
+          else { window.__atcPersistManquant = (window.__atcPersistManquant || 0) + 1; }
+          window.__atcEcrit[_cleG] = { x: bx, y: by, w: Math.round(nw), h: Math.round(nh) };
+        } catch (e) {}
+      }
       if (_dejaBon) return;
-      f.x = bx; f.y = by;
-      f.w = Math.round(nw); f.h = Math.round(nh);
-      figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
-      figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
       /* ═══ v633g — RECALER L'ANCRE SUR LE TEXTE REELLEMENT COUVERT ═══
          Le bornage ci-dessus deplace le cadre ; or `ox`/`oy` ont ete mesures
          AVANT bornage. Sur donnee reelle, cet ecart atteignait 229 px
@@ -29747,17 +29895,13 @@ initTafsirVerseTooltip();
          couvrait plus son propre texte. On re-mesure donc le texte sous la
          boite BORNEE et on reecrit l'ancre dessus : mesure et restitution
          partagent alors le meme espace (meme regle qu'en v632g). */
-      if (_repare && typeof _ancFit === 'function') {
-        try {
-          const _w0 = f.w, _h0 = f.h;
-          _ancFit(box, f, figEl);
-          /* _ancFit a reecrit ow/oh/ox/oy : on ne garde que la TAILLE voulue,
-             qui ne doit pas changer lors d'un simple recalage. */
-          if (f.ancre && _w0 > 0 && _h0 > 0) {
-            f.ancre.ow = _w0; f.ancre.oh = _h0;
-          }
-        } catch (e) {}
-      }
+      /* ═══ v634 — LE RECALAGE NE DOIT PAS SE REPETER ═══
+         Le bloc v633g rappelait `_ancFit` a CHAQUE rendu, y compris sur une
+         figure deja reparee, puis reprenait `f.w` comme nouvelle largeur
+         d'origine. Sur le store reel, cela a elargi 12 cadres de plus de 50 px
+         (la pire : 447 -> 1612 px, jusqu'a saturer la largeur du conteneur).
+         Une reparation n'a lieu qu'UNE FOIS : ensuite `ow`/`oh` sont
+         immuables et le rendu se contente de RESTITUER la geometrie. */
       if (typeof markChatDirty === 'function') markChatDirty();
       /* ═══ v633b — UNE REPARATION PERDUE EST UNE REPARATION INUTILE ═══
          `_ancFit` cree l'ancre mais seul `persistFig` appelait `atcPersist()` :
@@ -29845,7 +29989,7 @@ initTafsirVerseTooltip();
   /* ── Barre d'outils flottante au-dessus de la figure sélectionnée ── */
   let figToolsEl = null;
   let _figEdTO = null;
-  function _figEditing(){ window.__atcFigEditing = true; if (_figEdTO) clearTimeout(_figEdTO); _figEdTO = setTimeout(function(){ window.__atcFigEditing = false; }, 140); }
+  function _figEditing(){ window.__atcFigEditing = true; window.__atcGeste = Date.now(); if (_figEdTO) clearTimeout(_figEdTO); _figEdTO = setTimeout(function(){ window.__atcFigEditing = false; }, 140); }
   function hideFigTools(){ if (figToolsEl) { figToolsEl.remove(); figToolsEl = null; } }
   function showFigTools(fb, f, ts){
     hideFigTools();
@@ -30991,21 +31135,31 @@ const idx = fullM.norm.indexOf(txtM.norm);
     if (totalFound > 0) console.log('[DIAG] applyMarks: found=' + totalFound + ' applied=' + totalApplied + ' byOffset=' + totalOffset + ' realigned=' + totalRealign + ' byText=' + totalText);
   }
 
+  /* ═══ v644 — LE POINT D'APPLICATION REJOUE JUSQU'A STABILISATION ═══
+     v643 avait cree `_atcSettle` sans l'appeler : un helper non branche ne
+     corrige rien. C'est `_atcScheduleApply` qui est reellement declenche par
+     le MutationObserver du conteneur — on l'y branche.
+     `_atcSettle` annule ses reprises a chaque appel : un flux de mutations ne
+     peut donc pas empiler les passes. */
   let _atcMoRaf = null;
   function _atcScheduleApply(){
     if (_atcMoRaf) return;                       // deja planifie cette frame
     if (typeof requestAnimationFrame === 'function') {
       _atcMoRaf = requestAnimationFrame(function(){
         _atcMoRaf = null;
-        window.__atcApplying = true;
-        try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
-        setTimeout(function(){ window.__atcApplying = false; }, 0);
+        try { _atcSettle(); } catch (e) {
+          window.__atcApplying = true;
+          try { applyHighlights(); applyMarks(); applyShapes(); } catch (e2) {}
+          setTimeout(function(){ window.__atcApplying = false; }, 0);
+        }
       });
     } else {
       setTimeout(function(){
-        window.__atcApplying = true;
-        try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
-        setTimeout(function(){ window.__atcApplying = false; }, 0);
+        try { _atcSettle(); } catch (e) {
+          window.__atcApplying = true;
+          try { applyHighlights(); applyMarks(); applyShapes(); } catch (e2) {}
+          setTimeout(function(){ window.__atcApplying = false; }, 0);
+        }
       }, 60);
     }
   }

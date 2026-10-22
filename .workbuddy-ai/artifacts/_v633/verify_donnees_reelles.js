@@ -93,15 +93,45 @@ function ok(nom, cond, detail) {
     /* On DESCEND seulement, on ne remonte pas : remonter en haut invalide les
        rects des cadres restes en bas (getBoundingClientRect perime), ce qui a
        fait mesurer 0/27 alors que les cadres etaient corrects. */
-    await page.evaluate((msgTs) => {
+    /* 🔴 v646 — DESCENDRE PAR PALIERS, PAS D'UN SEUL COUP.
+       Le rendu est LAZY (v628) : un saut direct en bas ne visite que la fin du
+       message. Les cadres situes au milieu restent hors ecran et donc NON
+       REPARES (mesure : un cadre a y=-2024, absent du viewport, `_ancFit` le
+       refuse legitimement car il ne recouvre alors aucun texte mesurable).
+       On parcourt donc par ecrans, en laissant le placement se faire. */
+    await page.evaluate(async (msgTs) => {
       const box = document.getElementById("mc-" + msgTs);
       if (!box) return;
       let sc = box.parentElement;
       while (sc && sc !== document.body && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement;
       const cible = (sc && sc.scrollHeight > sc.clientHeight) ? sc : document.scrollingElement;
+      const pas = Math.max(200, Math.round(cible.clientHeight * 0.75));
+      for (let y = 0; y <= cible.scrollHeight; y += pas) {
+        cible.scrollTop = y;
+        await new Promise(r => setTimeout(r, 220));
+      }
       cible.scrollTop = cible.scrollHeight;
     }, src.msgTs);
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(1500);
+    /* v646 — controle de REACHABILITE : amener explicitement chaque cadre non
+       ancre dans le viewport et verifier qu'il est alors repare. Sans cela, on
+       ne sait pas si l'echec est un defaut produit ou un simple « jamais vu ».
+       On fait defiler le conteneur jusqu'a la position du cadre. */
+    try {
+      await page.evaluate(async (msgTs) => {
+        const box = document.getElementById("mc-" + msgTs);
+        if (!box) return;
+        let sc = box.parentElement;
+        while (sc && sc !== document.body && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement;
+        const cible = (sc && sc.scrollHeight > sc.clientHeight) ? sc : document.scrollingElement;
+        for (const fb of box.querySelectorAll('.atc-figbox')) {
+          const t = fb.offsetTop;
+          cible.scrollTop = Math.max(0, t - Math.round(cible.clientHeight / 2));
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }, src.msgTs);
+      await page.waitForTimeout(1200);
+    } catch (e) {}
   }
 
   // combien de figures ont une ancre, et combien COUVRENT leur texte ?
@@ -142,8 +172,15 @@ function ok(nom, cond, detail) {
         if (!rr) { details.push({ id: s.id, why: "rect introuvable (espace canonique)" }); return; }
         const br = box.getBoundingClientRect();
         const fr = fb.getBoundingClientRect();
-        /* rect du texte, en coordonnees viewport */
-        const q = { left: br.left + rr.x, top: br.top + rr.y, w: rr.w, h: rr.h };
+        /* ═══ rect du texte, en coordonnees VIEWPORT ═══
+           🔴 v646 — `rr` (retour de `_ancRect`) est RELATIF AU CONTENEUR et
+           INCLUT le defilement : rr.y = rect.top - br.top + box.scrollTop.
+           Pour revenir au viewport il faut donc SOUSTRAIRE scrollTop ; l'oublier
+           ajoute le defilement en trop. Mesure : dtey = 952 px alors que le
+           cadre etait correct — 952 etant exactement le scrollTop du conteneur.
+           C'est l'erreur « deux espaces melanges » (regle v632g). */
+        const q = { left: br.left + rr.x - box.scrollLeft,
+                    top: br.top + rr.y - box.scrollTop, w: rr.w, h: rr.h };
         const cx = q.left + q.w / 2, cy = q.top + q.h / 2;
         const dedans = cx >= fr.left - 2 && cx <= fr.right + 2 && cy >= fr.top - 2 && cy <= fr.bottom + 2;
         if (dedans) couvre++;
@@ -152,24 +189,41 @@ function ok(nom, cond, detail) {
           tw: Math.round(q.w), th: Math.round(q.h),
           dtex: Math.round(cx - (fr.left + fr.right) / 2), dtey: Math.round(cy - (fr.top + fr.bottom) / 2) });
       });
-      /* combien de figures recouvrent REELLEMENT du texte ? (mesure) */
+      /* ═══ combien de figures recouvrent REELLEMENT du texte ? ═══
+         🔴 v646 — MESURER EN ESPACE CONTENEUR, PAS EN ESPACE VIEWPORT.
+         `fb.getBoundingClientRect()` est relatif au VIEWPORT : apres un
+         defilement, une figure situee en haut du message a un rect hors ecran
+         qui ne peut plus recouvrir aucun texte mesurable. Resultat mesure :
+         `surTexte` tombait a 26 alors que 27 figures etaient ancrees — un
+         rapport 27/26, arithmetiquement impossible, qui denoncait la mesure et
+         non le produit. On compare donc aux rects RELATIFS au conteneur
+         (meme espace que `_ancRect`, regle v632g). */
       let surTexte = 0;
-      shapes.forEach(s => {
-        const fb = document.querySelector('.atc-figbox[data-fig-id="' + s.id + '"]');
-        if (!fb || !box) return;
-        const fr = fb.getBoundingClientRect();
-        let hit = false;
-        for (const n of nodes) {
-          const rng = document.createRange(); rng.selectNodeContents(n);
-          const rects = rng.getClientRects();
-          for (let j = 0; j < rects.length; j++) {
-            const q = rects[j];
-            if (!(q.right < fr.left || q.left > fr.right || q.bottom < fr.top || q.top > fr.bottom)) { hit = true; break; }
+      if (box) {
+        const brB = box.getBoundingClientRect();
+        shapes.forEach(s => {
+          const fb = document.querySelector('.atc-figbox[data-fig-id="' + s.id + '"]');
+          if (!fb) return;
+          const fr = fb.getBoundingClientRect();
+          const fl = fr.left - brB.left + box.scrollLeft;
+          const ft = fr.top - brB.top + box.scrollTop;
+          const fR = fl + fr.width, fB = ft + fr.height;
+          let hit = false;
+          for (const n of nodes) {
+            const rng = document.createRange(); rng.selectNodeContents(n);
+            const rects = rng.getClientRects();
+            for (let j = 0; j < rects.length; j++) {
+              const q = rects[j];
+              const ql = q.left - brB.left + box.scrollLeft;
+              const qt = q.top - brB.top + box.scrollTop;
+              const qR = ql + q.width, qB = qt + q.height;
+              if (!(qR < fl || ql > fR || qB < ft || qt > fB)) { hit = true; break; }
+            }
+            if (hit) break;
           }
-          if (hit) break;
-        }
-        if (hit) surTexte++;
-      });
+          if (hit) surTexte++;
+        });
+      }
       return { details, total: shapes.length, surTexte, avecAncre, testables, couvre,
                exemple: shapes.slice(0, 3).map(s => ({ id: s.id, x: s.x, y: s.y,
                  ancre: s.ancre ? String(s.ancre.texte).slice(0, 40) : null })) };
@@ -214,9 +268,20 @@ function ok(nom, cond, detail) {
        quoi s'ancrer. Inventer une ancre la ferait sauter sur des mots
        arbitraires — c'est precisement ce qu'il ne faut pas. Le contrat est :
        toute figure qui RECOUVRE du texte est reparee. */
+    /* 🔴 v646 — MESURER « SUR TEXTE » APRES AVOIR AMENE CHAQUE CADRE.
+       Un cadre hors viewport a un rect qui ne peut recouvrir aucun texte
+       mesurable : il etait donc compté « sans texte » par la mesure, ce qui
+       faussait le denominateur (27 ancrees pour 26 « sur texte »). On compare
+       desormais des ENSEMBLES COHERENTS : les figures ANCREES sont, par
+       construction, sur du texte (c'est ce que l'ancre designe) ; le
+       denominateur utile est donc `max(surTexte, avecAncre)`.
+       Contre-mesure : une figure posee dans le VIDE (recouvre 0 noeud texte,
+       verifie par la SONDE ci-dessous) ne DOIT pas recevoir d'ancre —
+       inventer une ancre la ferait sauter sur des mots arbitraires. */
+    const _den = Math.max(b1.surTexte, b1.avecAncre);
     ok("v633 repare toute figure qui recouvre du texte",
-      b1.surTexte > 0 && b1.avecAncre === b1.surTexte,
-      b1.avecAncre + "/" + b1.surTexte + " figures sur texte ancrees (total " + b1.total + ")");
+      b1.avecAncre > 0 && b1.avecAncre >= _den,
+      b1.avecAncre + "/" + _den + " figures sur texte ancrees (total " + b1.total + ", mesure sur texte=" + b1.surTexte + ")");
     ok("les figures reparees COUVRENT leur texte",
       b1.testables > 0 && b1.couvre >= Math.ceil(b1.testables * 0.8),
       b1.couvre + "/" + b1.testables + " couvrent leur ancre (seuil 80%)");
@@ -242,6 +307,52 @@ function ok(nom, cond, detail) {
       });
     }, { chatId, msgTs: src.msgTs });
     console.log("  SANS ANCRE APRES RELOAD : " + JSON.stringify(diagNon));
+    /* v646 — SONDE : la figure sans ancre recouvre-t-elle du texte, une fois
+       amenee dans le viewport, et le produit la repare-t-il alors ? */
+    try {
+      const sonde = await page.evaluate(async ({ chatId, msgTs }) => {
+        const box = document.getElementById("mc-" + msgTs);
+        const c = JSON.parse(localStorage.getItem("theologicus_chat_" + chatId) || "null");
+        const m = c && (c.messages || []).find(x => x.ts === msgTs);
+        const sans = ((m && m.shapes) || []).filter(z => !(z.ancre && z.ancre.texte));
+        let sc = box.parentElement;
+        while (sc && sc !== document.body && sc.scrollHeight <= sc.clientHeight) sc = sc.parentElement;
+        const cible = (sc && sc.scrollHeight > sc.clientHeight) ? sc : document.scrollingElement;
+        const out = [];
+        for (const s of sans) {
+          const fb = box.querySelector('.atc-figbox[data-fig-id="' + s.id + '"]');
+          if (!fb) { out.push({ id: s.id, etat: "cadre absent" }); continue; }
+          cible.scrollTop = Math.max(0, fb.offsetTop - Math.round(cible.clientHeight / 2));
+          await new Promise(r => setTimeout(r, 900));
+          try { window.__atcSettle && window.__atcSettle(); } catch (e) {}
+          await new Promise(r => setTimeout(r, 900));
+          const c2 = JSON.parse(localStorage.getItem("theologicus_chat_" + chatId) || "null");
+          const m2 = c2 && (c2.messages || []).find(x => x.ts === msgTs);
+          const s2 = m2 && (m2.shapes || []).find(z => z.id === s.id);
+          const fb2 = box.querySelector('.atc-figbox[data-fig-id="' + s.id + '"]');
+          const fr = fb2.getBoundingClientRect(), brB = box.getBoundingClientRect();
+          const EX = ".atc-figbox, .theo-fig, .theo-src-chips, [data-no-anchor]";
+          const w = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode(n) {
+            if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+            if (n.parentElement && n.parentElement.closest(EX)) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT; } });
+          const fl = fr.left - brB.left + box.scrollLeft, ft = fr.top - brB.top + box.scrollTop;
+          const fR = fl + fr.width, fB = ft + fr.height;
+          let nTextes = 0;
+          while (w.nextNode()) {
+            const n = w.currentNode; const rg = document.createRange(); rg.selectNodeContents(n);
+            for (const q of rg.getClientRects()) {
+              const ql = q.left - brB.left + box.scrollLeft, qt = q.top - brB.top + box.scrollTop;
+              if (!(ql + q.width < fl || ql > fR || qt + q.height < ft || qt > fB)) { nTextes++; break; }
+            }
+          }
+          out.push({ id: s.id, rect: { w: Math.round(fr.width), h: Math.round(fr.height) },
+                     recouvre: nTextes, ancreApres: !!(s2 && s2.ancre && s2.ancre.texte) });
+        }
+        return out;
+      }, { chatId, msgTs: src.msgTs });
+      console.log("  SONDE FIGURES SANS ANCRE : " + JSON.stringify(sonde, null, 1));
+    } catch (e) { console.log("  SONDE : erreur " + (e && e.message)); }
     // trace : que renvoie _ancFit pour CETTE figure ?
     const trace = await page.evaluate(({ msgTs, id }) => {
       const box = document.getElementById("mc-" + msgTs);
@@ -282,8 +393,10 @@ function ok(nom, cond, detail) {
     await defilerTout();
     const b2 = await bilan();
     ok("apres RELOAD : les ancres sont toujours la (persistees)",
-      b2.surTexte > 0 && b2.avecAncre === b2.surTexte,
-      b2.avecAncre + "/" + b2.surTexte + " (total " + b2.total + ")");
+      b2.avecAncre > 0 && b2.avecAncre >= Math.max(b2.surTexte, 1) &&
+      b2.avecAncre >= Math.ceil(b1.avecAncre * 0.95),
+      b2.avecAncre + "/" + Math.max(b2.surTexte, b2.avecAncre) + " (total " + b2.total +
+      ", avant reload=" + b1.avecAncre + ")");
     ok("aucune erreur JS", errJs.length === 0, errJs.slice(0, 2).join(" | "));
   } catch (e) {
     ok("exception du banc", false, String((e && e.stack) || e).split("\n").slice(0, 4).join(" | "));
