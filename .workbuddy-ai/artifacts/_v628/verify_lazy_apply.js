@@ -97,9 +97,15 @@ function ok(nom, cond, detail) {
   async function attendreApp() {
     await page.waitForFunction(() => typeof window.renderMessages === "function", null, { timeout: 90000 });
     await page.evaluate(() => {
-      ["auth-overlay", "setup-wizard-overlay", "onboarding-overlay"].forEach(function(id){
-        const o = document.getElementById(id); if (o) o.remove();
-      });
+      const o = document.getElementById("auth-overlay"); if (o) o.remove();
+      /* v629/v631 — NE PAS retirer setup-wizard-overlay : une course avec
+         initWizardEvents (DOMContentLoaded) coupe l'init -> chat jamais rendu
+         (flaky CI constate). Desarmement EN BOUCLE : la classe "active" saute
+         sous 300 ms, les retries Playwright passent, le noeud reste en place. */
+      window.__disarmTimer = setInterval(function () {
+        const w = document.getElementById("setup-wizard-overlay");
+        if (w) w.classList.remove("active");
+      }, 300);
     });
   }
   const inDom = (id) => page.evaluate((mid) => !!document.querySelector('[data-mark-id="' + mid + '"]'), id);
