@@ -75,7 +75,20 @@ const TS = 1700000000000;
     return { ok: true, ancre: !!f.ancre };
   }, TS);
   await page.waitForTimeout(400);
-  ok("cadre posé SANS ancre", prep.ok === true && prep.ancre === false, JSON.stringify(prep));
+  /* 🔴 v633 — cette assertion verifiait l'ANCIEN contrat (« cadre pose SANS
+     ancre »). v633 ancre desormais TOUTE figure qui recouvre du texte, et c'est
+     la demande de l'utilisateur (sinon le cadre se decale au redemarrage).
+     On verifie le nouveau contrat, sans perdre le controle : le cadre doit
+     etre ancre SUR LE MOT SURHIGNE, sinon il ne suit pas le bon texte. */
+  const prep2 = await page.evaluate(() => {
+    const f = (state.messages[0].shapes || [])[0];
+    return f && f.ancre
+      ? { ancre: true, texte: String(f.ancre.texte || ''), start: f.ancre.start, end: f.ancre.end }
+      : { ancre: false };
+  });
+  ok("cadre posé : v633 l'ancre sur le mot survolé",
+     prep.ok === true && prep2.ancre === true && prep2.texte.indexOf("hiérarchie") >= 0,
+     JSON.stringify(prep2));
 
   async function survoler(sel) {
     const r = await page.evaluate((s) => {
