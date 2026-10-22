@@ -46,3 +46,7 @@ dbg_*.js
 # Dependances du banc Playwright (installees par tools/run_benches.py)
 node_modules/
 package-lock.json
+
+# Donnees reelles extraites du store utilisateur (vie privee) — JAMAIS suivies
+.workbuddy-ai/artifacts/**/real_chat.json
+.workbuddy-ai/artifacts/**/neg_root/

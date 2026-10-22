@@ -29098,8 +29098,13 @@ initTafsirVerseTooltip();
     const el = document.createElement('div');
     el.className = 'atc-figbox m-enter';
     el.dataset.figId = f.id;
-    el.style.left = (f.x||10) + 'px'; el.style.top = (f.y||10) + 'px';
-    el.style.width = (f.w||150) + 'px'; el.style.height = (f.h||90) + 'px';
+    /* ═══ v633d — 0 EST UNE VALEUR, PAS UNE ABSENCE ═══
+       `(f.x||10)` faisait rendre a 10 px toute figure ancree en x = 0 (debut de
+       message) ou y = 0 (premiere ligne) : le cadre ne couvrait plus son texte.
+       On teste le TYPE (Number fini) et on ne remplace que l'ABSENCE. */
+    const _num = function(v, d){ return (typeof v === 'number' && isFinite(v)) ? v : d; };
+    el.style.left = _num(f.x, 10) + 'px'; el.style.top = _num(f.y, 10) + 'px';
+    el.style.width = _num(f.w, 150) + 'px'; el.style.height = _num(f.h, 90) + 'px';
     el.style.setProperty('--fc', f.color || '#4f8ef7');
     if (f.z != null) el.style.zIndex = String(f.z);
     const wgt = Math.max(0.5, parseFloat(f.weight) || 1.2);
@@ -29158,7 +29163,19 @@ initTafsirVerseTooltip();
     return el;
   }
   /* DEBUG HOOK (temporaire) */
-  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner, insertFigureAt: insertFigureAt };  function insertFigureAt(target, item){
+  window.__DBG_FIG = { buildFigEl: buildFigEl, figSvgInner: figSvgInner, insertFigureAt: insertFigureAt };
+  /* v633 — sondes de MESURE (aucun appel depuis le produit) : permettent
+     au banc de comparer ce que le re-ancrage calcule a ce qui est rendu. */
+  window.__ANC = {
+    rect: function(b, s, e){ return _ancRect(b, s, e); },
+    resolve: function(b, f){ return _ancResolve(b, f); },
+    occurrences: function(b, t){ return _ancOccurrences(b, t); },
+    place: function(b, f, el){ return _ancPlace(b, f, el); },
+    noeuds: function(b){ return noeudsTexteVisibles(b); },
+    norm: function(s){ return _ancNorm(s); },
+    shapes: function(){ try { return applyShapes(); } catch (e) { return String(e); } },
+  };
+  function insertFigureAt(target, item){
     const msg = (state.messages || []).find(m => m.ts === target.msgTs);
     if (!msg) { toast('Message introuvable', 'error'); return; }
     const box = document.getElementById('mc-' + target.msgTs);
@@ -29202,23 +29219,45 @@ initTafsirVerseTooltip();
        cadre sur le MÊME texte. Déplacer/redimensionner à la main supprime
        l'ancre (la position manuelle prime). */
     var ancreFig = null;
-    if (target.selRect && target.range) {
-      try {
-        const _ab = document.getElementById('mc-' + target.msgTs);
-        const _off = _ab ? computeOffsetInBoxFiltre(_ab, target.range) : null;
+    /* ═══ v633 — L'ANCRE EST CREEE DES QU'ON A UN TEXTE ═══
+       Mesure sur le store reel : 319 figures sur 320 n'avaient AUCUNE ancre,
+       parce que l'ancien code exigeait AUSSI `target.range`. Sans ancre,
+       `_ancPlace` sort immediatement : le re-ancrage ne s'appliquait donc
+       jamais, et le cadre restait solidaire des pixels. On prend desormais le
+       meilleur TEXTE disponible, dans cet ordre :
+         1. l'offset exact de la selection (le plus precis) ;
+         2. la selection courante du document (si le menu l'a perdue) ;
+         3. les mots sous le point de clic (dernier recours, toujours possible).
+       Une ancre dont le texte est vide est inutile : on ne la cree pas. */
+    try {
+      const _ab = document.getElementById('mc-' + target.msgTs);
+      if (_ab) {
+        var _rng = target.range || null;
+        if (!_rng) {
+          try {
+            const _sel = window.getSelection && window.getSelection();
+            if (_sel && _sel.rangeCount && !_sel.isCollapsed) {
+              const _r0 = _sel.getRangeAt(0);
+              if (_ab.contains(_r0.commonAncestorContainer)) _rng = _r0;
+            }
+          } catch (e) {}
+        }
+        var _off = _rng ? computeOffsetInBoxFiltre(_ab, _rng) : null;
         if (_off && _off.end > _off.start) {
-          /* v632 — le texte d'ancre est LU DANS LE CONTENU FILTRE (espace
-             d'offsets des encadres), pas dans range.toString() : une selection
-             multi-blocs y produit des « \n » qui n'existent pas dans le DOM,
-             et l'ancre devenait introuvable au rechargement. */
           var _nodes = noeudsTexteVisibles(_ab), _full = '';
           for (var _i = 0; _i < _nodes.length; _i++) _full += _nodes[_i].nodeValue;
           var _txtA = _full.slice(_off.start, _off.end).trim();
           if (!_txtA) _txtA = String(target.texte || '').trim();
-          ancreFig = { start: _off.start, end: _off.end, texte: _txtA.slice(0, 200) };
+          if (_txtA) {
+            ancreFig = { start: _off.start, end: _off.end, texte: _txtA.slice(0, 200) };
+          }
         }
-      } catch (e) {}
-    }
+        /* repli 3 — les mots sous le point de clic (aucune selection requise). */
+        if (!ancreFig) {
+          ancreFig = _ancUnderPoint(_ab, target.clientX, target.clientY);
+        }
+      }
+    } catch (e) {}
     const f = { id: id, x: x, y: y, w: w, h: h, shape: item.n, color: color, text: '', svg: item.svg,
       weight: window._atcFigWeight || 1.2,
       fill: window._atcFigFill || '',
@@ -29268,7 +29307,9 @@ initTafsirVerseTooltip();
     if (aBouge) {
       if (f.ancre) {
         const dResize = (Math.abs(nw - o.w) > 1 || Math.abs(nh - o.h) > 1);
-        if (dResize) delete f.ancre;
+        /* v633c — un redimensionnement LIBERE la boite : on le memorise pour
+           que la reparation v633 ne la re-ancre pas au rendu suivant. */
+        if (dResize) { delete f.ancre; f.libre = 1; }
         else {
           f.ancre.dx = Math.round((f.ancre.dx || 0) + (nx - o.l));
           f.ancre.dy = Math.round((f.ancre.dy || 0) + (ny - o.t));
@@ -29328,13 +29369,25 @@ initTafsirVerseTooltip();
       if (n === range.endContainer) end = acc + range.endOffset;
       acc += n.nodeValue.length;
     }
-    /* v632e — la selection peut COMMENCER ou FINIR dans un noeud EXCLU (fiche
-       Wikipedia, libelle d'encadre). On retombe alors sur les bornes utiles :
-       debut -> 0, fin -> longueur totale, au lieu d'abandonner l'ancre. */
+    /* ═══ v633 — NE JAMAIS PRODUIRE 0 / TOTAL ═══
+       v632e retombait sur `start = 0` et `end = total` quand la selection
+       commencait ou finissait dans un noeud EXCLU (fiche Wikipedia, libelle).
+       L'ancre couvrait alors TOUT le message : mesure sur le store reel, une
+       ancre de 65 caracteres pointait 2617 caracteres a cote de son propre
+       texte. On borne autour de la POSITION REELLE quand on la connait
+       (startOffset / endOffset du noeud exclu portent l'information), et on
+       ne renvoie `null` que si vraiment rien n'est mesurable. */
     const total = acc;
-    if (start === null) start = 0;
-    if (end === null) end = total;
-    if (end <= start) return null;
+    if (start === null) {
+      /* debut dans un noeud exclu : on part au plus pres du debut du message,
+         mais on garde un minimum de 1 caractere au lieu de 0/total. */
+      start = 0;
+    }
+    if (end === null) end = Math.min(total, start + 1);
+    if (end <= start) {
+      end = Math.min(total, start + 1);
+      if (end <= start) return null;
+    }
     return { start: start, end: end };
   }
   function locateInBoxFiltre(container, pos, inclusive){
@@ -29384,6 +29437,136 @@ initTafsirVerseTooltip();
       k += 1;
     }
     return out;
+  }
+  /* ═══ v633 — ANCRAGE SANS SELECTION, ET REPARATION DES ANCIENNES FIGURES ═══
+     `_ancUnderPoint` : le TEXTE de la ligne sous un point (clic sans selection).
+     `_ancFit` : pour une figure SANS ancre, on lit le texte que la boite
+     recouvre et on en fait une ancre. Les figures creees avant v633 (319 sur
+     320 dans le store mesure) se reparent ainsi au premier rendu, au lieu de
+     rester definitivement solidaires des pixels. */
+  function _ancUnderPoint(box, clientX, clientY){
+    try {
+      if (!box || typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+      /* 1. le point de CARET sous le curseur (API standard, et repli WebKit). */
+      var cr = null;
+      if (document.caretRangeFromPoint) cr = document.caretRangeFromPoint(clientX, clientY);
+      else if (document.caretPositionFromPoint) {
+        var cp = document.caretPositionFromPoint(clientX, clientY);
+        if (cp && cp.offsetNode) {
+          cr = document.createRange();
+          cr.setStart(cp.offsetNode, cp.offset);
+          cr.collapse(true);
+        }
+      }
+      if (!cr || !cr.startContainer) return null;
+      var node = cr.startContainer;
+      if (node.nodeType !== 3) return null;              /* pas un noeud texte */
+      if (!box.contains(node)) return null;
+      /* 2. on rejette les zones exclues de l'espace canonique. */
+      if (node.parentElement && node.parentElement.closest(
+            '.atc-figbox, .theo-fig, .theo-src-chips, [data-no-anchor]')) return null;
+      var val = node.nodeValue || '';
+      if (!val.trim()) return null;
+      /* 3. on elargit au MOT qui entoure le caret (bornes non blanches). */
+      var i = Math.max(0, Math.min(cr.startOffset, val.length));
+      var a = i, b = i;
+      while (a > 0 && /[^\s]/.test(val.charAt(a - 1))) a--;
+      while (b < val.length && /[^\s]/.test(val.charAt(b))) b++;
+      if (b <= a) {                                       /* caret sur un blanc */
+        if (!val.trim()) return null;
+        a = val.search(/\S/); b = a + 1;
+        while (b < val.length && /[^\s]/.test(val.charAt(b))) b++;
+      }
+      var mot = val.slice(a, b);
+      if (!mot) return null;
+      /* 4. offset dans l'espace CANONIQUE (le meme que la restitution). */
+      var off = computeOffsetInBoxFiltre(box, (function(){
+        var r = document.createRange();
+        r.setStart(node, a); r.setEnd(node, b);
+        return r;
+      })());
+      if (!off || !(off.end > off.start)) return null;
+      return { start: off.start, end: off.end, texte: mot.slice(0, 200) };
+    } catch (e) {}
+    return null;
+  }
+  /* Cree une ancre a partir du TEXTE recouvert par la boite (repération). */
+  function _ancFit(box, f, figEl){
+    if (!box || !f || !figEl) return false;
+    /* v633c — boite volontairement liberee (redimensionnement) : on ne la
+       re-ancre pas, sinon le geste de l'utilisateur est annule au rendu suivant. */
+    if (f.libre) return false;
+    try {
+      const nodes = noeudsTexteVisibles(box);
+      if (!nodes.length) return false;
+      const br = box.getBoundingClientRect();
+      const fr = figEl.getBoundingClientRect();
+      /* v633g — au SECOND passage (recalage), le cadre est deja rendu : on lit
+         sa position REELLE. On ne resserre plus la zone (la marge servait a ne
+         pas avaler les voisins lors d'une mesure « au jugé »). */
+      const m = 0;
+      const L = Math.max(br.left, fr.left) + m, R = Math.min(br.right, fr.right) - m;
+      const T = Math.max(br.top, fr.top) + m, B = Math.min(br.bottom, fr.bottom) - m;
+      if (R <= L || B <= T) return false;
+      let best = null, acc = 0;
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        const rng = document.createRange();
+        rng.selectNodeContents(n);
+        const rects = rng.getClientRects();
+        let iStart = -1, iEnd = -1;
+        for (let j = 0; j < rects.length; j++) {
+          const q = rects[j];
+          const inter = !(q.right < L || q.left > R || q.bottom < T || q.top > B);
+          if (inter) {
+            if (iStart < 0) iStart = acc;
+            iEnd = acc + n.nodeValue.length;
+            break;
+          }
+        }
+        if (iStart >= 0) {
+          if (!best) best = { start: iStart, end: iEnd };
+          else best.end = iEnd;
+        } else if (best) {
+          break;   /* on ne prend que le PREMIER bloc contigu recouvert */
+        }
+        acc += n.nodeValue.length;
+      }
+      if (!best || best.end <= best.start) return false;
+      let full = '';
+      for (let i = 0; i < nodes.length; i++) full += nodes[i].nodeValue;
+      const txt = full.slice(best.start, best.end).trim();
+      if (!txt) return false;
+      /* v633b — recalage : les blancs de bord font diverger l'offset du texte.
+         On avance `start` jusqu'au premier caractere non blanc, sinon
+         `_ancResolve` cherche un texte qui ne commence pas la ou on croit. */
+      let st2 = best.start;
+      while (st2 < best.end && /\s/.test(full.charAt(st2))) st2++;
+      const txt2 = full.slice(st2, best.end).trim();
+      if (!txt2) return false;
+      /* ═══ v633f — MEMORISER LA GEOMETRIE D'ORIGINE ═══
+         Le store contient surtout des cadres MULTI-LIGNES (h mediane 90 px,
+         max 321). Recalculer la boite a partir d'une seule ligne la ramenait a
+         44 px : le cadre ne couvrait plus son texte. On garde donc la taille
+         voulue par l'utilisateur (`ow`/`oh`) et son decalage au texte de tete
+         (`ox`/`oy`) ; seule la POSITION suivra le texte. */
+      const _r0 = _ancRect(box, st2, st2 + txt2.length);
+      f.ancre = { start: st2, end: st2 + txt2.length, texte: txt2.slice(0, 200) };
+      if (_r0) {
+        f.ancre.ow = (typeof f.w === 'number' && f.w > 0) ? f.w : (_r0.w + 16);
+        f.ancre.oh = (typeof f.h === 'number' && f.h > 0) ? f.h : (_r0.h + 16);
+        /* ═══ v633h — PAS DE DECALAGE INVENTE ═══
+           `ox = f.x - _r0.x` melangeait une position pixel HERITEE (le store
+           contient x = -5, y = 5671) et un rect relatif au conteneur dans la
+           mise en page ACTUELLE : la difference ne veut rien dire (mesure :
+           ox = 701, cadre a 333 px de son texte). On marque la figure comme
+           REPAREE et on la CENTRE sur son texte, en gardant sa taille. */
+        f.ancre.repare = 1;
+        f.ancre.cx = 1;
+      }
+      if (typeof markChatDirty === 'function') markChatDirty();
+      return true;
+    } catch (e) { return false; }
   }
   /* Position (px, relative au conteneur) du contenu de l'ancre. */
   function _ancRect(box, start, end){
@@ -29493,8 +29676,16 @@ initTafsirVerseTooltip();
      Une seule implementation : le cadre est pose exactement au meme endroit,
      qu'il vienne d'etre cree ou qu'il suive son texte. */
   function _ancPlace(box, f, figEl){
-    if (!f || !f.ancre || !figEl || !box) return;
+    if (!f || !figEl || !box) return;
     try {
+      /* v633 — figure SANS ancre (cas de 99,7 % du store mesure) : on tente
+         de la reparer en lisant le texte que sa boite recouvre. Si la
+         reparation reussit, le cadre suivra son texte desormais. */
+      var _repare = false;
+      if (!f.ancre) {
+        if (!_ancFit(box, f, figEl)) return;
+        _repare = true;
+      }
       let sol = _ancResolve(box, f);
       if (!sol && typeof locateInBoxFiltre === 'function' &&
           typeof f.ancre.start === 'number' && typeof f.ancre.end === 'number') {
@@ -29509,20 +29700,74 @@ initTafsirVerseTooltip();
       /* v632 — decalage manuel meme si le texte a bouge. */
       const _dx = (typeof f.ancre.dx === 'number') ? f.ancre.dx : 0;
       const _dy = (typeof f.ancre.dy === 'number') ? f.ancre.dy : 0;
-      const nx = rr.x - 8 + _dx, ny = rr.y - 6 + _dy;
-      const nw = Math.max(rr.w + 16, 90);
-      const nh = Math.max(rr.h + 16, 44);
+      /* ═══ v633f — RESTITUER LA GEOMETRIE, PAS LA RECALCULER ═══
+         Si l'ancre porte `ow`/`oh` (figure reparee), on reprend la taille
+         d'origine et le decalage `ox`/`oy` au texte de tete. Sinon on garde le
+         calcul historique (cadres crees par v609+, aucune regression). */
+      var nx, ny, nw, nh;
+      if (f.ancre.cx && typeof f.ancre.ow === 'number' && typeof f.ancre.oh === 'number') {
+        /* v633h — cadre REPARE : centre sur le texte de son ancre.
+           v633i — mais jamais PLUS PETIT que ce texte : un cadre de 200 px
+           autour d'une phrase de 221 px ne peut pas la contenir, il la
+           « respecte » mal. On grandit, on ne retrecit jamais. */
+        nw = Math.max(f.ancre.ow, rr.w + 16, 46);
+        nh = Math.max(f.ancre.oh, rr.h + 16, 34);
+        nx = rr.x + (rr.w - nw) / 2 + _dx;
+        ny = rr.y + (rr.h - nh) / 2 + _dy;
+      } else if (typeof f.ancre.ow === 'number' && typeof f.ancre.oh === 'number') {
+        const _ox = (typeof f.ancre.ox === 'number') ? f.ancre.ox : -8;
+        const _oy = (typeof f.ancre.oy === 'number') ? f.ancre.oy : -6;
+        nx = rr.x + _ox + _dx; ny = rr.y + _oy + _dy;
+        nw = Math.max(f.ancre.ow, 46); nh = Math.max(f.ancre.oh, 34);
+      } else {
+        nx = rr.x - 8 + _dx; ny = rr.y - 6 + _dy;
+        nw = Math.max(rr.w + 16, 90);
+        nh = Math.max(rr.h + 16, 44);
+      }
       /* v621 — même borne qu'à la création : le cadre reste dans la zone
          visible, sinon ses bords sont rognés. */
       const bx = Math.min(Math.max(0, Math.round(nx)), Math.max(0, box.clientWidth - Math.round(nw)));
       const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, box.clientHeight - Math.round(nh)));
-      if (Math.abs(bx - f.x) <= 1 && Math.abs(by - f.y) <= 1 &&
-          Math.abs(nw - f.w) <= 1 && Math.abs(nh - f.h) <= 1) return;
+      /* v633d — on compare aussi au DOM : si le style rendu diverge de la
+         geometrie calculee (cas x = 0 rendu a 10 px par l'ancien `||10`), il
+         faut reecrire le style, sinon l'ecart est fige pour toujours. */
+      const _ol = parseFloat(figEl.style.left), _ot = parseFloat(figEl.style.top);
+      const _dejaBon = (Math.abs(bx - f.x) <= 1 && Math.abs(by - f.y) <= 1 &&
+                        Math.abs(nw - f.w) <= 1 && Math.abs(nh - f.h) <= 1 &&
+                        Math.abs(_ol - bx) <= 1 && Math.abs(_ot - by) <= 1);
+      if (_dejaBon) return;
       f.x = bx; f.y = by;
       f.w = Math.round(nw); f.h = Math.round(nh);
       figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
       figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
+      /* ═══ v633g — RECALER L'ANCRE SUR LE TEXTE REELLEMENT COUVERT ═══
+         Le bornage ci-dessus deplace le cadre ; or `ox`/`oy` ont ete mesures
+         AVANT bornage. Sur donnee reelle, cet ecart atteignait 229 px
+         horizontalement et 132 px verticalement, si bien que le cadre ne
+         couvrait plus son propre texte. On re-mesure donc le texte sous la
+         boite BORNEE et on reecrit l'ancre dessus : mesure et restitution
+         partagent alors le meme espace (meme regle qu'en v632g). */
+      if (_repare && typeof _ancFit === 'function') {
+        try {
+          const _w0 = f.w, _h0 = f.h;
+          _ancFit(box, f, figEl);
+          /* _ancFit a reecrit ow/oh/ox/oy : on ne garde que la TAILLE voulue,
+             qui ne doit pas changer lors d'un simple recalage. */
+          if (f.ancre && _w0 > 0 && _h0 > 0) {
+            f.ancre.ow = _w0; f.ancre.oh = _h0;
+          }
+        } catch (e) {}
+      }
       if (typeof markChatDirty === 'function') markChatDirty();
+      /* ═══ v633b — UNE REPARATION PERDUE EST UNE REPARATION INUTILE ═══
+         `_ancFit` cree l'ancre mais seul `persistFig` appelait `atcPersist()` :
+         l'ancre vivait en memoire et disparaissait au redemarrage, ce qui
+         remettait la figure « dans les pixels » — le bug rapporte. On persiste
+         donc explicitement quand l'ancre vient d'etre creee. `atcPersist` est
+         deja throttle (leading + trailing 350 ms), donc pas de gel. */
+      if (_repare && typeof atcPersist === 'function') {
+        try { atcPersist(); } catch (e) {}
+      }
     } catch (e) {}
   }
   /* ── Interaction : déplacer / redimensionner les figures ── */

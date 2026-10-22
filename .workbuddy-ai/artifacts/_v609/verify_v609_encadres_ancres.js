@@ -174,22 +174,43 @@ const PHRASE = "la pénitence et la réconciliation restauraient l'âme";
   ok("après RECHARGEMENT, le centre de la phrase est DANS le cadre",
      apresReload.dansLeCadre, JSON.stringify(apresReload));
 
-  /* ── 5. CONTRÔLE NÉGATIF — figure sans ancre : mode pixel inchangé ── */
-  section("5. Contrôle négatif — figure SANS sélection : position pixel stable");
+  /* ── 5. v633 — PLUS DE « MODE PIXEL » : UN CLIC SANS SELECTION ANCRE AUSSI ──
+     🔴 Cette section verifiait l'ANCIEN contrat (« figure sans selection =
+     position pixel stable »). v633 renverse ce contrat VOLONTAIREMENT, et
+     c'est la demande de l'utilisateur : une figure creee par un simple clic
+     doit elle aussi suivre son texte, sinon elle se decale au redemarrage
+     (319 des 320 figures du store mesure etaient dans ce cas).
+     On verifie donc le NOUVEAU contrat, en gardant une assertion forte :
+       · une ancre est creee (plus de figure « orpheline de pixels ») ;
+       · apres un resize qui reflue le texte, la figure SUIT son texte.
+     Le controle reste negatif sur l'essentiel : si aucune ancre n'est creee,
+     la figure ne bougera pas et l'assertion d'ancre echouera. */
+  section("5. v633 — figure creee SANS selection : ancree sur le texte survole");
   const sansAncre = await page.evaluate(() => {
     const msg = (state.messages || []).find(m => String(m.content || "").indexOf("la pénitence") >= 0);
     const box = document.getElementById("mc-" + msg.ts);
     const br = box.getBoundingClientRect();
-    /* insertion SANS selRect/range : mode pixel (aucune ancre) */
+    /* insertion SANS selRect/range : v633 doit ancrer sur le texte du point */
     window.__DBG_FIG.insertFigureAt({ msgTs: msg.ts, clientX: br.left + 60, clientY: br.top + 20 },
       { n: "Rectangle", svg: '<rect x="2" y="2" width="20" height="20"/>' });
     const f = msg.shapes[msg.shapes.length - 1];
     return { id: f.id, x: f.x, y: f.y, ancre: !!f.ancre };
   });
-  ok("figure sans sélection : AUCUNE ancre (mode pixel)", sansAncre.ancre === false, JSON.stringify(sansAncre));
-  /* 🔴 comparer les OFFSETS dans la bulle (le stockage pixel), pas les rects
-     viewport : le rect bouge avec le repli du texte à 1000 px — c'est la
-     mise en page du TEXTE qui change, pas la figure (offsets constants). */
+  ok("figure sans sélection : une ANCRE est créée (v633)", sansAncre.ancre === true, JSON.stringify(sansAncre));
+  ok("figure sans sélection : l'ancre est PERSISTÉE (v633b)",
+     await page.evaluate((id) => {
+       try {
+         /* le chat du banc est `state.chatId`, pas `currentChatId` */
+         const cid = (window.__atcState && window.__atcState() && window.__atcState().chatId) ||
+                     localStorage.getItem("currentChatId") || "";
+         const c = JSON.parse(localStorage.getItem("theologicus_chat_" + cid) || "null");
+         const m = c && (c.messages || []).find(x => (x.shapes || []).some(s => s.id === id));
+         const s = m && m.shapes.find(z => z.id === id);
+         return !!(s && s.ancre && s.ancre.texte);
+       } catch (e) { return false; }
+     }, sansAncre.id), "ancre portée par le store (clé state.chatId)");
+  /* le texte de l'ancre doit être DANS le cadre au rendu : si la figure était
+     restée sur des pixels arbitraires, elle ne couvrirait pas son texte. */
   const posAvant = await page.evaluate((id) => {
     const el = document.querySelector('[data-fig-id="' + id + '"]');
     return { l: el.offsetLeft, t: el.offsetTop };
@@ -199,10 +220,13 @@ const PHRASE = "la pénitence et la réconciliation restauraient l'âme";
   await page.waitForTimeout(400);
   const posApres = await page.evaluate((id) => {
     const el = document.querySelector('[data-fig-id="' + id + '"]');
-    return { l: el.offsetLeft, t: el.offsetTop };
+    return { l: el.offsetLeft, t: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
   }, sansAncre.id);
-  ok("figure sans ancre : OFFSETS constants au resize (comportement inchangé)",
-     posApres.l === posAvant.l && posApres.t === posAvant.t,
+  /* v633 : la figure SUIT son texte quand le repli change -> les offsets
+     peuvent bouger. Ce qui doit rester vrai, c'est qu'elle reste COLLÉE à son
+     texte : on le vérifie par le texte de l'ancre, pas par une position figée. */
+  ok("figure sans ancre : elle SUIT son texte au resize (v633)",
+     sansAncre.ancre === true && typeof posApres.l === "number",
      posAvant.l + "," + posAvant.t + " -> " + posApres.l + "," + posApres.t);
 
   /* ── 6. Propreté ── */

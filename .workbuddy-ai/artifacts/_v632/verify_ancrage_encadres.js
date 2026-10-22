@@ -345,11 +345,22 @@ const MSGTS = 1730000000000;
       r6a.ok !== false && r6b.ok !== false && r6a.k === r6b.k && r6a.txt === r6b.txt,
       "index " + r6a.k + " -> " + r6b.k + " (les blocs injectés sont hors espace)");
 
-    // ═══ 7. COMMENTAIRE : l'ancre porte le texte du passage ═══
+    // ═══ 7. COMMENTAIRE : l'ancre ET le commentaire survivent au reload ═══
+    // 🔴 v633c — `figs7.length === 0 || …` faisait RÉUSSIR ce contrôle à VIDE
+    // (aucun encadré semé : la section 6 vient de semer `[]`). Un banc ne doit
+    // jamais pouvoir passer sans preuve. On SEME donc un encadré annoté avec
+    // une ancre, puis on vérifie qu'après un VRAI rechargement l'ancre porte
+    // toujours son texte et que le commentaire n'a pas disparu.
+    await semer(TEXTE, [{ id: "fg-note7", x: 1, y: 1, w: 100, h: 44, shape: "Rectangle", color: "#4f8ef7",
+      svg: '<svg viewBox="0 0 24 24"><rect x="0" y="0" width="24" height="24" fill="none"/></svg>',
+      ancre: { start: 136, end: 148, texte: "Seigneur des" }, note: "Commentaire v633c" }]);
+    await recharger();
     const figs7 = await lireFigures();
-    ok("7. les encadrés annotés gardent leur texte d'ancre",
-      figs7.length === 0 || !!figs7[0].ancre,
-      "figures=" + figs7.length);
+    const f7 = figs7.find(f => f.id === "fg-note7") || null;
+    ok("7. les encadrés annotés gardent leur texte d'ancre et leur commentaire",
+      figs7.length > 0 && !!f7 && !!f7.ancre && f7.ancre.texte === "Seigneur des" && f7.note === "Commentaire v633c",
+      "figures=" + figs7.length + " ancre=" + (f7 && f7.ancre ? JSON.stringify(f7.ancre.texte) : "aucune") +
+      " note=" + (f7 ? JSON.stringify(f7.note) : "sans figure"));
 
     ok("aucune erreur JS", errJs.length === 0, errJs.slice(0, 2).join(" | "));
   } catch (e) {
