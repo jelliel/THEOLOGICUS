@@ -34,6 +34,10 @@ on:
       - 'android/**'
       - 'tools/**'
       - 'app.py'
+      - 'proxy_server.py'   # v631b — le serveur embarqué fait partie de l'exe : une
+                            # modification seule DOIT déclencher la CI (sinon le dépôt
+                            # et la release divergent en silence — le pont /media/*
+                            # version-aware est resté hors release pour cette raison)
       - 'installer.iss'
       - 'build_installer.bat'
       - 'THEOLOGICUS.ico'
