@@ -29171,6 +29171,22 @@ initTafsirVerseTooltip();
       y = target.selRect.top - br.top + box.scrollTop - 6;
       w = Math.max(target.selRect.width + 16, 90);
       h = Math.max(target.selRect.height + 16, 44);
+      /* v632d — la geometrie est ALIGNEE sur le re-ancrage (meme calcul, meme
+         rect) : sinon le cadre perd 4 px de large au premier rendu et « saute »
+         visibly. On ne le fait que si l'ancre texte a pu etre calculee. */
+      if (target.range) {
+        try {
+          var _off0 = computeOffsetInBoxFiltre(box, target.range);
+          if (_off0 && _off0.end > _off0.start) {
+            var _r0 = _ancRect(box, _off0.start, _off0.end);
+            if (_r0) {
+              x = _r0.x - 8; y = _r0.y - 6;
+              w = Math.max(_r0.w + 16, 90);
+              h = Math.max(_r0.h + 16, 44);
+            }
+          }
+        } catch (e) {}
+      }
       /* v621 — le cadre doit rester DANS le contenu : `.message-content` a
          overflow:hidden, et un bord rogné n'est plus saisissable. */
       x = Math.min(Math.max(0, x), Math.max(0, box.clientWidth - w));
@@ -29190,8 +29206,17 @@ initTafsirVerseTooltip();
       try {
         const _ab = document.getElementById('mc-' + target.msgTs);
         const _off = _ab ? computeOffsetInBoxFiltre(_ab, target.range) : null;
-        if (_off) ancreFig = { start: _off.start, end: _off.end,
-          texte: (target.texte || (target.range ? target.range.toString() : '') || '').slice(0, 200) };
+        if (_off && _off.end > _off.start) {
+          /* v632 — le texte d'ancre est LU DANS LE CONTENU FILTRE (espace
+             d'offsets des encadres), pas dans range.toString() : une selection
+             multi-blocs y produit des « \n » qui n'existent pas dans le DOM,
+             et l'ancre devenait introuvable au rechargement. */
+          var _nodes = noeudsTexteVisibles(_ab), _full = '';
+          for (var _i = 0; _i < _nodes.length; _i++) _full += _nodes[_i].nodeValue;
+          var _txtA = _full.slice(_off.start, _off.end).trim();
+          if (!_txtA) _txtA = String(target.texte || '').trim();
+          ancreFig = { start: _off.start, end: _off.end, texte: _txtA.slice(0, 200) };
+        }
       } catch (e) {}
     }
     const f = { id: id, x: x, y: y, w: w, h: h, shape: item.n, color: color, text: '', svg: item.svg,
@@ -29208,6 +29233,16 @@ initTafsirVerseTooltip();
     setTimeout(function(){ window.__atcApplying = false; }, 0);
     toast('✓ Figure insérée (' + item.n + ') · glissez pour déplacer, poignées ◻ pour redimensionner, double-clic pour le texte ; cliquez-la pour tourner ↻ et remplir ▨', 'success');
   }
+  /* v632c — HOOKS DE BANC (aucun chemin produit ne les appelle) :
+     lecture seule de l'etat (le DOM est lazy-rendu, donc incomplet hors
+     viewport) et insertion d'encadre par le chemin reel de l'utilisateur. */
+  window.__atcState = function(){ try { return state; } catch (e) { return null; } };
+  window.__atcInsertFig = function(target, forme){
+    var it = findForme(forme || 'Rectangle') || findForme('Rectangle');
+    if (!it) return false;
+    insertFigureAt(target, it);
+    return true;
+  };
   function persistFig(f, fb, origine){
     const nx = fb.offsetLeft, ny = fb.offsetTop, nw = fb.offsetWidth, nh = fb.offsetHeight;
     /* v618/v621 — un CLIC (down+up sans mouvement) appelle aussi persistFig :
@@ -29220,9 +29255,26 @@ initTafsirVerseTooltip();
     const aBouge = (Math.abs(nx - o.l) > 1 || Math.abs(ny - o.t) > 1 ||
                     Math.abs(nw - o.w) > 1 || Math.abs(nh - o.h) > 1);
     f.x = nx; f.y = ny; f.w = nw; f.h = nh;
-    /* v609 — déplacement/retaille MANUELS : l'ancre texte est retirée (la
-       position manuelle prime sur le ré-ancrage automatique). */
-    if (aBouge && f.ancre) { delete f.ancre; }
+    /* ═══ v632 — ON NE CASSE PLUS L'ANCRE EN DEPLACANT ═══
+       v609 retirait l'ancre au moindre mouvement : un simple glissement (ou
+       un clic qui « bouge de 1 px ») rendait le cadre definitivement solidaire
+       des PIXELS, donc il se Decalait au redemarrage suivant — c'est le bug
+       rapporte. Desormais :
+         · DEPLACEMENT  -> l'ancre est CONSERVEE ; le decalage voulu par
+           l'utilisateur est memorise dans ancre.dx/dy et reapplique (le cadre
+           reste « decale » mais suit son texte) ;
+         · REDIMENSIONNEMENT -> l'ancre est retiree (geometrie texte inadaptee),
+           la boite devient libre — comportement voulu, et desormais le SEUL. */
+    if (aBouge) {
+      if (f.ancre) {
+        const dResize = (Math.abs(nw - o.w) > 1 || Math.abs(nh - o.h) > 1);
+        if (dResize) delete f.ancre;
+        else {
+          f.ancre.dx = Math.round((f.ancre.dx || 0) + (nx - o.l));
+          f.ancre.dy = Math.round((f.ancre.dy || 0) + (ny - o.t));
+        }
+      }
+    }
     if (typeof markChatDirty === 'function') markChatDirty();
     atcPersist();
   }
@@ -29243,11 +29295,23 @@ initTafsirVerseTooltip();
      encadrés eux-mêmes (.atc-figbox : libellé, croix) sont EXCLUS, sinon
      l'ajout d'un 2e encadré décalerait les offsets du 1er. Les marques
      (spans) n'ajoutent aucun texte : elles restent incluses. ── */
+  /* ═══ v632e — ESPACE D'OFFSETS CANONIQUE ═══
+     On EXCLUT toute la « chrome » injectee par l'app dans le message :
+       · `.atc-figbox`      — les encadres eux-memes (libelle, badge) ;
+       · `.theo-fig`        — les fiches Wikipedia ajoutees APRES le rendu
+                              (titre + extrait + lien : plusieurs centaines de
+                              caracteres inseres AVANT le passage etudie !) ;
+       · `.theo-src-chips`  — les puces de sources cliquables ;
+       · `[data-no-anchor]` — marqueur generique pour tout futur ajout.
+     Sans cela, chaque fiche ajoutee DECALE d'autant tous les offsets
+     memorises : c'etait la cause du deplacement des encadrements au
+     redemarrage (mesure : 439 -> ~700 caracteres apres un seul fetch). */
+  var _ANC_EXCLUS = '.atc-figbox, .theo-fig, .theo-src-chips, [data-no-anchor]';
   function noeudsTexteVisibles(box){
     const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
       acceptNode: function (n) {
         const pp = n.parentElement;
-        if (pp && pp.closest && pp.closest('.atc-figbox')) return NodeFilter.FILTER_REJECT;
+        if (pp && pp.closest && pp.closest(_ANC_EXCLUS)) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
       }
     });
@@ -29264,7 +29328,13 @@ initTafsirVerseTooltip();
       if (n === range.endContainer) end = acc + range.endOffset;
       acc += n.nodeValue.length;
     }
-    if (start === null || end === null || end <= start) return null;
+    /* v632e — la selection peut COMMENCER ou FINIR dans un noeud EXCLU (fiche
+       Wikipedia, libelle d'encadre). On retombe alors sur les bornes utiles :
+       debut -> 0, fin -> longueur totale, au lieu d'abandonner l'ancre. */
+    const total = acc;
+    if (start === null) start = 0;
+    if (end === null) end = total;
+    if (end <= start) return null;
     return { start: start, end: end };
   }
   function locateInBoxFiltre(container, pos, inclusive){
@@ -29280,6 +29350,93 @@ initTafsirVerseTooltip();
     }
     if (nodes.length) return { node: nodes[nodes.length - 1], off: nodes[nodes.length - 1].nodeValue.length };
     return null;
+  }
+  /* ═══ v632 — ANCHE TEXTE ROBUSTE DES ENCADRES ═══
+     `noeudsTexteVisibles` definit l'espace d'offsets des encadres. Il EXCLUT
+     le texte des `.atc-figbox` ; l'ajout d'un encadre ne decale donc jamais
+     les suivants. Mais un offset nu reste fragile des que le contenu du
+     message change (streaming, markdown, regeneration, changement de police
+     peut aussi re-brasser les retours). On ancre donc sur le TEXTE. */
+  function _ancNorm(str){
+    /* NFKC compose les ligatures, NFD separe les accents, on retire les
+       diacritiques, on met en minuscule puis on garde lettres + chiffres :
+       une ancre survit a « ’ » vs « ' », aux espaces insecables, aux puces. */
+    const NF = String(str == null ? '' : str).normalize('NFKC').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    let norm = '', map = [];
+    for (let i = 0; i < NF.length; i++) {
+      const ch = NF[i];
+      if (/[a-z0-9]/.test(ch)) { norm += ch; map.push(i); }
+    }
+    return { norm: norm, map: map };
+  }
+  /* Toutes les positions possibles de `texte` dans le contenu filtre. */
+  function _ancOccurrences(container, texte){
+    const nodes = noeudsTexteVisibles(container);
+    if (!nodes.length) return [];
+    let full = '', starts = [];
+    for (let i = 0; i < nodes.length; i++) { starts.push(full.length); full += nodes[i].nodeValue; }
+    const F = _ancNorm(full), T = _ancNorm(texte);
+    if (!T.norm) return [];
+    const out = []; let k = 0;
+    while ((k = F.norm.indexOf(T.norm, k)) !== -1) {
+      out.push({ start: F.map[k], end: F.map[k + T.norm.length - 1] + 1, idx: k });
+      k += 1;
+    }
+    return out;
+  }
+  /* Position (px, relative au conteneur) du contenu de l'ancre. */
+  function _ancRect(box, start, end){
+    const a = locateInBoxFiltre(box, start, false);
+    const b = locateInBoxFiltre(box, end, true);
+    if (!a || !b) return null;
+    try {
+      const rng = document.createRange();
+      rng.setStart(a.node, Math.max(0, Math.min(a.off, a.node.nodeValue.length)));
+      rng.setEnd(b.node, Math.max(0, Math.min(b.off, b.node.nodeValue.length)));
+      const rr = rng.getBoundingClientRect();
+      if (!rr || rr.width <= 2) return null;
+      const br = box.getBoundingClientRect();
+      return { x: rr.left - br.left + box.scrollLeft, y: rr.top - br.top + box.scrollTop,
+               w: rr.width, h: rr.height };
+    } catch (e) { return null; }
+  }
+  /* Ancre un encadre : cherche le texte dans la mise en page ACTUELLE, choisit
+     l'occurrence la plus proche de l'ancre memorisee, retourne le rect. */
+  function _ancResolve(box, f){
+    if (!f || !f.ancre) return null;
+    const an = f.ancre;
+    const texte = (typeof an.texte === 'string') ? an.texte : '';
+    if (!_ancNorm(texte).norm) return null;      /* ancre « muette » : offset seul */
+    const occ = _ancOccurrences(box, texte);
+    if (!occ.length) return null;
+    let best = occ[0], bd = Infinity;
+    const ref = (typeof an.start === 'number') ? an.start : 0;
+    for (let i = 0; i < occ.length; i++) {
+      const d = Math.abs(occ[i].start - ref);
+      if (d < bd) { bd = d; best = occ[i]; }
+    }
+    const r = _ancRect(box, best.start, best.end);
+    if (!r) return null;
+    return { r: r, start: best.start, end: best.end };
+  }
+  /* Repare l'ancre (texte + offsets reels) — utilise aussi pour les anciens
+     encadres crees avant v632, dont `ancre.texte` pouvait etre vide. */
+  function _ancRepair(box, f, solve){
+    if (!f || !f.ancre || !solve) return;
+    const an = f.ancre;
+    if (!_ancNorm(an.texte || '').norm) {
+      /* pas de texte memorise : on le LIT dans la mise en page courante a
+         l'offset courant (le seul indice disponible), puis on le conserve. */
+      const nodes = noeudsTexteVisibles(box);
+      let full = '', starts = [];
+      for (let i = 0; i < nodes.length; i++) { starts.push(full.length); full += nodes[i].nodeValue; }
+      const a = Math.max(0, Math.min(an.start | 0, full.length));
+      const b = Math.max(a, Math.min(an.end | 0, full.length));
+      const t = full.slice(a, b).trim();
+      if (_ancNorm(t).norm) an.texte = t.slice(0, 200);
+    }
+    if (solve) { an.start = solve.start; an.end = solve.end; }
   }
   /* v628 — LAZY-APPLY : on ne traite que les messages VISIBLES (viewport +
      marge). Un message hors écran sera traité quand il y ENTRERA (le scroll
@@ -29306,7 +29463,12 @@ initTafsirVerseTooltip();
       m.shapes.forEach(function(f){
         if (!f || !f.id) return;
         const dejaLa = box.querySelector('[data-fig-id="' + f.id + '"]');
-        if (dejaLa) return;
+        if (dejaLa) {
+          /* v632f — le cadre est deja rendu : le contenu a pu CHANGER sous lui
+             (fiche Wikipedia inseree, markdown re-rendu). On le replace. */
+          _ancPlace(box, f, dejaLa);
+          return;
+        }
         const figEl = buildFigEl(f);
         box.appendChild(figEl);
         /* v609 — RÉ-ANCRAGE : si l'encadré a une ancre texte, il est
@@ -29314,38 +29476,54 @@ initTafsirVerseTooltip();
            (largeur de fenêtre, polices, repli) — le bug « change de place au
            redémarrage ». Les valeurs persistées sont mises à jour si elles
            bougent de plus d'1 px (fidélité export/stockage). */
-        if (f.ancre && typeof locateInBoxFiltre === 'function') {
-          try {
-            const a = locateInBoxFiltre(box, f.ancre.start, false);
-            const b = locateInBoxFiltre(box, f.ancre.end, true);
-            if (a && b) {
-              const rng = document.createRange();
-              rng.setStart(a.node, a.off); rng.setEnd(b.node, b.off);
-              const rr = rng.getBoundingClientRect();
-              if (rr && rr.width > 2) {
-                const br = box.getBoundingClientRect();
-                const nx = rr.left - br.left + box.scrollLeft - 8;
-                const ny = rr.top - br.top + box.scrollTop - 6;
-                const nw = Math.max(rr.width + 16, 90);
-                const nh = Math.max(rr.height + 16, 44);
-                /* v621 — même borne qu'à la création : le cadre reste dans
-                   la zone visible, sinon ses bords sont rognés. */
-                const bx = Math.min(Math.max(0, Math.round(nx)), Math.max(0, box.clientWidth - Math.round(nw)));
-                const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, box.clientHeight - Math.round(nh)));
-                if (Math.abs(bx - f.x) > 1 || Math.abs(by - f.y) > 1 ||
-                    Math.abs(nw - f.w) > 1 || Math.abs(nh - f.h) > 1) {
-                  f.x = bx; f.y = by;
-                  f.w = Math.round(nw); f.h = Math.round(nh);
-                  figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
-                  figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
-                  if (typeof markChatDirty === 'function') markChatDirty();
-                }
-              }
-            }
-          } catch (e) {}
-        }
+        /* ═══ v632 — RE-ANCRAGE PAR TEXTE ═══
+           L'ancre precedente (offset nu, v609) designait un AUTRE mot des que
+           le contenu du message bougeait : la walker filtree des encadres
+           n'a pas le meme espace d'offsets que Range.toString(), donc un
+           decalage d'un seul caractere suffisait a deplacer le cadre d'une
+           ligne. On retrouve d'abord le TEXTE de l'ancre ; l'offset ne sert
+           plus que de repli ET de departage entre occurrences. */
+        _ancPlace(box, f, figEl);
       });
     });
+    /* v628 — les cadres hors viewport n'ont pas ete traites : au scroll, la
+       passe les reprend (listener plus bas -> _atcScheduleApply). */
+  }
+  /* ═══ v632f — PLACEMENT D'UN ENCADRE (creation ET re-rendu) ═══
+     Une seule implementation : le cadre est pose exactement au meme endroit,
+     qu'il vienne d'etre cree ou qu'il suive son texte. */
+  function _ancPlace(box, f, figEl){
+    if (!f || !f.ancre || !figEl || !box) return;
+    try {
+      let sol = _ancResolve(box, f);
+      if (!sol && typeof locateInBoxFiltre === 'function' &&
+          typeof f.ancre.start === 'number' && typeof f.ancre.end === 'number') {
+        /* repli : ancien encadre dont l'ancre n'a pas encore de texte,
+           ou texte introuvable -> on garde l'offset comme depart. */
+        const rr0 = _ancRect(box, f.ancre.start, f.ancre.end);
+        if (rr0) sol = { r: rr0, start: f.ancre.start, end: f.ancre.end };
+      }
+      _ancRepair(box, f, sol);
+      if (!sol || !sol.r) return;
+      const rr = sol.r;
+      /* v632 — decalage manuel meme si le texte a bouge. */
+      const _dx = (typeof f.ancre.dx === 'number') ? f.ancre.dx : 0;
+      const _dy = (typeof f.ancre.dy === 'number') ? f.ancre.dy : 0;
+      const nx = rr.x - 8 + _dx, ny = rr.y - 6 + _dy;
+      const nw = Math.max(rr.w + 16, 90);
+      const nh = Math.max(rr.h + 16, 44);
+      /* v621 — même borne qu'à la création : le cadre reste dans la zone
+         visible, sinon ses bords sont rognés. */
+      const bx = Math.min(Math.max(0, Math.round(nx)), Math.max(0, box.clientWidth - Math.round(nw)));
+      const by = Math.min(Math.max(0, Math.round(ny)), Math.max(0, box.clientHeight - Math.round(nh)));
+      if (Math.abs(bx - f.x) <= 1 && Math.abs(by - f.y) <= 1 &&
+          Math.abs(nw - f.w) <= 1 && Math.abs(nh - f.h) <= 1) return;
+      f.x = bx; f.y = by;
+      f.w = Math.round(nw); f.h = Math.round(nh);
+      figEl.style.left = f.x + 'px'; figEl.style.top = f.y + 'px';
+      figEl.style.width = f.w + 'px'; figEl.style.height = f.h + 'px';
+      if (typeof markChatDirty === 'function') markChatDirty();
+    } catch (e) {}
   }
   /* ── Interaction : déplacer / redimensionner les figures ── */
   cc && cc.addEventListener('mousedown', function(e){
@@ -30187,6 +30365,19 @@ initTafsirVerseTooltip();
      const b = locateInBox(container, end, true);
      return extractWrap(container, a, b, hlId, cls);
    }
+   /* v632e — l'offset d'un surlignage est memorise dans l'espace CANONIQUE
+      (sans les blocs injectes). Pour le re-coller il faut donc resoudre dans ce
+      meme espace, sinon l'insertion d'une fiche Wikipedia decale le span. */
+   function wrapByOffsetCanon(container, start, end, hlId, cls){
+     if (typeof start !== 'number' || typeof end !== 'number' || end <= start) return false;
+     if (typeof noeudsTexteVisibles !== 'function' || typeof locateInBoxFiltre !== 'function') {
+       return wrapByOffset(container, start, end, hlId, cls);
+     }
+     const a = locateInBoxFiltre(container, start, false);
+     const b = locateInBoxFiltre(container, end, true);
+     if (!a || !b) return false;
+     return extractWrap(container, a, b, hlId, cls);
+   }
    /* Offset positionnel d'une sélection (Range) dans le message rendu.
       Mesuré dans l'espace de concaténation des nœuds texte (= Range.toString()). */
    function computeOffsetInBox(box, range){
@@ -30435,7 +30626,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
         }
         // Priorité : offset positionnel (invariant gras/markdown/mots répétis)
         if (!ok && typeof a.start === 'number' && typeof a.end === 'number') {
-          ok = wrapByOffset(box, a.start, a.end, a.id, 'atc-hl');
+          ok = wrapByOffsetCanon(box, a.start, a.end, a.id, 'atc-hl');
           // Filet de sécurité (sans faux positif) : si le span englobe un
           // élément interactif (bouton/lien), on dé-wrapp. Le fractionnement par
           // nœud texte évite normalement ça, mais on garde la protection.
@@ -30533,7 +30724,7 @@ const idx = fullM.norm.indexOf(txtM.norm);
         _mkColor[mk.id] = mk.color || 'yellow';
         let ok = false;
         if (typeof mk.start === 'number' && typeof mk.end === 'number') {
-          ok = wrapByOffset(box, mk.start, mk.end, mk.id, 'atc-mark');
+          ok = wrapByOffsetCanon(box, mk.start, mk.end, mk.id, 'atc-mark');
           /* v623 — l'offset peut être périmé : on vérifie que le texte
              enveloppé est bien le texte surligné ; sinon on ré-ancre. */
           if (ok && !_mkAlign(box, mk)) { _mkUnwrap(box, mk.id); ok = false; totalRealign++; }
