@@ -30381,6 +30381,15 @@ initTafsirVerseTooltip();
    /* Offset positionnel d'une sélection (Range) dans le message rendu.
       Mesuré dans l'espace de concaténation des nœuds texte (= Range.toString()). */
    function computeOffsetInBox(box, range){
+     /* v632g — la mesure canonique est SYMETRIQUE de la restitution
+        (wrapByOffsetCanon). On la prefere toujours ; l'ancien calcul reste en
+        repli si elle echoue (Range hors des noeuds visibles). */
+     try {
+       if (typeof computeOffsetInBoxFiltre === 'function') {
+         const f = computeOffsetInBoxFiltre(box, range);
+         if (f && f.end > f.start) return f;
+       }
+     } catch (e) {}
      const total = (function(){ const r = document.createRange(); r.selectNodeContents(box); return r.toString().length; })();
      const pre = document.createRange();
      pre.selectNodeContents(box);

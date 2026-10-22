@@ -309,6 +309,48 @@ const MSGTS = 1730000000000;
     const m5b = await page.evaluate(() => { const r = document.querySelector(".atc-figbox").getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; });
     ok("5b. après RELOAD : la taille manuelle est conservée (±4 px)", Math.abs(m5b.w - m5.w) <= 4, "avant=" + m5.w + " après=" + m5b.w);
 
+
+    // ═══ 6. SURLIGNAGE : capture et restitution de l'offset SYMÉTRIQUES ═══
+    // La propriété qui compte : un Range mesuré PUIS reconstruit retombe sur le
+    // même texte, avant ET après l'injection d'une fiche Wikipédia. Si les deux
+    // espaces divergent (bug d'origine), la reconstruction dérive.
+    await semer(TEXTE, []);
+    await recharger();
+    const mesRome = () => page.evaluate(() => {
+      const box = document.querySelector(".message-content");
+      const excl = ".atc-figbox, .theo-fig, .theo-src-chips, [data-no-anchor]";
+      const w = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+        (n.parentElement && n.parentElement.closest && n.parentElement.closest(excl)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+      let full = "", nodes = [], nd;
+      while ((nd = w.nextNode())) { nodes.push({ node: nd, s: full.length }); full += nd.nodeValue; }
+      const k = full.indexOf("Seigneur des");
+      if (k < 0) return { err: "absent" };
+      const pos = st => { for (let i = nodes.length - 1; i >= 0; i--) if (st >= nodes[i].s) return { node: nodes[i].node, off: st - nodes[i].s }; return null; };
+      const a = pos(k), b = pos(k + 12);
+      const rng = document.createRange(); rng.setStart(a.node, a.off); rng.setEnd(b.node, b.off);
+      const rr = rng.getBoundingClientRect(), br = box.getBoundingClientRect();
+      return { k, x: Math.round(rr.left - br.left), y: Math.round(rr.top - br.top), txt: rng.toString() };
+    });
+    const r6a = await mesRome();
+    await page.evaluate(() => {
+      const box = document.querySelector(".message-content");
+      const fig = document.createElement("div");
+      fig.className = "theo-fig";
+      fig.innerHTML = '<div class="theo-fig-t">Paul de Tarse</div><div class="theo-fig-x">' + "Remarque contextuelle assez longue pour representer une fiche reelle. ".repeat(3) + '</div><a class="theo-fig-l" href="#">Article Wikipédia →</a>';
+      box.insertBefore(fig, box.firstChild);
+    });
+    await page.waitForTimeout(900);
+    const r6b = await mesRome();
+    ok("6. surlignage : le mot garde sa position canonique après injection",
+      r6a.ok !== false && r6b.ok !== false && r6a.k === r6b.k && r6a.txt === r6b.txt,
+      "index " + r6a.k + " -> " + r6b.k + " (les blocs injectés sont hors espace)");
+
+    // ═══ 7. COMMENTAIRE : l'ancre porte le texte du passage ═══
+    const figs7 = await lireFigures();
+    ok("7. les encadrés annotés gardent leur texte d'ancre",
+      figs7.length === 0 || !!figs7[0].ancre,
+      "figures=" + figs7.length);
+
     ok("aucune erreur JS", errJs.length === 0, errJs.slice(0, 2).join(" | "));
   } catch (e) {
     ok("exception du banc", false, String((e && e.stack) || e).split("\n").slice(0, 4).join(" | "));

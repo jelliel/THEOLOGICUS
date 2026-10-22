@@ -73,6 +73,16 @@ quand le module additif arrive — **sans aucune régression réelle** (faux pos
   (sinon il ramasse un toast périmé d'une section précédente).
 
 ## 4. Mise en place du banc
+- **Désarmer l'overlay du wizard, JAMAIS le retirer.** `#setup-wizard-overlay`
+  est en place AVANT le gros de l'init ; le retirer laisse `initWizardEvents()`
+  / `showWizard()` (rappelé ~500 ms plus tard) courir sur un noeud absent et
+  **coupe l'init** : le chat n'est jamais rendu, `msgCount=0`, une `pageerror`.
+  Le banc échoue alors à l'installation, avant toute assertion
+  (`RESULTAT : 0/1`), d'où un diagnostic trompeur.
+  Mesure (v632) : noeud retiré = **2 échecs / 6** passages ; noeud conservé
+  (classe `active` retirée en boucle toutes les 300 ms) = **0 / 12** puis
+  **0 / 8**. Plusieurs bancs portaient un commentaire disant de ne pas le
+  retirer et une ligne qui le retirait quand même (`_v627/verify_fig_layers.js`).
 - Helpers `basculer/ouvrir/fermer` appelant `page.evaluate` doivent être DÉFINIS
   **DANS l'IIFE** (`page` n'existe qu'à l'intérieur), sinon `ReferenceError:
   page is not defined` (vécu v598).

@@ -90,7 +90,10 @@ function ok(nom, cond, detail) {
         const w = document.getElementById("setup-wizard-overlay");
         if (w) w.classList.remove("active");
       }, 300);
-      document.querySelectorAll(".setup-wizard-overlay, .onboarding-overlay, #setup-wizard-overlay").forEach(function(o){ o.remove(); });
+      /* v632 — la consigne ci-dessus était CONTREDITE par la ligne suivante,
+         qui retirait le noeud : le banc restait donc fragile. Mesure : noeud
+         retire = 2 echecs / 6 passages (pageerrors=1, msg=0, message jamais
+         rendu) ; noeud conserve = 0 / 12 puis 0 / 8. On ne retire plus. */
     });
   }
   function zOf(figId){ return page.evaluate((id) => {
