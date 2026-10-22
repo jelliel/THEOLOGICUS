@@ -132,10 +132,22 @@ function ok(nom, cond, detail) {
     /* 🔴 v642 — LAISSER LA MISE EN PAGE SE STABILISER AVANT DE MESURER.
        Le contenu du message s'agrandit APRES le premier rendu (fiches,
        puces de sources) : mesurer aussitot capture une position provisoire
-       (240 px mesure) qui n'est PAS celle que l'utilisateur voit. On attend
-       que deux mesures consecutives concordent, avec un plafond de securite. */
-    let _prec = null;
-    for (let i = 0; i < 20; i++) {
+       (240 px mesure) qui n'est PAS celle que l'utilisateur voit.
+       🔴 v647 — DEUX MESURES CONCORDANTES NE SUFFISAIENT PAS.
+       Mesure (sonde _v647/probe_flake_v634.js) : le contenu grandit PAR
+       PALIERS — scrollHeight 391 -> 727 -> 788 -> 849 — et le cadre suit
+       avec le retard d'une passe (y : 72 -> 240 -> 301). Deux mesures
+       concordantes tombent donc AUSSI sur un palier intermediaire : la
+       boucle coupait a t=321 ms sur le palier y=240, puis `mesure()`
+       lisait 301. D'ou 6/6, 6/6, 4/6 sur le MEME build (fluctuation
+       confirmee sur le build d'avant comme sur le corrige).
+       Critere retenu : le couple (y du cadre, scrollHeight) doit etre
+       INCHANGE sur 5 mesures consecutives espacces de 250 ms, soit ~1 s
+       de calme — de quoi couvrir le dernier palier observe (540 ms) et la
+       passe de placement qui le suit (646 ms). Aucun palier intermediaire
+       observe ne dure assez longtemps pour produire 5 mesures egales. */
+    let _prec = null, _calme = 0;
+    for (let i = 0; i < 30; i++) {
       const cur = await page.evaluate(() => {
         const b = document.querySelector(".message-content");
         const f = document.querySelector('.atc-figbox[data-fig-id="fmulti"]');
@@ -143,8 +155,10 @@ function ok(nom, cond, detail) {
         const br = b.getBoundingClientRect(), fr = f.getBoundingClientRect();
         return [Math.round(fr.top - br.top + b.scrollTop), Math.round(b.scrollHeight)];
       });
-      if (cur && _prec && cur[0] === _prec[0] && cur[1] === _prec[1]) break;
+      if (cur && _prec && cur[0] === _prec[0] && cur[1] === _prec[1]) _calme++;
+      else _calme = 0;
       _prec = cur;
+      if (_calme >= 4) break;
       await page.waitForTimeout(250);
     }
     await page.waitForTimeout(400);

@@ -29323,8 +29323,36 @@ initTafsirVerseTooltip();
            que la reparation v633 ne la re-ancre pas au rendu suivant. */
         if (dResize) { delete f.ancre; f.libre = 1; }
         else {
-          f.ancre.dx = Math.round((f.ancre.dx || 0) + (nx - o.l));
-          f.ancre.dy = Math.round((f.ancre.dy || 0) + (ny - o.t));
+          /* v647 — UN DEPLACEMENT MANUEL DOIT ETRE REPRODUCTIBLE.
+             Accumuler `dx/dy` ne suffisait pas : la branche `cx` de
+             `_ancPlace` CENTRE la boite (`rr.x + (rr.w - nw)/2 + dx`).
+             Une boite plus large que son ancre donne un terme negatif, puis
+             le borne-bas a 0 ramene le cadre a sa position d'origine —
+             mesure : dx=30 enregistre, cadre rendu a left=0px.
+             On memorise donc l'ecart AU COIN de l'ancre (`ox/oy`), reference
+             fixe : `rr.x + ox` restitue la position au pixel. `ow/oh` restent
+             immuables, donc l'idempotence v634 est conservee.
+             Repli : si l'ancre n'a pas de texte resoluble, on garde l'ancien
+             cumul `dx/dy` (mieux que rien). */
+          var _boxP = fb.closest ? (fb.closest('.message-content') || fb.parentElement) : null;
+          var _oxN = null, _oyN = null;
+          try {
+            if (_boxP) {
+              var _solP = _ancResolve(_boxP, f);
+              if (_solP && _solP.r) {
+                _oxN = Math.round(nx - _solP.r.x);
+                _oyN = Math.round(ny - _solP.r.y);
+              }
+            }
+          } catch (e) {}
+          if (_oxN !== null) {
+            f.ancre.ox = _oxN; f.ancre.oy = _oyN;
+            f.ancre.dx = 0; f.ancre.dy = 0;
+            delete f.ancre.cx;
+          } else {
+            f.ancre.dx = Math.round((f.ancre.dx || 0) + (nx - o.l));
+            f.ancre.dy = Math.round((f.ancre.dy || 0) + (ny - o.t));
+          }
         }
       }
     }
@@ -29787,6 +29815,15 @@ initTafsirVerseTooltip();
      qu'il vienne d'etre cree ou qu'il suive son texte. */
   function _ancPlace(box, f, figEl){
     if (!f || !figEl || !box) return;
+    /* v647 — NE JAMAIS ECRASER UN GESTE EN COURS.
+       Pendant un glissement, chaque ecriture de `style.left` mute le DOM ;
+       le MutationObserver de `cc` relance `_atcSettle` -> `applyShapes` ->
+       `_ancPlace`, qui RECALCULAIT la position depuis l'ancre et defaisait
+       le geste (mesure : left=5px a t+64ms, left=0px a t+176ms, left=0px a
+       t+594ms apres le mouseup). Un cadre SAISI n'est plus replace : le
+       geste est seul maitre jusqu'au `mouseup`, ou `persistFig` enregistre
+       la geometrie. Le banc v621 test 4 mesurait 0 -> 0. */
+    if (figEl.__atcGeste) return;
     try {
       /* v633 — figure SANS ancre (cas de 99,7 % du store mesure) : on tente
          de la reparer en lisant le texte que sa boite recouvre. Si la
@@ -29940,6 +29977,23 @@ initTafsirVerseTooltip();
     cc.querySelectorAll('.atc-figbox.sel').forEach(function(o){ if (o !== fb) o.classList.remove('sel'); });
     fb.classList.add('sel');
     showFigTools(fb, f, ts);
+    /* v647 — le cadre est SAISI : `_ancPlace` s'abstient jusqu'au `mouseup`,
+       sinon le rendu defait le glissement en cours. */
+    fb.__atcGeste = true;
+    window.__atcGeste = Date.now();
+    /* v647b — FILET DE SÉCURITÉ. Si le `mouseup` est perdu (bouton relâché
+       hors de la fenêtre, perte de focale), la marque resterait posée et le
+       cadre ne serait PLUS JAMAIS replacé : il ne suivrait plus son texte.
+       L'écouteur de capture sur `window` passe AVANT le `mouseup` de
+       `document`, donc `up()` retrouve la marque déjà levée — idempotent. */
+    window.__atcGesteEl = fb;
+    if (!window.__atcGesteFilet) {
+      window.__atcGesteFilet = function () {
+        var el = window.__atcGesteEl;
+        if (el) { el.__atcGeste = false; window.__atcGesteEl = null; }
+      };
+      window.addEventListener('mouseup', window.__atcGesteFilet, true);
+    }
     const hnd = e.target.closest ? e.target.closest('.h') : null;
     const dir = hnd ? hnd.dataset.dir : null;
     const sx = e.clientX, sy = e.clientY;
@@ -29979,6 +30033,10 @@ initTafsirVerseTooltip();
       document.removeEventListener('mousemove', mv);
       document.removeEventListener('mouseup', up);
       fb.classList.remove('dragging');
+      /* v647 — fin de la saisie : le rendu reprend la main. `persistFig`
+         tourne AVANT, donc la geometrie enregistree est deja la bonne. */
+      fb.__atcGeste = false;
+      if (window.__atcGesteEl === fb) window.__atcGesteEl = null;
       persistFig(f, fb, { l: ol, t: ot, w: ow, h: oh });
       if (fb.classList.contains('sel')) showFigTools(fb, f, ts);
     }

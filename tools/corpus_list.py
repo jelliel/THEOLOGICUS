@@ -28,6 +28,7 @@ IGNORES = [
     "tools", "dist", "android", "build", "output", "node_modules",
     ".git", ".github", ".workbuddy-ai", "__pycache__", "fonts",
     "theo_tests",  # v504 : tests unitaires (outillage, pas un corpus embarqué)
+    "tools_court", # v647 : contournement LOCAL de bancs_shard.js (spawnSync EBUSY)
 ]
 
 # Nombre de tranches attendu par dossier (contrôle de cohérence) :
