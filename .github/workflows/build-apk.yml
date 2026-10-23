@@ -107,7 +107,16 @@ jobs:
   # Un défaut remonte dès que SA tranche se termine (~ durée tranche / N).
   bancs:
     needs: controles
-    runs-on: ubuntu-latest
+    # v650 — ÉPINGLÉ SUR ubuntu-24.04, et ce n'est pas un choix de style.
+    # `ubuntu-latest` a migré vers Ubuntu 26.04 le 19 octobre 2026, et
+    # Playwright 1.55.0 — la version qu'utilisent les bancs — ne le supporte
+    # pas : `npx playwright install --with-deps chromium` échoue sur
+    # « Playwright does not support chromium on ubuntu26.04-x64 ». Les 5 shards
+    # tombaient À L'INSTALLATION, avant qu'un seul banc ne tourne.
+    # On restaure donc l'environnement exact dans lequel les bancs ont été
+    # validés, plutôt que de monter Playwright (ce qui changerait le navigateur
+    # et obligerait à revalider les 139 bancs — deux variables à la fois).
+    runs-on: ubuntu-24.04
     timeout-minutes: 70
     strategy:
       fail-fast: false          # un shard en échec n'interrompt PAS les autres
