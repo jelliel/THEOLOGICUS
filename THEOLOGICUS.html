@@ -29318,6 +29318,17 @@ initTafsirVerseTooltip();
       return;
     }
     f.x = nx; f.y = ny; f.w = nw; f.h = nh;
+    /* 🔴 v652b — UN GESTE INVALIDE LE MARQUEUR DE PLACEMENT.
+       v652 saute `_ancPlace` pour une figure deja placee (c'est ce qui rend
+       le defilement gratuit). Mais c'est `_ancPlace` qui recalcule
+       `bx = rr.x + ox` ET qui persiste la geometrie corrigee : sans lui, le
+       cadre restait a sa nouvelle place pendant la session (x=628) tandis
+       que le store gardait l'ancienne (x=558) — au rechargement il
+       revenait en arriere. Mesure : banc v632 10/12 au lieu de 12/12.
+       On invalide donc le marqueur ici : la passe suivante replace la
+       figure UNE fois (persistance restauree), puis le defilement redevient
+       gratuit. */
+    fb.__atcGen = -1;
     /* ═══ v632 — ON NE CASSE PLUS L'ANCRE EN DEPLACANT ═══
        v609 retirait l'ancre au moindre mouvement : un simple glissement (ou
        un clic qui « bouge de 1 px ») rendait le cadre definitivement solidaire
