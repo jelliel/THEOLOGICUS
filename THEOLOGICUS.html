@@ -29725,9 +29725,49 @@ initTafsirVerseTooltip();
      sur TOUTE l'historique à chaque mutation, mais sur les seuls messages
      affichés. Fail-open : en cas d'erreur de mesure, on traite. */
   var _ATC_VIEW_MARGIN = 300;
+  /* v649c — position DOCUMENT memorisee par message, invalidee par la
+     hauteur de contenu du conteneur. Voir `_atcBoxNear`. */
+  var _atcNearH = -1;
+  var _atcNearGen = 0;
+  function _atcConteneurScroll(){
+    var el = document.querySelector('#chat-container') || document.querySelector('.message-content');
+    if (!el) el = document.scrollingElement || document.documentElement;
+    return el;
+  }
   function _atcBoxNear(box){
     try {
+      /* 🔴 v649/v649c — LA PROXIMITE NE DOIT PLUS COUTER DE REFLOW.
+         `getBoundingClientRect` FORCE un reflow synchrone. Histoire mesuree
+         (sonde _v649, 60 messages, 2 figures) :
+           v648 ( builds publies )  744 reflows / settle, 1302 / defilement
+           v649 ( cache par passe )  272 / settle,  858 / defilement
+         La position d'un message dans le DOCUMENT ne change que lorsque le
+         contenu AU-DESSUS change — jamais parce qu'on a fait defiler la
+         vue. On memorise donc cette position, et la proximite devient un
+         calcul arithmetique : `y - scrollTop` contre le viewport.
+         Invalidation par la hauteur de contenu du conteneur : des que le
+         contenu grandit, elle change et tout le monde re-mesure — exactement
+         la condition que la stabilisation doit guetter. Un defilement, lui,
+         ne change pas cette hauteur : il ne coute donc PLUS AUCUN reflow.
+         `_atcConteneurScroll` est indispensable : `document.scrollingElement`
+         NE DEFILE PAS dans cette app (scrollHeight == clientHeight == 900),
+         le vrai conteneur est `#chat-container` (24175 / 697). */
+      var sc = _atcConteneurScroll();
+      var h = (sc === document.documentElement || sc === document.body)
+        ? (document.documentElement.scrollHeight || document.body.scrollHeight)
+        : sc.scrollHeight;
+      if (h !== _atcNearH) { _atcNearH = h; _atcNearGen++; }
+      if (box.__atcNearGen === _atcNearGen) {
+        var st = sc.scrollTop || 0;
+        var vh2 = (window.innerHeight || document.documentElement.clientHeight || 800);
+        var top = box.__atcNearY, bot = top + (box.__atcNearHH || 0);
+        return (bot >= st - _ATC_VIEW_MARGIN) && (top <= st + vh2 + _ATC_VIEW_MARGIN);
+      }
       var r = box.getBoundingClientRect();
+      var st2 = sc.scrollTop || 0;
+      box.__atcNearY = r.top + st2;
+      box.__atcNearHH = r.height;
+      box.__atcNearGen = _atcNearGen;
       var vh = (window.innerHeight || document.documentElement.clientHeight || 800);
       var vw = (window.innerWidth || document.documentElement.clientWidth || 1200);
       return (r.bottom >= -_ATC_VIEW_MARGIN) && (r.top <= vh + _ATC_VIEW_MARGIN) && (r.right >= 0) && (r.left <= vw);
@@ -29745,7 +29785,7 @@ initTafsirVerseTooltip();
      Cout : 3 rAF + 2 timeouts courts, UNE fois par rendu — jamais sur un flux
      d'evenements (regle anti-lag v624). */
   var _atcSettleTO = [];
-  function _atcSettle(){
+  function _atcSettle(uneSeule){
     for (var i = 0; i < _atcSettleTO.length; i++) { try { clearTimeout(_atcSettleTO[i]); } catch (e) {} }
     _atcSettleTO = [];
     var passe = function(){
@@ -29759,11 +29799,22 @@ initTafsirVerseTooltip();
       if (window.__atcFigEditing) return;
       if (window.__atcGeste && window.__atcGeste > _seq0) return;
       window.__atcApplying = true;
+      /* v649 — nouvelle passe : le cache de proximite est remis a zero,
+         puis active le temps des trois apply. Hors de ce bloc, le cache
+         est inactif et `_atcBoxNear` mesure comme avant. */
+      /* v649c — plus de cache par passe : l'invalidation de `_atcBoxNear`
+         se fait par la hauteur de contenu, ce qui est plus precis (une passe
+         apres une insertion re-mesure, une passe apres un simple scroll non). */
       try { applyHighlights(); applyMarks(); applyShapes(); } catch (e) {}
       setTimeout(function(){ window.__atcApplying = false; }, 0);
     };
     var _seq0 = Date.now();
     passe();
+    /* v649b — UNE SEULE PASSE SUR DEMANDE. Les reprises a 120/400/900 ms
+       servent a rattraper le contenu qui grandit APRES un rendu. Un simple
+       defilement n'insere aucun contenu : les declencher double le cout
+       pour rien. Le chemin de rendu (MutationObserver) garde ses 4 passes. */
+    if (uneSeule) return;
     _atcSettleTO.push(setTimeout(passe, 120));
     _atcSettleTO.push(setTimeout(passe, 400));
     _atcSettleTO.push(setTimeout(passe, 900));
@@ -31212,12 +31263,16 @@ const idx = fullM.norm.indexOf(txtM.norm);
      `_atcSettle` annule ses reprises a chaque appel : un flux de mutations ne
      peut donc pas empiler les passes. */
   let _atcMoRaf = null;
-  function _atcScheduleApply(){
+  function _atcScheduleApply(uneSeule){
     if (_atcMoRaf) return;                       // deja planifie cette frame
+    /* v649b — tout declenchement qui ne vient PAS du scroll signifie que la
+       mise en page a change : le point de comparaison du defilement est
+       perime, on le remet a zero pour ne pas sauter un vrai changement. */
+    if (!uneSeule) _atcScrollVu = null;
     if (typeof requestAnimationFrame === 'function') {
       _atcMoRaf = requestAnimationFrame(function(){
         _atcMoRaf = null;
-        try { _atcSettle(); } catch (e) {
+        try { _atcSettle(uneSeule); } catch (e) {
           window.__atcApplying = true;
           try { applyHighlights(); applyMarks(); applyShapes(); } catch (e2) {}
           setTimeout(function(){ window.__atcApplying = false; }, 0);
@@ -31247,10 +31302,37 @@ const idx = fullM.norm.indexOf(txtM.norm);
      re-déclenche l'apply (coalescé par rAF) pour les traiter.
      capture:true attrape le scroll de cc même s'il ne bubble pas. */
   var _atcScT = null;
+  /* v649b — le conteneur qui defile VRAIMENT. Mesure :
+     `document.scrollingElement` NE DEFILE PAS dans cette app
+     (scrollHeight == clientHeight == 900) ; le vrai conteneur est
+     `#chat-container` (scrollHeight 24175, clientHeight 697). Comparer la
+     position sur un element qui ne bouge jamais rendait le garde inutile. */
+  var _atcScrollEl = null;
+  function _atcConteneurScroll(){
+    if (_atcScrollEl && document.contains(_atcScrollEl)) return _atcScrollEl;
+    _atcScrollEl = document.querySelector('#chat-container') ||
+                   document.querySelector('.message-content');
+    if (!_atcScrollEl) _atcScrollEl = document.scrollingElement || document.documentElement;
+    return _atcScrollEl;
+  }
+  var _atcScrollVu = null;
   document.addEventListener('scroll', function(){
     if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
     if (_atcScT) return;
-    _atcScT = setTimeout(function(){ _atcScT = null; _atcScheduleApply(); }, 120);
+    /* 🔴 v649b — NE RIEN FAIRE SI AUCUN MESSAGE N'EST ENTRE DANS LE VIEWPORT.
+       Ce gestionnaire existe pour traiter les messages qui ENTRENT (regle lazy
+       v628). Un defilement de moins que la marge (300 px) n'en fait entrer
+       AUCUN : relancer un settle complet ne sert a rien. Mesure avant correctif
+       (sonde _v649) : ~113 reflows forces par cran de molette sur une
+       conversation de 60 messages, la ou le build d'avant la refonte en
+       coutait 0. Un defilement continu ne declenche donc plus rien tant
+       qu'aucun message nouveau n'apparait — et quand il en apparait un, une
+       seule passe suffit (`uneSeule`). */
+    var _sc = _atcConteneurScroll();
+    var _st = _sc ? _sc.scrollTop : 0;
+    if (_atcScrollVu !== null && Math.abs(_st - _atcScrollVu) < _ATC_VIEW_MARGIN) return;
+    _atcScrollVu = _st;
+    _atcScT = setTimeout(function(){ _atcScT = null; _atcScheduleApply(true); }, 120);
   }, { passive: true, capture: true });
 
   /* ── Tooltip AU SURVOL ── */
