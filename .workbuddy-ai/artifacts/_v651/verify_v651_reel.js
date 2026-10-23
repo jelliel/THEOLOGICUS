@@ -31,7 +31,14 @@ function ok(nom, cond, detail) {
 }
 
 (async () => {
-  if (!fs.existsSync(FIXTURE)) { console.error("fixture absente :", FIXTURE); process.exit(2); }
+  /* La fixture est la conversation REELLE de l'utilisateur : elle n'est pas
+     versionnee (vie privee, voir .gitignore). Son absence n'est donc PAS un
+     echec — c'est un prerequis manquant, convention du projet : code 77. */
+  if (!fs.existsSync(FIXTURE)) {
+    console.log("IGNORE — fixture absente (conversation reelle non versionnee) : " + FIXTURE);
+    console.log("  Reextractible depuis le store local ; voir le journal du 2026-10-23.");
+    process.exit(77);
+  }
   const chat = JSON.parse(fs.readFileSync(FIXTURE, "utf8"));
   const CHAT = chat.id;
 
