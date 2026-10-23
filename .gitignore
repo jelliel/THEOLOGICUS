@@ -50,3 +50,7 @@ package-lock.json
 # Donnees reelles extraites du store utilisateur (vie privee) — JAMAIS suivies
 .workbuddy-ai/artifacts/**/real_chat.json
 .workbuddy-ai/artifacts/**/neg_root/
+
+# v651 — fixture de conversation REELLE de l utilisateur : jamais publiee.
+# Reextractible depuis son store local (voir le journal du 2026-10-23).
+.workbuddy-ai/artifacts/_v651/kyrios_reel.json
