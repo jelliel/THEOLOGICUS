@@ -29849,7 +29849,20 @@ initTafsirVerseTooltip();
         const dejaLa = box.querySelector('[data-fig-id="' + f.id + '"]');
         if (dejaLa) {
           /* v632f — le cadre est deja rendu : le contenu a pu CHANGER sous lui
-             (fiche Wikipedia inseree, markdown re-rendu). On le replace. */
+             (fiche Wikipedia inseree, markdown re-rendu). On le replace.
+             🔴 v652 — MAIS PAS S'IL N'A PAS CHANGE.
+             `_ancPlace` fait un walk complet du texte du message et plusieurs
+             `Range.getBoundingClientRect`. Sur la conversation reelle
+             « Kyrios » (15 messages de 11 000 a 14 000 caracteres, 107
+             figures), une passe de defilement recalculait donc la geometrie
+             de dizaines de figures — alors que DEFILER NE CHANGE NI L'ANCRE
+             NI LA POSITION d'une figure : elle est positionnee dans le
+             message et defile avec lui.
+             On saute donc la figure tant que la generation de mise en page
+             n'a pas bouge. `_atcNearGen` change des que la hauteur de
+             contenu change (fiche inseree, markdown re-rendu) et sur une
+             redimension de fenetre : ces cas-la replacent bien. */
+          if (dejaLa.__atcGen === _atcNearGen) return;
           _ancPlace(box, f, dejaLa);
           return;
         }
@@ -29987,6 +30000,10 @@ initTafsirVerseTooltip();
           window.__atcEcrit[_cleG] = { x: bx, y: by, w: Math.round(nw), h: Math.round(nh) };
         } catch (e) {}
       }
+      /* v652 — la figure est placee et conforme : on note la generation de
+         mise en page. Une passe suivante, sur le meme contenu, ne la
+         recalculera plus (c'est tout le gain au defilement). */
+      figEl.__atcGen = _atcNearGen;
       if (_dejaBon) return;
       /* ═══ v633g — RECALER L'ANCRE SUR LE TEXTE REELLEMENT COUVERT ═══
          Le bornage ci-dessus deplace le cadre ; or `ox`/`oy` ont ete mesures
@@ -30012,6 +30029,8 @@ initTafsirVerseTooltip();
       if (_repare && typeof atcPersist === 'function') {
         try { atcPersist(); } catch (e) {}
       }
+      /* v652 — placement mene a son terme (recalage v633g compris). */
+      figEl.__atcGen = _atcNearGen;
     } catch (e) {}
   }
   /* ── Interaction : déplacer / redimensionner les figures ── */
@@ -31316,6 +31335,11 @@ const idx = fullM.norm.indexOf(txtM.norm);
     return _atcScrollEl;
   }
   var _atcScrollVu = null;
+  /* v652 — une redimension de fenetre refluidifie le texte : la geometrie
+     memorisee n'est plus valable. On invalide les marqueurs de placement.
+     (La hauteur de contenu change souvent, mais pas toujours : une fenetre
+     plus large peut garder la meme hauteur totale.) */
+  window.addEventListener('resize', function(){ _atcNearGen++; }, { passive: true });
   document.addEventListener('scroll', function(){
     if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
     if (_atcScT) return;
