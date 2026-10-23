@@ -1,33 +1,68 @@
-# THEOLOGICUS — notes long terme
+# MEMORY — THEOLOGICUS (essentiel ; détails → daily logs)
 
-**Ne pas reconstruire ici ce qui vit dans un skill.** Skills :
-`theologicus-apk-build`, `theologicus-zindex-guard`, `theologicus-tts-diagnostic`,
-`theologicus-code-fragilities`. Journaux `.workbuddy-ai/memory/AAAA-MM-JJ.md` ;
-bancs `.workbuddy-ai/artifacts/`. **Version = `git rev-list --count HEAD` → `2.0.<n>`.**
+## Build
+- `THEOLOGICUS.html` : fichier unique, modules `<script id="vNOM">` avant `</body>`. **CRLF obligatoire**. `ls`=octets, `String.length`=UTF-16.
+- 🔴 Injection par **tranches** (jamais `s.replace(ancre,module)` : avale `</script>`). Vérifier fermeture + `node --check`. Ancre multi-ligne en LF dans un CRLF = échec silencieux.
+- 🔴 Normaliser CRLF : `s.replace("\n","\r\n")` **LITTÉRAL**. La regex `(?<!\r)\n` en heredoc double les échappements et casse le JS (30 modules, v611). Après : `node --check` + comptage CRLF/LF.
+- Embarque `ai-video.html` + `newsreel.html` → `tools/sync_html.py` + `--check` (refuse d'écraser une cible plus grande). Version = `git rev-list --count` → `apk-v4.0.N`.
+- 🔴 **Clé `~/.workbuddy-ai/keys/theologicus-release.jks` : ne jamais remplacer.** Perdre = plus de mises à jour signées.
+- 🔴 **`tools/sync_html.py` après CHAQUE correctif (4 copies)** : non synchronisé = invisible. **L'exe lit le HTML sur le disque.**
+- 🔴 **Commit + push à CHAQUE correctif** (`jelliel/THEOLOGICUS`, `main`). **Jamais `git stash`.**
+- 🔴 Port **STABLE 8765–8780** (deux ports = deux stockages navigateur). Binder d'abord.
+- 🔴 **Aucun processus de fond ne survit à l'invocation qui l'a lancé** (relais, MPT) → `tools/run_benches.py` possède le relais.
+- Skills **versionnés** dans `.workbuddy-ai/skills/` = MIROIR de `~/.workbuddy-ai/skills/` ; **le canonique vit dans le répertoire utilisateur**. `tools/sync_skills.py` copie Source(user) → Miroir(repo) : éditer directement le miroir puis lancer `sync_skills` **ÉCRASE l'ajout**. Bon flux : éditer `~/.workbuddy-ai/skills/…/SKILL.md`, puis `sync_skills.py`, puis `git add`. `tools/githooks/pre-commit` vérifie le miroir à chaque commit. Clone neuf : `python tools/install_hooks.py` (`core.hooksPath` ne voyage pas).
 
-Skills **versionnés** dans `.workbuddy-ai/skills/` (miroir de
-`~/.workbuddy-ai/skills/`, hors dépôt). **Le canonique vit dans le
-répertoire utilisateur** (`~/.workbuddy-ai/skills/`) ; le repo n'en est que
-le MIROIR. `tools/sync_skills.py` copie **Source (user) → Miroir (repo)**
-— donc **éditer directement `.workbuddy-ai/skills/…/SKILL.md` puis lancer
-`sync_skills` ÉCRASE l'ajout** avec la version user (sans la leçon). Bon
-flux : éditer `~/.workbuddy-ai/skills/…/SKILL.md`, puis `sync_skills.py`
-miroite, puis `git add .workbuddy-ai/skills/`. `tools/githooks/pre-commit`
-vérifie ce miroir **à chaque commit**, plus secrets indexés, clés par nom,
-syntaxe JS du HTML. Clone neuf : `python tools/install_hooks.py`
-(`core.hooksPath` ne voyage pas).
+## CI
+- `controles` → 5 shards (`tools/bancs_shard.js`) → `bancs_gate` (`if:always()`) → `build`/`windows`, qui dépendent du GATE, pas des shards.
+- 🔴 Ajout/suppression de module ⇒ mettre à jour `MODULES_ATTENDUS` (`tools/ci_smoke.js`) et le relancer en local.
+- 🔴 Ne jamais conclure sur la DURÉE d'un shard : sous charge, un shard sain monte à 50–63 min.
+- 🔴 `tools/bancs_shard.js` inutilisable en local : `spawnSync(node.exe)` = **EBUSY** ici, compté « dépassement de délai » (138 échecs en 1 s). Contournement : `tools_court/liste_bancs.js` + `tools_court/lanceur.sh`.
 
-## Règles qui coûtent cher
+## Ancrage des edits d'étude (v632→v647) — le cœur
+- 🔴 Espace d'offsets CANONIQUE : `noeudsTexteVisibles` exclut `.atc-figbox, .theo-fig, .theo-src-chips, [data-no-anchor]`. Ancrer sur le TEXTE ; l'offset ne départage que les occurrences. Mesure et restitution symétriques.
+- 🔴 99,7 % des figures du store n'avaient AUCUNE ancre → `_ancFit` la répare en lisant le texte couvert, et la réparation doit être PERSISTÉE.
+- 🔴 `(f.x||10)` : **0 est une valeur** — tester le TYPE, pas la véracité.
+- 🔴 Une figure réparée se CENTRE (`ancre.cx`) ; on n'invente pas d'offset (mesuré : cadres à 333 px de leur texte).
+- 🔴 **Sa taille est la sienne — jamais `rr.w+16`** : ancre multi-lignes ⇒ `rr.w` ≈ conteneur, et `f.w` élargi redonne le `_w0` du démarrage suivant ⇒ gonflait à chaque redémarrage (447→1612 px). Plancher = largeur de la PREMIÈRE LIGNE, plafond ×1,6.
+- 🔴 Borner sur `scrollHeight` (contenu), jamais `clientHeight` (vu 727 puis 849 → borne différente selon l'instant, et persistée).
+- 🔴 Placement IDEMPOTENT + rejoué après stabilisation (`_atcSettle` branché sur `_atcScheduleApply`) : le contenu grandit par paliers, le cadre suit une passe plus tard (240→301 mesurés).
+- 🔴 **Un geste manuel ne doit JAMAIS être défait** (v647) : `_ancPlace` s'abstient si `figEl.__atcGeste` ; le mousedown pose la marque, le mouseup la lève. Un DÉPLACEMENT mémorise l'écart AU COIN de l'ancre (`ox/oy`) — accumuler `dx/dy` sur le centrage n'est pas reproductible (dx=30 enregistré, cadre rendu à 0). Le redimensionnement retire l'ancre et pose `f.libre=1`.
+- 🔴 **Une marque « en cours » doit avoir son filet** (v647b) : un `mouseup` perdu (bouton lâché hors fenêtre) laisserait `__atcGeste` posé ⇒ le cadre ne serait PLUS JAMAIS replacé, il ne suivrait plus son texte — la classe de défaut même qu'on corrige. Écouteur de capture sur `window`, idempotent avec `up()`.
+- 🔴 Persistance : `saveChat` écrit dans **IndexedDB** (canonique) ; localStorage n'est qu'un filet. Lire localStorage a fait croire 5 versions durant que le store n'apprenait rien. `atcPersist` n'est PAS sur `window`. `_ancRect` renvoie du conteneur **scroll inclus** → revenir au viewport = SOUSTRAIRE `scrollTop`.
+- 🔴 **Un geste manuel n'est jamais jeté, même sur une mise en page qui bouge** (v648) : le garde `__atcStable === false` de `persistFig` était placé AVANT le calcul de `aBouge`, donc un déplacement fait pendant que le contenu s'insère encore faisait `return` sans rien enregistrer — et `_ancPlace` rappelait alors le cadre sur son ancre (dans la session ET au démarrage). Ce qui est provisoire, c'est la position ABSOLUE ; l'écart à l'ancre (`ox/oy`) est durable. Garde déplacé après `aBouge`.
+- Anti-lag : `atcPersist()` = `flushChatNow()` (setItem synchrone) — jamais sur un `input` répété ; throttle 350 ms ; garder `__atcApplying`/`__atcFigEditing`.
 
-- **`tools/sync_html.py` après CHAQUE correctif** (4 copies) : non synchronisé =
-  invisible. L'exe lit le HTML **sur le disque**.
-- **Commit + push à CHAQUE correctif** (`jelliel/THEOLOGICUS`, `main`, anglais).
-  **Jamais `git stash`**.
-- **Clé `~/.workbuddy-ai/keys/theologicus-release.jks` : ne jamais remplacer.**
-- Config survivant à une MAJ → `%LOCALAPPDATA%/THEOLOGICUS/`, jamais l'install.
-- **Port STABLE 8765–8780** (deux ports = deux stockages navigateur). Binder d'abord.
-- **Aucun processus de fond ne survit à l'invocation qui l'a lancé** (relais, MPT)
-  → `tools/run_benches.py` possède le relais (voir « Bancs »).
+## Bancs (règles dures)
+- 🔴 Un contrôle négatif doit échouer pour la BONNE raison, et rendre l'ancien build STRUCTURELLEMENT incapable de passer.
+- 🔴 Un contrôle négatif qui mesure `0 → 0` ne prouve RIEN : il doit TENIR une valeur réelle (`{"l":30,"t":18} -> {"l":30,"t":18}`), sinon il passe à vide des deux côtés.
+- 🔴 **Un helper de comparaison déclaré `async` rend le contrôle VIDE** : une fonction `async` retourne une Promise, TOUJOURS truthy, donc `cond && memeGeo(a,b)` vaut vrai quoi qu'il arrive. C'était le cas dans les bancs v647 et v648 (v648, oct. 2026) : A2 et C ne testaient en réalité que A1. Comparaison **synchrone**, ou `await` à l'appel.
+- 🔴 **L'état d'un banc doit être vérifié À L'INSTANT où le code le lit**, pas à l'instant où on le prépare : forcer `__atcStable=false` avant le glissement ne sert à rien, `_atcSettle` le réarme en ~200 ms (premier banc v648 = faux positif 8/8).
+- 🔴 Aucun scénario ne doit passer à vide : semer ce qu'on vérifie et REFUSER de passer quand la prémisse manque.
+- 🔴 Deux mesures concordantes ne suffisent pas pour « mise en page stabilisée » : il faut ~1 s de calme (5 mesures). C'était la fluctuation de v634.
+- 🔴 Ne jamais retirer `setup-wizard-overlay` (coupe l'init) : semer `theologicus_wizard_skipped='1'`, désarmer `.active` en boucle.
+- 🔴 Un banc qui échoue une fois puis passe n'est pas « flaky à ignorer » : le rejouer pour trouver la condition.
+- `page.evaluate(fn, arg)` : UN SEUL argument ; helpers définis dans l'IIFE.
+
+## Stockage / environnement
+- IDB `THEOLOGICUS_AI_DB` canonique ; localStorage filet 5 Mo. WebView (exe/APK) ne télécharge pas les blob URL → export serveur `/save-data`.
+- 🔴 `git push` BLOQUE >5 min ici (GCM du PortableGit, invite dans le bac à sable) → timeout 124, sortie vide. La recette `git credential fill` ne prime RIEN (fichier vide). Ce QUI MARCHE, vérifié : `TOKEN=$(gh auth token)` puis `git -c credential.helper= -c http.extraheader="Authorization: Basic $(printf '%s' "x-access-token:$TOKEN" | base64 -w0)" push origin main` → 7 s. `cmd | tail` renvoie le code de `tail` → fichier + `$?`.
+- 🔴 Lancer une commande de fond DANS un wrapper `&` + `sleep` la fait tuer avec le wrapper : le log reste vide et l'effet n'a pas eu lieu. Passer la commande elle-même en `run_in_background`.
+- Jetons CSS : un même jeton se déclare plusieurs fois (thème) → ancorer après la PREMIÈRE occurrence du `:root`. Insertion CSS par regex : inclure le `;`. `window.toast`/`state` : un top-level `const` n'est PAS sur `window`. Mocker le contrat DOCUMENTÉ d'une API, jamais un commode.
+
+---
+
+## Règles héritées (reprises du MEMORY.md précédent, à ne pas reperdre)
+
+- Config survivant à une MAJ → `%LOCALAPPDATA%/THEOLOGICUS/`, **jamais** le dossier d'install.
+- `maj_installe.py` (`_v126/_align_bench/`, gitignoré) tamponne le HTML du dépôt dans
+  `C://Theologicus//.workbuddy-ai//artifacts//_v123//_pub//installe//` — cible des raccourcis.
+  Ce dossier `installe/` **n'a pas suivi** le déplacement du projet vers `C://tmp//theoverify`.
+- 🔴 **La version doit MONTER.** Le fichier porte `VERSION` (gitignoré, donc rien ne
+  signale un retard). Cas réel : `2.0.214` écrit alors que l'install était en `2.0.224`.
+  Garde de monotonie (comparaison **numérique**). Lire le tampon en place :
+  `grep -o "STAMPED *= *'[^']*'" installe/THEOLOGICUS.html`.
+- **Vérifier la parité hors tampon** (le tampon fait 9 caractères d'écart) : comparer les
+  **sha1 après neutralisation du tampon**, pas les tailles seules.
 
 ## Application
 
@@ -73,7 +108,7 @@ tout le reste renvoie un statut lisible (valide / invalide / HTTP n).
 `#studio-modal` n'est jamais enregistré, sans erreur** (c'est le sélecteur balayé).
 La note « source payante » doit suivre le **`change`**, pas le remplissage.
 
-## Bancs
+## Bancs — mise en œuvre (héritée)
 
 `tools/run_benches.py [--mpt] [--port N] [--keep] banc…` lance le relais, attend
 par **CONDITION**, exécute, referme.
@@ -151,3 +186,6 @@ close** ; **`[slowly]`/`[softly]` proscrits** ; quota ElevenLabs épuisé 2026-1
 **Zéro littéral numérique hors modal** ; une seule échelle z-index nommée.
 Voisins : Supertonic 8091, LibreTranslate, MPT 8080. **Parité MPT** : suivre
 EXACTEMENT `VideoParams`, chaînes vides **omises**.
+
+> Note : la convention de version est passée de `2.0.<n>` à `apk-v4.0.<n>`
+> (`git rev-list --count HEAD`) ; au 23 oct. 2026 le dépôt est en **663** révisions.
