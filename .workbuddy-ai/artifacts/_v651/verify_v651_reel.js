@@ -85,6 +85,7 @@ function ok(nom, cond, detail) {
   }, chat);
 
   async function entrer() {
+    await page.evaluate((id) => { window.__chatId = id; }, CHAT);
     await page.waitForFunction(() => typeof window.renderMessages === "function", null, { timeout: 120000 });
     await page.evaluate(() => {
       const o = document.getElementById("auth-overlay"); if (o) o.remove();
@@ -95,11 +96,27 @@ function ok(nom, cond, detail) {
   }
   // Positions de TOUTES les figures rendues, triees par id.
   async function geo() {
-    return await page.evaluate(() => {
+    return await page.evaluate(async () => {
+      // Ancres telles que le STORE les connait, pour distinguer deux causes :
+      //   - ancre DIFFERENTE  -> la reparation est non deterministe ;
+      //   - ancre IDENTIQUE   -> la figure SUIT son texte, qui s'est deplace.
+      const idb = await new Promise((ok) => {
+        const r = indexedDB.open("THEOLOGICUS_AI_DB");
+        r.onsuccess = () => {
+          const tx = r.result.transaction(["chats"], "readonly");
+          const g = tx.objectStore("chats").get(window.__chatId || "");
+          g.onsuccess = () => ok(g.result); g.onerror = () => ok(null);
+        };
+        r.onerror = () => ok(null);
+      });
+      const anc = {};
+      if (idb && idb.messages) for (const m of idb.messages) for (const f of (m.shapes || [])) {
+        anc[f.id] = f.ancre ? (f.ancre.start + ".." + f.ancre.end) : "none";
+      }
       const out = [];
       document.querySelectorAll(".atc-figbox").forEach(function (fb) {
-        out.push([fb.getAttribute("data-fig-id"), fb.offsetLeft, fb.offsetTop,
-                  fb.offsetWidth, fb.offsetHeight]);
+        const id = fb.getAttribute("data-fig-id");
+        out.push([id, fb.offsetLeft, fb.offsetTop, fb.offsetWidth, fb.offsetHeight, anc[id] || "?"]);
       });
       out.sort(function (a, b) { return String(a[0]).localeCompare(String(b[0])); });
       return out;
@@ -107,12 +124,17 @@ function ok(nom, cond, detail) {
   }
   // Stabilisation : 5 mesures identiques espacees de 250 ms.
   async function stabiliser() {
+    /* v655 — ATTENDRE LA VRAIE FIN. Mesure : la hauteur du conteneur croit
+       pendant ~4 s apres le rendu (74 832 -> 78 009 px, +3 177). La
+       stabilisation par « 5 mesures identiques » peut se croiser sur un
+       plateau intermediaire. On impose donc un plancher de 9 s. */
+    const _t0 = Date.now();
     let prec = null, calme = 0;
     for (let i = 0; i < 60; i++) {
       const cur = JSON.stringify(await geo());
       if (prec === cur) calme++; else calme = 0;
       prec = cur;
-      if (calme >= 4) break;
+      if (calme >= 4 && Date.now() - _t0 >= 9000) break;
       await page.waitForTimeout(250);
     }
     return JSON.parse(prec || "[]");
@@ -216,7 +238,8 @@ function ok(nom, cond, detail) {
       const p = ma.get(r[0]);
       if (!p) continue;
       const d = [r[1] - p[1], r[2] - p[2], r[3] - p[3], r[4] - p[4]];
-      if (d.some(v => Math.abs(v) > 1)) bouges.push({ id: r[0], d: d, avant: [p[1], p[2], p[3], p[4]], apres: [r[1], r[2], r[3], r[4]] });
+      if (d.some(v => Math.abs(v) > 1)) bouges.push({ id: r[0], d: d, avant: [p[1], p[2], p[3], p[4]], apres: [r[1], r[2], r[3], r[4]],
+                                                      ancreAvant: p[5], ancreApres: r[5] });
     }
     const maxd = bouges.reduce((m, x) => Math.max(m, Math.abs(x.d[0]), Math.abs(x.d[1])), 0);
     console.log("  " + etiquette + " : " + bouges.length + "/" + b.length + " figure(s) deplacee(s)" +
@@ -237,8 +260,11 @@ function ok(nom, cond, detail) {
   const b23 = comparer(o2b, o3b, "ouverture 2 -> 3");
   const b13 = comparer(o1b, o3b, "ouverture 1 -> 3");
   if (b13.length) {
-    console.log("  exemples :");
-    b13.slice(0, 5).forEach(x => console.log("    " + x.id + " : " + JSON.stringify(x.avant) + " -> " + JSON.stringify(x.apres)));
+    const ancreChangee = b13.filter(x => x.ancreAvant !== x.ancreApres);
+    console.log("  CAUSE : ancre changee = " + ancreChangee.length + "/" + b13.length +
+                " ; position suivie (ancre identique) = " + (b13.length - ancreChangee.length) + "/" + b13.length);
+    b13.slice(0, 6).forEach(x => console.log("    " + x.id + " : ancre " + x.ancreAvant + " -> " + x.ancreApres +
+                                             "  |  " + JSON.stringify(x.avant) + " -> " + JSON.stringify(x.apres)));
   }
   ok("A. la geometrie ne bouge pas d'une ouverture a l'autre",
      b13.length === 0,
