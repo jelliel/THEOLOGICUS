@@ -168,7 +168,12 @@ function ok(nom, cond, detail) {
     }
     return _prec;
   }
-  async function memeGeo(a, b) {
+  /* 🔴 PAS de `async` ici : une fonction async retourne une Promise, TOUJOURS
+     truthy — `cond && memeGeo(...)` vaudrait donc vrai quoi qu'il arrive et le
+     contrôle passerait A VIDE. C'était le cas dans ce banc (A2 et C ne
+     testaient en réalité que A1). Corrigé après mesure, voir banc v648.
+     Comparaison pure, synchrone. */
+  function memeGeo(a, b) {
     return !!a && !!b && a.l === b.l && a.t === b.t && a.w === b.w && a.h === b.h;
   }
 

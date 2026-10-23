@@ -29286,15 +29286,6 @@ initTafsirVerseTooltip();
     return true;
   };
   function persistFig(f, fb, origine){
-    /* ═══ v635 — PAS DE PERSISTANCE SUR UNE MISE EN PAGE MOUVANTE ═══
-       Un cadre deplace ou redimensionne a la main pendant que le contenu
-       s'insere encore enregistrerait une position provisoire (la hauteur de
-       zone a change depuis le debut du cycle). On l'ignore : le prochain
-       passage, sur contenu stable, fera foi. */
-    if (window.__atcStable === false && origine !== 'creation-manuelle') {
-      try { if (typeof markChatDirty === 'function') markChatDirty(); } catch (e) {}
-      return;
-    }
     const nx = fb.offsetLeft, ny = fb.offsetTop, nw = fb.offsetWidth, nh = fb.offsetHeight;
     /* v618/v621 — un CLIC (down+up sans mouvement) appelle aussi persistFig :
        il ne doit PAS retirer l'ancre, sinon le cadre cesse de suivre son texte
@@ -29305,6 +29296,27 @@ initTafsirVerseTooltip();
     const o = origine || { l: f.x, t: f.y, w: f.w, h: f.h };
     const aBouge = (Math.abs(nx - o.l) > 1 || Math.abs(ny - o.t) > 1 ||
                     Math.abs(nw - o.w) > 1 || Math.abs(nh - o.h) > 1);
+    /* ═══ v648 — UN GESTE MANUEL N'EST JAMAIS JETÉ ═══
+       Le garde v635 passait AVANT le calcul de `aBouge` : un cadre déplacé à la
+       main pendant que le contenu s'insère encore (`__atcStable === false`)
+       faisait `return` SANS mettre à jour `f.x/f.y` et SANS enregistrer. Or
+       `_ancPlace` recalcule juste après depuis l'ancre et écrit par-dessus
+       (`if (!_dejaBon) { f.x = bx; f.y = by; figEl.style.left = ... }`) : le
+       cadre était RAPPELÉ sur son ancre — dans la session ET au démarrage.
+       Mesure (banc v648) : glissement +44/+26 accepté, cadre rendu à 94/0
+       après stabilisation, store x=94 y=0. `__atcGeste` (v647) ne protège que
+       PENDANT le glissement : il est levé au `mouseup`, AVANT `persistFig`.
+       Ce qui est provisoire sur une mise en page mouvante, c'est la position
+       ABSOLUE. Ce que l'utilisateur vient de décider — l'écart à son ancre
+       (`ox/oy`) — est durable, et `_ancPlace` reconstruit l'absolu depuis
+       l'ancre (`bx = rr.x + ox` boucle à l'identique). On enregistre donc
+       TOUJOURS un geste qui a vraiment bouge quelque chose ; le garde ne sert
+       plus que pour un CLIC qui n'a rien bouge, cas où il n'y a de toute
+       façon rien à enregistrer. */
+    if (!aBouge && window.__atcStable === false && origine !== 'creation-manuelle') {
+      try { if (typeof markChatDirty === 'function') markChatDirty(); } catch (e) {}
+      return;
+    }
     f.x = nx; f.y = ny; f.w = nw; f.h = nh;
     /* ═══ v632 — ON NE CASSE PLUS L'ANCRE EN DEPLACANT ═══
        v609 retirait l'ancre au moindre mouvement : un simple glissement (ou
