@@ -29561,7 +29561,7 @@ initTafsirVerseTooltip();
     if (f.libre) return false;
     try {
       const nodes = noeudsTexteVisibles(box);
-      if (!nodes.length) return false;
+      if (!nodes.length) { return false; }
       const br = box.getBoundingClientRect();
       const fr = figEl.getBoundingClientRect();
       /* v633g — au SECOND passage (recalage), le cadre est deja rendu : on lit
@@ -29570,7 +29570,7 @@ initTafsirVerseTooltip();
       const m = 0;
       const L = Math.max(br.left, fr.left) + m, R = Math.min(br.right, fr.right) - m;
       const T = Math.max(br.top, fr.top) + m, B = Math.min(br.bottom, fr.bottom) - m;
-      if (R <= L || B <= T) return false;
+      if (R <= L || B <= T) { return false; }
       let best = null, acc = 0;
       for (let i = 0; i < nodes.length; i++) {
         const n = nodes[i];
@@ -29595,7 +29595,36 @@ initTafsirVerseTooltip();
         }
         acc += n.nodeValue.length;
       }
-      if (!best || best.end <= best.start) return false;
+      /* v657 — REPLI : aucun texte strictement sous la figure. Cela arrive quand
+         la position pixel provisoire recouvre un bloc non-textuel (carte
+         Wikipédia auto-inseree, image) sur le layout final. On ancre alors au
+         TEXTE LE PLUS PROCHE du centre de la figure — choix deterministe sur le
+         layout final, donc identique d'un demarrage a l'autre (contrairement a
+         la lecture de la position pixel, qui variait selon le reflue des cartes).
+         On ancre sur le noeud le plus proche dans son entier (phrase courte), ce
+         qui suffit a positionner le cadre sur son texte de facon reproductible. */
+      if (!best) {
+        const cx = (L + R) / 2, cy = (T + B) / 2;
+        let _acc = 0, _min = Infinity, _mb = null;
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (!n.nodeValue || !n.nodeValue.trim()) { _acc += n.nodeValue.length; continue; }
+          const rng = document.createRange(); rng.selectNodeContents(n);
+          const rects = rng.getClientRects();
+          let nd = Infinity;
+          for (let j = 0; j < rects.length; j++) {
+            const q = rects[j];
+            const dx = Math.max(q.left - cx, 0, cx - q.right);
+            const dy = Math.max(q.top - cy, 0, cy - q.bottom);
+            const d = dx * dx + dy * dy;
+            if (d < nd) nd = d;
+          }
+          if (nd < _min) { _min = nd; _mb = { start: _acc, end: _acc + n.nodeValue.length }; }
+          _acc += n.nodeValue.length;
+        }
+        if (_mb) { best = _mb; }
+      }
+      if (!best || best.end <= best.start) { return false; }
       let full = '';
       for (let i = 0; i < nodes.length; i++) full += nodes[i].nodeValue;
       const txt = full.slice(best.start, best.end).trim();
@@ -29740,6 +29769,64 @@ initTafsirVerseTooltip();
      hauteur de contenu du conteneur. Voir `_atcBoxNear`. */
   var _atcNearH = -1;
   var _atcNearGen = 0;
+  /* v657 — SIGNAL DE STABILITE DE MISE EN PAGE. Mis a true par le DEBOUNCE de
+     _atcSettle (et par le repli de _atcVeille) quand la mise en page est FIGEE
+     — c'est-a-dire 1 s apres le dernier _atcSettle (rendu OU mutation asynchrone
+     OU defilement). La repair sans ancre (_ancFit) ne s'execute QUE quand il est
+     a true : ainsi elle lit le texte sous la figure sur le layout FINAL, identique
+     d'un demarrage a l'autre, jamais pendant le reflue des cartes Wikipédia au
+     demarrage (course -> position aleatoire). Avant ce delai, _ancPlace renvoie
+     sans reparer : la figure reste a sa position pixel provisoire (f.x/f.y). */
+  var _atcStableLayout = false;
+  /* v657 — DEBOUNCE DE STABILITE PARTAGE.
+     Un SEUL timer (_atcDebounceTO) porte le signal de stabilite. Il est
+     REPROGRAMME (clear + redemarre a 1000 ms) par CHAQUE evenement de mise en
+     page : un _atcSettle (rendu, mutation asynchrone, defilement) OU un
+     changement de hauteur detecte par la veille. Il ne se declenche DONC qu'1 s
+     apres le DERNIER evenement — c'est-a-dire quand la page est FIGEE. Au
+     declenchement, il pose _atcStableLayout = true et relance la derniere passe
+     (_atcStablePasse), unique moment ou _ancFit lit le texte sous la figure sur
+     le layout FINAL, identique d'un demarrage a l'autre. Robuste contre :
+       - les re-rendus rapproches (banc v634 : 5 rendus -> 1 s apres le dernier) ;
+       - les cartes Wikipédia asynchrones (banc v657e : 1 s apres la derniere
+         carte inseree) ;
+       - une carte dont le MutationObserver aurait ete manque : la veille voit le
+         changement de hauteur et reprograme le debounce.
+       - les POLICES : voir _atcFontsPrets ci-dessous. */
+  var _atcDebounceTO = null;
+  var _atcStablePasse = null;   /* derniere `passe` connue (portee de _atcSettle) */
+  /* v657 — FONTS. La lecture PIXEL de _ancFit depend de la mise en page FINALE.
+     Tant que les polices ne sont pas chargees, le texte s'enroule differemment
+     (cartouches, cartes Wikipédia auto-inserees a la volee), la hauteur du
+     message diffère, et le texte SOUS la figure n'est pas celui du layout final
+     -> ancre differente a chaque demarrage = « deplacements aleatoires » (le bug
+     rapporte). Le debounce ne se declenche DONC qu'APRES document.fonts.ready.
+     Si les polices ne sont pas pretres au declenchement, on reprograme (re-poll
+     1 s) ; quand elles le deviennent, on relance le debounce pour que le signal
+     de stabilite tombe 1 s APRES le chargement des polices (et apres le dernier
+     evenement de mise en page). */
+  var _atcFontsPrets = false;
+  function _atcFontsInit(){
+    if (typeof document === 'undefined' || !document.fonts || !document.fonts.ready) { _atcFontsPrets = true; return; }
+    if (document.fonts.status === 'loaded') { _atcFontsPrets = true; return; }
+    try { document.fonts.ready.then(function(){ _atcFontsPrets = true; _atcPlanifieStable(); }); }
+    catch (e) { _atcFontsPrets = true; }
+  }
+  function _atcStableDeclenche(){
+    if (!_atcStablePasse) return;
+    /* garde : polices non pretres -> on reporte d'1 s (re-poll). */
+    if (!_atcFontsPrets) { _atcPlanifieStable(); return; }
+    _atcStableLayout = true;
+    try { _atcStablePasse(); } catch (e) {}
+  }
+  function _atcPlanifieStable(){
+    _atcStableLayout = false;
+    if (_atcDebounceTO) { try { clearTimeout(_atcDebounceTO); } catch (e) {} _atcDebounceTO = null; }
+    /* 1 s APRES le dernier evenement de mise en page (ET polices pretres : voir
+       la garde dans _atcStableDeclenche, qui reprograme si besoin). */
+    _atcDebounceTO = setTimeout(function(){ _atcDebounceTO = null; _atcStableDeclenche(); }, 1000);
+  }
+  _atcFontsInit();
   function _atcConteneurScroll(){
     var el = document.querySelector('#chat-container') || document.querySelector('.message-content');
     if (!el) el = document.scrollingElement || document.documentElement;
@@ -29838,15 +29925,25 @@ initTafsirVerseTooltip();
       ? (document.documentElement.scrollHeight || document.body.scrollHeight)
       : sc.scrollHeight;
   }
+  var _atcVeilleH = -1;        /* hauteur de reference (persistante entre les rendus) */
+  var _atcVeilleCalme = 0;     /* echantillons stables consecutifs (persistant) */
+  var _atcVeilleT0 = 0;        /* debut du budget de veille (reinitialise a chaque rendu) */
+  var _atcVeilleTours = 0;
   function _atcVeille(passe, seq0){
     _atcVeilleArret();
-    var hPrec = _atcHauteurConteneur();
-    var calme = 0, tours = 0, t0 = Date.now();
+    /* v657 — les compteurs de stabilite (calme / hauteur) SONT PERSISTANTS entre
+       les rendus successifs. Sinon, 5 rendus rapproches (banc v634) redemarrent
+       la veille a chaque fois et n'atteignent jamais l'etat calme -> la repair
+       sans ancre ne s'execute jamais. On ne reinitialise que le BUDGET (t0), pas
+       l'etat de stabilite. */
+    _atcVeilleT0 = Date.now();
+    _atcVeilleTours = 0;
+    if (_atcVeilleH < 0) _atcVeilleH = _atcHauteurConteneur();
     var tour = function(){
       _atcVeilleTO = null;
-      tours++;
+      _atcVeilleTours++;
       var maintenant = Date.now();
-      var fini = (maintenant - t0) > 12000 || tours >= 60;
+      var fini = (maintenant - _atcVeilleT0) > 12000 || _atcVeilleTours >= 60;
       /* ON NE VEILLE PAS PENDANT QUE L'UTILISATEUR DEFILE. Son geste a la
          priorite, et un defilement ne change pas la mise en page : rien ne
          presse. Mesure : sans cette retenue, le cout d'un defilement passait
@@ -29857,10 +29954,31 @@ initTafsirVerseTooltip();
         return;
       }
       var h = _atcHauteurConteneur();
-      if (h !== hPrec) { hPrec = h; calme = 0; try { passe(); } catch (e) {} }
-      else calme++;
-      if (fini) return;
-      _atcVeilleTO = setTimeout(tour, calme >= 3 ? 600 : 300);
+      if (h !== _atcVeilleH) {
+        /* hauteur changee : la mise en page n'est pas figee. v656 — on relance
+           une passe de placement (c'est l'instant ou une position provisoire
+           devient fausse). v657 — on REPROGRAMME AUSSI le debounce de stabilite
+           partage : la repair sans ancre (_ancFit) attendra le calme. Le signal
+           de stabilite est porte par le debounce unique (relance a chaque
+           mutation asynchrone ET a chaque changement de hauteur), pas par la
+           veille seule. */
+        _atcVeilleH = h; _atcVeilleCalme = 0;
+        _atcPlanifieStable();
+        try { passe(); } catch (e) {}
+      } else {
+        _atcVeilleCalme++;
+        /* v656 — stabilite de hauteur : une derniere passe de placement
+           (idempotente). La repair sans ancre est gérée par le debounce. */
+        if (_atcVeilleCalme === 2) {
+          try { passe(); } catch (e) {}
+        }
+      }
+      /* v657 — REPLI : la veille arrive en bout de budget (12 s / 60 tours)
+         sans que le debounce n'ait signale la stabilite (defilement continu,
+         etc.). On force la repair sur la mise en page courante plutot que de
+         laisser la figure a sa position pixel provisoire. */
+      if (fini) { _atcStableLayout = true; try { passe(); } catch (e) {} return; }
+      _atcVeilleTO = setTimeout(tour, _atcVeilleCalme >= 3 ? 600 : 300);
     };
     _atcVeilleTO = setTimeout(tour, 300);
   }
@@ -29898,6 +30016,24 @@ initTafsirVerseTooltip();
       setTimeout(function(){ window.__atcApplying = false; }, 0);
     };
     var _seq0 = Date.now();
+    /* v657 — DEBOUNCE DE STABILITE DE MISE EN PAGE (partage).
+       On memorise la `passe` courante et on reprograme le debounce unique : il
+       se declenchera 1 s apres le DERNIER evenement de mise en page (ce _atcSettle
+       ci, une mutation asynchrone, un defilement, OU un changement de hauteur
+       vu par la veille) et lancera alors une derniere passe avec
+       _atcStableLayout = true. C'est le SEUL moment ou la repair sans ancre
+       (_ancFit, branche !f.ancre) lit le texte sous la figure — sur le layout
+       FINAL, donc identique d'un demarrage a l'autre.
+       Robuste contre :
+         - les re-rendus rapproches (banc v634 : 5 rendus -> 1 s apres le
+           dernier, la repair s'execute une fois sur le layout final) ;
+         - les cartes Wikipédia asynchrones (banc v657e : 1 s apres la derniere
+           carte inseree, la page ne bouge plus -> ancre deterministe).
+       Avant ce delai, _atcStableLayout est false et _ancPlace renvoie sans
+       reparer : la figure reste a sa position pixel provisoire (f.x/f.y), elle
+       n'est JAMAIS ancree sur un layout en reflue. */
+    _atcStablePasse = passe;
+    _atcPlanifieStable();
     passe();
     /* v649b — UNE SEULE PASSE SUR DEMANDE. Les reprises a 120/400/900 ms
        servent a rattraper le contenu qui grandit APRES un rendu. Un simple
@@ -29998,7 +30134,17 @@ initTafsirVerseTooltip();
          reparation reussit, le cadre suivra son texte desormais. */
       var _repare = false;
       if (!f.ancre) {
-        if (!_ancFit(box, f, figEl)) return;
+        /* v657 — NE PAS REPARER SUR UNE MISE EN PAGE INSTABLE. _ancFit lit le
+           texte SOUS la position pixel de la figure ; or au demarrage les cartes
+           Wikipédia se re-telechargent et refluent la page. Selon l'instant ou
+           la repair s'execute (course avec le chargement asynchrone), elle ancre
+           sur un texte different -> position ALEATOIRE a chaque demarrage. On
+           attend donc la stabilite confirmee par _atcVeille (_atcStableLayout)
+           avant de reparer : l'ancre est alors derivee du layout FINAL, identique
+           d'un demarrage a l'autre. La figure reste a f.x/f.y (posee par
+           buildFigEl) en attendant. */
+        if (!_atcStableLayout) return;
+        if (!_ancFit(box, f, figEl)) { return; }
         _repare = true;
       }
       let sol = _ancResolve(box, f);
