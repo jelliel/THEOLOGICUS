@@ -29376,6 +29376,9 @@ initTafsirVerseTooltip();
             f.ancre.dx = Math.round((f.ancre.dx || 0) + (nx - o.l));
             f.ancre.dy = Math.round((f.ancre.dy || 0) + (ny - o.t));
           }
+          /* v657b — un geste rend l'ancre DEFINITIVE : l'utilisateur a decide
+             de son ecart a CETTE ancre ; la finalisation ne la re-ancrera pas. */
+          delete f.ancre.prov;
         }
       }
     }
@@ -29553,8 +29556,17 @@ initTafsirVerseTooltip();
     } catch (e) {}
     return null;
   }
-  /* Cree une ancre a partir du TEXTE recouvert par la boite (repération). */
-  function _ancFit(box, f, figEl){
+  /* ═══ v657b — REPARATION EN DEUX PHASES ═══
+     Cree une ancre a partir du TEXTE recouvert par la boite (repération).
+     opts.posOverride {x,y} : position de la figure dans l'espace CONTENU
+       (meme espace que f.x/f.y, qui inclut le scroll). Utilisee par la
+       FINALISATION : on re-ancre depuis la position D'ORIGINE de la figure
+       (mémorisée a la creation dans ancre.px/py), pas depuis sa position
+       courante — celle-ci depend de l'ancre provisoire, donc ne converge pas.
+     opts.finalise : l'ancre produite est DEFINITIVE (pas de marque `prov`).
+     opts.keepGeo : conserver ow/oh d'une ancre provisoire preexistante
+       (la taille du cadre est la sienne — v634 — jamais recalculee). */
+  function _ancFit(box, f, figEl, opts){
     if (!box || !f || !figEl) return false;
     /* v633c — boite volontairement liberee (redimensionnement) : on ne la
        re-ancre pas, sinon le geste de l'utilisateur est annule au rendu suivant. */
@@ -29563,7 +29575,23 @@ initTafsirVerseTooltip();
       const nodes = noeudsTexteVisibles(box);
       if (!nodes.length) { return false; }
       const br = box.getBoundingClientRect();
-      const fr = figEl.getBoundingClientRect();
+      /* v657b — la position peut etre imposee (finalisation depuis ancre.px/py
+         : l'espace contenu -> viewport, en retirant le scroll du conteneur). */
+      var fr;
+      if (opts && opts.posOverride) {
+        var _vl = br.left + (opts.posOverride.x - (box.scrollLeft || 0));
+        var _vt = br.top + (opts.posOverride.y - (box.scrollTop || 0));
+        var _vw = (typeof f.w === 'number' && f.w > 0) ? f.w : 200;
+        var _vh = (typeof f.h === 'number' && f.h > 0) ? f.h : 90;
+        fr = { left: _vl, top: _vt, right: _vl + _vw, bottom: _vt + _vh, width: _vw, height: _vh };
+      } else {
+        fr = figEl.getBoundingClientRect();
+      }
+      /* v657b — keepGeo : la taille d'une reparation provisoire est conservee. */
+      var _keepOw = null, _keepOh = null;
+      if (opts && opts.keepGeo && f.ancre) {
+        if (typeof f.ancre.ow === 'number') { _keepOw = f.ancre.ow; _keepOh = f.ancre.oh; }
+      }
       /* v633g — au SECOND passage (recalage), le cadre est deja rendu : on lit
          sa position REELLE. On ne resserre plus la zone (la marge servait a ne
          pas avaler les voisins lors d'une mesure « au jugé »). */
@@ -29644,6 +29672,19 @@ initTafsirVerseTooltip();
          (`ox`/`oy`) ; seule la POSITION suivra le texte. */
       const _r0 = _ancRect(box, st2, st2 + txt2.length);
       f.ancre = { start: st2, end: st2 + txt2.length, texte: txt2.slice(0, 200) };
+      /* v657b — MEMOIRE DE LA POSITION D'ORIGINE. ancre.px/py est la position
+         de la figure AU MOMENT DE LA CREATION de l'ancre (espace contenu).
+         C'est la reference CONVERGENTE : au moment de la finalisation, on
+         re-ancre depuis CE point sur le layout final — meme store + meme
+         layout final => meme texte => meme position, d'un demarrage a l'autre.
+         (La position COURANTE, elle, depend de l'ancre provisoire : s'y
+         re-ancrer serait auto-renforçant et ne convergerait pas.) */
+      f.ancre.px = Math.round((opts && opts.posOverride) ? opts.posOverride.x : f.x);
+      f.ancre.py = Math.round((opts && opts.posOverride) ? opts.posOverride.y : f.y);
+      /* v657b — PROVISOIRE par defaut : l'ancre lue sur la mise en page de t0
+         (polices peut-etre non chargees, cartes pas encore inserees) sera
+         re-ancree sur le layout FINAL par la finalisation (_ancPlace). */
+      if (!(opts && opts.finalise)) f.ancre.prov = 1;
       if (_r0) {
         /* ═══ v636 — LA TAILLE DU CADRE EST LA SIENNE ═══
            🔴 La regle v634 `Math.max(_w0, min(_r0.w + 16, clientWidth))`
@@ -29688,6 +29729,13 @@ initTafsirVerseTooltip();
            REPAREE et on la CENTRE sur son texte, en gardant sa taille. */
         f.ancre.repare = 1;
         f.ancre.cx = 1;
+      }
+      /* v657b — keepGeo : une reparation PROVISOIRE deja pourvue en ow/oh les
+         garde (la taille du cadre est la sienne — v634 — jamais recalculee,
+         y compris par la finalisation). */
+      if (typeof _keepOw === 'number') {
+        f.ancre.ow = _keepOw; f.ancre.oh = _keepOh;
+        f.ancre.repare = 1; f.ancre.cx = 1;
       }
       if (typeof markChatDirty === 'function') markChatDirty();
       return true;
@@ -30129,23 +30177,40 @@ initTafsirVerseTooltip();
        la geometrie. Le banc v621 test 4 mesurait 0 -> 0. */
     if (figEl.__atcGeste) return;
     try {
-      /* v633 — figure SANS ancre (cas de 99,7 % du store mesure) : on tente
-         de la reparer en lisant le texte que sa boite recouvre. Si la
-         reparation reussit, le cadre suivra son texte desormais. */
+      /* ═══ v657b — REPARATION EN DEUX PHASES ═══
+         PHASE 1 (immediate). Une figure SANS ancre (cas de 99,7 % du store
+         mesure) est reparee DES LE PREMIER placement — comme v656, et comme
+         le faisait deja v633 : le texte que sa boite recouvre devient son
+         ancre, et le cadre suivra son texte desormais. Pourquoi immédiatement
+         : un geste de l'utilisateur (deplacement) peut survenir a tout
+         moment ; `persistFig` doit trouver une ancre pour y memoriser
+         l'ecart `ox/oy` (bancs v647/v648 : sans ancre au geste, le
+         redemarrage re-ancrait depuis les pixels et la geometrie changeait).
+         Cette ancre de t0 est marquee `prov = 1` : elle a ete lue sur une mise
+         en page peut-etre provisoire (polices non chargees, cartes Wikipedia
+         en cours de re-telechargement).
+         PHASE 2 (finalisation). Quand le signal de stabilite tombe
+         (`_atcStableLayout`, 1 s apres le dernier evenement de mise en page
+         ET apres document.fonts.ready), une ancre ENCORE provisoire est
+         re-ancree sur le layout FINAL depuis la position D'ORIGINE de la
+         figure (ancre.px/py) : meme store + meme layout final => meme texte
+         => meme position d'un demarrage a l'autre — c'est la correction du
+         « deplacement aleatoire au demarrage ». Une figure GESTEE (ox/oy ou
+         dx/dy presents : l'utilisateur a decide de son ecart a l'ancre) ou
+         liberee n'est JAMAIS finalisee. */
       var _repare = false;
       if (!f.ancre) {
-        /* v657 — NE PAS REPARER SUR UNE MISE EN PAGE INSTABLE. _ancFit lit le
-           texte SOUS la position pixel de la figure ; or au demarrage les cartes
-           Wikipédia se re-telechargent et refluent la page. Selon l'instant ou
-           la repair s'execute (course avec le chargement asynchrone), elle ancre
-           sur un texte different -> position ALEATOIRE a chaque demarrage. On
-           attend donc la stabilite confirmee par _atcVeille (_atcStableLayout)
-           avant de reparer : l'ancre est alors derivee du layout FINAL, identique
-           d'un demarrage a l'autre. La figure reste a f.x/f.y (posee par
-           buildFigEl) en attendant. */
-        if (!_atcStableLayout) return;
         if (!_ancFit(box, f, figEl)) { return; }
         _repare = true;
+      } else if (f.ancre.prov && _atcStableLayout &&
+                 f.ancre.ox === undefined && !f.ancre.dx && !f.ancre.dy) {
+        if (_ancFit(box, f, figEl, {
+              posOverride: { x: f.ancre.px, y: f.ancre.py },
+              finalise: true, keepGeo: true })) {
+          _repare = true;
+        }
+        /* si le re-ancrage echoue, l'ancre provisoire est conservee (mieux
+           que rien) ; une passe suivante re-tentera la finalisation. */
       }
       let sol = _ancResolve(box, f);
       if (!sol && typeof locateInBoxFiltre === 'function' &&
@@ -30240,8 +30305,16 @@ initTafsirVerseTooltip();
       }
       /* v652 — la figure est placee et conforme : on note la generation de
          mise en page. Une passe suivante, sur le meme contenu, ne la
-         recalculera plus (c'est tout le gain au defilement). */
-      figEl.__atcGen = _atcNearGen;
+         recalculera plus (c'est tout le gain au defilement).
+         v657b — SAUF si son ancre est encore PROVISOIRE : la finalisation
+         (re-ancrage sur le layout final depuis ancre.px/py) doit recevoir une
+         passe apres le signal de stabilite ; or ce signal arrive a passe
+         unique (le debounce) sur une mise en page deja figee, donc a
+         generation INCHANGEE — une figure marquee serait sautee ici (mesure :
+         ancres provisoires 638.. jamais finalisees, `stableVu` reste a 0).
+         Tant que `prov` est pose, la figure reste re-traitable a chaque passe ;
+         il n'y en a que pendant les ~2 s qui suivent un rendu. */
+      if (!(f.ancre && f.ancre.prov)) figEl.__atcGen = _atcNearGen;
       if (_dejaBon) return;
       /* ═══ v633g — RECALER L'ANCRE SUR LE TEXTE REELLEMENT COUVERT ═══
          Le bornage ci-dessus deplace le cadre ; or `ox`/`oy` ont ete mesures
@@ -30268,7 +30341,7 @@ initTafsirVerseTooltip();
         try { atcPersist(); } catch (e) {}
       }
       /* v652 — placement mene a son terme (recalage v633g compris). */
-      figEl.__atcGen = _atcNearGen;
+      if (!(f.ancre && f.ancre.prov)) figEl.__atcGen = _atcNearGen;
     } catch (e) {}
   }
   /* ── Interaction : déplacer / redimensionner les figures ── */
