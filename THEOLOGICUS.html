@@ -29795,10 +29795,88 @@ initTafsirVerseTooltip();
      pas deplacer un cadre deja correct.
      Cout : 3 rAF + 2 timeouts courts, UNE fois par rendu — jamais sur un flux
      d'evenements (regle anti-lag v624). */
+  /* ═══ v656 — VEILLE DE MISE EN PAGE ═══
+     POURQUOI. `_atcSettle` rejoue le placement a 0 / 120 / 400 / 900 ms. Mais
+     le contenu grandit PLUS LONGTEMPS que ca : mesure `_v655/diag_layout.js`
+     sur la conversation reelle « Kyrios », la hauteur du conteneur passe de
+     74 832 a 78 009 px en ~4 s (+3 177 px), par paliers. Un cadre pose a
+     900 ms l'est donc sur une mise en page encore provisoire, et rien ne le
+     replace ensuite. Symptome exact, mesure deux fois :
+
+         banc v634, local : depart 147,72  ->  reloads 149,301 (x3)
+         CI shard 1       : 149,240        ->  149,301
+
+     CE QUE CE N'EST PAS. Pas la convergence de v651b, qui re-reparait
+     l'ANCRE et degradait tout (63/107 puis 21-33/107). Ici l'ancre n'est
+     JAMAIS touchee : la mesure v654 a montre qu'elle est identique dans
+     18 cas sur 18, c'est le texte qui se deplace. On rejoue donc seulement
+     le PLACEMENT, qui est idempotent par construction (`bx = rr.x + ox`) et
+     que v634 verifie deja (ow/oh immuables apres 5 rendus).
+
+     COMMENT. On echantillonne la hauteur du conteneur : toutes les 300 ms tant
+     qu'elle bouge, puis toutes les 600 ms. Des qu'elle change, une passe de
+     placement — c'est exactement l'instant ou une position provisoire devient
+     fausse. Fenetre de 12 s : la croissance mesuree dure ~4 s, 12 s la couvre
+     largement ; au-dela, une croissance n'est plus le fait du rendu mais d'une
+     action, et d'autres chemins la traitent. Plafond de 60 echantillons.
+
+     Un echantillon de `scrollHeight` sur une mise en page propre ne force RIEN :
+     le layout est deja a jour. Il ne coute quelque chose que quand la hauteur a
+     effectivement change — c'est-a-dire quand il faut replacer.
+
+     COUT. Nul sur un defilement : le chemin scroll appelle
+     `_atcSettle(true)` et sort avant la veille. Sur un rendu, la veille ne
+     place que si la hauteur a bouge. */
+  var _atcVeilleTO = null;
+  var _atcDernierScroll = 0;
+  function _atcVeilleArret(){
+    if (_atcVeilleTO) { try { clearTimeout(_atcVeilleTO); } catch (e) {} _atcVeilleTO = null; }
+  }
+  function _atcHauteurConteneur(){
+    var sc = _atcConteneurScroll();
+    return (sc === document.documentElement || sc === document.body)
+      ? (document.documentElement.scrollHeight || document.body.scrollHeight)
+      : sc.scrollHeight;
+  }
+  function _atcVeille(passe, seq0){
+    _atcVeilleArret();
+    var hPrec = _atcHauteurConteneur();
+    var calme = 0, tours = 0, t0 = Date.now();
+    var tour = function(){
+      _atcVeilleTO = null;
+      tours++;
+      var maintenant = Date.now();
+      var fini = (maintenant - t0) > 12000 || tours >= 60;
+      /* ON NE VEILLE PAS PENDANT QUE L'UTILISATEUR DEFILE. Son geste a la
+         priorite, et un defilement ne change pas la mise en page : rien ne
+         presse. Mesure : sans cette retenue, le cout d'un defilement passait
+         de 220 a 416 reflows sur 10 crans — la veille travaillait pendant le
+         geste. */
+      if (!fini && maintenant - (_atcDernierScroll || 0) < 250) {
+        _atcVeilleTO = setTimeout(tour, 300);
+        return;
+      }
+      var h = _atcHauteurConteneur();
+      if (h !== hPrec) { hPrec = h; calme = 0; try { passe(); } catch (e) {} }
+      else calme++;
+      if (fini) return;
+      _atcVeilleTO = setTimeout(tour, calme >= 3 ? 600 : 300);
+    };
+    _atcVeilleTO = setTimeout(tour, 300);
+  }
+
   var _atcSettleTO = [];
   function _atcSettle(uneSeule){
     for (var i = 0; i < _atcSettleTO.length; i++) { try { clearTimeout(_atcSettleTO[i]); } catch (e) {} }
     _atcSettleTO = [];
+    /* v656 — une NOUVELLE SEQUENCE COMPLETE remplace la precedente : sa veille
+       aussi. Mais PAS sur `uneSeule` : ce chemin est celui du DEFILEMENT, et
+       l'application defile d'elle-meme au chargement. L'annuler la faisait
+       mourir avant la fin de la croissance — mesure sur la conversation
+       reelle : la derive revenait (11/107, 381 px) alors que le mecanisme
+       etait corrige. Une veille ne doit pas s'arreter parce qu'on a fait
+       defiler la vue : le defilement ne change pas la mise en page. */
+    if (!uneSeule) _atcVeilleArret();
     var passe = function(){
       /* ═══ v646 — NE JAMAIS DEFAire UN GESTE ═══
          Un glissement/redimensionnement deplace le cadre et persiste sa
@@ -29829,6 +29907,9 @@ initTafsirVerseTooltip();
     _atcSettleTO.push(setTimeout(passe, 120));
     _atcSettleTO.push(setTimeout(passe, 400));
     _atcSettleTO.push(setTimeout(passe, 900));
+    /* v656 — le contenu grandit au-dela de 900 ms : on continue a replacer
+       tant que la hauteur bouge, et on s'arrete au calme. */
+    _atcVeille(passe, _seq0);
   }
   window.__atcSettle = _atcSettle;
 
@@ -31352,6 +31433,8 @@ const idx = fullM.norm.indexOf(txtM.norm);
      plus large peut garder la meme hauteur totale.) */
   window.addEventListener('resize', function(){ _atcNearGen++; }, { passive: true });
   document.addEventListener('scroll', function(){
+    /* v656 — un defilement est en cours : la veille s'efface (voir _atcVeille). */
+    _atcDernierScroll = Date.now();
     if (window.__atcStreaming || window.__atcApplying || window.__atcFigEditing) return;
     if (_atcScT) return;
     /* 🔴 v649b — NE RIEN FAIRE SI AUCUN MESSAGE N'EST ENTRE DANS LE VIEWPORT.

@@ -147,7 +147,8 @@ function ok(nom, cond, detail) {
        passe de placement qui le suit (646 ms). Aucun palier intermediaire
        observe ne dure assez longtemps pour produire 5 mesures egales. */
     let _prec = null, _calme = 0;
-    for (let i = 0; i < 30; i++) {
+    const _t0 = Date.now();
+    for (let i = 0; i < 40; i++) {
       const cur = await page.evaluate(() => {
         const b = document.querySelector(".message-content");
         const f = document.querySelector('.atc-figbox[data-fig-id="fmulti"]');
@@ -158,7 +159,18 @@ function ok(nom, cond, detail) {
       if (cur && _prec && cur[0] === _prec[0] && cur[1] === _prec[1]) _calme++;
       else _calme = 0;
       _prec = cur;
-      if (_calme >= 4) break;
+      /* 🔴 v656 — PLANCHER DE TEMPS, en plus du calme.
+         Le run CI 39978888742 est tombe ici :
+             C. geometrie IDENTIQUE apres 5 rendus -- 149,240,672,90 | 149,301,672,90
+         Le banc avait retenu y=240 comme « stabilise » alors que la position
+         finale est 301. Mesure `_v655/diag_layout.js` : la mise en page croit
+         par PALIERS pendant ~4 s (74 832 -> 78 009 px). Sur un runner lent, un
+         palier dure plus d'une seconde : 4 mesures egales (1 s) tombent donc
+         DESSUS. Le calme seul ne peut pas distinguer un palier de la fin.
+         On exige donc 5 mesures egales ET 4,5 s ecoulees — la duree mesuree de
+         la convergence. Ce n'est pas assouplir le critere : c'est mesurer
+         l'etat FINAL au lieu d'un etat intermediaire. */
+      if (_calme >= 5 && Date.now() - _t0 >= 4500) break;
       await page.waitForTimeout(250);
     }
     await page.waitForTimeout(400);
