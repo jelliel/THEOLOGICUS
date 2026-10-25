@@ -29215,7 +29215,12 @@ initTafsirVerseTooltip();
       x = target.clientX - br.left + box.scrollLeft;
       y = target.clientY - br.top + box.scrollTop;
     }
-    const id = 'fg-' + Date.now();
+    /* v658 — ID UNIQUE : Date.now() seul entre en collision si deux figures
+       sont creees dans la meme milliseconde (insertion rapide/scriptee) —
+       au re-rendu, deux formes partageant le meme data-fig-id se fondent sur
+       le meme element DOM et l'une disparait (mesure banc v658 : 46 shapes
+       au store, 38 rendus). Suffixe aleatoire : cle toujours distincte. */
+    const id = 'fg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     /* v609 — ANCRAGE TEXTE : l'encadré est lié aux OFFSETS de la sélection
        (computeOffsetInBoxFiltre, textes des encadrés exclus) et non aux
        pixels : au re-rendu ET au redémarrage, applyShapes repositionne le
@@ -30511,7 +30516,9 @@ initTafsirVerseTooltip();
       if (!msg) return;
       msg.shapes = msg.shapes || [];
       const nf = JSON.parse(JSON.stringify(f));
-      nf.id = 'fg-' + Date.now(); nf.x = (f.x || 0) + 24; nf.y = (f.y || 0) + 24;
+      /* v658 — ID unique (voir insertFigureAt) : jamais deux figures avec la
+         meme cle, sinon elles se fondent au re-rendu. */
+      nf.id = 'fg-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6); nf.x = (f.x || 0) + 24; nf.y = (f.y || 0) + 24;
       msg.shapes.push(nf);
       window.__atcApplying = true;
       try { fb.parentElement.appendChild(buildFigEl(nf)); } catch(e) {}
@@ -32645,29 +32652,59 @@ const idx = fullM.norm.indexOf(txtM.norm);
       {n:'Ligne', svg:'<line x1="4" y1="18" x2="20" y2="6" stroke="cur" stroke-width="2"/>'},
       {n:'Flèche', svg:'<line x1="4" y1="18" x2="18" y2="6" stroke="cur" stroke-width="2"/><polygon points="18,6 12,7 16,12" fill="cur"/>'},
       {n:'Zigzag', svg:'<polyline points="4,18 9,6 14,18 19,6" fill="none" stroke="cur" stroke-width="2"/>'},
-      {n:'Courbe', svg:'<path d="M4 18 Q10 4 20 18" fill="none" stroke="cur" stroke-width="2"/>'}
+      {n:'Courbe', svg:'<path d="M4 18 Q10 4 20 18" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Ligne pointillée', svg:'<line x1="4" y1="18" x2="20" y2="6" stroke="cur" stroke-width="2" stroke-dasharray="4 3"/>'},
+      {n:'Ligne double', svg:'<line x1="4" y1="16" x2="20" y2="4" stroke="cur" stroke-width="2"/><line x1="4" y1="20" x2="20" y2="8" stroke="cur" stroke-width="2"/>'},
+      {n:'Flèche fine double', svg:'<line x1="6" y1="18" x2="18" y2="6" stroke="cur" stroke-width="2"/><polygon points="18,6 12.5,6.8 16.5,10.8" fill="cur"/><polygon points="6,18 11.5,17.2 7.5,13.2" fill="cur"/>'},
+      {n:'Connecteur coude', svg:'<polyline points="4,19 4,9 19,9 19,5" fill="none" stroke="cur" stroke-width="2"/><polygon points="19,5 14.5,5.8 18,10" fill="cur"/>'},
+      {n:'Connecteur courbe', svg:'<path d="M4 19 C4 9 20 15 20 5" fill="none" stroke="cur" stroke-width="2"/><polygon points="20,5 15.8,6.4 19.6,9.6" fill="cur"/>'}
     ]},
     { cat: 'Formes', items: [
       {n:'Rectangle', svg:'<rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Carré', svg:'<rect x="6" y="5" width="14" height="14" rx="2" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Rond', svg:'<circle cx="12" cy="12" r="8" fill="none" stroke="cur" stroke-width="2"/>'},
-      {n:'Losange', svg:'<polygon points="12,4 20,12 12,20 4,12" fill="none" stroke="cur" stroke-width="2"/>'}
+      {n:'Losange', svg:'<polygon points="12,4 20,12 12,20 4,12" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Pentagone', svg:'<polygon points="12,3 21,9.7 17.6,20 6.4,20 3,9.7" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Octogone', svg:'<polygon points="9.5,3 14.5,3 21,9.5 21,14.5 14.5,21 9.5,21 3,14.5 3,9.5" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Parallélogramme', svg:'<polygon points="7,6 22,6 17,18 2,18" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Trapèze', svg:'<polygon points="7,6 17,6 21,18 3,18" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Demi-cercle', svg:'<path d="M3 15 A9 9 0 0 1 21 15 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Anneau', svg:'<circle cx="12" cy="12" r="9" fill="none" stroke="cur" stroke-width="2"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Arc', svg:'<path d="M4 20 A16 16 0 0 1 20 4" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Lune', svg:'<path d="M14 3 A9 9 0 1 0 14 21 A11 11 0 0 1 14 3 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Éclair', svg:'<polygon points="13,2 5,13 11,13 9,22 19,10 13,10" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Soleil', svg:'<circle cx="12" cy="12" r="5" fill="none" stroke="cur" stroke-width="2"/><path d="M12 2 V5 M12 19 V22 M2 12 H5 M19 12 H22 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M19.1 4.9 L17 7 M7 17 L4.9 19.1" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Smiley', svg:'<circle cx="12" cy="12" r="9" fill="none" stroke="cur" stroke-width="2"/><path d="M8.5 9.5 V10.5 M15.5 9.5 V10.5 M8 15 C9.5 17 14.5 17 16 15" fill="none" stroke="cur" stroke-width="2"/>'}
     ]},
     { cat: 'Schéma', items: [
       {n:'Triangle', svg:'<polygon points="12,4 20,19 4,19" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Étoile', svg:'<polygon points="12,3 14,9 21,9 15,13 17,20 12,16 7,20 9,13 3,9 10,9" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Hexagone', svg:'<polygon points="12,3 20,7 20,17 12,21 4,17 4,7" fill="none" stroke="cur" stroke-width="2"/>'},
-      {n:'Cœur', svg:'<path d="M12 20 C4 13 4 6 9 6 C11 6 12 8 12 8 C12 8 13 6 15 6 C20 6 20 13 12 20 Z" fill="none" stroke="cur" stroke-width="2"/>'}
+      {n:'Cœur', svg:'<path d="M12 20 C4 13 4 6 9 6 C11 6 12 8 12 8 C12 8 13 6 15 6 C20 6 20 13 12 20 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Étoile 4 branches', svg:'<polygon points="12,3 13.8,10.2 21,12 13.8,13.8 12,21 10.2,13.8 3,12 10.2,10.2" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Étoile 6 branches', svg:'<polygon points="12,3 13.9,8.7 19.8,7.5 15.8,12 19.8,16.5 13.9,15.3 12,21 10.1,15.3 4.2,16.5 8.2,12 4.2,7.5 10.1,8.7" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Étoile 8 branches', svg:'<polygon points="12,3 13.7,7.9 18.4,5.6 16.1,10.3 21,12 16.1,13.7 18.4,18.4 13.7,16.1 12,21 10.3,16.1 5.6,18.4 7.9,13.7 3,12 7.9,10.3 5.6,5.6 10.3,7.9" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Éclat', svg:'<polygon points="12,2.5 13,8.1 16.5,5.4 14.8,9.2 20.5,7.8 15.9,11 20,12 15.9,13 19.9,17.3 14.8,14.8 15.5,19.2 13,15.9 12,21.5 11,15.9 7.5,18.6 9.2,14.8 3.5,16.2 8.1,13 4,12 8.1,11 4.1,6.7 9.2,9.2 8.5,4.8 11,8.1" fill="none" stroke="cur" stroke-width="2"/>'}
     ]},
     { cat: 'Blocs', items: [
       {n:'Processus', svg:'<rect x="4" y="6" width="16" height="12" rx="2" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Décision', svg:'<polygon points="12,4 20,12 12,20 4,12" fill="none" stroke="cur" stroke-width="2"/>'},
       {n:'Début/Fin', svg:'<rect x="4" y="6" width="16" height="12" rx="8" fill="none" stroke="cur" stroke-width="2"/>'},
-      {n:'Données', svg:'<polygon points="4,8 7,6 20,6 17,18 4,18" fill="none" stroke="cur" stroke-width="2"/>'}
+      {n:'Données', svg:'<polygon points="4,8 7,6 20,6 17,18 4,18" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Document', svg:'<path d="M4 5 H20 V16 C18 15 16 18 13 16.5 C10 15 8 18 4 16.5 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Multi-documents', svg:'<rect x="8" y="3" width="12" height="12" rx="1" fill="none" stroke="cur" stroke-width="2"/><rect x="4" y="9" width="12" height="12" rx="1" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Préparation', svg:'<polygon points="8,6 16,6 20,12 16,18 8,18 4,12" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Entrée manuelle', svg:'<polygon points="4,9 20,5 20,19 4,19" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Retard', svg:'<path d="M4 5 H12 A7 7 0 0 1 12 19 H4 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Base de données', svg:'<ellipse cx="12" cy="6" rx="8" ry="2.6" fill="none" stroke="cur" stroke-width="2"/><path d="M4 6 V18 C4 19.8 7.6 21 12 21 C16.4 21 20 19.8 20 18 V6" fill="none" stroke="cur" stroke-width="2"/>'},
+      {n:'Somme', svg:'<circle cx="12" cy="12" r="9" fill="none" stroke="cur" stroke-width="2"/><path d="M6.3 6.3 L17.7 17.7 M17.7 6.3 L6.3 17.7" fill="none" stroke="cur" stroke-width="2"/>'}
     ]},
      { cat: 'Bulles', items: [
        {n:'Bulle', svg:'<path d="M4 5 H20 V15 H10 L6 19 V15 H4 Z" fill="none" stroke="cur" stroke-width="2"/>'},
-       {n:'Nuage', svg:'<path d="M6 14 a4 4 0 1 1 2-7 a5 5 0 0 1 9 1 a3 3 0 0 1 1 6 Z" fill="none" stroke="cur" stroke-width="2"/>'}
+       {n:'Nuage', svg:'<path d="M6 14 a4 4 0 1 1 2-7 a5 5 0 0 1 9 1 a3 3 0 0 1 1 6 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Bulle ronde', svg:'<path d="M12 4 C17 4 21 7.1 21 11 C21 14.9 17 18 12 18 C10.8 18 9.6 17.8 8.6 17.4 L4 20 L5.6 15.9 C4.6 14.7 4 12.9 4 11 C4 7.1 7 4 12 4 Z" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Bulle pensée', svg:'<path d="M7 15 C4.8 15 3 13.4 3 11.5 C3 9.9 4.2 8.6 5.9 8.2 C6.3 6 8.4 4.3 11 4.3 C13.2 4.3 15 5.5 15.8 7.3 C18.2 7.3 21 8.7 21 11.3 C21 13.5 19.2 15 17 15 Z" fill="none" stroke="cur" stroke-width="2"/><circle cx="6.5" cy="18" r="1.2" fill="none" stroke="cur" stroke-width="2"/><circle cx="3.8" cy="21" r="1.5" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Bannière', svg:'<path d="M3 6 H18 L21 12 L18 18 H3 Z" fill="none" stroke="cur" stroke-width="2"/>'}
      ]},
      { cat: 'Blocs Flèches', items: [
        {n:'Flèche droite', svg:'<polygon points="2,9 14,9 14,5 22,12 14,19 14,15 2,15" fill="none" stroke="cur" stroke-width="2"/>'},
@@ -32677,7 +32714,20 @@ const idx = fullM.norm.indexOf(txtM.norm);
        {n:'Flèche double', svg:'<polygon points="6,5 1,12 6,19 6,15 18,15 18,19 23,12 18,5 18,9 6,9" fill="none" stroke="cur" stroke-width="2"/>'},
        {n:'Flèche haut-bas', svg:'<polygon points="5,6 12,1 19,6 15,6 15,18 19,18 12,23 5,18 9,18 9,6" fill="none" stroke="cur" stroke-width="2"/>'},
        {n:'Flèche quad', svg:'<polygon points="9,5 12,1 15,5 15,9 19,9 23,12 19,15 15,15 15,19 12,23 9,19 9,15 5,15 1,12 5,9 9,9" fill="none" stroke="cur" stroke-width="2"/>'},
-       {n:'Flèche courbée', svg:'<path d="M4 17 C4 7 14 4 19 8" fill="none" stroke="cur" stroke-width="2"/><polygon points="19,8 13,8 17,13" fill="none" stroke="cur" stroke-width="2"/>'}
+       {n:'Flèche courbée', svg:'<path d="M4 17 C4 7 14 4 19 8" fill="none" stroke="cur" stroke-width="2"/><polygon points="19,8 13,8 17,13" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Flèche coudée', svg:'<polygon points="4,20 4,10 16,10 16,6.5 22,12.5 16,18.5 16,15 9,15 9,20" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Flèche en U', svg:'<path d="M5 20 V10 A7 7 0 0 1 19 10 V12" fill="none" stroke="cur" stroke-width="2"/><polygon points="15,12 23,12 19,20" fill="cur"/>'},
+       {n:'Flèche circulaire', svg:'<path d="M19 12 A7 7 0 1 1 12 5" fill="none" stroke="cur" stroke-width="2"/><polygon points="12.5,1.5 12.5,8.5 6,5" fill="cur"/>'},
+       {n:'Flèche diagonale', svg:'<polygon points="20,4 19.2,11.6 13.2,17.6 7.5,23.3 0.7,16.5 6.4,10.8 12.4,4.8" fill="none" stroke="cur" stroke-width="2"/>'}
+     ]},
+     { cat: 'Accolades', items: [
+       {n:'Parenthèse gauche', svg:'<path d="M15 3 C9.5 6.5 9.5 17.5 15 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Parenthèse droite', svg:'<path d="M9 3 C14.5 6.5 14.5 17.5 9 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Parenthèses', svg:'<path d="M13 3 C8.5 6.5 8.5 17.5 13 21" fill="none" stroke="cur" stroke-width="2"/><path d="M11 3 C15.5 6.5 15.5 17.5 11 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Accolade gauche', svg:'<path d="M16 3 C12 3 13.5 9.5 9 12 C13.5 14.5 12 21 16 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Accolade droite', svg:'<path d="M8 3 C12 3 10.5 9.5 15 12 C10.5 14.5 12 21 8 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Accolades', svg:'<path d="M11 3 C7 3 8.5 9.5 4 12 C8.5 14.5 7 21 11 21" fill="none" stroke="cur" stroke-width="2"/><path d="M13 3 C17 3 15.5 9.5 20 12 C15.5 14.5 17 21 13 21" fill="none" stroke="cur" stroke-width="2"/>'},
+       {n:'Crochets', svg:'<path d="M14 3 H9 V21 H14" fill="none" stroke="cur" stroke-width="2"/><path d="M10 3 H15 V21 H10" fill="none" stroke="cur" stroke-width="2"/>'}
      ]}
   ];
   window.__FORMES_PALETTE = PALETTE;
