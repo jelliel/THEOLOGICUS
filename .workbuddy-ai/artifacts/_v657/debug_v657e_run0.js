@@ -87,6 +87,7 @@ const INJECT_MS = parseInt(process.env.INJECT_MS || "100", 10);
       const cardInner = card ? card.innerHTML.length : null;
       return {
         dbg: d,
+        dbg2: window.__v657bDbg || null,
         fit: d ? d.fit : null,
         fitFail: d ? d.fitFail : null,
         stable: d ? d.stable : null,
@@ -102,7 +103,7 @@ const INJECT_MS = parseInt(process.env.INJECT_MS || "100", 10);
     if (s.fit !== prevFit) marqueur.push(">>> FIT++ (" + s.fit + ")");
     if (s.cardH !== prevCardH) marqueur.push("cardH " + prevCardH + "->" + s.cardH);
     prevFit = s.fit; prevCardH = s.cardH;
-    console.log(`t=${(k+1)*150}ms fit=${s.fit} fitFail=${s.fitFail} stable=${s.stable} noAncre=${s.noAncre} fonts=${s.fonts} res=${s.fontsResolved} cardH=${s.cardH} fbY=${s.fbY} boxH=${s.boxH} ${marqueur.join(" ")}`);
+    console.log(`t=${(k+1)*150}ms dbg2=${JSON.stringify(s.dbg2)} fit=${s.fit} fitFail=${s.fitFail} stable=${s.stable} noAncre=${s.noAncre} fonts=${s.fonts} res=${s.fontsResolved} cardH=${s.cardH} fbY=${s.fbY} boxH=${s.boxH} ${marqueur.join(" ")}`);
     if (k > 0 && s.fit !== null && s.fit > 0) {
       // une fois l'ancre creee, attendre un peu puis lire l'ancre
       if (k >= 8) break;
