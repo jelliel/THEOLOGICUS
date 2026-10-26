@@ -79,6 +79,10 @@ function ok(nom, cond, detail) {
       return route.fulfill({ status: 200, headers: cors, body: JSON.stringify({ data: [{ id: "agnes-video-v2.0" }, { id: "agnes-video-2.5" }] }) });
     }
     if (meth === "POST" && /\/videos$/.test(url)) {
+      /* endpoint SANS route vidéo (test F) : 404 systématique */
+      if (/exemple\.test\/nonvideo/.test(url)) {
+        return route.fulfill({ status: 404, headers: cors, body: JSON.stringify({ error: { message: "Invalid URL (POST /videos)", type: "invalid_request_error" } }) });
+      }
       /* 404 pour agnes-video-v2.0 (modèle retiré, scénario du bug), OK sinon */
       if (body.model === "agnes-video-v2.0") {
         return route.fulfill({ status: 404, headers: cors, body: JSON.stringify({ error: { message: "model not found", type: "invalid_request_error" } }) });
@@ -209,6 +213,58 @@ function ok(nom, cond, detail) {
        /route vidéo introuvable/i.test(d.brut) && !/^HTTP 404$/.test(d.brut),
        `404 -> « ${d.brut} » | 500 -> « ${d.autre} »`);
   }
+
+  /* F. MODÈLE PERSONNALISÉ dont l'endpoint n'a PAS de route vidéo (404) :
+     le repli doit s'appliquer aussi (v661b) et la génération aboutir sur les
+     modèles Agnes par défaut. */
+  await page.evaluate(() => {
+    try {
+      localStorage.setItem("cinema_noir_custom_models_v2", JSON.stringify([{
+        uid: "cm-nonvideo", name: "Perso texte", model: "modele-texte", id: "modele-texte",
+        endpoint: "https://exemple.test/nonvideo", apiKey: "k", video: true, adapter: "agnes"
+      }]));
+      localStorage.setItem("cinema_noir_active_models_v1", JSON.stringify(["agnes-video-v2.0"]));
+    } catch (e) {}
+  });
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
+  await page.waitForFunction(() => !!window.__v660b, null, { timeout: 20000 });
+  await page.waitForTimeout(800);
+  /* vider la galerie + préparer le run */
+  await page.evaluate(async () => {
+    const idb = await new Promise((ok2) => {
+      const r = indexedDB.open("cinema_noir_video", 1);
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); };
+      r.onsuccess = () => ok2(r.result); r.onerror = () => ok2(null);
+    });
+    await new Promise((ok2) => {
+      const tx = idb.transaction(["kv"], "readwrite");
+      tx.objectStore("kv").delete("gallery-idb");
+      tx.oncomplete = () => ok2(); tx.onerror = () => ok2();
+    });
+    const st = window.__v499 && window.__v499.etat;
+    if (st) { st.mode = "text"; st.activeModels = ["agnes-video-v2.0"]; st.durationFrames = 121; st.textBase = "Un canard traverse un lac."; }
+    const ta = document.getElementById("scene-base-text");
+    if (ta) { ta.value = "Un canard traverse un lac."; ta.dispatchEvent(new Event("input", { bubbles: true })); }
+  });
+  appels.length = 0;
+  await page.evaluate(() => {
+    const btn = document.getElementById("generate-btn");
+    if (btn) { btn.disabled = false; btn.click(); }
+  });
+  let finF = { galerie: 0, modele: null, label: null };
+  let arretF = 0;
+  for (let i = 0; i < 50; i++) {
+    await page.waitForTimeout(1000);
+    const g = await lireGalerie();
+    const running = await page.evaluate(() => { const st = window.__v499 && window.__v499.etat; return !!(st && st.isRunning); });
+    if (g.n >= 1 && /^Scène/.test(String(g.label || ""))) { finF = { galerie: g.n, modele: g.modele, label: g.label }; break; }
+    if (!running) { arretF++; if (arretF >= 5) { finF = { galerie: g.n, modele: g.modele, label: g.label }; break; } } else arretF = 0;
+  }
+  const postsF = appels.filter(x => x.meth === "POST");
+  ok("F. modèle personnalisé sans route vidéo (404) -> repli sur les modèles Agnes et succès",
+     finF.galerie >= 1 && /^Scène/.test(String(finF.label || "")) && /^agnes-video/.test(String(finF.modele || "")) &&
+     postsF.some(x => /exemple\.test/.test(x.url)) && postsF.some(x => /agnes-ai\.com/.test(x.url)),
+     `galerie=${finF.galerie} label=${finF.label} modèle=${finF.modele} POST=${postsF.map(x => (x.url.match(/https?:\/\/([^/]+)/) || [])[1]).join(" -> ")}`);
 
   /* E. hygiène */
   ok("E. aucune erreur JavaScript non gérée", errJs.length === 0, errJs.slice(0, 2).join(" | "));

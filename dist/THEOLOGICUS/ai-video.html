@@ -3197,8 +3197,18 @@ async function startGeneration() {
                tenté ; « aucune vidéo — HTTP 404 » était donc une impasse.
                On essaie désormais les autres modèles vidéo connus, une fois
                chacun, en excluant celui qui vient d'échouer. Le dialecte 2.5
-               est pris en charge par la réécriture de corps (bloc v455-long). */
-            if (!cmVid) {
+               est pris en charge par la réécriture de corps (bloc v455-long).
+               v661b — le repli s'applique AUSSI à un MODÈLE PERSONNALISÉ qui
+               répond 404 : un endpoint qui n'a pas de route /videos (API de
+               texte, URL mal saisie) échouait là aussi sans issue, alors que
+               les modèles Agnes par défaut savent générer. On ne bascule que
+               sur un 404 (route absente) : une clé refusée ou une limite
+               (401/429) garde le comportement d'arrêt explicite. */
+            const _est404 = /\b404\b/.test(String(e && e.message || ''));
+            if (!cmVid || _est404) {
+                if (cmVid && _est404) {
+                    logWarn('⚠️ Le modèle personnalisé <code>' + escapeHtml(modelId) + '</code> ne connaît pas la route vidéo (404) — bascule sur les modèles Agnes par défaut.');
+                }
                 const replis = ['agnes-video-v2.0', 'agnes-video-2.5'].filter(function (m, i, arr) {
                     return m !== modelId && arr.indexOf(m) === i;
                 });
