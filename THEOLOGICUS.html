@@ -13969,34 +13969,77 @@ const db = {
     // avant même de lier le bouton SEND. On rejette pour passer au fallback.
     req.onblocked = () => rej(new Error('IndexedDB bloquée par un autre onglet'));
   }),
-  put: (store, data) => new Promise((res, rej) => {
-    try {
-      const tx = db.conn.transaction(store, 'readwrite');
-      const r = tx.objectStore(store).put(data);
-      r.onsuccess = () => res(); r.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
-  }),
-  get: (store, id) => new Promise((res, rej) => {
-    try {
-      const tx = db.conn.transaction(store, 'readonly');
-      const r = tx.objectStore(store).get(id);
-      r.onsuccess = () => res(r.result); r.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
-  }),
-  getAll: store => new Promise((res, rej) => {
-    try {
-      const tx = db.conn.transaction(store, 'readonly');
-      const r = tx.objectStore(store).getAll();
-      r.onsuccess = () => res(r.result); r.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
-  }),
-  delete: (store, id) => new Promise((res, rej) => {
-    try {
-      const tx = db.conn.transaction(store, 'readwrite');
-      const r = tx.objectStore(store).delete(id);
-      r.onsuccess = () => res(); r.onerror = e => rej(e.target.error);
-    } catch(e) { rej(e); }
-  })
+  /* ═══ v660 — LA BASE SE RÉ-OUVRE À LA DEMANDE ═══
+     Avant : `db.open()` n'était tenté qu'UNE fois au démarrage, et un échec
+     (profil WebView2 verrouillé au tout premier lancement, upgrade bloquée,
+     fermeture par le navigateur) était seulement journalisé. Ensuite TOUT
+     échouait : « Erreur de chargement » dans Archives (db.getAll sur un
+     `db.conn` indéfini), conversations invisibles — jusqu'au redémarrage.
+     `ensure()` vérifie que la connexion est vivante (une transaction d'essai
+     échoue si elle est fermée), sinon rouvre, avec 3 tentatives espacées.
+     Un seul `open()` en vol à la fois : les appels concurrents partagent la
+     même promesse. */
+  _ouverture: null,
+  ensure: async () => {
+    if (db.conn) {
+      try { db.conn.transaction('settings'); return db.conn; }
+      catch (e) { db.conn = null; }        /* connexion fermée/invalide */
+    }
+    if (db._ouverture) return db._ouverture;
+    db._ouverture = (async () => {
+      let derniere = null;
+      for (let i = 0; i < 3; i++) {
+        try { await db.open(); return db.conn; }
+        catch (e) {
+          derniere = e;
+          if (i < 2) await new Promise(r => setTimeout(r, 150 * (i + 1)));
+        }
+      }
+      throw derniere || new Error('IndexedDB indisponible');
+    })();
+    try { return await db._ouverture; }
+    finally { db._ouverture = null; }
+  },
+  put: async (store, data) => {
+    await db.ensure();
+    return new Promise((res, rej) => {
+      try {
+        const tx = db.conn.transaction(store, 'readwrite');
+        const r = tx.objectStore(store).put(data);
+        r.onsuccess = () => res(); r.onerror = e => rej(e.target.error);
+      } catch(e) { rej(e); }
+    });
+  },
+  get: async (store, id) => {
+    await db.ensure();
+    return new Promise((res, rej) => {
+      try {
+        const tx = db.conn.transaction(store, 'readonly');
+        const r = tx.objectStore(store).get(id);
+        r.onsuccess = () => res(r.result); r.onerror = e => rej(e.target.error);
+      } catch(e) { rej(e); }
+    });
+  },
+  getAll: async store => {
+    await db.ensure();
+    return new Promise((res, rej) => {
+      try {
+        const tx = db.conn.transaction(store, 'readonly');
+        const r = tx.objectStore(store).getAll();
+        r.onsuccess = () => res(r.result); r.onerror = e => rej(e.target.error);
+      } catch(e) { rej(e); }
+    });
+  },
+  delete: async (store, id) => {
+    await db.ensure();
+    return new Promise((res, rej) => {
+      try {
+        const tx = db.conn.transaction(store, 'readwrite');
+        const r = tx.objectStore(store).delete(id);
+        r.onsuccess = () => res(); r.onerror = e => rej(e.target.error);
+      } catch(e) { rej(e); }
+    });
+  }
 };
 
 // ════════════════════════════════════════
@@ -19846,7 +19889,13 @@ async function renderArchives() {
         </div>
       </div>`;
     }).join(''));
-  } catch(e) { setAll('<div class="archive-empty">Erreur de chargement</div>'); }
+  } catch(e) {
+    /* v660 — message actionnable : un échec de lecture n'est plus une impasse.
+       db.getAll rouvre désormais la base à la demande (db.ensure) ; si l'erreur
+       persiste (stockage verrouillé), l'utilisateur peut relancer la lecture
+       sans redémarrer l'application. */
+    setAll('<div class="archive-empty">Erreur de chargement — <a href="#" onclick="event.preventDefault();renderArchives();return false;" style="color:var(--accent);text-decoration:underline;">réessayer</a></div>');
+  }
 }
 
 window.loadArchiveChat = async (id, msgIdx) => {
@@ -21958,7 +22007,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // DB
-  try { await db.open(); } catch(e) { console.error("DB init:", e); }
+  /* v660 — ouverture robuste : 3 tentatives (db.ensure), et surtout la base
+     pourra se rouvrir plus tard à la demande (voir db.ensure) — un échec au
+     démarrage ne condamne plus Archives et les conversations pour la session. */
+  try { await db.ensure(); } catch(e) { console.error("DB init:", e); }
 
   // MIGRATION one-shot: repair stored messages (escaped bible HTML) in IndexedDB.
   try {

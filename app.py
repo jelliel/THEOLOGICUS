@@ -845,10 +845,42 @@ def main() -> int:
     except Exception:
         pass  # pywebview ancien : bannière absente, sans crash
     # private_mode=False : WebView2 persiste ses données (cache, etc.)
-    webview.start(
+    # ═══ v660 — PROFIL WEBVIEW2 DÉDIÉ À L'APPLICATION ═══
+    # Sans `storage_path`, pywebview place le profil dans %APPDATA%\pywebview,
+    # un dossier PARTAGÉ par toutes les applications pywebview de la machine.
+    # Un autre logiciel (ou une autre copie de THEOLOGICUS : installée +
+    # portable) peut le verrouiller ou le corrompre : IndexedDB n'ouvre plus
+    # (« Erreur de chargement » dans Archives) et localStorage/cookies sont
+    # perdus — il faut alors refaire toute la configuration à chaque démarrage.
+    # On donne donc à THEOLOGICUS son propre profil, sous LOCALAPPDATA.
+    profil_wv2 = None
+    try:
+        base_profil = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        candidat = os.path.join(base_profil, "THEOLOGICUS", "WebView2")
+        os.makedirs(candidat, exist_ok=True)
+        if os.access(candidat, os.W_OK):
+            profil_wv2 = candidat
+            print(f"[OK] Profil WebView2 dédié : {profil_wv2}")
+        else:
+            print(f"[!] Profil WebView2 non inscriptible : {candidat} "
+                  f"— repli sur le profil pywebview partagé.", file=sys.stderr)
+    except Exception as e:
+        print(f"[!] Impossible de préparer le profil WebView2 ({e}) "
+              f"— repli sur le profil pywebview partagé.", file=sys.stderr)
+
+    options_start = dict(
         private_mode=False,
         icon=icon_path if os.path.isfile(icon_path) else None,
     )
+    if profil_wv2:
+        options_start["storage_path"] = profil_wv2
+    try:
+        webview.start(**options_start)
+    except TypeError:
+        # pywebview ancien sans `storage_path` : on relance sans l'option
+        # plutôt que de laisser l'application ne pas démarrer.
+        options_start.pop("storage_path", None)
+        webview.start(**options_start)
     # v117 : ne rien arrêter si l'on a réutilisé une instance déjà lancée.
     if httpd is not None:
         httpd.shutdown()
