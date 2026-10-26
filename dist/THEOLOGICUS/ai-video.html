@@ -2836,7 +2836,11 @@ async function apiFetch(url, options = {}) {
     return lastResponse || fetch(url, options);
 }
 async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, videoDataUri, cm) {
-    const base = cm ? _viaRelais(cm.endpoint) : API_BASE;
+    /* v660b — URL NORMALISÉE : un endpoint personnalisé saisi avec un « / »
+       final produisait « …/v1//videos » -> certains fournisseurs répondent
+       404 « Invalid URL ». On retire les barres finales avant d'ajouter la
+       route. (Le défaut /v1 n'est pas concerné : il n'a pas de barre finale.) */
+    const base = String(cm ? _viaRelais(cm.endpoint) : API_BASE).replace(/\/+$/, '');
     const key = cm ? (cm.apiKey || '') : getApiKey();
     prompt = assainirPrompt(prompt);   /* v500 — A5 : prompt propre (contrôle, longueur) */
     const body = { model: modelId, prompt, num_frames: state.durationFrames, frame_rate: FRAME_RATE };
@@ -2849,7 +2853,20 @@ async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, vide
     if (imageDataUri) logInfo('🖼️ Image jointe');
     if (audioDataUri) logInfo('🎵 Audio joint');
     const res = await apiFetch(base + '/videos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) { const err = await res.text(); logError('❌ HTTP ' + res.status + ' — ' + escapeHtml(err.slice(0, 150))); throw new Error('HTTP ' + res.status); }
+    if (!res.ok) {
+        const err = await res.text();
+        logError('❌ HTTP ' + res.status + ' — ' + escapeHtml(err.slice(0, 150)));
+        /* v660b — 404 : le fournisseur dit « cette route n'existe pas POUR CE
+           MODÈLE / CETTE URL ». On trace la requête exacte (modèle, endpoint,
+           URL) : sans elle, « aucune vidéo — HTTP 404 » ne disait pas quoi
+           corriger. */
+        if (res.status === 404) {
+            logWarn('🔎 Requête refusée (404) — modèle <code>' + escapeHtml(modelId) +
+                    '</code> sur <code>' + escapeHtml(base + '/videos') + '</code>' +
+                    (cm ? ' (modèle personnalisé)' : ''));
+        }
+        throw new Error('HTTP ' + res.status);
+    }
     const data = await res.json();
     const videoId = data.video_id || data.id || data.task_id;
     if (!videoId) { logError('❌ Pas de video_id'); throw new Error('Pas de video_id'); }
@@ -2859,10 +2876,19 @@ async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, vide
 }
 
 async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
-    const base = cm ? _viaRelais(cm.endpoint) : API_BASE;
+    const base = String(cm ? _viaRelais(cm.endpoint) : API_BASE).replace(/\/+$/, '');
     const key = cm ? (cm.apiKey || '') : getApiKey();
-    const openai = !!(cm && cm.adapter === 'openai');
-    const pollBase = cm ? (openai ? _viaRelais(cm.endpoint) + '/videos' : _viaRelais(cm.endpoint) + '/agnesapi') : POLL_BASE;
+    /* v660b — agnes-video-2.5 est « API compatible OpenAI Videos » (voir le
+       bloc v455-long-video) : sa création part sur /v1/videos, son suivi doit
+       donc interroger /v1/videos/<id>. Il était suivi sur /agnesapi (dialecte
+       v2.0) -> 404 à CHAQUE sondage, avalé par la boucle de polling, puis
+       « Délai maximal » au lieu du vrai motif. Motif dupliqué en local : le
+       bloc v455-long-video qui définit est25() est un <script> postérieur. */
+    const _m25 = /^agnes-video-2\.5/.test(String(modelId || ''));
+    const openai = _m25 || !!(cm && cm.adapter === 'openai');
+    const pollBase = cm
+        ? (openai ? _viaRelais(cm.endpoint).replace(/\/+$/, '') + '/videos' : _viaRelais(cm.endpoint).replace(/\/+$/, '') + '/agnesapi')
+        : (_m25 ? base + '/videos' : POLL_BASE);
     const videoDurationSec = state.durationFrames / FRAME_RATE;
     /* v499 — #4 : timeout dimensionné sur l'HISTORIQUE (cache de timing) plutôt
        qu'un 900 s figé ; #2 : attente de préparation COURTE puis backoff. */
@@ -2930,8 +2956,12 @@ async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
     throw new Error('Délai maximal (' + totalSec + 's)');
 }
 
-function fileToDataUri(file) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.onerror = () => reject(new Error('Erreur')); r.readAsDataURL(file); }); }
-async function processOneImage(file) {
+/* v660b — Export de test (meme convention que window.__v499) : la creation
+   d'une tache et le sondage, pour verifier l'URL construite (barres, dialecte
+   2.5) sans dependre du fournisseur. Aucun chemin produit ne l'appelle. */
+window.__v660b = { creer: createVideoTask, sonder: pollUntilDone, classer: classerEchec };
+
+function fileToDataUri(file) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.onerror = () => reject(new Error('Erreur')); r.readAsDataURL(file); }); }async function processOneImage(file) {
     const validExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif|svg|ico|heic|heif|avif|jfif|jpe)$/i;
     const isImg = file.type.startsWith('image/') || validExts.test(file.name);
     if (!isImg || file.size > 12 * 1024 * 1024) return null;
@@ -3159,19 +3189,33 @@ async function startGeneration() {
                 state.stopRequested = true;
                 return;
             }
-            /* A1 — repli sur un modèle vidéo fiable, une seule fois. */
-            if (!cmVid && modelId !== VIDEO_REPLI) {
-                logWarn('🔁 Échec de <code>' + escapeHtml(modelId) + '</code> — repli sur <code>' + VIDEO_REPLI + '</code>');
-                try {
-                    const vidRepli = await createVideoTask(prompt, img, aud, VIDEO_REPLI, vid, null);
-                    await pollUntilDone(vidRepli, VIDEO_REPLI, sceneLabel + ' (repli)', null);
-                    completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
-                    const g2 = loadGallery();
-                    if (g2[0]) { g2[0].prompt = prompt; g2[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10; g2[0].quotaSec = g2[0].durationSec; saveGallery(g2); cacheVideoSet(cleCache, g2[0].id); }
-                    logSuccess('✅ Repli réussi avec <code>' + VIDEO_REPLI + '</code>');
-                    return;
-                } catch (e2) {
-                    logError('💥 Repli <code>' + VIDEO_REPLI + '</code> échoué : ' + escapeHtml(String(e2 && e2.message || e2)));
+            /* ═══ A1 — CHAÎNE DE REPLIS (v660b) ═══
+               Le repli unique était `VIDEO_REPLI` (agnes-video-v2.0) — or c'est
+               AUSSI le modèle par défaut : quand le fournisseur retire ce
+               modèle (404 « modèle introuvable »), la condition
+               `modelId !== VIDEO_REPLI` était fausse et AUCUN repli n'était
+               tenté ; « aucune vidéo — HTTP 404 » était donc une impasse.
+               On essaie désormais les autres modèles vidéo connus, une fois
+               chacun, en excluant celui qui vient d'échouer. Le dialecte 2.5
+               est pris en charge par la réécriture de corps (bloc v455-long). */
+            if (!cmVid) {
+                const replis = ['agnes-video-v2.0', 'agnes-video-2.5'].filter(function (m, i, arr) {
+                    return m !== modelId && arr.indexOf(m) === i;
+                });
+                for (let ri = 0; ri < replis.length; ri++) {
+                    const modeleRepli = replis[ri];
+                    logWarn('🔁 Échec de <code>' + escapeHtml(modelId) + '</code> — repli sur <code>' + modeleRepli + '</code>');
+                    try {
+                        const vidRepli = await createVideoTask(prompt, img, aud, modeleRepli, vid, null);
+                        await pollUntilDone(vidRepli, modeleRepli, sceneLabel + ' (repli)', null);
+                        completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
+                        const g2 = loadGallery();
+                        if (g2[0]) { g2[0].prompt = prompt; g2[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10; g2[0].quotaSec = g2[0].durationSec; saveGallery(g2); cacheVideoSet(cleCache, g2[0].id); }
+                        logSuccess('✅ Repli réussi avec <code>' + modeleRepli + '</code>');
+                        return;
+                    } catch (e2) {
+                        logError('💥 Repli <code>' + modeleRepli + '</code> échoué : ' + escapeHtml(String(e2 && e2.message || e2)));
+                    }
                 }
             }
             failed++;
@@ -3250,6 +3294,9 @@ function classerEchec(m) {
     if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'clé Agnes refusée (invalide ou expirée) — vérifiez-la dans la section API';
     if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour) — réessayez plus tard';
     if (/\b400\b|bad request/i.test(m)) return 'requête refusée par le fournisseur (paramètre) — le détail est dans le journal';
+    /* v660b — 404 n'avait aucune branche : la cause affichée était le texte
+       brut « HTTP 404 », qui ne dit pas quoi corriger. */
+    if (/\b404\b/.test(m)) return 'route vidéo introuvable chez le fournisseur (HTTP 404) — modèle retiré ou endpoint personnalisé erroné ; le journal donne le modèle et l\'URL exacte';
     if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service du fournisseur momentanément indisponible — réessayez';
     if (/réseau|network|failed to fetch|load failed|timeout/i.test(m)) return 'connexion au fournisseur impossible (réseau ou relais arrêté)';
     if (/ffmpeg|montage|assemblage/i.test(m)) return 'assemblage des segments impossible — les segments restent dans la galerie';
