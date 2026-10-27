@@ -92,6 +92,23 @@ nulle part.** Le service est un **voisin** (« non détecté » est vrai) : 2 s 
 indispensable** sinon `http_proxy`=53051 rend un 502 qui ressemble à une réponse.
 `mpt_lancer()` rend `lance:true` **avant** que MPT réponde → sonder la condition.
 
+## AI VIDEO — modèles et quotas Agnes (v662, mesuré sur l'API)
+
+- 🔴 `agnes-video-v2.0` est **RETIRÉ** (POST → 500 `get_channel_failed`, absent
+  de `/v1/models`). Il ne reste que `agnes-video-2.5` (payant, ~0,125 $/5 s en
+  720P) et `agnes-video-2.5-flash` (**gratuit**, mais 503 `video_queue_full`
+  quand la file est pleine). Le défaut et la tête du repli = **2.5 Flash**.
+- 🔴 Un solde épuisé renvoie **403 `insufficient_user_quota`** avec
+  `remaining`/`required` : ne JAMAIS le classer « clé refusée ». La cause doit
+  venir du CORPS de la réponse — donc `createVideoTask` doit joindre un extrait
+  du corps à l'erreur jetée (avant, `HTTP 403` nu rendait tout diagnostic faux).
+- 🔴 `causeProbable` classe par **priorité actionnable**, pas par fréquence :
+  500 (modèle retiré) + 403 (quota) doit afficher le QUOTA.
+- Un quota épuisé ne doit pas court-circuiter la chaîne de replis : le modèle
+  gratuit reste accessible.
+- Migration du store : `MODELES_RETIRES` réécrit v2.0 → 2.5 Flash à la lecture
+  ET persiste au démarrage.
+
 ## AI VIDEO — vérification de clé (v126h)
 
 `verifyAgnesKey`/`verifyMistralKey` passent par `_verifCle(relais, direct,
@@ -111,6 +128,21 @@ tout le reste renvoie un statut lisible (valide / invalide / HTTP n).
 `rel=noopener noreferrer`. Fiches IA **construites par le service**. **Un champ hors
 `#studio-modal` n'est jamais enregistré, sans erreur** (c'est le sélecteur balayé).
 La note « source payante » doit suivre le **`change`**, pas le remplissage.
+
+## Bancs — pièges vérifiés (v662)
+
+- 🔴 `page.addInitScript` s'exécute dans **CHAQUE frame** : une iframe
+  `about:blank` créée après le démarrage re-sème le store et écrase ce que
+  l'app vient d'écrire (mesuré : 3 écritures « flash » journalisées, puis
+  `v2.0` relu). Toujours `if (window.top !== window) return;` dans un semis.
+- 🔴 Un `setItem` journalisé ne prouve pas l'état final : vérifier la LECTURE
+  finale (et par frame).
+- 🔴 `tools/verifier_assets.py` REFUSE un banc au chemin navigateur en dur :
+  `process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright"` et
+  `executablePath` conditionnel.
+- 🔴 Une assertion ne doit pas figer un ORDRE de repli (v661 C exigeait
+  `agnes-video-2.5`, cassé dès que Flash est passé devant) : asserter « repli
+  réel vers un AUTRE modèle qui produit ».
 
 ## Bancs — mise en œuvre (héritée)
 
