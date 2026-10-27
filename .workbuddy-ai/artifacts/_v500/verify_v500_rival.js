@@ -24,7 +24,7 @@ const BASE = `http://127.0.0.1:${PORT}/THEOLOGICUS.html`;
 const RACINE = path.resolve(__dirname, "..", "..", "..");
 const PY = process.env.PY_BIN || "C:/Users/toshr/.workbuddy-ai/binaries/python/versions/3.13.12/python.exe";
 const AUTH_HASH = "ca9cc135dea09c84e670f62659826f1d9d76a633e421cdc54c67ffa20b3a1a96";
-const REPLI = "agnes-video-v2.0";
+const REPLI = "agnes-video-2.5-flash";   /* v662 : v2.0 retire, Flash est gratuit */
 const PRIMAIRE = "agnes-video-v1.9-test";   // modèle choisi qui ÉCHOUERA (500)
 
 const resultats = [];
@@ -64,6 +64,9 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
         await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom modele primaire" }) }); return;
       }
       if (u.includes("/agnesapi")) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "succeeded", progress: 100, metadata: { url: "http://127.0.0.1:" + PORT + "/fake.mp4" } }) }); return; }
+      /* v662 — le repli est desormais 2.5 Flash, suivi sur /v1/videos/<id>
+         (dialecte OpenAI Videos), et non plus sur /agnesapi (dialecte v2.0). */
+      if (/\/videos\/[^/?]+$/.test(u)) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "succeeded", progress: 100, metadata: { url: "http://127.0.0.1:" + PORT + "/fake.mp4" } }) }); return; }
     }
     await route.continue();
   });
@@ -112,7 +115,7 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
     const w = document.getElementById("aivideo-frame").contentDocument.defaultView;
     return { repli: w.__v500.VIDEO_REPLI, cls: w.classerEchec("HTTP 401 unauthorized") };
   });
-  ok("A1 le modèle de repli est défini (agnes-video-v2.0)", a1.repli === "agnes-video-v2.0", a1.repli);
+  ok("A1 le modèle de repli est 2.5 Flash (v2.0 retiré par le fournisseur)", a1.repli === "agnes-video-2.5-flash", a1.repli);
   ok("A4 un 401 est classé « clé Agnes refusée »", /clé Agnes refusée/i.test(a1.cls), a1.cls);
 
   section("B2. Rotation de clés");
@@ -161,17 +164,24 @@ if (!relais.child || relais.child.exitCode !== null) { console.log("\nRelais inj
   const gen = await evalW(async (prim) => {
     const w = document.getElementById("aivideo-frame").contentDocument.defaultView;
     const st = w.__v499.etat;
-    st.mode = "video";
+    /* v662 — plus de fichier joint : le seul modele qui acceptait le base64
+       (v2.0) est retire, et un joint est desormais refuse explicitement AVANT
+       tout appel (donc aucun repli ne serait exerce). Mode TEXTE : le modele
+       primaire echoue en 500, le repli doit prendre le relais. */
+    st.mode = "text";
     st.activeModels = [prim];
-    st.videos = [{ type: "video", dataUri: "data:video/mp4;base64,AAAA", thumbnail: "", id: Date.now(), name: "t.mp4", size: 100 }];
+    st.textBase = "une scène de repli";
+    st.videos = [];
     const p = document.getElementById("aivideo-frame").contentDocument.getElementById("main-prompt-video");
     if (p) { p.value = "une scène de repli"; p.dispatchEvent(new Event("input")); }
+    const ta = document.getElementById("aivideo-frame").contentDocument.getElementById("scene-base-text");
+    if (ta) { ta.value = "une scène de repli"; ta.dispatchEvent(new Event("input")); }
     await w.startGeneration();
     const d = document.getElementById("aivideo-frame").contentDocument;
     return { phases: d.querySelectorAll("#phase-bar .phase-step.done").length };
   }, PRIMAIRE);
   ok("A1 le modèle primaire a bien été tenté", cpt.modeles.indexOf(PRIMAIRE) >= 0, "modèles=" + JSON.stringify(cpt.modeles));
-  ok("A1 le repli agnes-video-v2.0 a été utilisé", cpt.modeles.indexOf(REPLI) >= 0, "modèles=" + JSON.stringify(cpt.modeles));
+  ok("A1 le repli agnes-video-2.5-flash a été utilisé", cpt.modeles.indexOf(REPLI) >= 0, "modèles=" + JSON.stringify(cpt.modeles));
   ok("C1 la barre de phases progresse (étapes « done »)", gen.phases >= 1, "done=" + gen.phases);
 
   section("D. Propreté");

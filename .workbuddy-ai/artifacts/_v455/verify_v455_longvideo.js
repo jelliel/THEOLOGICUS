@@ -65,19 +65,30 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   });
 
   // 1. seuil
-  const seuil = await page.evaluate(() => ({
-    plafond: window.__v455Long.plafond(),
-    minimum: window.__v455Long.minimum(),
-    court: (function () { state.durationFrames = 441; return window.__v455Long.necessaire(); })(),
-    long: (function () { state.durationFrames = 601; return window.__v455Long.necessaire(); })(),
-    o25: window.__v455Long.planOptimal(601),
-    o50: window.__v455Long.planOptimal(1201),
-    p25: window.__v455Long.decouper(601),
-    p50: window.__v455Long.decouper(1201),
-    p90: window.__v455Long.decouper(2161)
-  }));
+  /* v662 — `necessaire()` dépend du MODÈLE ACTIF : un 2.5 plafonne à 12 s et
+     passe TOUJOURS par le planificateur. Le défaut étant désormais 2.5 Flash,
+     l'ancien test mesurait le chemin 2.5 en croyant mesurer le chemin
+     d'origine. On force donc un modèle NON 2.5 pour le chemin d'origine, et on
+     vérifie séparément que 2.5 force bien le découpage. */
+  const seuil = await page.evaluate(() => {
+    const sauv = (state.activeModels || []).slice();
+    const avec = (m, f) => { state.activeModels = m; try { return f(); } finally { state.activeModels = sauv; } };
+    return {
+      plafond: window.__v455Long.plafond(),
+      minimum: window.__v455Long.minimum(),
+      court: avec(['modele-perso-441'], () => { state.durationFrames = 441; return window.__v455Long.necessaire(); }),
+      court25: avec(['agnes-video-2.5'], () => { state.durationFrames = 441; return window.__v455Long.necessaire(); }),
+      long: avec(['modele-perso-441'], () => { state.durationFrames = 601; return window.__v455Long.necessaire(); }),
+      o25: window.__v455Long.planOptimal(601),
+      o50: window.__v455Long.planOptimal(1201),
+      p25: window.__v455Long.decouper(601),
+      p50: window.__v455Long.decouper(1201),
+      p90: window.__v455Long.decouper(2161)
+    };
+  });
   ok('plafond fournisseur = 441 images (18,4 s à 24 i/s), minimum 81', seuil.plafond === 441 && seuil.minimum === 81, JSON.stringify({ p: seuil.plafond, m: seuil.minimum }));
   ok('une durée VALIDE (441) → chemin d’origine (pas de découpage)', seuil.court === false);
+  ok('un modèle 2.5 → planificateur même pour 441 images (plafond 12 s)', seuil.court25 === true);
   ok('une durée invalide (601) → découpage déclenché', seuil.long === true);
   ok('25 s → [441, 161] (25,1 s) ; 50 s → [441,441,321]', JSON.stringify(seuil.p25) === '[441,161]' && JSON.stringify(seuil.p50) === '[441,441,321]', JSON.stringify({ p25: seuil.p25, p50: seuil.p50 }));
   ok('25 s tient en UN SEUL plan en baissant la cadence (16 i/s, 401 images)',
@@ -162,8 +173,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('2.5 : 50 s -> [12,12,12,7,7] (segments 4..12 s valides)', JSON.stringify(d25.p50) === '[12,12,12,7,7]', JSON.stringify(d25.p50));
   ok('2.5 : 90 s -> 8 segments dont un de 6 s', d25.p90.length === 8 && d25.p90[7] === 6, JSON.stringify(d25.p90));
   ok('2.5 : 8 s -> un seul segment', JSON.stringify(d25.p8) === '[8]', JSON.stringify(d25.p8));
-  ok('les 3 modèles sont proposés dans la grille (v2.0, 2.5, 2.5-flash)',
-     d25.modeles.indexOf('agnes-video-v2.0') >= 0 && d25.modeles.indexOf('agnes-video-2.5') >= 0 && d25.modeles.indexOf('agnes-video-2.5-flash') >= 0,
+  /* v662 — agnes-video-v2.0 a ete RETIRE par le fournisseur (500
+     get_channel_failed, absent de /v1/models) : le proposer encore garantissait
+     un echec. La grille doit donc l'EXCLURE et proposer les deux 2.5. */
+  ok('la grille propose 2.5 et 2.5-flash, et plus v2.0 (retiré)',
+     d25.modeles.indexOf('agnes-video-v2.0') < 0 &&
+     d25.modeles.indexOf('agnes-video-2.5') >= 0 && d25.modeles.indexOf('agnes-video-2.5-flash') >= 0,
      JSON.stringify(d25.modeles));
 
   // 2c. DÉCOUPAGE OPTIMAL : chaque segment = le plus long plan légal
@@ -213,8 +228,10 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('au-delà de 80 % du quota : confirmation demandée', garde.demande === true, JSON.stringify(garde));
   ok('si l’utilisateur refuse : aucune génération lancée', garde.appels === 0, JSON.stringify(garde));
 
-  // 3b. LE CAS SIGNALÉ : modèle 2.5 + image jointe (base64) + 50 s
-  //     → bascule automatique sur v2.0, sinon « aucune vidéo ».
+  // 3b. LE CAS SIGNALÉ, CONTRAT v662 : modèle 2.5 + image jointe (base64)
+  //     → REFUS EXPLICITE. Le seul modèle qui acceptait le base64
+  //     (agnes-video-v2.0) a été RETIRÉ : basculer dessus, comme avant,
+  //     produisait un 500 puis « aucune vidéo » sans explication.
   const bascule = await page.evaluate(async () => {
     saveGallery([]);
     localStorage.removeItem('theologicus_video_quota');
@@ -227,14 +244,18 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
       return 't' + rec.modeles.length;
     };
     logState.entries = [];
-    await window.__v455Long.executer('PROMPT SCENARIO', 'data:image/png;base64,AAAA', null, 'agnes-video-2.5-flash', null, 'Scene 1/1');
-    return { rec: rec, avert: logState.entries.filter(e => e.level === 'warn').map(e => e.message), galerie: loadGallery().length };
+    let erreur = '';
+    try {
+      await window.__v455Long.executer('PROMPT SCENARIO', 'data:image/png;base64,AAAA', null, 'agnes-video-2.5-flash', null, 'Scene 1/1');
+    } catch (e) { erreur = String((e && e.message) || e); }
+    return { rec: rec, erreur: erreur, journal: logState.entries.map(e => e.message), galerie: loadGallery().length };
   });
-  ok('2.5 + image jointe + 50 s → bascule sur v2.0, 2 segments (441 + 321)',
-     bascule.rec.modeles.length === 2 && bascule.rec.modeles.every(m => m === 'agnes-video-v2.0') && JSON.stringify(bascule.rec.frames) === '[441,321]',
-     JSON.stringify(bascule.rec).slice(0, 120));
-  ok('la bascule est ANNONCÉE dans le journal (pas silencieuse)', bascule.avert.some(m => /bascule/.test(m)), JSON.stringify(bascule.avert).slice(0, 90));
-  ok('résultat : une seule vidéo assemblée (plus de « aucune vidéo »)', bascule.galerie === 1, String(bascule.galerie));
+  ok('2.5 + image jointe → REFUS explicite, aucun appel à un modèle mort',
+     bascule.rec.modeles.length === 0 && /URL PUBLIQUE/i.test(bascule.erreur) && /retiré/i.test(bascule.erreur),
+     JSON.stringify({ modeles: bascule.rec.modeles, erreur: bascule.erreur }).slice(0, 160));
+  ok('le refus est ANNONCÉ dans le journal (pas silencieux)',
+     bascule.journal.some(m => /URL PUBLIQUE|retiré/i.test(String(m))), JSON.stringify(bascule.journal).slice(0, 120));
+  ok('aucune vidéo fantôme ajoutée en galerie', bascule.galerie === 0, String(bascule.galerie));
 
   // 4b/4c/4d. corps réellement envoyé : page NEUVE (les tests précédents ont
   // doublé createVideoTask), l'app passe par le relais local /proxy/…

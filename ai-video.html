@@ -4086,6 +4086,15 @@ async function enrichWithMistral(btn, textareaId) {
 
   function necessaire() {
     if (!valide(state.durationFrames)) return true;
+    /* v662 — le modèle RÉELLEMENT utilisé prime : un modèle vidéo PERSONNALISÉ
+       actif (endpoint + clé propres) ne doit pas être jugé sur la sélection par
+       défaut. Avant, `necessaire()` consultait getSelectedModelId() — devenu
+       2.5 Flash — et envoyait donc un job personnalisé dans le planificateur
+       2.5, qui appelle createVideoTask SANS le contexte du modèle : la requête
+       partait vers l'API Agnes avec la clé générique -> 401 « Invalid token »
+       puis « clé Agnes refusée » (mesuré, banc v499). */
+    var cmv = (typeof customModelsVideo === 'function') ? customModelsVideo() : null;
+    if (cmv) return est25(cmv.id);
     /* un modèle 2.5 plafonne à 12 s : on passe par le planificateur */
     var modeles = state.activeModels && state.activeModels.length ? state.activeModels : [getSelectedModelId()];
     for (var i = 0; i < modeles.length; i++) { if (est25(modeles[i])) return true; }
