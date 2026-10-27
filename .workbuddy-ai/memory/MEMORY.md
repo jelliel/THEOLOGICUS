@@ -108,6 +108,11 @@ indispensable** sinon `http_proxy`=53051 rend un 502 qui ressemble à une répon
   gratuit reste accessible.
 - Migration du store : `MODELES_RETIRES` réécrit v2.0 → 2.5 Flash à la lecture
   ET persiste au démarrage.
+- 🔴 `necessaire()` (choix du chemin : planificateur 2.5 ou chemin d'origine)
+  doit lire le modèle DU JOB : un modèle vidéo personnalisé actif prime
+  (`customModelsVideo()`), sinon le défaut global 2.5 y envoie le job — et
+  le planificateur appelle `createVideoTask` sans `cm` → 401 « Invalid token »
+  puis « clé Agnes refusée » (v662b, mesuré).
 
 ## AI VIDEO — vérification de clé (v126h)
 
