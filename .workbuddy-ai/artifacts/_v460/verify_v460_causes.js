@@ -31,6 +31,12 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
     c5xx: classerEchec('HTTP 503'),
     cRes: classerEchec('Failed to fetch'),
     cMont: classerEchec('Assemblage impossible : ffmpeg a échoué'),
+    /* v664 — la phrase et le conseil sont désormais deux sorties distinctes
+       d'une même décision : la phrase diagnostique, le conseil dit quoi faire
+       (ici : les segments restent). Le conseil est joint dans la ligne de
+       résumé par `causeProbable`. */
+    cMontConseil: (window.__v664 && window.__v664.conseil)
+      ? window.__v664.conseil('Assemblage impossible : ffmpeg a échoué') : '',
     dom: causeProbable(['HTTP 401', 'HTTP 401', 'HTTP 503'])
   }));
   ok('401 → clé Agnes refusée', /clé Agnes/.test(t.c401), t.c401);
@@ -38,7 +44,9 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('400 → requête refusée', /requête refusée/.test(t.c400), t.c400);
   ok('503 → service indisponible', /indisponible/.test(t.c5xx), t.c5xx);
   ok('réseau → connexion impossible', /connexion/.test(t.cRes), t.cRes);
-  ok('assemblage → segments conservés', /segments restent/.test(t.cMont), t.cMont);
+  ok('assemblage → phrase diagnostique + conseil « segments conservés »',
+     /assemblage/i.test(t.cMont) && /segments restent/.test(t.cMontConseil),
+     t.cMont + ' | ' + t.cMontConseil);
   ok('cause dominante comptée (2 × 401 sur 3)', /^2 échecs : clé Agnes/.test(t.dom), t.dom);
 
   // 2. en conditions réelles : une génération qui échoue en 429
