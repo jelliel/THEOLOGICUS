@@ -1,0 +1,2065 @@
+# deAPI
+
+> Decentralized AI inference API. One unified REST API for image generation, video generation (from text, image, or audio), video upscaling, timestamped video descriptions, audio synthesis, music creation, transcription, OCR, embeddings, and more.
+
+- **API base URL: `https://api.deapi.ai`** — every path below is relative to this host. `https://deapi.ai` is the marketing site, not the API: it answers `/api/v2/...` with an HTML 404 page, which is easy to mistake for an API response.
+- Site: [deapi.ai](https://deapi.ai)
+- Docs: [docs.deapi.ai](https://docs.deapi.ai)
+- Dashboard: [app.deapi.ai/dashboard](https://app.deapi.ai/dashboard)
+- Status: [status.deapi.ai](https://status.deapi.ai)
+- GitHub: [github.com/deapi-ai](https://github.com/deapi-ai)
+
+## Authentication
+
+All requests require a Bearer token in the `Authorization` header and `Accept: application/json`.
+
+```
+Authorization: Bearer YOUR_API_KEY
+Accept: application/json
+```
+
+Get your API key at [app.deapi.ai/dashboard/api-keys](https://app.deapi.ai/dashboard/api-keys). New accounts receive $5 free credits.
+
+A key looks like `sk-dp-<id>-<secret>`. Send it unchanged everywhere: the native API, the OpenAI-compatible gateway, the MCP server and WebSocket auth. There is no prefix to add or remove. Keys created before this format look like `<id>|<secret>` and keep working unchanged on every surface.
+
+### Key roles and restrictions
+
+Every key has a role chosen at creation; the role cannot be changed later (create a new key instead). Keys created before roles were introduced are ADMIN keys.
+
+- **API key** — runs inference. No access to account billing or other keys: `GET /api/v2/account/balance` (and v1 `/api/v1/client/balance`) returns `403` with `code: insufficient_permissions`.
+- **ADMIN key** — full account access: inference, billing and key management. ADMIN keys can be created, changed and deleted only in the Dashboard; API keys can also be managed over the API with an ADMIN key — see [Key and Account Management](#key-and-account-management).
+
+Optional per-key restrictions, set in the Dashboard (Settings → API Keys) or with `POST`/`PATCH /api/v2/keys`; changes apply from the next request:
+
+| Restriction | Behavior | Default |
+|---|---|---|
+| Expiration date | Presets 1h, 1d, 7/30/90/180d, 1y, or custom date. After it, requests return `401 key_expired`. Extending the date revives the key. | No expiration |
+| Spend limit (USD) | Hard cap. When used up, requests return `402 key_limit_exceeded` and no job is created. Changing the limit does not reset the counter. A limit is a ceiling, not reserved budget. | No limit |
+| Reset window | `never`, `daily`, `weekly`, `monthly` — UTC, anchored to the key's creation time. | Never |
+| IP allowlist | Up to 20 IPv4/IPv6 addresses or CIDR ranges. Other addresses get `403 ip_not_allowed`. | Any IP |
+
+An account can have up to **100 active keys**; expired, disabled and deleted keys do not count. Rejected requests (expired, revoked, IP, limit) create no job and are not charged. See [docs.deapi.ai/api-keys](https://docs.deapi.ai/api-keys).
+
+## API Versions
+
+deAPI exposes the native v2 API plus an OpenAI-compatible gateway:
+
+- **v2 (Current)** — REST-style resource URLs (`/api/v2/images/generations`, `/api/v2/videos/upscales`). The only API surface you should integrate against. A single unified transcription endpoint (`/api/v2/audio/transcriptions`) covers every audio and video transcription case. Host: `https://api.deapi.ai`.
+- **OpenAI-compatible** — Drop-in surface for the OpenAI SDK on a separate host: `https://oai.deapi.ai/v1` (the `/v1` here is OpenAI's SDK path convention, not a deAPI API version). The same key works on both, unchanged. Covers image generation, image edits, TTS, transcription, embeddings, and video generation. See [OpenAI Compatibility](#openai-compatibility).
+
+Every endpoint, parameter, and example in this document is **v2**. Authentication, rate limits, models, webhooks, and result delivery are shared with the OpenAI-compatible surface.
+
+## Dynamic Model Discovery
+
+**Never hardcode model names.** Use the models endpoint to discover available models at runtime.
+
+### GET /api/v2/models
+
+Returns all available models. **Always call it as `GET /api/v2/models?limit=50`.** Filter by inference type to get models for a specific task.
+
+Query parameters:
+- `filter[inference_types]` — Comma-separated list of inference types to filter by. Values must match the `inference_types` strings returned by this endpoint **exactly** — note that some use hyphens, and they are *not* the same identifiers as the webhook `job_type` enum. OpenAPI enum: `txt2img`, `img2txt`, `txt2audio`, `txt2music`, `txt2video`, `img2video`, `img2img`, `audio2video`, `video-replace`, `img-upscale`, `img-rmbg`, `vid-upscale`, `txt2embedding`, `audio2text`, `video2text`, `audio_file2text`, `video_file2text`, `video2desc`, `video_file2desc`. An unrecognised value is not rejected — the endpoint returns an empty `data` array. Example: `filter[inference_types]=txt2img,img2img`
+- `limit` — **Page size.** Defaults to **50**; the maximum is **100**, and a value above it is clamped down, not rejected. `limit=50` covers the current catalogue in one call.
+- `page` — Page number, starting at 1 (default: 1). Rarely needed with `limit=50` — see below.
+- `per_page` — Alias of `limit`, kept for backward compatibility. Ignored when `limit` is also sent.
+- `sort` — Sort field; prefix with `-` for descending. One of `id`, `-id`, `name`, `-name`, `created_at`, `-created_at`, `updated_at`, `-updated_at`. Defaults to `-created_at`, i.e. newest models first.
+
+**⚠ One call is not guaranteed to be the whole catalogue.** A page that omits models looks exactly like a complete one — nothing in the response body reads as an error, and the newest models are the ones that land on the last page. Do not infer completeness from the size of `data`; read `meta.last_page`, as below.
+
+**Never hardcode a model count** — the catalogue grows, and it is account-scoped, so the total you see may differ from another key's. Read `meta.total` and `meta.last_page` from the response instead.
+
+`meta.last_page` is your completeness check: with `limit=50` it reads `1`, which means the `data` array you just received is the entire catalogue. If it ever reads more than `1`, the catalogue has outgrown the page you asked for and the remaining models are on `?limit=50&page=2` and beyond — concatenate until `meta.current_page == meta.last_page`. Requesting a page beyond `last_page` returns an empty `data` array, not an error.
+
+Shape of a complete single-call response:
+
+```json
+{
+  "data": [ /* ...every model object... */ ],
+  "links": { "first": "...?page=1", "last": "...?page=1", "prev": null, "next": null },
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 50, "total": 30 }
+}
+```
+
+`meta` also carries `from`, `to`, `path` and its own `links` array (Laravel paginator output); only `current_page`, `last_page` and `total` matter for paging.
+
+Each model in `data` has this schema:
+```json
+{
+  "name": "FLUX.1 Schnell 12B NF4",
+  "slug": "Flux1schnell",
+  "inference_types": ["txt2img"],
+  "tags": [],
+  "status": "standard_model",
+  "info": {
+    "limits": {
+      "min_width": 256, "max_width": 2048,
+      "min_height": 256, "max_height": 2048,
+      "min_steps": 1, "max_steps": 10,
+      "resolution_step": 128
+    },
+    "features": {
+      "supports_steps": true,
+      "supports_guidance": false,
+      "supports_negative_prompt": true
+    },
+    "defaults": {
+      "width": 768, "height": 768,
+      "steps": 4,
+      "negative_prompt": "Negative prompt"
+    }
+  },
+  "loras": [
+    { "display_name": "LoRA Display Name", "name": "LoraSlug" }
+  ]
+}
+```
+
+Notes:
+- `slug` is the exact string to send as the `model` parameter. `name` is a display label — never send it to the API.
+- `tags` is a list of controlled labels (`test`, `experimental`, `new`, `beta`). `status` is `standard_model` (native fleet model) or `test_model` (externally-provided model). **The catalogue is account-scoped** — `test_model` entries and anything tagged `experimental` are not exposed to every account, so two keys can legitimately see different model lists and different totals. This is another reason to discover models at runtime rather than hardcoding them.
+- **Optional keys are omitted, not null.** `loras` and `languages` are absent entirely on models that do not support them — use `model.get("loras")`, not `model["loras"]`. The same applies *inside* `info`: it is always an object, but only `limits` is guaranteed. `defaults` and `features` are frequently missing — e.g. `Kokoro` and every `AceStep_*` model have no `features` at all, and OCR / upscale / background-removal models (`Nanonets_Ocr_S_F16`, `RealESRGAN_x4`, `Ben2`, `FlashVSR_Tiny`, …) have neither `defaults` nor `features`. Read them with `info.get("features", {})`, never `info["features"]`.
+- `loras` lists `{display_name, name}` objects. In generation requests, use `loras: [{"name": "LoraSlug", "weight": 0.8}]`.
+- `features` fields vary by model type **when present**: image models have `supports_guidance`, `supports_steps`, `supports_negative_prompt`, `supports_custom_output_size`; video models add `supports_last_frame`; TTS models have `supports_voice_clone`, `supports_custom_voice`, `supports_voice_design`; transcription models have `supports_timestamps` and `supports_diarization`; video-description models may advertise `supports_presets`. Absence of a flag means "not advertised", not "false" — fall back to `limits`.
+- **`features` flags are advisory, `limits` are authoritative.** A flag saying a parameter is supported does not mean you get to choose its value: `Flux_2_Klein_4B_BF16` reports `supports_steps: true` but publishes `min_steps: 4` and `max_steps: 4`, so `4` is the only value it will accept. Conversely `Ltx2_3_22B_Dist_INT8` reports `supports_steps: false` and publishes no `min_steps`/`max_steps` at all — there `steps` is simply optional and ignored. Read `limits` first, treat `features` as a hint, and always be ready to handle a `422` and read the field-level message.
+- `limits` fields vary by model type. Ones that gate a request and are easy to miss:
+  - image: `min_width`/`max_width`, `min_height`/`max_height`, `min_steps`/`max_steps`, `resolution_step`, `max_input_images`
+  - video generation (`txt2video`, `img2video`): `min_frames`/`max_frames`, `min_fps`/`max_fps`, `min_steps`/`max_steps`, `min_width`/`max_width`, `min_height`/`max_height` — often min == max, i.e. a single legal value (`Ltxv_13B_0_9_8_Distilled_FP8` pins `fps` to 30 and `steps` to 1). Note that video **generation** models expose no `max_video_duration_seconds` and no `min_scale`/`max_scale`: that duration limit is used by upscale, replace, and video-description models; scale bounds belong to upscale models. Newer models add a whole-frame budget on top of the per-axis bounds — `min_side`/`max_side`, `max_pixels`, `max_ratio`, `dimension_multiple` (`ZImageTurbo_INT8`, `ZAnimeDistill_8Step_INT8`, `MiniMaxH3_33B_Turbo_INT8`, `FlashVSR_Tiny`, `RealESRGAN_Vid_x2`/`_x4`, `Ltx2_5_22B_Dist_INT8`). A size inside `max_width`/`max_height` can still be rejected by them: on `Ltx2_5_22B_Dist_INT8` (`max_width`/`max_height` 1344, `max_pixels` 1032192, `max_ratio` 2) `1024x1024` returns `422 "Size 1024x1024 (1,048,576 px) exceeds the model limit of 1,032,192 px."` and `1344x512` returns `422 "Size 1344x512 has an aspect ratio of 2.62:1, above the model limit of 2.00:1."`, while `1344x768` passes. `dimension_multiple` is advisory — `700x700` is accepted and billed by both `/price` and `POST /api/v2/videos/generations`
+  - audio-to-video (`audio2video`): additionally `min_ref_audio_duration`/`max_ref_audio_duration` (1–11 s on `Ltx2_3_22B_Dist_INT8`, 1–10 s on `Ltx2_5_22B_Dist_INT8`), which gate the `audio` file
+  - TTS: `min_text`/`max_text`, `min_speed`/`max_speed`, `available_ratios` (legal `sample_rate` values), `output_formats` (legal `format` values), `min_ref_audio_duration`/`max_ref_audio_duration`
+  - music: `min_caption`/`max_caption`, `min_duration`/`max_duration`, `min_steps`/`max_steps` (these gate the `inference_steps` field — easy to miss because the request parameter has a different name), `min_bpm`/`max_bpm`, `min_guidance`/`max_guidance`, `min_ref_audio_duration`/`max_ref_audio_duration`, `output_formats`
+  - embeddings: `max_input_tokens`, `max_total_tokens`
+  - transcription: `timestamp_levels` (e.g. `["segment"]` or `["segment","word"]`), `output_format`, `languages`
+  - OCR / image upscale / background removal: only `min_width`/`max_width`, `min_height`/`max_height` — these models expose no `steps`, `defaults` or `features`
+  - video upscale: `min_scale`/`max_scale`, `min_width`/`max_width`, `min_height`/`max_height`, `max_video_duration_seconds`. Both scale bounds are enforced (`scale: 8` on `FlashVSR_Tiny`, whose `max_scale` is 4, returns `422 "The scale field must not be greater than 4."`), and when both are `null` the model has a fixed factor and any `scale` is rejected outright
+  - video replace: `min_width`/`max_width`, `min_height`/`max_height`, `max_video_duration_seconds`
+  - video description (`video2desc`, `video_file2desc`): `max_video_duration_seconds`, `available_presets`; check `info.features.supports_presets` before selecting a preset. Both task identifiers map to `POST /api/v2/videos/descriptions`, not to transcription.
+
+For TTS models, `languages` contains an array of supported languages with voice presets:
+```json
+{
+  "languages": [
+    {
+      "name": "English (US)",
+      "slug": "en-us",
+      "voices": [
+        { "name": "Alloy", "slug": "af_alloy", "gender": "male" }
+      ]
+    }
+  ]
+}
+```
+
+### Python Example: Fetching and Caching Models
+
+The cache below uses **stale-while-revalidate** semantics: fresh entries return from memory, stale entries return immediately while a background thread refreshes them (callers never block on a refresh), and cold misses fetch synchronously. It walks every page of the paginated response so the catalogue is complete. Slug-set comparison detects catalog drift between refreshes so you can react to new/removed models without polling.
+
+```python
+import requests
+import threading
+import time
+
+class DeAPIModelCache:
+    """
+    Model-list cache with stale-while-revalidate semantics.
+
+    - Fresh entries return immediately from memory.
+    - Stale entries (TTL expired but copy still present) return immediately
+      while a background thread refreshes them — callers never block on a
+      refresh, so a transient /models slowdown does not stall production traffic.
+    - Cold misses fetch synchronously.
+    - Walks all pages, asking for the maximum page size (`limit=50`).
+    - Detects catalog drift by comparing slug sets between refreshes and
+      invokes `on_change(added, removed)` when the model list changes.
+    """
+
+    def __init__(self, api_key, cache_ttl=300, on_change=None):
+        self.api_key = api_key
+        self.base_url = "https://api.deapi.ai"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json",
+        }
+        self.cache_ttl = cache_ttl       # seconds (default: 5 minutes)
+        self.on_change = on_change       # callback(added: set, removed: set)
+        self._cache = {}
+        self._cache_ts = {}
+        self._refreshing = set()
+        self._lock = threading.Lock()
+
+    def _fetch(self, inference_type):
+        """Fetch every page — `limit=50` is the widest page the endpoint allows."""
+        models, page = [], 1
+        while True:
+            params = {"page": page, "limit": 50}
+            if inference_type:
+                params["filter[inference_types]"] = inference_type
+            resp = requests.get(
+                f"{self.base_url}/api/v2/models",
+                headers=self.headers,
+                params=params,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            models.extend(body["data"])
+            meta = body.get("meta", {})
+            if page >= meta.get("last_page", page):
+                return models
+            page += 1
+
+    def _refresh(self, cache_key, inference_type):
+        try:
+            new_models = self._fetch(inference_type)
+            with self._lock:
+                old_slugs = {m["slug"] for m in self._cache.get(cache_key, [])}
+                new_slugs = {m["slug"] for m in new_models}
+                self._cache[cache_key] = new_models
+                self._cache_ts[cache_key] = time.time()
+            added, removed = new_slugs - old_slugs, old_slugs - new_slugs
+            if self.on_change and (added or removed):
+                self.on_change(added=added, removed=removed)
+        finally:
+            with self._lock:
+                self._refreshing.discard(cache_key)
+
+    def get_models(self, inference_type=None, force_refresh=False):
+        cache_key = inference_type or "__all__"
+        now = time.time()
+
+        with self._lock:
+            cached = self._cache.get(cache_key)
+            age = now - self._cache_ts.get(cache_key, 0)
+            fresh = cached is not None and age < self.cache_ttl
+
+            if fresh and not force_refresh:
+                return cached
+
+            # Stale-while-revalidate: serve the stale copy either way, and start
+            # at most one background refresh. Returning inside this branch is what
+            # keeps the promise in the docstring — if a refresh is already in
+            # flight we must still hand back the stale copy. Falling through
+            # would both block the caller and fetch the catalogue a second time.
+            if cached is not None and not force_refresh:
+                if not fresh and cache_key not in self._refreshing:
+                    self._refreshing.add(cache_key)
+                    threading.Thread(
+                        target=self._refresh,
+                        args=(cache_key, inference_type),
+                        daemon=True,
+                    ).start()
+                return cached
+
+        # Cold start or explicit force_refresh: fetch synchronously.
+        self._refresh(cache_key, inference_type)
+        return self._cache[cache_key]
+
+    def get_model_slugs(self, inference_type):
+        """Return list of model slugs for a given task type."""
+        return [m["slug"] for m in self.get_models(inference_type)]
+
+
+# Example: react to catalog drift without ever blocking callers.
+def log_change(added, removed):
+    if added:   print(f"[deAPI] new models available: {sorted(added)}")
+    if removed: print(f"[deAPI] models removed: {sorted(removed)}")
+
+cache = DeAPIModelCache(api_key="...", cache_ttl=300, on_change=log_change)
+models = cache.get_models("txt2img")   # warms the cache
+# ... time passes ...
+models = cache.get_models("txt2img")   # if stale, returns instantly + refresh in bg
+```
+
+### Model Fallback Strategy
+
+When a model is unavailable or returns errors, fall back to another model of the same inference type:
+
+```python
+import requests
+import time
+
+class DeAPIClient:
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = "https://api.deapi.ai"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/json"
+        }
+        self.model_cache = DeAPIModelCache(api_key)
+
+    @staticmethod
+    def _fit_to_model(payload, model):
+        """Clamp a payload to ONE model's limits.
+
+        Swapping only `model` is not enough: two models of the same inference
+        type routinely disagree on what they accept. `steps: 8` is legal on
+        `ZImageTurbo_INT8` (1-50) and on `ZAnimeDistill_8Step_INT8` (4-16) but
+        not on `Flux_2_Klein_4B_BF16`, which pins min == max == 4. `Flux1schnell`
+        wants a `resolution_step` of 128 and a minimum side of 256, while most
+        others use 16 and 128. Without this step the fallback loop produces a
+        fresh 422 precisely when it is supposed to be rescuing the request.
+        """
+        limits = model.get("info", {}).get("limits", {})
+        out = dict(payload, model=model["slug"])
+
+        def clamp(key, lo, hi, step=None):
+            if out.get(key) is None:
+                return
+            v = out[key]
+            if lo is not None:
+                v = max(v, lo)
+            if hi is not None:
+                v = min(v, hi)
+            if step:                      # snap down onto the model's grid
+                v = max(lo or step, (v // step) * step)
+            out[key] = v
+
+        rs = limits.get("resolution_step")
+        clamp("steps",  limits.get("min_steps"),  limits.get("max_steps"))
+        clamp("width",  limits.get("min_width"),  limits.get("max_width"),  rs)
+        clamp("height", limits.get("min_height"), limits.get("max_height"), rs)
+        clamp("frames", limits.get("min_frames"), limits.get("max_frames"))
+        clamp("fps",    limits.get("min_fps"),    limits.get("max_fps"))
+        return out
+
+    def generate_with_fallback(self, endpoint, payload, inference_type):
+        """Try each available model until one succeeds."""
+        models = self.model_cache.get_models(inference_type)
+
+        last_error = None
+        for model in models:
+            body = self._fit_to_model(payload, model)
+            try:
+                resp = requests.post(
+                    f"{self.base_url}{endpoint}",
+                    headers=self.headers,
+                    json=body
+                )
+                if resp.status_code == 429:
+                    self._handle_rate_limit(resp)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                # Refresh model list in case availability changed
+                self.model_cache.get_models(inference_type, force_refresh=True)
+                continue
+
+        raise last_error or Exception("All models failed")
+
+    def _handle_rate_limit(self, resp):
+        retry_after = int(resp.headers.get("Retry-After", 5))
+        time.sleep(retry_after)
+```
+
+## Rate Limit Handling
+
+### Rate Limit Tiers
+
+| Tier | Activation | RPM | Daily Limit (RPD) |
+|---|---|---|---|
+| Basic | New account; no payment made | Model- and endpoint-specific; see below | Model- and endpoint-specific; see below |
+| Premium | Any payment made | Model- and endpoint-specific; see below | Model- and endpoint-specific; see below |
+
+Premium uses model-specific RPM and daily RPD quotas, with separate limits for utility endpoints. The published quotas below depend on the selected model and endpoint. Read the response headers for the limits effective on your account.
+
+Each window opens on the **first request into that bucket** and refills a fixed interval later — 60 s for the per-minute window, 86400 s for the daily one — not at a calendar boundary. Use `X-RateLimit-Reset` and `X-RateLimit-Daily-Reset` for the exact reset times.
+
+#### Basic inference limits
+
+| Endpoint | Models | RPM | RPD |
+| --- | --- | --- | --- |
+| `/api/v2/images/generations` | `Flux1schnell`, `ZImageTurbo_INT8`, `Flux_2_Klein_4B_BF16`, `ZAnimeDistill_8Step_INT8` | 3 | 100 |
+| `/api/v2/images/edits` | `Flux_2_Klein_4B_BF16`, `QwenImageEdit_Plus_NF4` | 1 | 15 |
+| `/api/v2/images/ocr` | `Nanonets_Ocr_S_F16` | 5 | 50 |
+| `/api/v2/images/background-removals` | `Ben2` | 5 | 100 |
+| `/api/v2/images/upscales` | `RealESRGAN_x4` | 5 | 100 |
+| `/api/v2/videos/generations` | `Ltxv_13B_0_9_8_Distilled_FP8`, `Ltx2_3_22B_Dist_INT8`, `Ltx2_5_22B_Dist_INT8` | 1 | 15 |
+| `/api/v2/videos/generations` | `MiniMaxH3_33B_Turbo_INT8` | 1 | 3 |
+| `/api/v2/videos/animations` | `Ltxv_13B_0_9_8_Distilled_FP8`, `Ltx2_3_22B_Dist_INT8`, `Ltx2_5_22B_Dist_INT8` | 1 | 15 |
+| `/api/v2/videos/animations` | `MiniMaxH3_33B_Turbo_INT8` | 1 | 3 |
+| `/api/v2/videos/audio-syncs` | `Ltx2_3_22B_Dist_INT8`, `Ltx2_5_22B_Dist_INT8` | 1 | 15 |
+| `/api/v2/videos/upscales` | `RealESRGAN_Vid_x4`, `RealESRGAN_Vid_x2`, `FlashVSR_Tiny` | 1 | 15 |
+| `/api/v2/audio/speech` | `Kokoro`, `Chatterbox`, `Qwen3_TTS_12Hz_1_7B_CustomVoice` | 5 | 300 |
+| `/api/v2/audio/speech` | `Qwen3_TTS_12Hz_1_7B_Base`, `Qwen3_TTS_12Hz_1_7B_VoiceDesign` | 3 | 300 |
+| `/api/v2/audio/music` | `AceStep_1_5_Turbo`, `AceStep_1_5_Base`, `AceStep_1_5_XL_Turbo_INT8` | 1 | 15 |
+| `/api/v2/audio/transcriptions` | `WhisperLargeV3`, `WhisperLargeV3Ct2` | 1 | 10 |
+| `/api/v2/embeddings` | `Bge_M3_FP16` | 10 | 500 |
+| `/api/v2/images/generations` | `gpt-image-1.5`, `gpt-image-2`, `nano-banana-2` | Read response headers | Read response headers |
+| `/api/v2/images/edits` | `gpt-image-1.5`, `gpt-image-2` | Read response headers | Read response headers |
+| `/api/v2/videos/descriptions` | `Marlin_2B` | 1 | 10 |
+
+Entries marked "Read response headers" have no fixed Basic quota published here; they do not imply that the model is available on Basic. Discover availability with your own key through `/models`; partner models require Premium. Do not substitute Premium quotas for unknown Basic values.
+
+#### Premium inference limits
+
+| Endpoint | Models | RPM | RPD |
+| --- | --- | --- | --- |
+| `/api/v2/images/generations` | `Flux1schnell` | 45 | 13,000 |
+| `/api/v2/images/generations` | `ZImageTurbo_INT8` | 20 | 6,100 |
+| `/api/v2/images/generations` | `Flux_2_Klein_4B_BF16` | 60 | 17,000 |
+| `/api/v2/images/generations` | `ZAnimeDistill_8Step_INT8` | 35 | 10,000 |
+| `/api/v2/images/generations` | `gpt-image-1.5` | 20 | 500 |
+| `/api/v2/images/generations` | `gpt-image-2` | 20 | 500 |
+| `/api/v2/images/generations` | `nano-banana-2` | 20 | 500 |
+| `/api/v2/images/edits` | `Flux_2_Klein_4B_BF16` | 60 | 17,000 |
+| `/api/v2/images/edits` | `QwenImageEdit_Plus_NF4` | 2 | 860 |
+| `/api/v2/images/edits` | `gpt-image-1.5` | 20 | 500 |
+| `/api/v2/images/edits` | `gpt-image-2` | 20 | 500 |
+| `/api/v2/images/ocr` | `Nanonets_Ocr_S_F16` | 65 | 18,000 |
+| `/api/v2/images/background-removals` | `Ben2` | 300 | 100,000 |
+| `/api/v2/images/upscales` | `RealESRGAN_x4` | 300 | 100,000 |
+| `/api/v2/videos/generations` | `Ltxv_13B_0_9_8_Distilled_FP8` | 16 | 4,700 |
+| `/api/v2/videos/generations` | `Ltx2_3_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/generations` | `Ltx2_5_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/generations` | `MiniMaxH3_33B_Turbo_INT8` | 3 | 1,000 |
+| `/api/v2/videos/animations` | `Ltxv_13B_0_9_8_Distilled_FP8` | 16 | 4,700 |
+| `/api/v2/videos/animations` | `Ltx2_3_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/animations` | `Ltx2_5_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/animations` | `MiniMaxH3_33B_Turbo_INT8` | 3 | 1,000 |
+| `/api/v2/videos/audio-syncs` | `Ltx2_3_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/audio-syncs` | `Ltx2_5_22B_Dist_INT8` | 5 | 1,600 |
+| `/api/v2/videos/upscales` | `RealESRGAN_Vid_x4` | 8 | 2,300 |
+| `/api/v2/videos/upscales` | `RealESRGAN_Vid_x2` | 20 | 6,000 |
+| `/api/v2/videos/upscales` | `FlashVSR_Tiny` | 2 | 840 |
+| `/api/v2/audio/speech` | `Kokoro` | 300 | 90,000 |
+| `/api/v2/audio/speech` | `Chatterbox` | 14 | 4,300 |
+| `/api/v2/audio/speech` | `Qwen3_TTS_12Hz_1_7B_CustomVoice` | 5 | 1,500 |
+| `/api/v2/audio/speech` | `Qwen3_TTS_12Hz_1_7B_Base` | 5 | 1,200 |
+| `/api/v2/audio/speech` | `Qwen3_TTS_12Hz_1_7B_VoiceDesign` | 5 | 1,400 |
+| `/api/v2/audio/music` | `AceStep_1_5_Turbo` | 55 | 17,000 |
+| `/api/v2/audio/music` | `AceStep_1_5_Base` | 30 | 9,400 |
+| `/api/v2/audio/music` | `AceStep_1_5_XL_Turbo_INT8` | 40 | 21,000 |
+| `/api/v2/audio/transcriptions` | `WhisperLargeV3` | 35 | 11,000 |
+| `/api/v2/audio/transcriptions` | `WhisperLargeV3Ct2` | 16 | 4,600 |
+| `/api/v2/embeddings` | `Bge_M3_FP16` | 190 | 55,000 |
+| `/api/v2/videos/descriptions` | `Marlin_2B` | 5 | 690 |
+
+Video-description processing time varies with source duration and preset. `Marlin_2B` has published limits of **1 RPM / 10 RPD on Basic** and **5 RPM / 690 RPD on Premium**. Qwen TTS Base and VoiceDesign each allow **3 RPM / 300 RPD on Basic**; Premium allows **5 RPM / 1,200 RPD** for Base and **5 RPM / 1,400 RPD** for VoiceDesign.
+
+#### Utility limits
+
+| Endpoint | Basic RPM | Basic RPD | Premium RPM | Premium RPD |
+|---|---|---|---|---|
+| Price calculation (`/api/v2/**/price`) | 50 | 200 | 300 | Unlimited |
+| Job status (`/api/v2/jobs/{request_id}`) | 50 | 200 | 300 | Unlimited |
+
+**`/api/v2/models` and `/api/v2/account/balance` are rate-limited too.** Balance uses a static 600 RPM limit; model discovery has a published Premium limit of 300 RPM. Read the headers for your account's effective limits.
+
+- `X-RateLimit-Source` identifies where a quota came from: `tier`, `fallback`, `model`, or `static`. It is not the numeric quota; read `X-RateLimit-Limit`. A `model` override may be shared across tiers.
+- Utility routes have separate counters: quoting a job does not spend model-discovery or job-status headroom. Do not treat all routes as one shared request pool.
+- A successful response carries the rate-limit headers too. Track remaining quota and reset times without deliberately triggering a `429`.
+
+### Rate Limit Headers
+
+The full `X-RateLimit-*` set is returned on **successful** responses too, so you can track headroom without waiting for a 429. `X-RateLimit-Source` says where the limit came from (`tier`, `fallback`, `model`, `static`) — it does **not** identify your ceiling; read `X-RateLimit-Limit` for that. `X-RateLimit-Policy` lists every window that applies as `<limit>;w=<seconds>` elements, so **a minute-only policy means there is no daily limit** — do not infer that from the absence of the `Daily-*` headers. `Retry-After` and `X-RateLimit-Type` are sent only on a 429.
+
+| Header | Description | Present on |
+|---|---|---|
+| `X-RateLimit-Limit` | Maximum requests per minute (RPM) | 2xx and 429 |
+| `X-RateLimit-Remaining` | Remaining requests in current minute window | 2xx and 429 |
+| `X-RateLimit-Reset` | Epoch second at which the minute window refills | 2xx and 429 |
+| `X-RateLimit-Policy` | Every window that applies, as `<limit>;w=<seconds>` | 2xx and 429 |
+| `X-RateLimit-Source` | Where the limit came from: `tier`, `fallback`, `model`, `static` | 2xx and 429 |
+| `X-RateLimit-Daily-Limit` | Maximum daily requests (RPD) | only when a daily limit applies |
+| `X-RateLimit-Daily-Remaining` | Remaining daily requests | only when a daily limit applies |
+| `X-RateLimit-Daily-Reset` | Epoch second at which the daily window refills | only when a daily limit applies |
+| `X-RateLimit-Type` | Which window rejected the request: `minute` or `daily` | 429 |
+| `Retry-After` | Seconds until that window frees up | 429 |
+
+Response body on 429: `{ "message": "Too Many Attempts." }`
+
+Note: no route is truly exempt. Treat every response's `X-RateLimit-Limit` as the only authority on your own ceiling — two keys on the same nominal tier can report different numbers on the same route.
+
+### Retry with Exponential Backoff
+
+```python
+import requests
+import time
+import random
+
+def request_with_retry(url, headers, payload=None, method="post",
+                       max_retries=5, content_type="json"):
+    for attempt in range(max_retries):
+        if method == "post":
+            if content_type == "json":
+                resp = requests.post(url, headers=headers, json=payload)
+            else:
+                resp = requests.post(url, headers=headers, data=payload)
+        else:
+            resp = requests.get(url, headers=headers, params=payload)
+
+        if resp.status_code != 429:
+            resp.raise_for_status()
+            return resp.json()
+
+        limit_type = resp.headers.get("X-RateLimit-Type", "minute")
+        retry_after = int(resp.headers.get("Retry-After", 5))
+
+        if limit_type == "daily":
+            raise Exception(f"Daily rate limit reached. Retry after {retry_after} seconds.")
+
+        # Exponential backoff with jitter, respecting Retry-After
+        wait = max(retry_after, (2 ** attempt) + random.uniform(0, 1))
+        time.sleep(wait)
+
+    raise Exception("Max retries exceeded")
+```
+
+## Generation Endpoints
+
+All generation endpoints return `{ "data": { "request_id": "UUID" } }`. Use the request_id to poll for results or receive them via webhook/WebSocket.
+
+Numeric ranges for `steps`, `frames`, `fps`, `guidance`, `duration`, and `bpm` are **model-specific** — read `info.limits.*` for your chosen `model` from `GET /api/v2/models` before sending the request. Values outside the model's range are rejected with `422`. Several models pin a parameter to a single value (e.g. `Ltxv_13B_0_9_8_Distilled_FP8` accepts only `fps: 30` and `steps: 1`; `Ltx2_3_22B_Dist_INT8` only `fps: 24`), so a "reasonable" default like `fps: 24` or `steps: 4` will fail on the wrong model.
+
+For image generation/editing and video generation/animation/audio-sync, `steps` and `guidance` are conditional: required when the corresponding `info.features.supports_steps` or `supports_guidance` flag is explicitly `true`, optional when absent, and accepted but dropped (neither forwarded nor priced) when explicitly `false`. Model bounds take priority; fallback bounds are 1–100 for `steps` and 0–30 for `guidance` when no model bounds are declared. `negative_prompt` is dropped when `supports_negative_prompt` is explicitly `false`. The same rules apply to matching quote fields.
+
+Enumerated values (`format`, `sample_rate`) are gated **twice**: first against the endpoint's own schema enum, then against the selected model's `info.limits` list. A value that is valid in the schema can still be rejected by the model — e.g. `format: "flac"` is in the music schema enum but every currently deployed music model advertises `output_formats: ["mp3"]` and returns `422 "This output format is not supported by this model. Available formats: mp3."`
+
+Uploaded images must be **at least 1 KB**; smaller files are rejected with `422 "The image field must be at least 1 kilobytes."`
+
+In addition to `webhook_url`, **every job-submitting endpoint** accepts an optional `webhook_secret` field (32-255 chars) to override the account-default HMAC secret on a per-request basis. The job-submitting endpoints are: `images/generations`, `images/edits`, `images/ocr`, `images/upscales`, `images/background-removals`, `videos/generations`, `videos/animations`, `videos/audio-syncs`, `videos/replacements`, `videos/upscales`, `videos/descriptions`, `audio/speech`, `audio/music`, `audio/transcriptions`, `embeddings`. The single exception is `prompts/enhancements`, which is synchronous and creates no job — it silently ignores the field. When provided, `webhook_url` must also be set.
+
+### POST /api/v2/images/generations — Text to Image
+
+Content-Type: `application/json`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Text description of the image to generate |
+| `model` | string | Yes | Model slug from /models endpoint |
+| `width` | integer | Yes | Image width in pixels |
+| `height` | integer | Yes | Image height in pixels |
+| `guidance` | number | Conditional | Required if `supports_guidance` is true; optional if absent; dropped and unpriced if false. Use the model's `min_guidance`/`max_guidance` (fallback 0–30) |
+| `steps` | integer | Conditional | Required if `supports_steps` is true; optional if absent; dropped and unpriced if false. Use the model's `min_steps`/`max_steps` (fallback 1–100) |
+| `seed` | integer | Yes | Random seed (-1 for random) |
+| `negative_prompt` | string | No | What to avoid in the image |
+| `quality` | string | No | Quality tier. **No model in the public catalogue implements one**, so the field is silently discarded — even a nonsense value is accepted, and the quoted price does not move. Treat it as a no-op |
+| `loras` | array | No | LoRA weights: `[{"name": "lora_slug", "weight": 0.8}]` |
+| `enhance_prompt` | boolean | No | Run the prompt through the prompt booster server-side before generating, instead of calling `POST /api/v2/prompts/enhancements` yourself. The finished job then reports `prompt_boosted: true` and carries the rewritten text in `prompt_boost`. Validated on `images/generations`, `images/edits`, `videos/generations` and `videos/animations` only — `videos/audio-syncs`, `audio/speech` and `audio/music` ignore it. **On the two multipart endpoints (`images/edits`, `videos/animations`) send `1` or `0`, not `true`/`false`** — the string forms are rejected with 422 "The enhance prompt field must be true or false.", even though every other boolean in the same form accepts them, and even though the matching `/price` endpoint accepts all four |
+| `webhook_url` | string | No | HTTPS URL for status notifications (max 2048 chars). `http://` is rejected |
+
+### POST /api/v2/images/edits — Image to Image (Edit)
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Text description for transformation |
+| `model` | string | Yes | Model slug |
+| `seed` | integer | Yes | Random seed |
+| `steps` | integer | Conditional | Required if `supports_steps` is true; optional if absent; dropped and unpriced if false. Use the model's `min_steps`/`max_steps` (fallback 1–100) |
+| `image` | file | Yes* | Source image (JPG, JPEG, PNG, GIF, BMP, WebP; max 10MB). Mutually exclusive with `images[]` |
+| `images[]` | file[] | Yes* | Multiple source images (max 10MB per image). Maximum count is model-dependent — see `max_input_images` on the model, defaults to 1. Mutually exclusive with `image` |
+| `negative_prompt` | string | No | What to avoid |
+| `width` | integer | No | Output width (defaults to first input image width) |
+| `height` | integer | No | Output height (defaults to first input image height) |
+| `guidance` | number | Conditional | Required if `supports_guidance` is true; optional if absent; dropped and unpriced if false. Use the model's `min_guidance`/`max_guidance` (fallback 0–30) |
+| `quality` | string | No | Quality tier. Silently discarded — see `images/generations` above |
+| `loras` | array | No | LoRA weights |
+| `enhance_prompt` | boolean | No | Run the prompt through the prompt booster server-side before generating, instead of calling `POST /api/v2/prompts/enhancements` yourself. The finished job then reports `prompt_boosted: true` and carries the rewritten text in `prompt_boost`. Validated on `images/generations`, `images/edits`, `videos/generations` and `videos/animations` only — `videos/audio-syncs`, `audio/speech` and `audio/music` ignore it. **On the two multipart endpoints (`images/edits`, `videos/animations`) send `1` or `0`, not `true`/`false`** — the string forms are rejected with 422 "The enhance prompt field must be true or false.", even though every other boolean in the same form accepts them, and even though the matching `/price` endpoint accepts all four |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/audio/speech — Text to Speech
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `text` | string | Yes | Text to synthesize. Both bounds are **model-specific** — read `info.limits.min_text`/`max_text`. `Kokoro` allows 3–10001 chars, but `Chatterbox` and every `Qwen3_TTS_*` require **at least 10** (`422 "The text field must be at least 10 characters."`), so 3 is not a safe universal minimum |
+| `model` | string | Yes | Model slug (e.g. `Kokoro`) |
+| `lang` | string | Yes | Language code — must be a `languages[].slug` on that model (e.g. `en-us`, `en-gb`, `es`, `fr-fr`, `hi`, `it`, `pt-br` on `Kokoro`) |
+| `speed` | number | Yes | Speech speed multiplier, within `info.limits.min_speed`/`max_speed` (0.5–2 on `Kokoro`; pinned to 1 on `Chatterbox` and `Qwen3_TTS_*`) |
+| `format` | string | Yes | Output format — must be listed in `info.limits.output_formats`. **Every deployed TTS model currently advertises `["mp3"]` only**; `wav`/`flac` return 422 and `opus` is not in the schema enum at all |
+| `sample_rate` | integer | Yes | Audio sample rate in Hz — must be listed in `info.limits.available_ratios` (currently `24000` on every model) |
+| `mode` | string | No | `custom_voice` (default), `voice_clone`, or `voice_design` |
+| `voice` | string | No | Voice preset slug from `languages[].voices[].slug`. Required for `custom_voice` mode. Native slugs are prefixed (`af_alloy`, `am_echo`, `bf_emma`, `af_sky`, …) — the bare OpenAI aliases (`alloy`, `nova`, …) work **only** on the OpenAI-compatible gateway, never on this endpoint |
+| `ref_audio` | file | No | Reference audio for voice cloning. Accepted types are `wav`, `mp3`, `flac`, `ogg`, `m4a`; **max 15360 kilobytes (15 MB)** — over that returns `422 "The ref audio field must not be greater than 15360 kilobytes."`, not a 413. Duration is gated by the model: `Qwen3_TTS_12Hz_1_7B_Base`, the only build with `supports_voice_clone: true`, publishes `min_ref_audio_duration: 5` / `max_ref_audio_duration: 15`, so **5-15 s** — 4 s is rejected and 12 s is fine. Required for `voice_clone` mode |
+| `ref_text` | string | No | Transcript of reference audio (improves cloning accuracy) |
+| `instruct` | string | No | Voice description for `voice_design` mode, or style/emotion control in `custom_voice` mode |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+#### End-to-end example (submit → poll → retrieve audio URL)
+
+TTS on the native v2 surface is asynchronous: the POST returns a `request_id` and the audio URL becomes available on `GET /api/v2/jobs/{request_id}` once `status` is `done`. The same polling pattern documented in [Result Delivery](#result-delivery) applies — `result_url` carries the audio file (per the `JobRequestStatusResource` schema, which describes `result_url` as the URL to the result file for image- or audio-producing jobs).
+
+```python
+import requests, time
+
+API_KEY = "your_api_key"
+BASE = "https://api.deapi.ai"
+HEADERS = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
+
+# 1. Submit (multipart form — parameter name is `text`, not `prompt` and not `input`)
+submit = requests.post(
+    f"{BASE}/api/v2/audio/speech",
+    headers=HEADERS,
+    data={
+        "text": "Hello from deAPI text-to-speech.",
+        "model": "Kokoro",
+        "lang": "en-us",
+        "speed": 1,
+        "format": "mp3",
+        "sample_rate": 24000,
+        "mode": "custom_voice",
+        "voice": "af_sky",
+    },
+)
+submit.raise_for_status()
+request_id = submit.json()["data"]["request_id"]
+
+# 2. Poll until done (or use webhook/WebSocket — see Result Delivery)
+while True:
+    data = requests.get(f"{BASE}/api/v2/jobs/{request_id}", headers=HEADERS).json()["data"]
+    if data["status"] == "done":
+        audio_url = data["result_url"]   # final audio file URL
+        print(audio_url)
+        break
+    if data["status"] == "error":
+        raise RuntimeError(f"TTS job {request_id} failed")
+    time.sleep(2)
+```
+
+> **Endpoint disambiguation.** The native v2 path (`POST /api/v2/audio/speech`) is multipart, uses the parameter **`text`**, and is **asynchronous** — it returns a `request_id` that you poll. The OpenAI-compatible path (`POST /v1/audio/speech` at `https://oai.deapi.ai/v1`) follows the OpenAI spec — uses the parameter **`input`** and returns audio bytes **synchronously** in the HTTP response body (via `client.audio.speech.create(...)` in the SDK). They are two distinct surfaces, not conflicting versions of the same endpoint. Pick one for your code path; see [OpenAI Compatibility](#openai-compatibility) for the synchronous call.
+
+### POST /api/v2/videos/generations — Text to Video
+
+Content-Type: `application/json`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Video description |
+| `model` | string | Yes | Model slug |
+| `width` | integer | Yes | Video width |
+| `height` | integer | Yes | Video height |
+| `guidance` | number | Conditional | Required if `supports_guidance` is true; optional if absent; dropped and unpriced if false. Use the model's `min_guidance`/`max_guidance` (fallback 0–30) |
+| `steps` | integer | Conditional | Required if `supports_steps` is true; optional if absent; dropped and unpriced if false. Use the model's `min_steps`/`max_steps` (fallback 1–100) |
+| `seed` | integer | Yes | Random seed |
+| `frames` | integer | Yes | Number of frames (model-specific range) |
+| `fps` | integer | Yes | Frames per second (model-specific range) |
+| `negative_prompt` | string | No | What to avoid |
+| `enhance_prompt` | boolean | No | Run the prompt through the prompt booster server-side before generating, instead of calling `POST /api/v2/prompts/enhancements` yourself. The finished job then reports `prompt_boosted: true` and carries the rewritten text in `prompt_boost`. Validated on `images/generations`, `images/edits`, `videos/generations` and `videos/animations` only — `videos/audio-syncs`, `audio/speech` and `audio/music` ignore it. **On the two multipart endpoints (`images/edits`, `videos/animations`) send `1` or `0`, not `true`/`false`** — the string forms are rejected with 422 "The enhance prompt field must be true or false.", even though every other boolean in the same form accepts them, and even though the matching `/price` endpoint accepts all four |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/videos/animations — Image to Video (Animation)
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Video description |
+| `first_frame_image` | file | Conditional | Starting keyframe (JPG, JPEG, PNG, GIF, BMP, WebP; 1KB–10MB). Required for keyframe mode; omitted in full-reference mode |
+| `model` | string | Yes | Model slug |
+| `width` | integer | Yes | Video width |
+| `height` | integer | Yes | Video height |
+| `guidance` | number | Conditional | Required if `supports_guidance` is true; optional if absent; dropped and unpriced if false. Use the model's `min_guidance`/`max_guidance` (fallback 0–30) |
+| `steps` | integer | Conditional | Required if `supports_steps` is true; optional if absent; dropped and unpriced if false. Use the model's `min_steps`/`max_steps` (fallback 1–100) |
+| `seed` | integer | Yes | Random seed |
+| `frames` | integer | Yes | Number of frames (model-specific range) |
+| `fps` | integer | Yes | Frames per second (model-specific range) |
+| `negative_prompt` | string | No | What to avoid |
+| `enhance_prompt` | boolean | No | Run the prompt through the prompt booster server-side before generating, instead of calling `POST /api/v2/prompts/enhancements` yourself. The finished job then reports `prompt_boosted: true` and carries the rewritten text in `prompt_boost`. Validated on `images/generations`, `images/edits`, `videos/generations` and `videos/animations` only — `videos/audio-syncs`, `audio/speech` and `audio/music` ignore it. **On the two multipart endpoints (`images/edits`, `videos/animations`) send `1` or `0`, not `true`/`false`** — the string forms are rejected with 422 "The enhance prompt field must be true or false.", even though every other boolean in the same form accepts them, and even though the matching `/price` endpoint accepts all four |
+| `last_frame_image` | file | No | Ending frame image (max 10MB). Only on models with `supports_last_frame` |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+**Animation input modes:** use keyframes (`first_frame_image`, optionally `last_frame_image`) or full-reference mode (`ref_images` and/or `ref_videos`, with optional `ref_audios`). Do not mix the two modes; audio cannot be the only reference. Read `supports_image_refs`, `supports_video_refs`, and `supports_audio_refs` independently, together with `max_ref_images`, `max_ref_videos`, `max_ref_audios`, `max_ref_files`, and per-type duration/size limits. Send ordered multipart arrays such as `ref_images[0]`, with indices starting at 0 and no gaps. See [Video Animation](https://docs.deapi.ai/api/v2/videos/animations) for constraints and prompt labels.
+
+### POST /api/v2/videos/audio-syncs — Audio to Video
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Video description |
+| `audio` | file | Yes | Audio file to condition the video generation (MP3, OGG; max 20MB) |
+| `model` | string | Yes | Model slug (e.g. `Ltx2_3_22B_Dist_INT8`) |
+| `width` | integer | Yes | Video width in pixels |
+| `height` | integer | Yes | Video height in pixels |
+| `seed` | integer | Yes | Random seed |
+| `frames` | integer | Yes | Number of frames (model-specific range) |
+| `fps` | integer | Yes | Frames per second (model-specific range) |
+| `guidance` | number | Conditional | Required if `supports_guidance` is true; optional if absent; dropped and unpriced if false. Use the model's `min_guidance`/`max_guidance` (fallback 0–30) |
+| `steps` | integer | Conditional | Required if `supports_steps` is true; optional if absent; dropped and unpriced if false. Use the model's `min_steps`/`max_steps` (fallback 1–100) |
+| `negative_prompt` | string | No | What to avoid |
+| `first_frame_image` | file | No | Starting frame image (max 10MB) |
+| `last_frame_image` | file | No | Ending frame image (max 10MB) |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/audio/music — Text to Music
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `caption` | string | Yes | Music description / style prompt |
+| `model` | string | Yes | Model slug (e.g. `AceStep_1_5_Turbo`) |
+| `lyrics` | string | Yes | Song lyrics — must not be empty. Use `"[Instrumental]"` for no vocals |
+| `duration` | number | Yes | Duration in seconds (model-specific range: `info.limits.min_duration`/`max_duration`) |
+| `inference_steps` | integer | Yes | Steps. The gating limits are `info.limits.min_steps`/`max_steps` — note the name mismatch with this parameter. Ranges differ sharply: `AceStep_1_5_Turbo` is pinned to exactly **8** (min == max == 8), while `AceStep_1_5_Base` accepts **5–100** |
+| `guidance_scale` | number | Yes | Guidance scale (model-specific range) |
+| `seed` | integer | Yes | Random seed (-1 for random) |
+| `format` | string | Yes | Audio output format. The schema publishes **no enum** — read the model's `info.limits.output_formats` and send one of the listed values; anything else is rejected with 422. Every deployed music model currently lists `["mp3"]` only |
+| `bpm` | integer | No | Beats per minute (model-specific range) |
+| `keyscale` | string | No | Musical key and scale, free-form (e.g. `"C major"`, `"F# minor"`) |
+| `timesignature` | integer | No | Time signature as an integer: 2, 3, 4, or 6. Strings like `"4/4"` are rejected |
+| `vocal_language` | string | No | Vocal language, free-form — ISO codes (`"en"`) or names (`"English"`) |
+| `reference_audio` | file | No | Reference audio file for style transfer. Accepted types are `wav`, `mp3`, `flac`, `ogg`, `m4a`. Duration is gated by `info.limits.min_ref_audio_duration`/`max_ref_audio_duration` — **5-60 s** on every deployed `AceStep_*` model |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/embeddings — Text to Embedding
+
+Content-Type: `application/json`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `input` | string or array | Yes | Text(s) to embed. Per-input cap is `info.limits.max_input_tokens` (8192 on `Bge_M3_FP16`) and is enforced per array element with the exact token count in the error; total cap is `info.limits.max_total_tokens` (245760, **not** 300K) |
+| `model` | string | Yes | Model slug (e.g. `Bge_M3_FP16`) |
+| `return_result_in_response` | boolean | No | Populates the job's `result` field with the embedding payload. **It does not make the POST return the result** — see the note below |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+## Analysis Endpoints
+
+### POST /api/v2/audio/transcriptions — Unified Transcription
+
+Content-Type: `multipart/form-data`
+
+A single endpoint for all transcription needs — audio or video, remote URL or local upload. Accepts either a source URL or a file upload; the job type is auto-detected. This is the only transcription endpoint you need.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `source_url` | string | One of* | URL to transcribe (YouTube, X/Twitter, Twitch, Kick, TikTok, X Spaces). **TikTok sources require `model: WhisperLargeV3Ct2`** — any other model is rejected with `422` at submit time, before the job is queued, so your balance is untouched. Mutually exclusive with `source_file` |
+| `source_file` | file | One of* | Audio or video file to transcribe (max 20MB audio / 50MB video). The validator accepts **seventeen** MIME types — audio: `audio/aac`, `audio/x-hx-aac-adts`, `audio/mpeg`, `audio/mp4`, `audio/x-m4a`, `audio/ogg`, `audio/wav`, `audio/webm`, `audio/flac`; video: `video/webm`, `video/mp4`, `application/mp4`, `video/mpeg`, `video/quicktime`, `video/x-msvideo`, `video/x-ms-wmv`, `video/ogg`. WAV, FLAC, M4A and WebM video all work — there is no need to transcode. Mutually exclusive with `source_url` |
+| `include_ts` | boolean | Yes | Include timestamps in transcription. Send `false` for plain text, `true` for timestamped output. It is a plain on/off switch — the granularity is chosen with `ts_level`, not here |
+| `model` | string | Yes | Model slug (e.g. `WhisperLargeV3`) |
+| `ts_level` | string | No | Timestamp granularity: `segment` (default) or `word`. Gated against the model's `info.limits.timestamp_levels` — `word` on `WhisperLargeV3` returns `422 "Model 'WhisperLargeV3' does not support ts_level 'word'. Supported levels: segment."` Only applies when `include_ts` is `true`, and is ignored otherwise (including for pricing). **`word` costs 50% more than `segment`** |
+| `diarize` | boolean | No | Label each timed unit with a detected speaker (`SPEAKER_00`, `SPEAKER_01`, …). Default `false`. Requires a model with `info.features.supports_diarization: true` — on `WhisperLargeV3` it returns `422 "Model 'WhisperLargeV3' does not support diarization."` **It does not turn itself on when you pick `WhisperLargeV3Ct2`; you have to send it.** Implies `include_ts` and carries the timestamp surcharge (+50%) at any granularity, including `segment` and even with `include_ts: false` |
+| `include_metadata` | boolean | No | Default `false`. Attaches a `metadata` object to the finished job describing the source — title, channel, uploader, upload date and engagement counts (views, likes, comments). URL sources only; there is no metadata to read off an upload. This is the **only** way to get those fields. Carries a flat surcharge on platforms that price it (+$0.005 on TikTok; no change on the base rate) |
+| `lang` | string | No | Language hint for the transcriber, max 16 characters (`422 "The lang field must not be greater than 16 characters."`). The only way to bias language detection |
+| `return_result_in_response` | boolean | No | Populates the job's `result` field with the transcript text — see the note below |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+\* Provide exactly one of `source_url` or `source_file`. Omitting both returns `422 "The source url field is required when source file is not present."`
+
+**`source_url` is validated synchronously at submit time.** An unreachable, private or removed video is rejected immediately with `422 "This video is private or unavailable and cannot be processed."` — you get the error on the POST rather than as a failed job later.
+
+**Pick the transcription model deliberately — the two Whisper builds are not interchangeable:**
+
+| Model | `timestamp_levels` | `supports_diarization` | `output_format` |
+|---|---|---|---|
+| `WhisperLargeV3` | `["segment"]` | `false` | `null` |
+| `WhisperLargeV3Ct2` | `["segment", "word"]` | `true` | `json` |
+
+`WhisperLargeV3Ct2` is the newer build (tagged `new`) and is the only one offering **word-level** timestamps and **speaker diarization** — and the only one that accepts TikTok sources. Read `info.limits.timestamp_levels` and `info.features.supports_diarization` before choosing.
+
+**Picking the model is necessary but not sufficient.** The model only decides which values are *legal*; you still have to ask for the behaviour explicitly:
+
+- word-level timestamps = `include_ts: true` **and** `ts_level: "word"`. Sending `include_ts: true` alone gives you `segment`, which is the default.
+- speaker labels = `diarize: true`. Nothing about choosing `WhisperLargeV3Ct2` switches diarization on by itself.
+
+Send `include_ts: true` on `WhisperLargeV3Ct2` and nothing else, and you get segment-level timestamps with no speakers — i.e. exactly what the older build already gave you.
+
+> **`return_result_in_response` does not skip polling.** On `embeddings`, `images/ocr`, `audio/transcriptions`, and `videos/descriptions` the POST always returns `{"data": {"request_id": ...}}` — never the result. The flag only controls whether the *finished job* carries its payload inline in the `result` field (`true`) or leaves `result` null (`false`, the default). You still poll `GET /api/v2/jobs/{id}`, or use a webhook. This also applies to video-description jobs.
+>
+> Two further details: `result_url` is populated **either way**, so `true` gives you both the inline payload and the download URL — it is not an either/or. And the inline `result` is a **JSON-encoded string**, not a parsed object: an embeddings job returns `result` as `"[[-0.0402115,0.0368909,...]]"`, so you need a second `json.loads(result)` to get the vectors.
+
+### POST /api/v2/videos/descriptions — Video Description
+
+Content-Type: `multipart/form-data`
+
+Create a timestamped index of visible events and scene boundaries. This analyses the picture; use `POST /api/v2/audio/transcriptions` for spoken words. Discover models with `filter[inference_types]=video2desc` for URLs or `video_file2desc` for uploads. The model slug is `Marlin_2B`, not `Marlin2B`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video_url` | string | One of* | Hosted video from YouTube, X/Twitter, Twitch, Kick, or TikTok. Live streams and audio-only sources such as X Spaces are rejected |
+| `video_file` | file | One of* | Uploaded video: MP4, MPEG, QuickTime/MOV, AVI, WMV, OGG, WebM, or MKV. Must contain a video stream |
+| `model` | string | Yes | Model slug from `/models`, with the inference type matching the source |
+| `preset` | string | No | `fast`, `balanced`, or `detail` on `Marlin_2B`; default `balanced`. Higher detail increases processing time and cost. Read the model's `available_presets` and `supports_presets` |
+| `include_metadata` | boolean | No | Default `false`. Request source title, channel, uploader, upload date, and engagement counts. URL sources only, with a flat surcharge; uploads return null metadata and have no metadata surcharge |
+| `return_result_in_response` | boolean | No | Default `false`. Also include the completed description as a JSON-encoded string in the job status response's `data.result` |
+| `webhook_url` | string | No | HTTPS URL for job notifications; max 2048 characters |
+| `webhook_secret` | string | No | Per-request signing secret, 32–255 characters; requires `webhook_url` |
+
+*Send exactly one of `video_url` or `video_file`. `duration_seconds` is an input to the price endpoint only. Honour the selected model's `info.limits.max_video_duration_seconds`. For multipart boolean fields, use `1` or `0`.
+
+The POST returns `{"data":{"request_id":"..."}}`. Poll `GET /api/v2/jobs/{request_id}` until `data.status` is `done` or `error`. A completed job's `data.result_url` points to a JSON document containing `events` (with `start`, `end`, and `description`), `scenes`, and `meta`. With `return_result_in_response=1`, parse `data.result` with `json.loads(...)` or `JSON.parse(...)`; it is a string, not an already-parsed object. Source metadata requested with `include_metadata` is returned separately in the job's `metadata` field.
+
+Estimate the charge first with `POST /api/v2/videos/descriptions/price`, using the same model, preset, and metadata flag. See [Video description quotes](#video-description-quotes).
+
+### POST /api/v2/images/ocr — Image to Text (OCR)
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `image` | file | Yes | Image file (JPG, JPEG, PNG, GIF, BMP, WebP; max 10MB) |
+| `model` | string | Yes | Model slug (e.g. `Nanonets_Ocr_S_F16`) |
+| `language` | string | No | Target language |
+| `format` | string | No | Output format: `text` or `json` |
+| `return_result_in_response` | boolean | No | Populates the finished job's `result` field with the OCR text. **It does not make the POST return the result** — see the note above |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+## Transformation Endpoints
+
+### POST /api/v2/images/background-removals — Image Background Removal
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `image` | file | Yes | Image file (max 10MB) |
+| `model` | string | Yes | Model slug (e.g. `Ben2`) |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/images/upscales — Image Upscale
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `image` | file | Yes | Image file to upscale (max 10MB) |
+| `model` | string | Yes | Model slug (e.g. `RealESRGAN_x4`) |
+| `webhook_url` | string | No | HTTPS webhook URL |
+
+### POST /api/v2/videos/upscales — Video Upscale
+
+Content-Type: `multipart/form-data`
+
+Upscales a video to higher resolution. `scale` is **conditional, not optional**: models that publish `info.limits.min_scale`/`max_scale` require it, and fixed-scale models reject it.
+
+`RealESRGAN_Vid_x2` / `_x4` are the fast, low-cost option and deliver a mild sharpen, while `FlashVSR_Tiny` reconstructs detail that is not resolvable in the source — at roughly an order of magnitude more processing time and cost, so pick it per job rather than as a default.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video` | file | Yes | Input video file (MP4, MPEG, QuickTime, AVI, WMV, OGG; max 50MB) |
+| `model` | string | Yes | Model slug from /models endpoint |
+| `scale` | integer | Conditional | Upscale factor. **Required** when the model publishes `info.limits.min_scale`/`max_scale` — omitting it returns 422 "The scale parameter is required for the selected model." (e.g. `FlashVSR_Tiny`, range 2-4). **Rejected** when both bounds are `null`: any `scale` returns 422 "The selected model does not support a configurable scale." (both `RealESRGAN_Vid_x4` and `_x2`). Schema bound is 1-16, but the model's own range is what is enforced. Read both bounds before sending |
+| `webhook_url` | string | No | HTTPS webhook URL (max 2048 chars) |
+
+### POST /api/v2/videos/replacements — Video Replace
+
+> **No model is currently available for this endpoint.** The previous model (`Wan2_2_Animate_14B_INT8`) has been retired; a new character-replacement model is coming soon. Check `GET /api/v2/models` for a model with the `video-replace` inference type before calling it. In the meantime, use `MiniMaxH3_33B_Turbo_INT8` on `POST /api/v2/videos/animations`: pass the character as a reference image and the source motion as a reference video (2–5 s).
+
+Content-Type: `multipart/form-data`
+
+Replaces a person in a video with a character from a reference image. Ideal for character animation, face swap, and creative video editing.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `video` | file | Yes | Input video file (MP4, MPEG, QuickTime, AVI, WMV, OGG; max 50MB). Duration is capped by `info.limits.max_video_duration_seconds` |
+| `ref_image` | file | Yes | Reference character image (JPG, JPEG, PNG, GIF, BMP, WebP; max 10MB) |
+| `model` | string | Yes | Model slug from /models endpoint |
+| `prompt` | string | No | Text prompt to guide the replacement |
+| `width` | integer | No | Output video width (defaults to input width). Must be provided together with height |
+| `height` | integer | No | Output video height (defaults to input height). Must be provided together with width |
+| `steps` | integer | No | Inference steps (default: 4) |
+| `seed` | integer | No | Random seed (default: -1 for random) |
+| `webhook_url` | string | No | HTTPS webhook URL (max 2048 chars) |
+
+The job fails if the model finds no person to replace in the source video: `error_code: "PROCESSING_ERROR"` with `refunded: false`. That failure is **not refunded** — validate your input footage before submitting, and branch on `refunded` rather than on any error text.
+
+## Prompt Enhancement
+
+Improve prompts before generation for better results. One unified endpoint — `POST /api/v2/prompts/enhancements` — handles most inference types via a `type` parameter (v2 dot-notation) and returns the enhanced prompt. Note that `videos.audio-syncs` and `videos.replacements` are **not** covered: both return `422 "The selected type is invalid."`
+
+### POST /api/v2/prompts/enhancements — Unified Prompt Booster
+
+Content-Type: `multipart/form-data`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `prompt` | string | Yes | Original prompt (min 3 characters) |
+| `negative_prompt` | string | No | Original negative prompt (min 3 chars when present) |
+| `type` | string | Yes | Inference type in v2 dot notation. Accepted values: `images.generations`, `images.edits`, `images.upscales`, `images.background-removals`, `images.ocr`, `videos.generations`, `videos.animations`, `videos.upscales`, `videos.transcriptions`, `audio.speech`, `audio.music`, `audio.transcriptions`, `embeddings` |
+| `model_slug` | string | Yes | Target model slug (e.g. `Flux1schnell`) |
+| `image` | file | No | Reference image, used as extra context for the booster. Supported formats: JPEG, PNG, BMP, GIF, WebP. Recommended for `images.edits` and `videos.animations`, but **not enforced** — both the endpoint and its `/price` variant answer normally without a file |
+
+**`type` and `model_slug` must agree.** The `type` is not free-form — the target model must actually support that inference type, otherwise you get `422 "Model 'FLUX.1 Schnell 12B NF4' does not support type 'txt2audio'."` So `images.generations` needs an image model, `audio.speech` a TTS model, and so on. The error message translates the dot notation back into the `GET /api/v2/models` identifier (`images.upscales` → `img-upscale`, `images.background-removals` → `img-rmbg`, `videos.transcriptions` → `video2text`), which is a handy way to confirm the mapping.
+
+Note that validation errors on this endpoint use a **generic** message: `{"message": "The given data was invalid.", "errors": {"type": [...]}}`. Generation endpoints instead put the first field error into `message` — so do not pattern-match on `message` here; read `errors`.
+
+Response: `{ "prompt": "enhanced prompt", "negative_prompt": "enhanced negative" }` — plain JSON with no `data` wrapper.
+
+Price endpoint: `POST /api/v2/prompts/enhancements/price` (same body, returns `{ "price": 0.00043 }` — also unwrapped).
+
+## Price Calculation
+
+Every inference endpoint has a corresponding `/price` POST endpoint that accepts broadly the same parameters and returns the cost before execution.
+
+**Pattern:** `POST /api/v2/{resource}/{operation}/price`
+
+Use `application/json` for quotes containing only text, numbers, flags, URLs, or a known duration. Use `multipart/form-data` when attaching files. File-capable quote endpoints include `images/ocr/price`, `images/background-removals/price`, `images/upscales/price`, `videos/upscales/price`, `videos/replacements/price`, `audio/transcriptions/price`, `videos/descriptions/price`, and `prompts/enhancements/price`, plus `audio/speech/price` with `ref_audio` and `audio/music/price` with `reference_audio`. Speech and music quotes can still use JSON when no reference file is sent. Image-edit, animation, and audio-sync quotes use numeric settings or reference counts rather than their generation uploads.
+
+> **`/price` validation is looser than the real endpoint's — a `/price` success does not guarantee the submission will pass.** For example `videos/generations/price` requires `model`, `width`, `height`, `frames`, and `fps` (plus `steps` when required by the model), while `POST /api/v2/videos/generations` additionally rejects a request missing `prompt` or `seed`. Likewise `audio/music/price` requires fewer fields than the music job (but now documents optional music controls), and `images/generations/price` ignores `webhook_url`/`webhook_secret`, all of which the main endpoint validates. Price first, then expect the main endpoint to enforce more.
+>
+> **The converse also holds, so do not assume "only cost-bearing fields are required".** `images/generations/price` and `images/edits/price` both reject a body missing `prompt` or `seed` (`422 "The prompt field is required."` / `"The seed field is required."`) even though neither value moves the price by a cent. Send the same body you intend to submit, rather than a minimal cost-only subset.
+
+Generation/analysis/transformation endpoints return: `{ "data": { "price": 0.00187 } }`
+Prompt enhancement endpoints return: `{ "price": 0.0008728 }`
+
+**Small prices come back in scientific notation.** `price` is a JSON number, and cheap calls serialise as e.g. `1.463e-5` or `2.31e-6` rather than `0.00001463`. Parse it as a number (`float(...)`, `Number(...)`) — a naive string comparison or a regex expecting a leading `0.` will break.
+
+Notes on price calculation parameters:
+- `images/edits/price`, `videos/animations/price`, and `videos/audio-syncs/price` use `Content-Type: application/json` (not multipart like their main endpoints), and take no file — only the numeric parameters.
+- File-based price endpoints accept dimensions instead of an upload: `images/ocr/price`, `images/upscales/price`, and `images/background-removals/price` take either `image`+`model`, or `width`+`height`+`model`.
+- `audio/speech/price` accepts `count_text` (integer) as an alternative to `text` — pass the character count instead of the full text. It also accepts an optional `ref_audio` file for voice-clone estimates; use multipart when attaching it. Its duration is validated against the model's `min_ref_audio_duration`/`max_ref_audio_duration`, as on the job.
+- `audio/music/price` requires `model`, `duration`, and `inference_steps`. Optional documented fields are `guidance_scale`, `bpm`, `caption`, `lyrics`, `keyscale`, `timesignature`, `vocal_language`, and `reference_audio`. When supplied, these follow the job's validation: guidance/BPM/caption/reference duration use model limits, and `timesignature` must be 2, 3, 4, or 6. Use multipart for `reference_audio`. Do not assume every optional control changes the charge.
+- `audio/transcriptions/price` accepts `source_url`, `source_file`, or `duration_seconds` (mutually exclusive), plus the required `include_ts` and `model`. It also accepts `ts_level`, `diarize` and `include_metadata`, and **all three change the quote** — pass them exactly as you will pass them to the job, or the estimate will not match the charge.
+- **`platform` (enum: `youtube`, `twitter`, `twitch`, `kick`, `tiktok`) is how you price by length.** It is valid **only** together with `duration_seconds`; sent alongside `source_url` or `source_file` it returns `422 "The platform field must be missing."`, because the platform is derived from the URL. Omit it and you get the model's base rate, which is **not** what a non-YouTube source costs.
+- **TikTok cannot be quoted from a URL at all.** `source_url` pointing at TikTok returns `422 "Price quotes from a tiktok URL are not supported. Quote by length instead: send `duration_seconds` together with `platform: tiktok`."` A YouTube URL for the same duration quotes fine, so this is specific to TikTok. Working around the error with a bare `duration_seconds` and no `platform` **under-quotes TikTok several-fold** — see [Pricing](#pricing).
+- `videos/upscales/price` accepts `video`+`model`, OR `width`+`height`+`duration`+`model` — plus `scale`, which follows the same conditional rule as the job endpoint: required on models publishing `min_scale`/`max_scale`, rejected on fixed-scale ones. **Price scales linearly with `duration`** — on `RealESRGAN_Vid_x4` at 1024x576, 1s costs $0.00560569 and 5s costs $0.02802844 (exactly 5×) — so always pass the real duration or you will under-quote. **Omitting `duration` returns `200` with `price: 0`, not a `422`** — treat a zero quote here as a malformed request, never as a free job. `duration` is additionally validated against the model's `max_video_duration_seconds` (`422 "Video duration exceeds maximum allowed (15 seconds)."`).
+- `videos/replacements/price` accepts `video`+`model`, or `model`+`width`/`height`+optional `duration` — pass video dimensions and duration for price estimation without uploading. It also accepts `steps`; use the same value as the planned job.
+
+- `images/edits/price` documents optional `width` and `height`. They do not change the price, but apply per-model output-size validation when `supports_custom_output_size` is true; otherwise they are ignored.
+- `videos/animations/price` accepts `ref_images_count`, `ref_videos_count`, and `ref_audios_count` instead of reference uploads. More than 2 reference images applies ×2, and any reference video applies ×3; only the highest multiplier applies. Reference audio adds no surcharge. The schema documents `ref_audios_count` for model reference validation; still check the model's supported reference types and individual/combined limits before submitting, because a successful quote is not a guarantee of job validation.
+
+Available price endpoints:
+- `/api/v2/images/generations/price`
+- `/api/v2/images/edits/price`
+- `/api/v2/images/ocr/price`
+- `/api/v2/images/background-removals/price`
+- `/api/v2/images/upscales/price`
+- `/api/v2/videos/generations/price`
+- `/api/v2/videos/animations/price`
+- `/api/v2/videos/audio-syncs/price`
+- `/api/v2/videos/replacements/price`
+- `/api/v2/videos/upscales/price`
+- `/api/v2/videos/descriptions/price`
+- `/api/v2/audio/speech/price`
+- `/api/v2/audio/music/price`
+- `/api/v2/audio/transcriptions/price`
+- `/api/v2/embeddings/price`
+- `/api/v2/prompts/enhancements/price` (accepts `application/json` or `multipart/form-data`; returns `{ "price": ... }` unwrapped)
+
+### Video description quotes
+
+`POST /api/v2/videos/descriptions/price` accepts exactly one source: `video_url`, `video_file`, or `duration_seconds` (number, minimum 0.1). `model` is required; `preset` and `include_metadata` are optional and should match the job. The response is `{"data":{"price": <number>}}`. Use multipart for uploads; a URL or duration quote can use JSON.
+
+`platform` belongs only to the duration variant. Accepted values are `youtube`, `twitter`, `twitch`, `kick`, and `tiktok`. Sending it with a URL or file, or combining source modes, returns `422`. Without `platform`, a duration quote is treated as an upload, so it can miss a URL metadata surcharge.
+
+**TikTok must be quoted by duration:** supply `duration_seconds` and `platform: "tiktok"`. TikTok URL quotes are rejected. Pricing uses fixed duration bands up to 1, 2, 3, 5, or 10 minutes, with 10 minutes as the maximum; presets multiply that card by ×0.75 (`fast`), ×1 (`balanced`), or ×1.5 (`detail`). Other sources are priced on estimated machine time at the model's hourly rate. Longer videos and more detailed presets cost more. `include_metadata` adds a flat surcharge for URL/platform sources and none for uploads.
+
+For example, after confirming `Marlin_2B` in `/models`:
+
+```json
+{
+  "duration_seconds": 180,
+  "platform": "tiktok",
+  "model": "Marlin_2B",
+  "preset": "balanced",
+  "include_metadata": false
+}
+```
+
+## Result Delivery
+
+deAPI supports three methods to receive job results: polling, WebSockets, and webhooks.
+
+### Polling
+
+Poll the job status endpoint until `status` is `done` or `error`.
+
+#### GET /api/v2/jobs/{request_id}
+
+Response (all fields shown, from a real completed 512x512 `Flux1schnell` job):
+```json
+{
+  "data": {
+    "status": "done",
+    "preview": "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAAB...",
+    "result_url": "https://results.deapi.ai/19223887/3gDUfYDubcC....png?X-Amz-Content-Sha256=...",
+    "results_alt_formats": {
+      "jpg": "https://results.deapi.ai/19223887/conversions/....jpg?X-Amz-...",
+      "webp": "https://results.deapi.ai/19223887/conversions/....webp?X-Amz-..."
+    },
+    "result": null,
+    "metadata": null,
+    "progress": 100,
+    "error_code": null,
+    "error_reason": null,
+    "retryable": null,
+    "refunded": null,
+    "failed_at": null,
+    "price": { "amount": 0.00136071, "is_estimated": false },
+    "prompt_boosted": false,
+    "prompt_boost": null
+  }
+}
+```
+
+Notes:
+- **`preview` is a bare base64-encoded PNG string** — not a URL, and not a `data:` URI, despite the field being described as a URL elsewhere. Decode it directly (`base64.b64decode(preview)`); it starts with `iVBORw0KGgo`. It is a small thumbnail, not the full-resolution result: a 512x512 job returns a **64x64 PNG, about 10 KB decoded from roughly 13.9 K characters of base64** — so budget for a payload of that order on every poll, not a few hundred bytes. To render it in a browser you must prepend `data:image/png;base64,` yourself. Only image-producing jobs populate it; otherwise `null`.
+- **`preview` arrives mid-flight, not at the end.** It is `null` while `status` is `pending` and while `progress` is still 0; it appears once the job is genuinely running (observed at `progress: 50`) and is still there on the `done` payload. If you want to show a thumbnail before the final image, poll for it — do not wait for `done`.
+- **`result_url` is served from `results.deapi.ai`, not `storage.deapi.ai`**, and is a presigned S3-style URL carrying `X-Amz-*` query parameters. It expires — download promptly or re-fetch the job for a fresh URL. Do not persist it.
+- `results_alt_formats` is null, or an object with **both** `jpg` and `webp` URLs on image-producing jobs.
+- `progress` is a **number** (0–100) here; the WebSocket event sends it as a decimal string (see below).
+- `result` carries text output for transcription/OCR/embedding/video-description jobs **only when `return_result_in_response: true` was sent** — otherwise it stays null. It is a **JSON-encoded string**, so parse it again before use. `result_url` is populated regardless.
+- `error_code`, `error_reason`, `retryable`, `refunded`, `metadata`, `failed_at`, `prompt_boost` and `prompt_boosted` are returned on every job, and all eight are in the published OpenAPI schema. **There is no `error_message`** — it is absent from the schema and live does not return it, so do not read it. The job payload is exactly these 15 fields. On a failure, `error_code` carries the coarse category and `error_reason` the actionable cause.
+- **`price` is an object, not a number** — `{ "amount": <credits>, "is_estimated": <bool> }`. It is populated only once the job is terminal (`done` or `error`) and is `null` while it runs; a refunded job reports `amount: 0`. For models served by an external provider the charge settles after inference, so until it settles `amount` is the estimate quoted at submission and `is_estimated` is `true` — **never reconcile or invoice against an estimated value.** Own-fleet models are charged up front and always report a settled figure.
+- **`refunded` and `retryable` are the fields to branch on after a failure.** `refunded` tells you whether the credits came back — do not infer it from `error_code`, since the same `PROCESSING_ERROR` can be refundable or not. `retryable` indicates whether resubmitting the identical request is worth attempting. Both are `null` on successful jobs.
+
+Status values: `pending` → `processing` → `done` | `error`
+
+A job may also report `in_progress` — see [WebSockets](#websockets-real-time). Treat any status other than `done` and `error` as non-terminal rather than enumerating them exhaustively.
+
+```python
+import requests
+import time
+
+def poll_job(api_key, request_id, interval=2, timeout=300):
+    """Poll for job completion with adaptive intervals."""
+    url = f"https://api.deapi.ai/api/v2/jobs/{request_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Accept": "application/json"
+    }
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = requests.get(url, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()["data"]
+
+        if data["status"] == "done":
+            return data
+        if data["status"] == "error":
+            raise Exception(f"Job {request_id} failed")
+
+        # Adaptive polling: poll faster once the job is past the halfway mark,
+        # since completion is imminent; back off while it is still early.
+        progress = data.get("progress", 0)
+        if progress > 50:
+            time.sleep(interval)
+        else:
+            time.sleep(interval * 2)
+
+    raise TimeoutError(f"Job {request_id} timed out after {timeout}s")
+```
+
+### WebSockets (Real-time)
+
+Connect to the Pusher-compatible WebSocket server for real-time status updates.
+
+- **Host:** `soketi.deapi.ai`
+- **Port:** 443 (WSS)
+- **App Key:** `depin-api-prod-key`
+- **Cluster:** `mt1`
+- **Auth endpoint:** `POST https://api.deapi.ai/broadcasting/auth`
+- **Channel:** `private-client.{client_id}` (with Laravel Echo use `echo.private('client.{client_id}')`)
+- **Event:** `request.status.updated` (with Laravel Echo use `.listen('.request.status.updated', ...)` — leading dot)
+
+Event payload:
+```json
+{
+  "request_id": "123e4567-e89b-12d3-a456-426614174000",
+  "status": "in_progress",
+  "preview": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+  "result_url": null,
+  "progress": "45.50"
+}
+```
+
+Note the type differences from the polling endpoint: on the WebSocket event `progress` is a **decimal string** (e.g. `"45.50"`), whereas `GET /api/v2/jobs/{id}` returns it as a number. `preview` carries base64 image data on both surfaces, but the WebSocket sends it as a full `data:` URI while the polling endpoint returns the **bare base64 payload with no prefix** — do not assume the two are interchangeable. `result_url` is a presigned `results.deapi.ai` URL that expires — download promptly or re-fetch it from `GET /api/v2/jobs/{id}`.
+
+WebSocket status flow: `pending` (no event) → `processing` → `in_progress` (repeated, with previews) → `done`
+
+Note: Error events are not sent via WebSocket — use webhooks to catch failures.
+
+Connection requirements:
+- Send ping every 30 seconds to keep connection alive (Pusher client libraries do this automatically)
+- Implement reconnection with exponential backoff
+
+### Webhooks
+
+Receive HTTP POST callbacks for job status changes.
+
+Configure globally in account settings or per-request via `webhook_url` parameter. Must be HTTPS.
+
+#### Security Headers
+
+Every webhook request includes these headers:
+
+| Header | Description |
+|---|---|
+| `X-DeAPI-Signature` | HMAC-SHA256 signature: `sha256=<hex>` |
+| `X-DeAPI-Timestamp` | Unix timestamp when the webhook was sent |
+| `X-DeAPI-Event` | Event type: `job.processing`, `job.completed`, or `job.failed` |
+| `X-DeAPI-Delivery-Id` | Unique delivery UUID (use for idempotency) |
+| `Content-Type` | Always `application/json` |
+| `User-Agent` | `DeAPI-Webhook/1.0` |
+
+#### Signature Verification
+
+Compute: `HMAC-SHA256(key: webhook_secret, message: timestamp + "." + raw_json_payload)`. Reject timestamps older than 5 minutes to prevent replay attacks. If the job was submitted with a per-request `webhook_secret`, every callback for that job (including retries) is signed with that secret instead of the account default.
+
+#### Webhook Payloads
+
+All payloads share a common envelope:
+
+```json
+{
+  "event": "job.completed",
+  "delivery_id": "550e8400-e29b-41d4-a716-446655440001",
+  "timestamp": "2024-01-15T10:30:45.000Z",
+  "data": { ... }
+}
+```
+
+**`job.processing`** — job started processing:
+
+```json
+{
+  "data": {
+    "job_request_id": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "processing",
+    "previous_status": "pending",
+    "job_type": "txt2img",
+    "started_at": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**`job.completed`** — job finished successfully:
+
+```json
+{
+  "data": {
+    "job_request_id": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "done",
+    "previous_status": "processing",
+    "job_type": "txt2img",
+    "completed_at": "2024-01-15T10:30:45.000Z",
+    "result_url": "https://results.deapi.ai/19223887/....png?X-Amz-...",
+    "processing_time_ms": 4500
+  }
+}
+```
+
+**`job.failed`** — job encountered an error:
+
+```json
+{
+  "data": {
+    "job_request_id": "123e4567-e89b-12d3-a456-426614174000",
+    "status": "error",
+    "previous_status": "processing",
+    "job_type": "txt2img",
+    "failed_at": "2024-01-15T10:30:45.000Z",
+    "error_code": "WORKER_TIMEOUT",
+    "error_reason": "TIMEOUT",
+    "retryable": true,
+    "refunded": true,
+    "price": { "amount": 0, "is_estimated": false }
+  }
+}
+```
+
+`job_type` identifies the kind of work the job performed, using its own short task-identifier vocabulary rather than the request path. The published enum is: `txt2img`, `img2txt`, `txt2audio`, `vid2txt`, `aud2txt`, `txt2video`, `img2video`, `img2img`, `img_upscale`, `img_rmbg`, `vid_upscale`, `txt2embedding`, `videofile2txt`, `audiofile2txt`. These are **not** the same strings accepted by `filter[inference_types]` on `GET /api/v2/models` — see [Dynamic Model Discovery](#dynamic-model-discovery). Treat the list as non-exhaustive and default gracefully on an unrecognised `job_type` rather than throwing.
+
+#### Webhook Error Codes
+
+`error_code` has exactly three values on v2:
+
+| Code | Description |
+|---|---|
+| `WORKER_TIMEOUT` | Worker timed out processing the job |
+| `WORKER_ERROR` | Worker failed before or outside inference |
+| `PROCESSING_ERROR` | Error during inference processing |
+
+A second field, `error_reason`, carries the actionable cause. It covers worker-side failures too, not only bad input:
+
+| Reason | Meaning |
+|---|---|
+| `SOURCE_PRIVATE` | The source is private, deleted or otherwise unavailable to us |
+| `SOURCE_RESTRICTED` | An age or region gate blocks it |
+| `SOURCE_UNPROCESSABLE` | Fetched, but the media is unusable (no audio track, corrupt, unsupported codec) |
+| `SOURCE_DOWNLOAD_FAILED` | Should be reachable, but this attempt failed to fetch it — frequently transient |
+| `INPUT_TOO_LARGE` | The request exceeds the model limits |
+| `TIMEOUT` | The job exceeded its time budget |
+| `CAPACITY_UNAVAILABLE` | Our fleet failed to complete it — not your request |
+| `PROCESSING_FAILED` | Ran and failed for a reason we could not classify |
+
+**This list is open** — new values may be added without a major version, so treat any value you do not recognise as `PROCESSING_FAILED`. Do not code against values you may have seen in older material either: `AGE_RESTRICTED`, `CONTEXT_LENGTH_EXCEEDED`, `INVALID_INPUT` and `UNKNOWN_ERROR` are **not** part of the v2 enum.
+
+**There is no `error_message` on v2.** The field is absent from the OpenAPI schema and live returns it neither on `GET /api/v2/jobs/{request_id}` nor in the webhook payload — do not read it, and do not log it. **Branch on `retryable`**, which stays correct as new `error_reason` values are added, and read `refunded` to learn whether the credits came back: the same `error_code` can be refundable or not.
+
+#### Webhook Requirements
+
+- Respond with 2xx within 10 seconds
+- No redirects (3xx responses are treated as failures)
+- Retry policy: exponential backoff, 10 attempts over ~24 hours (immediate, 1m, 2m, 5m, 10m, 30m, 1h, 3h, 6h, 12h)
+- Auto-disabled after 10 consecutive failures
+
+## Utility Endpoints
+
+> **Do not confuse documentation URLs with API routes.** The docs site groups utility pages under `docs.deapi.ai/api/v2/utilities/...` and `docs.deapi.ai/api/v2/overview`. Those are web pages. Calling `/api/v2/utilities/balance`, `/api/v2/utilities/models`, `/api/v2/utilities/jobs`, `/api/v2/overview`, `/api/v2/errors` or `/api/v2/prompt-enhancement/overview` against `api.deapi.ai` returns `404 "The route ... could not be found."` The real routes are `/api/v2/account/balance`, `/api/v2/models`, `/api/v2/jobs/{request_id}` and `/api/v2/prompts/enhancements`. The same trap applies to price paths: it is `/api/v2/audio/music/price`, not `/api/v2/audio/music-price`.
+
+### GET /api/v2/account/balance
+
+Returns current account balance. **Requires an ADMIN key** — an API key gets `403` `{"message": "This API key does not have permission to access this endpoint.", "code": "insufficient_permissions"}`.
+
+Response: `{ "data": { "balance": 4.52 } }`
+
+### GET /api/v2/models
+
+See [Dynamic Model Discovery](#dynamic-model-discovery) section above.
+
+### GET /api/v2/jobs/{request_id}
+
+See [Polling](#polling) section above.
+
+## Key and Account Management
+
+Everything the Dashboard does with keys and billing is also available over the API, with the same `Authorization: Bearer` header. Behaviour below was verified live.
+
+> **Docs pages vs routes again.** The reference pages live at `docs.deapi.ai/api/v2/keys/create-key`, `.../list-keys`, `docs.deapi.ai/api/v2/account/get-account` and so on. Those are web pages. The API routes are the ones in the tables below — e.g. `POST /api/v2/keys`, not `POST /api/v2/keys/create-key`.
+
+### Any key: inspect itself
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v2/key` | The calling key (`ApiKeyResource`, see below). Never the secret |
+| `GET /api/v2/key/usage` | Usage report of the calling key. Query: `from`, `to` (ISO 8601, UTC; `from` inclusive, `to` exclusive; default the last 7 days, at most 90 days back, `hour` grouping at most 31 days), `group_by` = `day` (default) \| `hour` \| `type` \| `model` |
+
+Use `GET /api/v2/key` to check how much of a key's spend limit is left before sending work — `limit_remaining` and `limit_resets_at` answer it without a failed request.
+
+### ADMIN key: manage API keys
+
+An API key calling any of these gets `403` `insufficient_permissions`.
+
+| Endpoint | Does |
+|---|---|
+| `GET /api/v2/keys` | Lists the account's keys, newest first. Paginated: `limit` (1–100, default 50; `per_page` is an alias), `page`. Response has `data`, `links`, `meta` |
+| `POST /api/v2/keys` | Creates an **API**-role key → `201`. **The only response that ever contains `secret`** |
+| `GET /api/v2/keys/{id}` | One key → `200`, or `404 {"message": "API key not found."}` |
+| `PATCH /api/v2/keys/{id}` | Changes an API-role key → `200` with the updated key |
+| `DELETE /api/v2/keys/{id}` | Deletes an API-role key permanently → `204`, empty body. Its past usage stays in reports |
+| `GET /api/v2/keys/{id}/usage` | Usage report of that key; same query as `/key/usage` |
+
+`ApiKeyResource` (returned by `/key`, `/keys`, `/keys/{id}`, `PATCH`):
+
+```json
+{
+  "data": {
+    "id": 42,
+    "name": "Production backend",
+    "preview": "sk-dp-42-...f3a",
+    "role": "api",
+    "status": "active",
+    "created_at": "2026-09-22T10:00:00+00:00",
+    "expires_at": null,
+    "last_used_at": "2026-09-22T11:30:00+00:00",
+    "ip_whitelist": ["203.0.113.7", "198.51.100.0/24"],
+    "ip_whitelist_count": 2,
+    "limit": 100,
+    "reset_interval": "monthly",
+    "limit_used": 41.25,
+    "limit_remaining": 58.75,
+    "limit_resets_at": "2026-10-22T10:00:00+00:00"
+  }
+}
+```
+
+- `role`: `api` or `admin`. `status`: `active`, `revoked` (disabled — in the Dashboard or with `"active": false`) or `expired`.
+- `limit` is USD per window, `null` = no limit; `0` is a real limit that accepts no paid work. `limit_used`, `limit_remaining`, `limit_resets_at` are `null` when there is no limit; `limit_resets_at` is also `null` when `reset_interval` is `none`.
+- `limit_used` counts spend since the current window opened. It is **not** the same figure as `/keys/{id}/usage`, which sums any period you ask for.
+- Windows are anchored to the key's creation instant, not to calendar boundaries.
+
+**Create a key** — JSON body, only `name` is required:
+
+```bash
+curl -X POST https://api.deapi.ai/api/v2/keys \
+  -H "Authorization: Bearer $DEAPI_ADMIN_KEY" \
+  -H "Accept: application/json" -H "Content-Type: application/json" \
+  -d '{"name": "Customer 1234", "limit": 5, "reset_interval": "daily",
+       "ip_whitelist": ["203.0.113.7", "198.51.100.0/24"],
+       "expires_at": "2026-12-31T23:59:59Z"}'
+```
+
+| Field | Notes |
+|---|---|
+| `name` | Required, max 255 characters |
+| `expires_at` | ISO 8601, in the future, no later than `2038-01-19T03:14:07Z`. Omit for no expiry |
+| `limit` | USD per window, `0`–`999999.999999`. Omit or `null` for no limit |
+| `reset_interval` | `none` (default), `daily`, `weekly`, `monthly`. **Only together with a non-null `limit`** — otherwise `422` |
+| `ip_whitelist` | Up to 20 IPv4/IPv6 addresses or CIDR ranges. `[]` or omitted = any address. `null`, `/0` ranges and IPv4-mapped IPv6 (`::ffff:192.0.2.1`) are refused |
+| `role` | Optional; only `api`. `"admin"` → `403 {"message": "ADMIN keys can only be created in the panel.", "code": "insufficient_permissions"}` |
+
+The `201` response is the `ApiKeyResource` plus `"secret": "sk-dp-43-…"` — the full value for the `Authorization: Bearer` header. **Store it immediately; no endpoint returns it again.** On a new key `limit_used` is `0` and `limit_remaining` equals `limit`.
+
+**Change a key** — `PATCH /api/v2/keys/{id}`, send only the fields to change:
+
+| Field | Semantics |
+|---|---|
+| `active` | `false` disables (`status: revoked`), `true` re-enables. Re-enabling counts toward the 100 active keys |
+| `expires_at` | New date, or `null` to remove expiry |
+| `limit` | New amount — **does not reset the counter** (raising 50 → 100 after spending 50 leaves 50). `null` removes the limit |
+| `reset_interval` | New window — **restarts the counter** and moves `limit_resets_at`. Allowed on its own only if the key already has a limit; with `"limit": null` → `422` |
+| `ip_whitelist` | **Replaces** the whole list (no merge). `[]` clears it; omitting leaves it unchanged; `null` is refused |
+
+The role cannot be changed, and ADMIN keys cannot be changed or deleted over the API.
+
+**Limits on key creation:**
+- At most **100 active keys** per account. Exceeding it on `POST` or on re-enabling with `PATCH` → `422` `{"message": "You have reached the limit of 100 active API keys — delete or deactivate the ones you no longer use.", "code": "active_key_limit_reached"}`. Not to be confused with `402 key_limit_exceeded`, which is about one key's spend.
+- Keys created over the API are rate-limited per account per hour, shared by all ADMIN keys. Exceeding it → `429` with `"code": "rate_limited"`, `retry_after`, `Retry-After`, and **`X-RateLimit-Type: key-creation`** — every other `X-RateLimit-*` header on that response describes the key-creation bucket, not the request rate.
+
+### ADMIN key: account billing and usage
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v2/account` | `{"data": {"balance": 42.17, "currency": "USD", "auto_top_up": {"enabled": true, "threshold": 2, "amount": 25}}}` — `amount` is `null` when auto top-up is not set up |
+| `GET /api/v2/account/usage` | Usage of the whole account — the same data as the Dashboard's Usage screen. Same query as `/key/usage`, plus `group_by=key` |
+| `GET /api/v2/account/payments` | Balance top-ups, newest first, in every status. Paginated like `/keys`. Item: `id`, `amount`, `currency`, `status` (`pending`, `paid`, `disputed`, `cancelled`, `failed`, `expired`), `provider`, `created_at` |
+
+### Usage report shape
+
+All three usage endpoints return the same shape:
+
+```json
+{
+  "data": {
+    "from": "2026-09-15T00:00:00+00:00",
+    "to": "2026-09-22T00:00:00+00:00",
+    "group_by": "key",
+    "currency": "USD",
+    "totals": { "cost": 12.345678, "requests": 830, "errors": 4 },
+    "groups": [
+      { "key": 42, "name": "Production backend", "cost": 11.2, "requests": 790, "errors": 4 },
+      { "key": "panel", "name": "Panel", "cost": 1.1, "requests": 38, "errors": 0 },
+      { "key": "deleted", "name": "Deleted keys", "cost": 0.045678, "requests": 2, "errors": 0 }
+    ]
+  }
+}
+```
+
+- `cost` is net of refunds. `errors` counts accepted requests that ended in an error; requests refused before a job existed (401, 403, 429) are not counted at all.
+- Only groups with usage are returned. `key` per `group_by`: `day` → `"YYYY-MM-DD"`; `hour` → the hour's start (UTC); `type` → a v2 type such as `images.generations`; `model` → model slug; `key` → the **integer** key id, `"panel"` (jobs started from the Dashboard itself, e.g. the Playground), `"deleted"` (all deleted keys combined), or `null` (origin unknown). `name` is present only with `group_by=key`.
+- An invalid `group_by` or range → `422`.
+
+## MCP Server Integration
+
+deAPI provides an MCP (Model Context Protocol) server for integration with AI assistants.
+
+- **MCP URL:** `https://mcp.deapi.ai/mcp`
+- **OAuth Client ID:** `deapi-mcp`
+- **OAuth Client Secret:** your deAPI API key
+- **Auth:** OAuth 2.0 (Authorization Code with PKCE) or Bearer token
+- **Transport:** Streamed HTTP
+- **Status:** Beta
+- **Source:** MIT-licensed at [github.com/deapi-ai/mcp-server-deapi](https://github.com/deapi-ai/mcp-server-deapi)
+
+### Claude Desktop Configuration
+
+```json
+{
+  "mcpServers": {
+    "deapi": {
+      "url": "https://mcp.deapi.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+```bash
+claude mcp add deapi -s user -t http https://mcp.deapi.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+Compatible with: Claude Web, Claude Desktop, Claude Code, Cursor IDE, ChatGPT, Codex, and Gemini CLI. Self-hosting is supported (Python 3.10+, or Docker).
+
+The MCP server includes smart adaptive polling with exponential backoff (1.5× multiplier): audio 1-5s (5 min timeout), images 2-8s (5 min timeout), video 5-30s (15 min timeout). The server never stores your API token.
+
+## Python SDK
+
+Official Python SDK (Python 3.9+). **It is not published on PyPI** — install it from source:
+
+```bash
+pip install git+https://github.com/deapi-ai/deapi-python-sdk.git
+```
+
+> **Do not `pip install deapi`.** That name on PyPI is already taken by an unrelated, actively maintained package!
+
+Source: [github.com/deapi-ai/deapi-python-sdk](https://github.com/deapi-ai/deapi-python-sdk)
+
+Features: full API coverage (images, video, audio, TTS, voice cloning, music, transcription, embeddings, OCR, video upscale, prompt enhancement), sync and async clients (`DeapiClient` / `AsyncDeapiClient`), automatic job polling with exponential backoff (`.wait()`), auto-retry on rate limits (429) and server errors (5xx), type-safe with Pydantic v2, webhook signature verification, price calculation for every method (`_price` counterpart).
+
+```python
+from deapi import DeapiClient
+
+client = DeapiClient(api_key="sk-your-api-key")
+
+# Generate an image
+job = client.images.generate(
+    prompt="a cat floating in a nebula, photorealistic",
+    model="Flux_2_Klein_4B_BF16",
+    width=1024,
+    height=1024,
+    steps=4,
+    seed=-1,
+)
+
+# Wait for the result (polls with exponential backoff)
+result = job.wait()
+print(result.result_url)
+```
+
+A Node.js / TypeScript SDK is in development. Until it ships, JS/TS users can use the OpenAI-compatible surface with the official OpenAI SDK (see below).
+
+## OpenAI Compatibility
+
+deAPI exposes an OpenAI-compatible API surface at `https://oai.deapi.ai/v1` — drop-in replacement for the OpenAI SDK. Change two parameters (`base_url`, `api_key`) and your existing OpenAI SDK code routes to deAPI for image generation, image edits, text-to-speech, transcription, embeddings, and video generation. Request body, response schema, and error envelope follow the OpenAI specification.
+
+### What changes vs OpenAI
+
+| Parameter | OpenAI | deAPI |
+|---|---|---|
+| `base_url` / `baseURL` | `https://api.openai.com/v1` | `https://oai.deapi.ai/v1` |
+| `api_key` / `apiKey` | `sk-...` | Your deAPI key as is, e.g. `sk-dp-1234-AbCdEf...` |
+| `model` | `dall-e-3`, `tts-1`, `whisper-1`, `text-embedding-3-small` | deAPI native slugs (e.g. `Flux1schnell`, `Kokoro`, `WhisperLargeV3`, `Bge_M3_FP16`) |
+
+The key for the OpenAI surface is the same key issued from the dashboard, pasted unchanged — no prefix is needed. Keys created before the `sk-dp-` format also work here, in their raw `<id>|<secret>` form (quote it in a shell because of the literal `|`) or with the old `dpn-sk-` prefix added.
+
+Auth errors on the gateway: no `Authorization` header, an empty one, or a scheme other than `Bearer` → `401` `missing_api_key`; an unknown, malformed, expired or deactivated key → `401` `invalid_api_key`. `Bearer` is matched case-insensitively.
+
+### Supported endpoints
+
+| Endpoint | Status | Description |
+|---|---|---|
+| `GET /v1/models` | Supported | OpenAI list envelope. Exposes a **subset** of the native catalogue (currently 15 models) with `"owned_by": "depin"` |
+| `GET /v1/models/{model}` | Supported | One model in the same shape (`client.models.retrieve(...)`). Unknown, hidden or out-of-plan models → `404 model_not_found` |
+| `POST /v1/images/generations` | Supported | Text-to-image. Synchronous; returns `{"created", "data":[{"url"}]}` |
+| `POST /v1/images/edits` | Supported | Image editing (img2img). Synchronous and **can take longer than 15 minutes** on slow models such as `QwenImageEdit_Plus_NF4` (40 default steps) — set a generous client timeout or use the native async endpoint. `mask` (inpainting) returns 400 |
+| `POST /v1/audio/speech` | Supported | Text-to-speech. Returns raw `audio/mpeg` bytes synchronously. `input` must be ≥3 characters |
+| `POST /v1/audio/transcriptions` | Supported | Audio & video transcription. `response_format`: `json` (default), `text`, `verbose_json`; `srt` returns 400 |
+| `POST /v1/embeddings` | Supported | Text embeddings. Single string and array input. `encoding_format: "base64"` returns each `embedding` as a base64 string |
+| `GET /v1/videos/{id}` | Supported | Poll a video job — see below |
+| `GET /v1/videos/{id}/content` | Supported | **Download the finished video.** The job object carries no result URL, so this is the only way to collect the output on this surface — the SDK equivalent is `client.videos.download_content(id)` |
+| `POST /v1/videos` | Supported | Video generation, mirroring OpenAI's own Videos API. **Asynchronous**, unlike every other endpoint here |
+| `POST /v1/chat/completions` | NOT supported | Returns **404** `endpoint_not_implemented` — deAPI does not serve LLMs |
+| `POST /v1/files` | Coming soon | Returns **404** `endpoint_not_implemented`. Files are sent inline (multipart) for now |
+
+`POST /v1/videos` does not block — it returns an OpenAI-Videos-style job object that you poll with `GET /v1/videos/{id}` until `status` is `completed`:
+
+```json
+{ "id": "db3124e9-...", "object": "video", "status": "queued", "created_at": 1785927913,
+  "expires_at": 1786014313, "model": "Ltxv_13B_0_9_8_Distilled_FP8",
+  "prompt": "waves on a beach", "seconds": "4", "size": "512x512", "progress": 0 }
+```
+
+**The completed job object contains no result URL.** Once `status` is `completed`, fetch the bytes from `GET /v1/videos/{id}/content` — `client.videos.download_content(id)` in the SDK. There is no other way to collect the output on this surface.
+
+Errors use the OpenAI envelope: `{"error": {"message", "type", "param", "code"}}` — e.g. `model_not_found`, `n_too_large`, `size_not_supported`, `mask_not_supported`, `format_not_supported`, `invalid_api_key`.
+
+### Known differences vs OpenAI
+
+| Feature | OpenAI | deAPI |
+|---|---|---|
+| Chat completions | Yes | No (out of scope) |
+| Inpainting (`mask` in `/v1/images/edits`) | Yes | No — returns 400 |
+| Model IDs | `dall-e-3`, `tts-1`, `whisper-1` | Native slugs (e.g. `Flux1schnell`, `Kokoro`) |
+| Image `size` values | Fixed set | A discrete per-model list. `Flux1schnell` accepts `512x512`, `768x768`, `1024x1024`, `1024x1536`, `1536x1024`; the 400 `size_not_supported` error names the supported set |
+| Video `size` values (`/v1/videos`) | n/a | Also a discrete per-model list — `Ltxv_13B_0_9_8_Distilled_FP8` accepts only `512x512`, `768x512`, `512x768`, `768x768` |
+| Max `n` (images per request) | 10 | Per-model cap, currently 4 (`n=5` → 400 `n_too_large`) |
+| Audio file size limit (transcription) | 25 MB | 20 MB per file, 50 MB for video. Over-size returns a `422` naming the field, not a `413` |
+| TTS output formats | `mp3`, `opus`, `aac`, `flac`, `wav`, `pcm` | **`mp3` only.** The gateway advertises `[mp3 wav flac]` and rejects `opus`, then the model rejects `wav`/`flac` too |
+| Embedding dimensions | 1536 (ada-002) | Model-specific (1024 for `Bge_M3_FP16`) |
+| Embedding `usage` counts | Real token counts | Returned as `{"prompt_tokens": 0, "total_tokens": 0}` |
+| `style: "vivid"` | Controls image style | Accepted but ignored |
+| Video generation | `client.videos.create()` / `.retrieve()` / `.download_content()` | Same three calls, same shapes — `POST /v1/videos`, `GET /v1/videos/{id}`, `GET /v1/videos/{id}/content`. Use the SDK; you do not need hand-rolled HTTP |
+| Model catalogue | Full | A subset (currently 15 models) of what `GET /api/v2/models` returns |
+
+### Model mapping cheat sheet
+
+| OpenAI model | deAPI replacement | Notes |
+|---|---|---|
+| `dall-e-3`, `dall-e-2` | `Flux1schnell` (and others — query `/v1/models`) | Pass deAPI slug as `model` |
+| `tts-1`, `tts-1-hd` | `Kokoro` | Supports the same six OpenAI voice aliases: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`. Voice language is determined by the voice prefix (`af_`/`am_` → US English, `bf_`/`bm_` → British English) |
+| `whisper-1` | `WhisperLargeV3` | Same `file` upload pattern; up to 20 MB audio / 50 MB video. On the native API prefer `WhisperLargeV3Ct2` if you need word-level timestamps or diarization |
+| `text-embedding-3-small` / `-large`, `ada-002` | `Bge_M3_FP16` | Vector dimension 1024 (not 1536) |
+
+### Quick start (Python)
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="sk-dp-your-key-here",
+    base_url="https://oai.deapi.ai/v1",
+)
+
+# Image generation (DALL-E → deAPI)
+response = client.images.generate(
+    model="Flux1schnell",
+    prompt="A futuristic city at sunset, cinematic lighting",
+    size="1024x1024",
+    n=1,
+)
+print(response.data[0].url)
+
+# Text-to-speech (OpenAI TTS → deAPI)
+audio = client.audio.speech.create(
+    model="Kokoro",
+    voice="alloy",
+    input="Hello world",
+)
+
+# Transcription (Whisper → deAPI)
+with open("audio.mp3", "rb") as f:
+    transcript = client.audio.transcriptions.create(
+        model="WhisperLargeV3",
+        file=f,
+    )
+
+# Embeddings
+emb = client.embeddings.create(
+    model="Bge_M3_FP16",
+    input="The quick brown fox",
+)
+print(len(emb.data[0].embedding))  # → 1024
+```
+
+### Quick start (Node.js / TypeScript)
+
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "sk-dp-your-key-here",
+  baseURL: "https://oai.deapi.ai/v1",
+});
+
+const response = await client.images.generate({
+  model: "Flux1schnell",
+  prompt: "A futuristic city at sunset, cinematic lighting",
+  size: "1024x1024",
+  n: 1,
+});
+```
+
+### Quick start (cURL)
+
+```bash
+curl -X POST "https://oai.deapi.ai/v1/images/generations" \
+  -H "Authorization: Bearer sk-dp-your-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Flux1schnell",
+    "prompt": "A futuristic city at sunset, cinematic lighting",
+    "size": "1024x1024",
+    "n": 1
+  }'
+```
+
+### Framework integrations
+
+Any framework that accepts a `base_url` / `api_base` parameter works without code changes.
+
+**LangChain:**
+```python
+from langchain_openai import OpenAIEmbeddings
+
+embeddings = OpenAIEmbeddings(
+    openai_api_key="sk-dp-your-key-here",
+    openai_api_base="https://oai.deapi.ai/v1",
+    model="Bge_M3_FP16",
+)
+```
+
+**LlamaIndex:**
+```python
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+embed_model = OpenAIEmbedding(
+    api_key="sk-dp-your-key-here",
+    api_base="https://oai.deapi.ai/v1",
+    model="Bge_M3_FP16",
+)
+```
+
+**Vercel AI SDK:**
+```typescript
+import { createOpenAI } from "@ai-sdk/openai";
+
+const deapi = createOpenAI({
+  apiKey: "sk-dp-your-key-here",
+  baseURL: "https://oai.deapi.ai/v1",
+});
+```
+
+**Environment-variable override (zero code changes):**
+```bash
+export OPENAI_API_KEY="sk-dp-your-key-here"
+export OPENAI_BASE_URL="https://oai.deapi.ai/v1"
+```
+
+For multi-provider setups (OpenAI for chat, deAPI for images/audio/video/embeddings), instantiate separate clients with different `base_url`s.
+
+### Listing models on the OpenAI surface
+
+```bash
+curl "https://oai.deapi.ai/v1/models" \
+  -H "Authorization: Bearer sk-dp-your-key-here"
+```
+
+Response uses the OpenAI list envelope (`{"object": "list", "data": [{"id": "Flux1schnell", "object": "model", "created": 1776902400, "owned_by": "depin"}, ...]}`). It lists a subset of the native catalogue (currently 15 models) and `owned_by` is `"depin"`, not `"deapi"`. The list is not paginated. `created` is a real per-model timestamp (measured 2026-09-03: `1776902400`, `1777334400` or `1787011200` — models added in the same batch share a value); it no longer returns `0`. For the full catalogue plus capabilities, limits, defaults, and LoRAs, query the native `GET /api/v2/models` endpoint instead.
+
+## Pricing
+
+Pay-per-use, no subscriptions required. $5 free credits for new accounts. Prices are calculated dynamically per task from resolution, steps, duration, or output characters.
+
+Every figure below was read back from the live `/price` endpoints, with the exact parameters shown.
+
+> **Figures are per-account, not universal.** Base rates are tier-dependent: two keys quoting the same job can differ by a constant factor (a 1.8× spread between tiers has been measured across both OCR and transcription). Platform surcharges on transcription, by contrast, appear to be absolute amounts that do not scale with the tier. Use the numbers below to understand the *shape* of the pricing and always read your own `/price` response for the amount you will actually be charged.
+
+| Service | Parameters | Price |
+|---|---|---|
+| Text-to-Image — `Flux1schnell` | 512x512, 4 steps | $0.00136071 |
+| Text-to-Image — `Flux1schnell` | 768x768, 4 steps (model defaults) | $0.00190931 |
+| Text-to-Image — `Flux1schnell` | 1024x1024, 4 steps | $0.00267734 |
+| Text-to-Image — `Flux_2_Klein_4B_BF16` | 512x512, 4 steps | $0.00186612 |
+| Text-to-Image — `ZImageTurbo_INT8` | 512x512, 4 steps | $0.00340179 |
+| Image Edit — `QwenImageEdit_Plus_NF4` | 20 steps | $0.017928 |
+| Image Edit — `QwenImageEdit_Plus_NF4` | 40 steps (model default) | $0.034848 |
+| Text-to-Speech — `Kokoro` | per 1M characters | $0.77142857 |
+| Text-to-Video — `Ltxv_13B_0_9_8_Distilled_FP8` | 256x256, 60 frames @30fps (2s) | $0.00173723 |
+| Text-to-Video — `Ltxv_13B_0_9_8_Distilled_FP8` | 512x512, 120 frames @30fps (4s) | $0.00564427 |
+| Image-to-Video — `Ltxv_13B_0_9_8_Distilled_FP8` | 256x256, 60 frames @30fps (2s) | $0.00173723 |
+| Audio-to-Video — `Ltx2_3_22B_Dist_INT8` | 512x512, 49 frames @24fps | $0.03800056 |
+| Text-to-Video — `Ltx2_3_22B_Dist_INT8` | 768x768, 120 frames @24fps (5s) | $0.04699788 |
+| Text-to-Video — `Ltx2_5_22B_Dist_INT8` | 512x512, 49 frames @24fps | $0.047269 |
+| Text-to-Video — `Ltx2_5_22B_Dist_INT8` | 768x768, 120 frames @24fps (5s) | $0.05846078 |
+| Text-to-Video — `Ltx2_5_22B_Dist_INT8` | 1344x768, 120 frames @24fps (5s) | $0.06542243 |
+| Text-to-Music — `AceStep_1_5_Turbo` | 60s, 8 steps | $0.00086817 |
+| Transcription — `WhisperLargeV3` | 3600s (1h) | $0.051875 |
+| Transcription — `WhisperLargeV3Ct2` | 60s, `include_ts` either way | $0.00578125 |
+| Transcription — `WhisperLargeV3Ct2` | 60s, `ts_level: word` **or** `diarize: true` | $0.00867188 |
+| Transcription — `WhisperLargeV3Ct2` | 60s, `platform: tiktok` | $0.015 |
+| Transcription — `WhisperLargeV3Ct2` | 60s, `platform: tiktok` + `include_metadata` | $0.02 |
+| Image OCR — `Nanonets_Ocr_S_F16` | 1024x1024 input | $0.00928094 |
+| Text-to-Embedding — `Bge_M3_FP16` | per 1K tokens | ~$0.0000841 |
+| Image Background Removal — `Ben2` | 1920x1080 | $0.00045524 |
+| Image Upscale — `RealESRGAN_x4` | 512x512 | $0.00059306 |
+| Video Upscale — `RealESRGAN_Vid_x4` | 1024x576, 1s | $0.00560569 |
+| Video Upscale — `RealESRGAN_Vid_x4` | 1024x576, 5s | $0.02802844 |
+| Prompt Enhancement | `images.generations`, `Flux1schnell` | ~$0.00043 |
+
+Image generation scales with resolution × steps; image **edit** pricing is driven by steps and is resolution-independent. Embedding cost is linear in token count. **Video-upscale price scales linearly with duration** (1s → $0.00560569, 5s → $0.02802844 on the same resolution), and `duration` is additionally validated against the model's `max_video_duration_seconds`. **Transcription price does *not* depend on duration alone.** Four parameters move it at a fixed length — `ts_level`, `diarize`, `include_metadata` and `platform`. `include_ts` by itself is the one flag that is genuinely free:
+
+| At 60 s on `WhisperLargeV3Ct2` | Price | vs base |
+|---|---|---|
+| base (`include_ts: false`) | $0.00578125 | — |
+| `include_ts: true` (defaults to `segment`) | $0.00578125 | no change |
+| `ts_level: "word"` | $0.00867188 | **+50%** |
+| `diarize: true` (at any granularity) | $0.00867188 | **+50%** |
+| `platform: tiktok` | $0.015 | **2.6×** |
+| `platform: tiktok` + `include_metadata` | $0.02 | + $0.005 flat |
+
+`include_ts` is free because `segment` sits inside the base rate — but that is the whole of the exemption. The platform surcharge is the one that hurts: at 600 s the same job is $0.0128125 with no `platform` and **$0.0825** with `platform: tiktok`. It also applies beyond TikTok — `twitch` costs materially more than `youtube` at identical length.
+
+So: quote with every flag you intend to send, and never quote a non-YouTube source by duration alone. A duration-only estimate is not a conservative estimate; it is an under-quote.
+
+TTS speed modifiers scale the cost: 2.0× playback ≈ 0.5× base cost, 0.5× playback ≈ 2.0× base cost. All three TTS modes (`custom_voice`, `voice_clone`, `voice_design`) use the same per-character pricing.
+
+Prices are approximate and vary by model and parameters. Use the `/price` endpoints (v2) for exact costs before execution. Never hardcode prices.
+
+### File upload limits
+
+| Cap | Limit | Scope |
+|---|---|---|
+| Request body (input) | 75 MB | Total size of any single API request (multipart + JSON fields combined) |
+| Job result (output) | 100 MB | Maximum size of the generated artifact |
+| Images | 10 MB | `jpg`, `jpeg`, `png`, `gif`, `bmp`, `webp`. Minimum 1 KB. **Dimensions come from the model, not from a global range** — see below |
+| Video | 50 MB | MP4, MPEG, QuickTime (MOV), AVI, WMV, OGG, **WebM** |
+| Audio | 20 MB | AAC (incl. ADTS), MP3, **WAV**, **FLAC**, **M4A** (`audio/mp4`, `audio/x-m4a`), OGG, WebM |
+| Voice-clone reference audio | **15 MB** (15360 kB) | `wav`, `mp3`, `flac`, `ogg`, `m4a`; **5-15 s** on `Qwen3_TTS_12Hz_1_7B_Base` |
+| Music reference audio | **15 MB** (15360 kB) | `wav`, `mp3`, `flac`, `ogg`, `m4a`; **5-60 s** on `AceStep_*` |
+
+**Exceeding a per-file cap returns `422`, not `413`** — a validation error naming the field, e.g. `"The ref audio field must not be greater than 15360 kilobytes."` Handle it exactly like any other 422 and read `errors`.
+
+**Image dimensions are per-model.** There is no global pixel range: every side is checked against the selected model's `info.limits.min_width`/`max_width`/`min_height`/`max_height`. In the current catalogue no model accepts a side below 128 (`64×64` is rejected with `"The width field must be at least 128."`) and none goes above 4096, which only `Nanonets_Ocr_S_F16` reaches — most image models stop at 2048. Also honour `resolution_step`: it is 128 on `Flux1schnell` and 16 on most others, so a size that works on one model is not automatically legal on another.
+
+Transcription URL inputs (`source_url`) bypass the upload cap. **The transcription models publish no maximum source duration** — the Whisper models expose no such limit and `/price` accepts very large `duration_seconds` values without complaint, so do not rely on a specific ceiling; if one is enforced it will surface as a `422` on submission.
+
+Video descriptions use `video_url` or `video_file`, not `source_url` or `source_file`. Their duration limit comes from `info.limits.max_video_duration_seconds`; do not apply the transcription duration assumptions to Marlin. The video-description upload schema also accepts MKV files.
+
+## Complete Usage Example
+
+```python
+import requests
+import time
+
+API_KEY = "your_api_key"
+BASE = "https://api.deapi.ai"
+HEADERS = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Accept": "application/json"
+}
+
+# 1. Discover models for text-to-image
+models_resp = requests.get(
+    f"{BASE}/api/v2/models",
+    headers=HEADERS,
+    params={"filter[inference_types]": "txt2img", "limit": 50}
+)
+models = models_resp.json()["data"]   # limit=50 — the whole catalogue in one call
+model_slug = models[0]["slug"]
+
+# `defaults` is optional inside `info` — never index it blindly.
+info = models[0].get("info", {})
+defaults = info.get("defaults", {})
+limits = info.get("limits", {})
+
+# 2. Check price before generating
+payload = {
+    "prompt": "a sunset over mountains",
+    "model": model_slug,
+    "width": defaults.get("width", limits.get("min_width", 512)),
+    "height": defaults.get("height", limits.get("min_height", 512)),
+    "steps": defaults.get("steps", limits.get("min_steps", 4)),
+    "seed": -1
+}
+price_resp = requests.post(
+    f"{BASE}/api/v2/images/generations/price",
+    headers={**HEADERS, "Content-Type": "application/json"},
+    json=payload
+)
+price = price_resp.json()["data"]["price"]
+print(f"Cost: ${price}")
+
+# 3. Generate image
+gen_resp = requests.post(
+    f"{BASE}/api/v2/images/generations",
+    headers={**HEADERS, "Content-Type": "application/json"},
+    json=payload
+)
+request_id = gen_resp.json()["data"]["request_id"]
+
+# 4. Poll for result
+while True:
+    status_resp = requests.get(
+        f"{BASE}/api/v2/jobs/{request_id}",
+        headers=HEADERS
+    )
+    data = status_resp.json()["data"]
+    if data["status"] == "done":
+        print(f"Result: {data['result_url']}")
+        break
+    if data["status"] == "error":
+        raise Exception("Generation failed")
+    time.sleep(3)
+```
+
+## Batch Operations
+
+The API is request-scoped — there is no native bulk-submit endpoint. To process many inputs, submit each request concurrently against the same endpoint and aggregate results by `request_id`. Per-model RPM and RPD limits apply on both Basic and Premium — see [Rate Limit Handling](#rate-limit-handling). Pace submissions, cap concurrency, and back off on HTTP 429; a concurrency cap alone does not enforce a per-minute quota. `request_id` is a UUID returned per submission and is safe to use as a dedup/idempotency key in your aggregator.
+
+### Python: concurrent text-to-image with bounded parallelism
+
+```python
+import requests, time, random
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+API_KEY = "your_api_key"
+BASE = "https://api.deapi.ai"
+HEADERS = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
+
+prompts = [
+    "a misty forest at dawn",
+    "a neon-lit Tokyo street",
+    "an astronaut planting a flag on Mars",
+    "a vintage steam locomotive",
+]
+
+def submit_one(prompt, model_slug, max_retries=5):
+    """Submit one generation; retry on HTTP 429 using Retry-After."""
+    payload = {
+        "prompt": prompt, "model": model_slug,
+        "width": 768, "height": 768,
+        "steps": 4, "guidance": 1, "seed": -1,
+    }
+    for attempt in range(max_retries):
+        resp = requests.post(
+            f"{BASE}/api/v2/images/generations",
+            headers={**HEADERS, "Content-Type": "application/json"},
+            json=payload,
+        )
+        if resp.status_code == 429:
+            wait = int(resp.headers.get("Retry-After", 5))
+            time.sleep(wait + random.uniform(0, 1))
+            continue
+        resp.raise_for_status()
+        return resp.json()["data"]["request_id"]
+    raise RuntimeError(f"Exhausted retries submitting: {prompt!r}")
+
+def wait_one(request_id, timeout=600, interval=5):
+    """Poll a single job to completion; return final result_url.
+
+    Check the HTTP status before touching the body: a 429 or 404 response has
+    no `data` key, so indexing it straight away turns a retryable rate limit
+    into a KeyError. `interval` is deliberately not 2 — see the note below on
+    targeting the Basic 50 RPM budget for /api/v2/jobs; also track its 200 RPD quota.
+    """
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = requests.get(f"{BASE}/api/v2/jobs/{request_id}", headers=HEADERS)
+
+        if resp.status_code == 429:
+            time.sleep(int(resp.headers.get("Retry-After", 5)) + random.uniform(0, 1))
+            continue
+        if resp.status_code >= 500:
+            time.sleep(interval)
+            continue
+        resp.raise_for_status()
+
+        data = resp.json().get("data")
+        if not data:
+            raise RuntimeError(f"Unexpected job payload for {request_id}: {resp.text[:200]}")
+        if data["status"] == "done":
+            return data["result_url"]
+        if data["status"] == "error":
+            raise RuntimeError(
+                f"Job {request_id} failed: {data.get('error_code')} / "
+                f"{data.get('error_reason')} (retryable={data.get('retryable')}, "
+                f"refunded={data.get('refunded')})"
+            )
+        time.sleep(interval)
+    raise TimeoutError(request_id)
+
+# 1. Pick a model (see Dynamic Model Discovery — never hardcode slugs)
+model_slug = requests.get(
+    f"{BASE}/api/v2/models", headers=HEADERS,
+    params={"filter[inference_types]": "txt2img", "limit": 50},
+).json()["data"][0]["slug"]
+
+# 2. Submit with bounded concurrency (stay under your tier's RPM)
+results, errors = {}, {}
+with ThreadPoolExecutor(max_workers=4) as pool:
+    submit_futures = {pool.submit(submit_one, p, model_slug): p for p in prompts}
+    request_ids = {}
+    for f in as_completed(submit_futures):
+        prompt = submit_futures[f]
+        try:
+            request_ids[f.result()] = prompt
+        except Exception as e:
+            errors[prompt] = str(e)
+
+    # 3. Wait for all submitted jobs in parallel
+    wait_futures = {pool.submit(wait_one, rid): rid for rid in request_ids}
+    for f in as_completed(wait_futures):
+        prompt = request_ids[wait_futures[f]]
+        try:
+            results[prompt] = f.result()
+        except Exception as e:
+            errors[prompt] = str(e)
+
+print("Successful:", results)
+print("Failed:", errors)
+```
+
+**Notes for batch workloads:**
+
+- **Submission pacing** — each submission consumes request quota. Use the selected model's RPM/RPD limits and response headers to pace calls; `max_workers` limits in-flight work but does not prevent many fast requests from exhausting a minute window. Honour daily limits as well as minute limits.
+- **Budget the polling, not just the submissions.** Every `wait_one` iteration spends one request against `/api/v2/jobs/{id}`, which is only 50 RPM on Basic. `workers × 60 / interval` must stay under that: four workers polling every 2 s is 120 RPM and will 429 on Basic. Four workers at a 5 s interval is 48 RPM, just within the minute quota, but Basic also has a 200 RPD job-status budget. Budget both windows. For anything bigger than a few dozen jobs, use webhooks instead of polling.
+- **Webhooks for large batches** — for jobs that exceed a few dozen, pass `webhook_url` on each submission and skip the polling loop. The gateway delivers `job.completed` / `job.failed` asynchronously (see [Webhooks](#webhooks)). Daily limits still apply per-account.
+- **Same pattern works for every async endpoint** — `images/edits`, `audio/speech`, `audio/music`, `videos/*`, `embeddings`, `images/ocr`, `audio/transcriptions`. Setting `return_result_in_response: true` on `embeddings`, `images/ocr` or `audio/transcriptions` does **not** let you skip the polling loop — the POST still returns only a `request_id`; the flag merely embeds the payload in the finished job's `result` field, saving you the `result_url` download.
+- **Partial failures are normal** — track them per-input (the `errors` dict above). One failed item should not abort the batch.
+
+## Error Handling
+
+| HTTP Code | Meaning | Action |
+|---|---|---|
+| 200 | OK | Response contains requested data |
+| 400 | Bad request | Returned by the **OpenAI-compatible gateway** for `size_not_supported`, `n_too_large`, `mask_not_supported`, `format_not_supported`. The native v2 API uses 422 instead |
+| 401 | Unauthorized — missing, invalid, expired or disabled key (`code`: `missing_key`, `invalid_key`, `key_expired`, `key_revoked`) | Check your API key. On `oai.deapi.ai` the codes are `missing_api_key` and `invalid_api_key` instead |
+| 402 | Key spend limit used up (`code: key_limit_exceeded`) | Wait for `resets_at` or raise the key's limit. No job was created |
+| 403 | Account suspended, IP not on the key's allowlist (`ip_not_allowed`), or API key on an ADMIN-only endpoint (`insufficient_permissions`) | See the bodies below |
+| 404 | Resource not found | Verify endpoint URL and request_id |
+| 413 | Payload too large | Reduce file size — see file upload limits |
+| 422 | Validation error — invalid parameters. Also `insufficient_balance` (account cannot pay) and `active_key_limit_reached` (100 active keys reached, on `POST`/`PATCH /api/v2/keys`) | Check field-level error details in response; branch on `code` when present |
+| 429 | Rate limited — request rate, or too many keys created over the API (`X-RateLimit-Type: key-creation`) | Respect `Retry-After` header; see Rate Limit Handling |
+| 500 | Internal server error | Retry with exponential backoff (1s, 2s, 4s) |
+| 501 | Not implemented | OpenAI gateway only, and only `variant_not_supported` on `GET /v1/videos/{id}/content` (a `?variant=` other than `video`). Do not retry. Paths the gateway does not serve — `/v1/chat/completions`, `/v1/files`, `.completions`, `.moderations`, `.responses`, `.audio.translations`, `.videos.list()`, or a typo — return **`404`** with `code: "endpoint_not_implemented"` (they used to return 501). Branch on `code`, not status, to tell them from `model_not_found` / `video_not_found`. `client.models.retrieve()` works (`GET /v1/models/{model}`) |
+
+Error bodies are **not** uniform — parse defensively. Verified live:
+
+**422** — `message` plus `errors` as an **object keyed by field name**, each value a list of strings. There is no `data` or `statusCode` key, and `errors` is not an array of `{field, messages}` objects:
+
+```json
+{
+  "message": "The steps field must not be greater than 1. (and 1 more error)",
+  "errors": {
+    "steps": ["The steps field must not be greater than 1."],
+    "fps": ["The fps field must be at least 30."]
+  }
+}
+```
+
+Two further quirks of the 422 body: a field's message list can contain the **same string twice** (`"width": ["The width field is required.", "The width field is required."]`), so de-duplicate before displaying; and array inputs are keyed by index, e.g. `"errors": {"input.0": [...], "input.1": [...]}` on `embeddings`.
+
+Not every endpoint fills `message` with the first field error. `prompts/enhancements` (and its `/price` variant) returns the generic `{"message": "The given data was invalid.", "errors": {...}}` instead — another reason to read `errors` rather than parsing `message`.
+
+**401** — `{ "message": "Unauthenticated.", "code": "missing_key" }` (no header) or `"code": "invalid_key"` (unknown key); `key_expired` / `key_revoked` for expired or disabled keys. Branch on `code`, not on `message`.
+**402** — key spend limit (verified live, key with a $0 limit and no reset window):
+
+```json
+{
+  "message": "This API key has reached its spend limit of $0.00. It does not reset on its own — raise or remove the limit on the key to continue.",
+  "code": "key_limit_exceeded",
+  "limit": 0,
+  "used": 0,
+  "remaining": 0,
+  "resets_at": null
+}
+```
+
+`resets_at` is the next window reset, or `null` when the limit never resets.
+**403 (key)** — `{ "message": "This API key does not have permission to access this endpoint.", "code": "insufficient_permissions" }` for an API key on an ADMIN-only endpoint; `"code": "ip_not_allowed"` for a request from outside the key's IP allowlist.
+**403** — `{ "message": "Client account is suspended. If you believe this is a mistake, contact us." }`. Returned by every endpoint that spends credits — generation, transcription and prompt enhancement — **before any validation runs**, so a suspended account sees this instead of a 422 about the body. No `errors` object accompanies it. The `/price` endpoints are not gated and keep working, so a working price quote is not evidence that a submission will be accepted.
+**404** — `{ "message": "No query results for model [Depin\\DepinShared\\Models\\JobRequest]." }`
+**429** — `{ "message": "Too Many Attempts." }`
+
+Only `message` is reliably present across every status. Read it with `body.get("message")` and iterate `body.get("errors", {}).items()` for field-level detail. Note that the OpenAI-compatible gateway uses a completely different envelope — `{"error": {"message", "type", "param", "code"}}` — so a client that talks to both surfaces needs two parsers.
+
+## Endpoint Index
+
+Every endpoint on `https://api.deapi.ai` that is available for use. Each generation, analysis, and transformation endpoint also has a matching `/price` variant (see [Price Calculation](#price-calculation)). A path answering `422` rather than `404` is not necessarily usable — some routes exist in the backend with no model behind them, and `GET /api/v2/models` is the authority on what you can actually run.
+
+| Task                          | Endpoint                                      |
+|-------------------------------|-----------------------------------------------|
+| Text to image                 | `POST /api/v2/images/generations`             |
+| Image to image (edit)         | `POST /api/v2/images/edits`                   |
+| Image to text (OCR)           | `POST /api/v2/images/ocr`                     |
+| Image background removal      | `POST /api/v2/images/background-removals`     |
+| Image upscale                 | `POST /api/v2/images/upscales`                |
+| Text to video                 | `POST /api/v2/videos/generations`             |
+| Image to video (animation)    | `POST /api/v2/videos/animations`              |
+| Audio to video                | `POST /api/v2/videos/audio-syncs`             |
+| Video character replacement (no model yet) | `POST /api/v2/videos/replacements` |
+| Video upscale                 | `POST /api/v2/videos/upscales`                |
+| Video description (URL or file) | `POST /api/v2/videos/descriptions`            |
+| Text to speech                | `POST /api/v2/audio/speech`                   |
+| Text to music                 | `POST /api/v2/audio/music`                    |
+| Transcription (audio & video, URL or file) | `POST /api/v2/audio/transcriptions` |
+| Text to embedding             | `POST /api/v2/embeddings`                     |
+| Prompt enhancement            | `POST /api/v2/prompts/enhancements`           |
+| Model catalog                 | `GET  /api/v2/models`                         |
+| Account balance (ADMIN key)   | `GET  /api/v2/account/balance`                |
+| Account billing (ADMIN key)   | `GET  /api/v2/account`                        |
+| Account usage (ADMIN key)     | `GET  /api/v2/account/usage`                  |
+| Account payments (ADMIN key)  | `GET  /api/v2/account/payments`               |
+| Calling key                   | `GET  /api/v2/key`                            |
+| Calling key usage             | `GET  /api/v2/key/usage`                      |
+| List / create API keys (ADMIN key) | `GET` / `POST /api/v2/keys`              |
+| Get / change / delete a key (ADMIN key) | `GET` / `PATCH` / `DELETE /api/v2/keys/{id}` |
+| Key usage (ADMIN key)         | `GET  /api/v2/keys/{id}/usage`                |
+| Job status / result           | `GET  /api/v2/jobs/{request_id}`              |
+
+Note on identifier vocabularies: the `filter[inference_types]` enum on `/api/v2/models` uses its own identifiers (`txt2img`, `img-rmbg`, `video2text`, `video_file2text`, `video2desc`, `video_file2desc`, etc.), which differ from the webhook `job_type` values — see [Dynamic Model Discovery](#dynamic-model-discovery) for the exact list.
+
+## Links
+
+### Documentation
+
+- Docs home: [docs.deapi.ai](https://docs.deapi.ai)
+- Introduction: [docs.deapi.ai/introduction](https://docs.deapi.ai/introduction)
+- Quickstart: [docs.deapi.ai/quickstart](https://docs.deapi.ai/quickstart)
+- Models guide: [docs.deapi.ai/models](https://docs.deapi.ai/models)
+- Pricing: [docs.deapi.ai/pricing](https://docs.deapi.ai/pricing)
+- OpenAI Compatibility: [docs.deapi.ai/openai-compatibility](https://docs.deapi.ai/openai-compatibility)
+- Architecture & Security: [docs.deapi.ai/architecture-and-security](https://docs.deapi.ai/architecture-and-security)
+- API Keys: [docs.deapi.ai/api-keys](https://docs.deapi.ai/api-keys)
+- Limits & Quotas: [docs.deapi.ai/limits-and-quotas](https://docs.deapi.ai/limits-and-quotas)
+- Execution Modes & HTTP Queue: [docs.deapi.ai/execution-modes-and-integrations/execution-modes-and-http-queue](https://docs.deapi.ai/execution-modes-and-integrations/execution-modes-and-http-queue)
+- Webhooks: [docs.deapi.ai/execution-modes-and-integrations/webhooks](https://docs.deapi.ai/execution-modes-and-integrations/webhooks)
+- WebSockets: [docs.deapi.ai/execution-modes-and-integrations/websockets](https://docs.deapi.ai/execution-modes-and-integrations/websockets)
+- MCP Server: [docs.deapi.ai/execution-modes-and-integrations/mcp-server](https://docs.deapi.ai/execution-modes-and-integrations/mcp-server)
+- n8n Integration: [docs.deapi.ai/execution-modes-and-integrations/n8n-integration](https://docs.deapi.ai/execution-modes-and-integrations/n8n-integration)
+- n8n deAPI Node: [docs.deapi.ai/execution-modes-and-integrations/n8n-deapi-node](https://docs.deapi.ai/execution-modes-and-integrations/n8n-deapi-node)
+- SDKs & Integrations: [docs.deapi.ai/other/sdks-and-integrations](https://docs.deapi.ai/other/sdks-and-integrations)
+- Payment Methods: [docs.deapi.ai/other/payment-methods](https://docs.deapi.ai/other/payment-methods)
+- FAQ: [docs.deapi.ai/other/faq-frequently-asked-questions](https://docs.deapi.ai/other/faq-frequently-asked-questions)
+- Support & Contact: [docs.deapi.ai/other/support-and-contact](https://docs.deapi.ai/other/support-and-contact)
+
+### API reference
+
+- API v2 Overview: [docs.deapi.ai/api/v2/overview](https://docs.deapi.ai/api/v2/overview)
+- API v2 Video Description: [docs.deapi.ai/api/v2/videos/descriptions](https://docs.deapi.ai/api/v2/videos/descriptions)
+- API v2 Video Description Price Calculation: [docs.deapi.ai/api/v2/videos/descriptions-price](https://docs.deapi.ai/api/v2/videos/descriptions-price)
+
+- API v2 Errors: [docs.deapi.ai/api/v2/errors](https://docs.deapi.ai/api/v2/errors)
+- API v2 Model Selection: [docs.deapi.ai/api/v2/utilities/models](https://docs.deapi.ai/api/v2/utilities/models)
+- API v2 Job Results: [docs.deapi.ai/api/v2/utilities/jobs](https://docs.deapi.ai/api/v2/utilities/jobs)
+- API v2 Balance: [docs.deapi.ai/api/v2/utilities/balance](https://docs.deapi.ai/api/v2/utilities/balance)
+- API v2 Get Current Key: [docs.deapi.ai/api/v2/keys/get-current-key](https://docs.deapi.ai/api/v2/keys/get-current-key)
+- API v2 Get Current Key Usage: [docs.deapi.ai/api/v2/keys/get-current-key-usage](https://docs.deapi.ai/api/v2/keys/get-current-key-usage)
+- API v2 List Keys: [docs.deapi.ai/api/v2/keys/list-keys](https://docs.deapi.ai/api/v2/keys/list-keys)
+- API v2 Create Key: [docs.deapi.ai/api/v2/keys/create-key](https://docs.deapi.ai/api/v2/keys/create-key)
+- API v2 Get Key: [docs.deapi.ai/api/v2/keys/get-key](https://docs.deapi.ai/api/v2/keys/get-key)
+- API v2 Update Key: [docs.deapi.ai/api/v2/keys/update-key](https://docs.deapi.ai/api/v2/keys/update-key)
+- API v2 Delete Key: [docs.deapi.ai/api/v2/keys/delete-key](https://docs.deapi.ai/api/v2/keys/delete-key)
+- API v2 Get Key Usage: [docs.deapi.ai/api/v2/keys/get-key-usage](https://docs.deapi.ai/api/v2/keys/get-key-usage)
+- API v2 Account Billing: [docs.deapi.ai/api/v2/account/get-account](https://docs.deapi.ai/api/v2/account/get-account)
+- API v2 Account Usage: [docs.deapi.ai/api/v2/account/usage](https://docs.deapi.ai/api/v2/account/usage)
+- API v2 Account Payments: [docs.deapi.ai/api/v2/account/payments](https://docs.deapi.ai/api/v2/account/payments)
+- API v2 Prompt Enhancement: [docs.deapi.ai/api/v2/prompt-enhancement/overview](https://docs.deapi.ai/api/v2/prompt-enhancement/overview)
+
+### Product & account
+
+- Dashboard & API Keys: [app.deapi.ai/dashboard](https://app.deapi.ai/dashboard)
+- Sign Up: [app.deapi.ai/register](https://app.deapi.ai/register)
+- Sign In: [app.deapi.ai/login](https://app.deapi.ai/login)
+- Account Settings: [app.deapi.ai/settings/account](https://app.deapi.ai/settings/account)
+- API Keys: [app.deapi.ai/settings/api-keys](https://app.deapi.ai/settings/api-keys)
+- Webhooks Settings: [app.deapi.ai/settings/webhooks](https://app.deapi.ai/settings/webhooks)
+- Billing: [app.deapi.ai/billing](https://app.deapi.ai/billing)
+
+### Website
+
+- Playground (Text to Image): [deapi.ai/playground/text-to-image](https://deapi.ai/playground/text-to-image)
+- Playground (Image to Image): [deapi.ai/playground/image-to-image](https://deapi.ai/playground/image-to-image)
+- Playground (Text to Speech): [deapi.ai/playground/text-to-speech](https://deapi.ai/playground/text-to-speech)
+- Playground (Image to Video): [deapi.ai/playground/image-to-video](https://deapi.ai/playground/image-to-video)
+- Playground (Video to Text): [deapi.ai/playground/video-to-text](https://deapi.ai/playground/video-to-text)
+- Playground (Image to Text / OCR): [deapi.ai/playground/image-to-text](https://deapi.ai/playground/image-to-text)
+- Playground (Text to Music): [deapi.ai/playground/text-to-music](https://deapi.ai/playground/text-to-music)
+- Models: [deapi.ai/models](https://deapi.ai/models)
+- Use Cases: [deapi.ai/use-cases](https://deapi.ai/use-cases)
+- Use Case — Text to Image: [deapi.ai/use-cases/text-to-image](https://deapi.ai/use-cases/text-to-image)
+- Use Case — Text to Speech: [deapi.ai/use-cases/text-to-speech](https://deapi.ai/use-cases/text-to-speech)
+- Use Case — Image to Video: [deapi.ai/use-cases/image-to-video](https://deapi.ai/use-cases/image-to-video)
+- Use Case — Video to Text: [deapi.ai/use-cases/video-to-text](https://deapi.ai/use-cases/video-to-text)
+- Use Case — Music Generation: [deapi.ai/use-cases/music-generation](https://deapi.ai/use-cases/music-generation)
+- Use Case — AI Video Avatar: [deapi.ai/use-cases/ai-video-avatar](https://deapi.ai/use-cases/ai-video-avatar)
+- Use Case — AI Image Editor: [deapi.ai/use-cases/ai-image-editor](https://deapi.ai/use-cases/ai-image-editor)
+- Use Case — Prompt Enhancer: [deapi.ai/use-cases/prompt-enhancer](https://deapi.ai/use-cases/prompt-enhancer)
+- Use Case — n8n AI Workflows: [deapi.ai/use-cases/n8n-ai-workflows](https://deapi.ai/use-cases/n8n-ai-workflows)
+- Use Case — Claude Code: [deapi.ai/use-cases/claude-code](https://deapi.ai/use-cases/claude-code)
+- Use Case — OpenClaw: [deapi.ai/use-cases/openclaw](https://deapi.ai/use-cases/openclaw)
+- Use Case — OpenAI API: [deapi.ai/use-cases/openai-api](https://deapi.ai/use-cases/openai-api)
+- Compare: [deapi.ai/compare](https://deapi.ai/compare)
+- Compare — deAPI vs. Replicate: [deapi.ai/compare/replicate](https://deapi.ai/compare/replicate)
+- Compare — deAPI vs. fal: [deapi.ai/compare/fal](https://deapi.ai/compare/fal)
+- Compare — deAPI vs. Together: [deapi.ai/compare/together](https://deapi.ai/compare/together)
+- Compare — deAPI vs. OpenAI: [deapi.ai/compare/openai](https://deapi.ai/compare/openai)
+- Compare — deAPI vs. ElevenLabs: [deapi.ai/compare/elevenlabs](https://deapi.ai/compare/elevenlabs)
+- Blog: [deapi.ai/blog](https://deapi.ai/blog)
+- Pricing: [deapi.ai/pricing](https://deapi.ai/pricing)
+- Changelog: [deapi.ai/changelog](https://deapi.ai/changelog)
+- Status Page: [status.deapi.ai](https://status.deapi.ai)
+- Contact Sales: [deapi.ai/contact-sales](https://deapi.ai/contact-sales)
+- Privacy Policy: [deapi.ai/privacy-policy](https://deapi.ai/privacy-policy)
+- Terms of Service: [deapi.ai/terms-of-service](https://deapi.ai/terms-of-service)
+- llms.txt: [deapi.ai/llms.txt](https://deapi.ai/llms.txt)
+
+### Code & community
+
+- GitHub: [github.com/deapi-ai](https://github.com/deapi-ai)
+- Python SDK: [github.com/deapi-ai/deapi-python-sdk](https://github.com/deapi-ai/deapi-python-sdk)
+- MCP Server Source: [github.com/deapi-ai/mcp-server-deapi](https://github.com/deapi-ai/mcp-server-deapi)
+- Claude Code Skills: [github.com/deapi-ai/claude-code-skills](https://github.com/deapi-ai/claude-code-skills)
+- n8n Node: [n8n.io/creators/deapi](https://n8n.io/creators/deapi/)
+- Twitter/X: [x.com/deAPI_](https://x.com/deAPI_)
+- Discord: [discord.com/invite/UFfK5YRBsr](https://discord.com/invite/UFfK5YRBsr)

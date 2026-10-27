@@ -530,6 +530,28 @@
 
     <div class="api-divider"></div>
 
+    <div class="api-provider-header extra"><span class="provider-dot"></span><span>🎬 DEAPI — Vidéo open-source (secours)</span></div>
+    <div class="api-key-row">
+        <input type="password" class="api-key-input" id="deapi-key-input" placeholder="Clé deAPI (sk-dp-...)" autocomplete="off">
+        <button type="button" class="api-btn extra" id="deapi-verify-btn">🔍 Vérifier</button>
+    </div>
+    <div class="api-status-line" id="deapi-status-line">
+        <span class="status-dot"></span>
+        <span id="deapi-status-text">Aucune clé deAPI</span>
+        <span class="status-detail" id="deapi-status-detail"></span>
+    </div>
+    <div class="api-hint">Compte gratuit (5 $ de crédits, sans carte bancaire) sur <a href="https://app.deapi.ai" target="_blank">app.deapi.ai</a>. Utilisé automatiquement quand Agnes échoue ou n'a pas de clé.</div>
+    <div class="model-selector">
+        <div class="model-selector-label">
+            <span>🎬 Modèles deAPI (texte → vidéo)</span>
+            <div class="model-actions-row"><button type="button" class="model-action-btn extra" id="deapi-refresh-btn">🔄 Détecter</button></div>
+        </div>
+        <div class="model-current" id="deapi-current-label">—</div>
+        <div class="model-grid" id="deapi-model-grid"><div class="model-empty">Saisissez votre clé puis « Détecter ».</div></div>
+    </div>
+
+    <div class="api-divider"></div>
+
     <div class="api-provider-header extra"><span class="provider-dot"></span><span>⚡ MODÈLES EXTRAS</span></div>
     <div class="api-hint" style="margin-bottom:0.5rem;">Ajoutez des IDs de modèles. Activez-les en cliquant dessus.</div>
     <div class="model-selector" style="margin-top:0.5rem; padding-top:0.5rem;">
@@ -2860,7 +2882,12 @@ async function apiFetch(url, options = {}) {
                 let filee = false;
                 try { const t = await res.clone().text(); filee = /video_queue_full|queue is full/i.test(t); } catch (e) {}
                 if (filee) {
-                    const planF = [60, 120, 180, 240, 300, 300];
+                    /* v663 — « file pleine » est l'état du FOURNISSEUR, pas du
+                       modèle : inutile d'attendre 20 min quand un secours
+                       (deAPI) est configuré — on rend la main tout de suite
+                       pour qu'il prenne le relais. Sans secours, on patiente. */
+                    const secours = (typeof window.deapiCle === 'function' && window.deapiCle());
+                    const planF = secours ? [] : [60, 120, 180, 240, 300, 300];
                     if (attenteFile >= planF.length) return res;
                     const wf = retryAfterSeconds(res, [planF[attenteFile]]);
                     attenteFile++;
@@ -3122,7 +3149,10 @@ function renderComboLists() {
 
 async function startGeneration() {
     if (state.isRunning) return;
-    if (!getApiKey()) { showToast('Ajoutez une clé Agnes', 'error'); return; }
+    /* v663 — deAPI suffit : il n'est plus obligatoire d'avoir une clé Agnes. */
+    if (!getApiKey() && !(typeof window.deapiCle === 'function' && window.deapiCle())) {
+        showToast('Ajoutez une clé Agnes ou deAPI', 'error'); return;
+    }
     if (state.agnesKeyStatus === 'invalid') { showToast('Clé Agnes invalide', 'error'); return; }
     if (state.mode === 'image') state.mainPrompt = document.getElementById('main-prompt').value.trim();
     else if (state.mode === 'text') state.textBase = document.getElementById('scene-base-text').value.trim();
@@ -3266,7 +3296,21 @@ async function startGeneration() {
                sur un 404 (route absente) : une clé refusée ou une limite
                (401/429) garde le comportement d'arrêt explicite. */
             const _est404 = /\b404\b/.test(String(e && e.message || ''));
-            if (!cmVid || _est404) {
+            const _filePleine = /video_queue_full|queue is full/i.test(String(e && e.message || ''));
+            const _secours = typeof window.deapiEssayer === 'function' && !cmVid &&
+                             typeof window.deapiCle === 'function' && window.deapiCle();
+            if (_secours && _filePleine) {
+                /* v663 — file Agnes saturée : c'est tout le fournisseur qui est
+                   plein, rejouer « 2.5 » puis « Flash » ne changerait rien. On
+                   bascule directement sur le secours open-source. */
+                logWarn('⏳ File Agnes saturée — bascule sur le secours deAPI.');
+                if (await window.deapiEssayer(prompt, img, aud, vid, sceneLabel)) {
+                    completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
+                    const g4 = loadGallery();
+                    if (g4[0]) { g4[0].prompt = prompt; g4[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10; g4[0].quotaSec = g4[0].durationSec; saveGallery(g4); cacheVideoSet(cleCache, g4[0].id); }
+                    return;
+                }
+            } else if (!cmVid || _est404) {
                 if (cmVid && _est404) {
                     logWarn('⚠️ Le modèle personnalisé <code>' + escapeHtml(modelId) + '</code> ne connaît pas la route vidéo (404) — bascule sur les modèles Agnes par défaut.');
                 }
@@ -3287,6 +3331,18 @@ async function startGeneration() {
                     } catch (e2) {
                         logError('💥 Repli <code>' + modeleRepli + '</code> échoué : ' + escapeHtml(String(e2 && e2.message || e2)));
                     }
+                }
+            }
+            /* v663 — SECOURS deAPI (vidéo open-source, 5 $ de crédits offerts) :
+               si Agnes n'a rien produit (file pleine, quota épuisé, modèle
+               retiré), on tente ce fournisseur AVANT de déclarer l'échec. Un
+               modèle personnalisé reste prioritaire (son endpoint est explicite). */
+            if (typeof window.deapiEssayer === 'function' && !cmVid) {
+                if (await window.deapiEssayer(prompt, img, aud, vid, sceneLabel)) {
+                    completed++; cadenceSucces(); recordTiming('job', Date.now() - t0);
+                    const g3 = loadGallery();
+                    if (g3[0]) { g3[0].prompt = prompt; g3[0].durationSec = Math.round((state.durationFrames / FRAME_RATE) * 10) / 10; g3[0].quotaSec = g3[0].durationSec; saveGallery(g3); cacheVideoSet(cleCache, g3[0].id); }
+                    return;
                 }
             }
             failed++;
@@ -3420,7 +3476,9 @@ function stopGeneration() { if (!state.isRunning) return; state.stopRequested = 
 function updateGenerateBtn() {
     const btn = document.getElementById('generate-btn'); if (!btn) return;
     if (state.isRunning) { btn.disabled = true; btn.textContent = 'Production…'; return; }
-    if (!getApiKey()) { btn.disabled = true; btn.textContent = 'Ajoutez votre clé Agnes'; return; }
+    if (!getApiKey() && !(typeof window.deapiCle === 'function' && window.deapiCle())) {
+        btn.disabled = true; btn.textContent = 'Ajoutez une clé (Agnes ou deAPI)'; return;
+    }
     if (state.agnesKeyStatus === 'invalid') { btn.disabled = true; btn.textContent = '⚠️ Clé Agnes invalide'; return; }
     let ready = false, label = '';
     if (state.mode === 'image') { ready = state.images.length > 0; label = ready ? 'Créer ' + state.images.length + ' scène(s)' : 'Ajoutez des images'; }
@@ -4922,6 +4980,290 @@ async function enrichWithMistral(btn, textareaId) {
   window.__v562Jauge = { mesurer: mesurer, rendre: rendre, verdict: verdict, activerVideo: activerVideo };
 })();
 
+</script>
+
+<script id="v663-deapi">
+/* ══════════════════════════════════════════════════════════════════════════
+   v663 — FOURNISSEUR DEAPI : vidéo open-source (LTX, MiniMax H3)
+
+   POURQUOI. Le seul modèle Agnes gratuit (2.5 Flash) répond 503
+   « video_queue_full » en permanence (mesuré : 6 échecs sur 6, à deux heures
+   d'intervalle), et le modèle payant exige 0,125 $ pour 5 s alors que le
+   compte dispose de 0,10 $. deAPI héberge des modèles OUVERTS (LTX Video,
+   MiniMax H3) avec 5 $ de crédits offerts à l'inscription, sans carte
+   bancaire : c'est une sortie de secours gratuite et disponible.
+
+   CONTRAT DE L'API (relevé dans https://deapi.ai/llms.txt) :
+   - POST /api/v2/videos/generations  (JSON)   -> { data: { request_id } }
+   - POST /api/v2/videos/animations   (multipart, first_frame_image) -> idem
+   - GET  /api/v2/jobs/{request_id}            -> { data: { status, progress,
+                                                            result_url } }
+     status: pending | in_progress | done | error
+   - GET  /api/v2/models?filter[inference_types]=txt2video -> catalogue
+   ⚠ Les bornes (frames, fps, largeur, hauteur, pixels, ratio) sont PROPRES À
+     CHAQUE MODÈLE : on les lit dans info.limits et on s'y conforme, jamais de
+     valeurs codées en dur (un « fps 24 raisonnable » est refusé par Ltxv_13B
+     qui impose 30, et un 1024x1024 dépasse le budget pixels de Ltx2_5).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  var SK_CLE = 'theologicus_deapi_key_v1';
+  var SK_MODELE = 'theologicus_deapi_model_v1';
+  var SK_MODELES = 'theologicus_deapi_models_v1';
+  var BASE = (typeof _viaRelais === 'function')
+    ? _viaRelais('https://api.deapi.ai/api/v2')
+    : 'https://api.deapi.ai/api/v2';
+  var TIMEOUT_MS = 20 * 60 * 1000;      /* 20 min : les jobs LTX sont longs */
+  var POLL_MS = 8000;
+
+  function cle() { try { return (localStorage.getItem(SK_CLE) || '').trim(); } catch (e) { return ''; } }
+  function sauverCle(v) { try { localStorage.setItem(SK_CLE, String(v || '').trim()); } catch (e) {} }
+  function modeleChoisi() { try { return localStorage.getItem(SK_MODELE) || ''; } catch (e) { return ''; } }
+  function sauverModele(v) { try { localStorage.setItem(SK_MODELE, String(v || '')); } catch (e) {} }
+  function modelesConnus() {
+    try { var o = JSON.parse(localStorage.getItem(SK_MODELES) || '[]'); return Array.isArray(o) ? o : []; }
+    catch (e) { return []; }
+  }
+  function sauverModeles(l) { try { localStorage.setItem(SK_MODELES, JSON.stringify(l || [])); } catch (e) {} }
+
+  function bornes(slug) {
+    var l = modelesConnus();
+    for (var i = 0; i < l.length; i++) {
+      if (l[i].slug === slug && l[i].info && l[i].info.limits) return l[i].info.limits;
+    }
+    return {};
+  }
+  function borner(v, lo, hi, def) {
+    v = Number(v); if (!isFinite(v)) v = def;
+    if (isFinite(lo)) v = Math.max(lo, v);
+    if (isFinite(hi)) v = Math.min(hi, v);
+    return Math.round(v);
+  }
+  function multiple(L) { var m = Number(L.dimension_multiple); return (isFinite(m) && m > 0) ? m : 8; }
+
+  /* Taille conforme au modèle : pixels ET ratio ET bornes par axe. */
+  function taille(slug, ratio) {
+    var L = bornes(slug);
+    var mult = multiple(L);
+    var arr = function (x) { return Math.max(mult, Math.round(x / mult) * mult); };
+    var w = 768, h = Math.round(768 / (ratio || 1.7778));
+    w = arr(w); h = arr(h);
+    var maxW = isFinite(Number(L.max_width)) ? Number(L.max_width) : 1024;
+    var maxH = isFinite(Number(L.max_height)) ? Number(L.max_height) : 1024;
+    var minW = isFinite(Number(L.min_width)) ? Number(L.min_width) : 256;
+    var minH = isFinite(Number(L.min_height)) ? Number(L.min_height) : 256;
+    var maxPx = isFinite(Number(L.max_pixels)) ? Number(L.max_pixels) : Infinity;
+    var maxRatio = isFinite(Number(L.max_ratio)) ? Number(L.max_ratio) : Infinity;
+    var echelle = Math.min(1, maxW / w, maxH / h);
+    if (isFinite(maxPx) && w * h > 0) echelle = Math.min(echelle, Math.sqrt(maxPx / (w * h)));
+    w = arr(Math.max(minW, w * echelle));
+    h = arr(Math.max(minH, h * echelle));
+    /* respect du ratio max (Ltx2_5 refuse 2.62:1) */
+    var r = Math.max(w / h, h / w);
+    if (isFinite(maxRatio) && r > maxRatio) {
+      if (w >= h) w = arr(h * maxRatio); else h = arr(w * maxRatio);
+    }
+    return { w: w, h: h };
+  }
+
+  function entetes(json) {
+    var h = { 'Authorization': 'Bearer ' + cle(), 'Accept': 'application/json' };
+    if (json) h['Content-Type'] = 'application/json';
+    return h;
+  }
+  function aller(url, opts) {
+    if (typeof apiFetch === 'function') return apiFetch(url, opts);
+    return fetch(url, opts);
+  }
+
+  /* ── Catalogue : découverte à l'exécution, jamais de nom codé en dur ── */
+  async function lister() {
+    if (!cle()) throw new Error('Clé deAPI absente');
+    var r = await aller(BASE + '/models?limit=50&filter[inference_types]=txt2video',
+      { method: 'GET', headers: entetes(true) });
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 120));
+    var d = await r.json();
+    var l = (d && d.data) ? d.data : [];
+    sauverModeles(l);
+    return l;
+  }
+
+  /* ── Devis (non bloquant : renseigne le coût avant de lancer) ── */
+  async function devis(corps) {
+    try {
+      var r = await aller(BASE + '/videos/generations/price',
+        { method: 'POST', headers: entetes(true), body: JSON.stringify(corps) });
+      if (!r.ok) return null;
+      var d = await r.json();
+      var v = d && d.data ? (d.data.price !== undefined ? d.data.price : d.data) : null;
+      return (typeof v === 'number') ? v : (v && v.price !== undefined ? v.price : null);
+    } catch (e) { return null; }
+  }
+
+  function dataUriVersBlob(uri) {
+    var m = /^data:([^;,]+);base64,(.*)$/.exec(String(uri || ''));
+    if (!m) return null;
+    var bin = atob(m[2]); var u8 = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: m[1] || 'image/png' });
+  }
+
+  /* ── Création : texte → vidéo, ou image → vidéo (multipart) ── */
+  async function creer(prompt, slug, opts) {
+    opts = opts || {};
+    var L = bornes(slug);
+    var fps = borner(opts.fps || 24, L.min_fps, L.max_fps, 24);
+    var dureeSec = opts.dureeSec || 4;
+    var frames = borner(Math.round(dureeSec * fps), L.min_frames, L.max_frames, Math.round(dureeSec * fps));
+    var t = taille(slug, opts.ratio || 1.7778);
+    var corps = {
+      prompt: prompt, model: slug, width: t.w, height: t.h,
+      seed: (opts.seed !== undefined ? opts.seed : Math.floor(Math.random() * 2147483647)),
+      frames: frames, fps: fps
+    };
+    if (opts.negative) corps.negative_prompt = opts.negative;
+
+    var url, init;
+    if (opts.image) {
+      var blob = dataUriVersBlob(opts.image);
+      if (!blob) throw new Error('image jointe illisible');
+      var fd = new FormData();
+      Object.keys(corps).forEach(function (k) { fd.append(k, String(corps[k])); });
+      fd.append('first_frame_image', blob, 'frame.png');
+      url = BASE + '/videos/animations'; init = { method: 'POST', headers: { 'Authorization': 'Bearer ' + cle(), 'Accept': 'application/json' }, body: fd };
+    } else {
+      var prix = await devis(corps);
+      if (prix !== null) logInfo('💰 deAPI : coût estimé <strong>' + prix + '</strong> (crédits)');
+      url = BASE + '/videos/generations'; init = { method: 'POST', headers: entetes(true), body: JSON.stringify(corps) };
+    }
+    var r = await aller(url, init);
+    var txt = await r.text();
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + txt.slice(0, 200));
+    var d = null; try { d = JSON.parse(txt); } catch (e) {}
+    var id = d && d.data && d.data.request_id;
+    if (!id) throw new Error('pas de request_id : ' + txt.slice(0, 120));
+    return id;
+  }
+
+  /* ── Sondage du job jusqu'à done / error ── */
+  async function sonder(requestId, label, slug) {
+    var t0 = Date.now();
+    var dernier = -1;
+    while (Date.now() - t0 < TIMEOUT_MS) {
+      if (typeof state !== 'undefined' && state.stopRequested) throw new Error('Arrêt');
+      var r = await aller(BASE + '/jobs/' + encodeURIComponent(requestId),
+        { method: 'GET', headers: entetes(true) });
+      if (r.ok) {
+        var d = await r.json(); var j = (d && d.data) ? d.data : {};
+        var st = String(j.status || '');
+        var pr = Number(j.progress || 0);
+        if (pr !== dernier) { dernier = pr; logInfo('🔄 ' + label + ' — <strong>' + pr + '%</strong> (' + st + ')'); setStatus(label + ' — ' + pr + '%'); }
+        if (st === 'done') {
+          var url = j.result_url || (j.result && j.result.url);
+          if (!url) throw new Error('job terminé sans URL');
+          logSuccess('🎉 ' + label + ' terminée (' + Math.round((Date.now() - t0) / 1000) + 's)');
+          if (typeof recordTiming === 'function') recordTiming('video', Date.now() - t0);
+          await addVideoToGallery(url, label, { model: 'deapi:' + slug, scene: label });
+          return true;
+        }
+        if (st === 'error') throw new Error('job en erreur : ' + String(j.error || j.message || '').slice(0, 120));
+      }
+      await sleep(POLL_MS / 1000);
+    }
+    throw new Error('délai dépassé (20 min)');
+  }
+
+  /* ── Point d'entrée : tenté en secours d'Agnes ── */
+  async function essayer(prompt, image, audio, video, sceneLabel) {
+    if (!cle()) return false;
+    if (audio || video) { logWarn('⚠️ deAPI : audio/vidéo joints non gérés — secours ignoré'); return false; }
+    var liste = modelesConnus();
+    var slug = modeleChoisi();
+    if (!slug || !liste.some(function (m) { return m.slug === slug; })) {
+      slug = liste.length ? liste[0].slug : '';
+    }
+    if (!slug) {
+      try { var l = await lister(); slug = l.length ? l[0].slug : ''; }
+      catch (e) { logWarn('⚠️ deAPI : catalogue inaccessible — ' + escapeHtml(e.message)); return false; }
+    }
+    if (!slug) { logWarn('⚠️ deAPI : aucun modèle texte→vidéo exposé à ce compte'); return false; }
+    var dureeSec = (typeof state !== 'undefined' && state.durationFrames && typeof FRAME_RATE !== 'undefined')
+      ? (state.durationFrames / FRAME_RATE) : 4;
+    try {
+      logStep('🔁 Secours <strong>deAPI</strong> — <code>' + escapeHtml(slug) + '</code>');
+      var id = await creer(prompt, slug, {
+        image: image || null, dureeSec: Math.max(2, Math.min(12, dureeSec)),
+        ratio: 1.7778, negative: 'blurry, low quality, watermark, text'
+      });
+      logInfo('🆔 Job deAPI <code>' + escapeHtml(String(id).slice(0, 12)) + '…</code>');
+      await sonder(id, sceneLabel + ' · deAPI', slug);
+      logSuccess('✅ Secours deAPI réussi');
+      return true;
+    } catch (e) {
+      logError('💥 Secours deAPI échoué : ' + escapeHtml(String((e && e.message) || e)));
+      return false;
+    }
+  }
+
+  /* ── Interface : clé, vérification, détection des modèles ── */
+  function majStatut(texte, detail, cls) {
+    var t = document.getElementById('deapi-status-text');
+    var d = document.getElementById('deapi-status-detail');
+    var l = document.getElementById('deapi-status-line');
+    if (t) t.textContent = texte;
+    if (d) d.textContent = detail || '';
+    if (l) { l.classList.remove('valid', 'invalid', 'checking'); if (cls) l.classList.add(cls); }
+  }
+  function rendreModeles(liste) {
+    var g = document.getElementById('deapi-model-grid');
+    var cur = document.getElementById('deapi-current-label');
+    var choisi = modeleChoisi();
+    if (!g) return;
+    if (!liste.length) { g.innerHTML = '<div class="model-empty">Aucun modèle texte→vidéo.</div>'; return; }
+    g.innerHTML = liste.map(function (m) {
+      var act = m.slug === choisi ? ' active' : '';
+      return '<button type="button" class="model-chip' + act + '" data-deapi="' + String(m.slug).replace(/"/g, '') + '">' + String(m.name || m.slug) + '</button>';
+    }).join('');
+    if (cur) cur.textContent = choisi || (liste[0] && (liste[0].name || liste[0].slug)) || '—';
+    Array.prototype.forEach.call(g.querySelectorAll('[data-deapi]'), function (b) {
+      b.addEventListener('click', function () {
+        sauverModele(b.getAttribute('data-deapi'));
+        rendreModeles(liste);
+        logSuccess('⚡ deAPI : modèle <code>' + escapeHtml(b.getAttribute('data-deapi')) + '</code>');
+      });
+    });
+  }
+
+  async function verifier() {
+    var inp = document.getElementById('deapi-key-input');
+    if (inp) sauverCle(inp.value);
+    if (!cle()) { majStatut('Aucune clé deAPI', '', 'invalid'); return; }
+    majStatut('Vérification…', '', 'checking');
+    try {
+      var l = await lister();
+      var txt = l.length ? (l.length + ' modèle(s) texte→vidéo') : 'clé valide, aucun modèle exposé';
+      majStatut('Clé deAPI valide', txt, 'valid');
+      rendreModeles(l);
+      logSuccess('✅ deAPI : ' + txt);
+    } catch (e) {
+      majStatut('Échec deAPI', String((e && e.message) || e).slice(0, 60), 'invalid');
+      logError('❌ deAPI : ' + escapeHtml(String((e && e.message) || e)));
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', function () {
+    var inp = document.getElementById('deapi-key-input');
+    if (inp) { inp.value = cle(); majStatut(cle() ? 'Clé deAPI enregistrée' : 'Aucune clé deAPI', '', cle() ? 'valid' : ''); }
+    var b = document.getElementById('deapi-verify-btn'); if (b) b.addEventListener('click', verifier);
+    var r = document.getElementById('deapi-refresh-btn'); if (r) r.addEventListener('click', verifier);
+    var connus = modelesConnus(); if (connus.length) rendreModeles(connus);
+  });
+
+  window.__v663 = { cle: cle, lister: lister, creer: creer, sonder: sonder, essayer: essayer, taille: taille, BASE: BASE };
+  window.deapiEssayer = essayer;      /* appelé en secours par la chaîne de replis */
+  window.deapiCle = cle;
+})();
 </script>
 </body>
 </html>
