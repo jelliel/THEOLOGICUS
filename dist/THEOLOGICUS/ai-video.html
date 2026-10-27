@@ -3274,7 +3274,9 @@ async function startGeneration() {
                s'exécuter d'abord ; le quota ne devient fatal qu'APRÈS, si le
                gratuit échoue aussi. */
             const cls = classerEchec(String(e && e.message || e));
-            if (/clé Agnes refusée/i.test(cls)) {
+            /* v664 — le test fatal porte sur le KIND : renommer la phrase ne
+               peut plus le désarmer (avant : /clé Agnes refusée/ sur le texte). */
+            if (estFatale(String(e && e.message || e))) {
                 logError('🛑 ' + cls + ' — arrêt du run (inutile de réessayer).');
                 failed++; echecs.push(String(e && e.message || e));
                 state.stopRequested = true;
@@ -3347,11 +3349,15 @@ async function startGeneration() {
             }
             failed++;
             echecs.push(String(e.message || e));
-            logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
+            /* v664 — la référence figure dans le journal : elle est copiable
+               dans un rapport et ne contient ni URL ni jeton. */
+            logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message) +
+                     ' — réf. <code>' + refEchec(e.message) + '</code>');
             /* v662 — la chaîne de replis n'a rien pu faire (le modèle gratuit
                a échoué aussi) : un solde épuisé est alors définitif, on arrête
-               le run au lieu de rejouer la même impasse sur chaque scène. */
-            if (/solde Agnes insuffisant/i.test(cls)) {
+               le run au lieu de rejouer la même impasse sur chaque scène.
+               v664 — décidé par le kind, comme l'arrêt sur clé refusée. */
+            if (estDefinitif(e.message)) {
                 logError('🛑 ' + cls + ' — arrêt du run (inutile de réessayer).');
                 state.stopRequested = true;
             }
@@ -3397,7 +3403,11 @@ async function startGeneration() {
     else {
         setLogStatusDot('error');
         var cause = causeProbable(echecs);
-        logError('❌ <strong>Aucune vidéo</strong>' + (cause ? ' — ' + cause : ''));
+        /* v664 — la référence est affichée à côté de la cause : même décision,
+           donc la même panne. Elle reste copiable (jetons fixes, bornée 64 c.). */
+        var ref = refPrincipale(echecs);
+        logError('❌ <strong>Aucune vidéo</strong>' + (cause ? ' — ' + cause : '') +
+                 (ref ? ' · réf. <code>' + ref + '</code>' : ''));
         showToast('Aucune vidéo — ' + (cause || 'voir le journal'), 'error', 8000);
     }
     majPhaseBar('done', 100, completed + '/' + totalJobs + ' réussies');   /* C1 */
@@ -3406,71 +3416,183 @@ async function startGeneration() {
     await sleep(4000); setStatus(null);
     setTimeout(() => setLogStatusDot('idle'), 5000);
 }
-/* v460 — traduit les messages du fournisseur en cause lisible.
-   Le résumé disait « Aucune vidéo » sans dire pourquoi : le motif n'était que
-   dans la ligne `💥` du journal. */
-function causeProbable(echecs) {
-    if (!echecs || !echecs.length) return '';
-    var compte = {}, ordre = [];
-    echecs.forEach(function (m) {
-        var c = classerEchec(m);
-        if (!compte[c]) { compte[c] = 0; ordre.push(c); }
-        compte[c]++;
-    });
-    /* v662 — la cause AFFICHÉE doit être la plus ACTIONNABLE, pas la plus
-       fréquente. Mesure du 2026-10-27 : 500 « modèle retiré » + 403 « quota »
-       donnaient à l'utilisateur « service du fournisseur momentanément
-       indisponible — réessayez », qui ne dit rien à corriger (réessayer ne
-       rechargera pas le compte). On classe par ordre de priorité explicite. */
-    var PRIORITE = [
-        /solde Agnes insuffisant/i,
-        /clé Agnes refusée/i,
-        /file d'attente vidéo/i,
-        /route vidéo introuvable/i,
-        /requête refusée par le fournisseur/i,
-        /média joint refusé/i,
-        /service du fournisseur momentanément/i,
-        /connexion au fournisseur/i,
-        /assemblage des segments/i
-    ];
-    var principale = ordre[0], trouve = false;
-    for (var p = 0; p < PRIORITE.length && !trouve; p++) {
-        for (var k = 0; k < ordre.length; k++) {
-            if (PRIORITE[p].test(ordre[k])) { principale = ordre[k]; trouve = true; break; }
-        }
-    }
-    var nb = compte[principale];
-    var txt = nb > 1 ? (nb + ' échecs : ') : '';
-    return txt + principale;
-}
-function classerEchec(m) {
-    m = String(m || '');
-    /* v662 — QUOTA. Le fournisseur répond 403 « insufficient_user_quota » avec
-       les montants exacts (remaining / required). La branche 403 générique
-       l'appelait « clé Agnes refusée » : l'utilisateur partait vérifier une clé
-       parfaitement valide pendant que le vrai problème était un solde à 0 $.
-       Mesuré le 2026-10-27 : remaining 0,100000 $ / required 0,125000 $. */
-    if (/insufficient_user_quota|insufficient.{0,12}quota|pre-consume quota/i.test(m)) {
-        var reste = /remaining:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
-        var requis = /required:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
-        return 'solde Agnes insuffisant' +
-            (reste ? ' — il reste ' + reste[1] + ' $' : '') +
-            (requis ? ', il faut ' + requis[1] + ' $' : '') +
-            ' ; rechargez le compte ou utilisez Agnes Video 2.5 Flash (gratuit)';
-    }
-    if (/video_queue_full|queue is full/i.test(m)) return 'file d\'attente vidéo du fournisseur pleine — réessayez dans quelques minutes (2.5 Flash est gratuit et souvent disponible)';
-    if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'clé Agnes refusée (invalide ou expirée) — vérifiez-la dans la section API';
-    if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour) — réessayez plus tard';
-    if (/\b400\b|bad request/i.test(m)) return 'requête refusée par le fournisseur (paramètre) — le détail est dans le journal';
+/* ═══ v664 — TAXONOMIE D'ÉCHECS, RÉFÉRENCE BORNÉE ═══
+   Le classement rendait DIRECTEMENT la phrase affichée, donc la priorité des
+   causes devait re-tester les phrases produites (PRIORITE était une liste de
+   regex sur le TEXTE) et l'arrêt fatal testait /clé Agnes refusée/ sur le
+   texte : renommer une phrase cassait l'ordre et l'arrêt en silence.
+   Ici la décision est prise UNE fois — un `kind` — et tout en dérive : phrase,
+   conseil, priorité (`prio`, triée), référence. Une phrase et son conseil ne
+   peuvent donc plus se contredire, et l'arrêt fatal suit le kind.
+   La référence n'est bâtie que de jetons FIXES (statut, errno, kind) : jamais
+   d'URL, de jeton ni de chemin, donc elle reste copiable dans un rapport.
+   Patron repris de packages/user-errors (nightly-labs/openbot). */
+var ECHECS = {
+    /* prio : plus petit = plus actionnable. La priorité est une DONNÉE, pas un
+       ordre de code — c'est ce qui la rend vérifiable par un banc. */
+    quota: {
+        prio: 10, http: true, ref: 'video/quota',
+        /* v662 — le fournisseur répond 403 « insufficient_user_quota » avec les
+           montants exacts. La branche 403 générique l'appelait « clé refusée » :
+           l'utilisateur vérifiait une clé valide pendant que le solde était à
+           0 $. Mesuré le 2026-10-27 : remaining 0,100000 $ / required 0,125000 $. */
+        texte: function (m) {
+            /* Le corps arrive tantôt en JSON (`"remaining":0.1`), tantôt recopié
+               en clair par le fournisseur (`remaining: 0.100000`). Les deux
+               formes doivent rendre les montants : sans ça la phrase redevient
+               muette à l'endroit le plus utile. */
+            var reste = /remaining["\s]*:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
+            var requis = /required["\s]*:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
+            return 'solde Agnes insuffisant' +
+                (reste ? ' — il reste ' + reste[1] + ' $' : '') +
+                (requis ? ', il faut ' + requis[1] + ' $' : '');
+        },
+        conseil: 'rechargez le compte ou utilisez Agnes Video 2.5 Flash (gratuit)'
+    },
+    file: {
+        prio: 30, http: true, ref: 'video/file',
+        texte: function () { return 'file d\'attente vidéo du fournisseur pleine'; },
+        conseil: 'réessayez dans quelques minutes (2.5 Flash est gratuit et souvent disponible)'
+    },
+    cle: {
+        prio: 20, http: true, ref: 'video/cle',
+        texte: function () { return 'clé Agnes refusée (invalide ou expirée)'; },
+        conseil: 'vérifiez-la dans la section API'
+    },
+    limite: {
+        prio: 50, http: true, ref: 'video/limite',
+        texte: function () { return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour)'; },
+        conseil: 'réessayez plus tard'
+    },
+    requete: {
+        prio: 40, http: true, ref: 'video/requete',
+        texte: function () { return 'requête refusée par le fournisseur (paramètre)'; },
+        conseil: 'le détail est dans le journal'
+    },
     /* v660b — 404 n'avait aucune branche : la cause affichée était le texte
        brut « HTTP 404 », qui ne dit pas quoi corriger. */
-    if (/\b404\b/.test(m)) return 'route vidéo introuvable chez le fournisseur (HTTP 404) — modèle retiré ou endpoint personnalisé erroné ; le journal donne le modèle et l\'URL exacte';
-    if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service du fournisseur momentanément indisponible — réessayez';
-    if (/réseau|network|failed to fetch|load failed|timeout/i.test(m)) return 'connexion au fournisseur impossible (réseau ou relais arrêté)';
-    if (/ffmpeg|montage|assemblage/i.test(m)) return 'assemblage des segments impossible — les segments restent dans la galerie';
-    if (/URL PUBLIQUE|data:/i.test(m)) return 'les fichiers joints exigent une URL publique (le modèle qui acceptait le base64 a été retiré) — hébergez le média et collez son URL, ou retirez le fichier joint';
-    return m.slice(0, 140);
+    route: {
+        prio: 60, http: true, ref: 'video/route',
+        texte: function () { return 'route vidéo introuvable chez le fournisseur (HTTP 404)'; },
+        conseil: 'modèle retiré ou endpoint personnalisé erroné ; le journal donne le modèle et l\'URL exacte'
+    },
+    service: {
+        prio: 70, http: true, ref: 'video/service',
+        texte: function () { return 'service du fournisseur momentanément indisponible'; },
+        conseil: 'réessayez'
+    },
+    reseau: {
+        prio: 80, http: false, ref: 'video/reseau',
+        texte: function () { return 'connexion au fournisseur impossible (réseau ou relais arrêté)'; },
+        conseil: 'vérifiez la connexion et que le relais local tourne'
+    },
+    assemblage: {
+        prio: 90, http: false, ref: 'video/assemblage',
+        texte: function () { return 'assemblage des segments impossible'; },
+        conseil: 'les segments restent dans la galerie'
+    },
+    media: {
+        prio: 65, http: false, ref: 'video/media',
+        texte: function () { return 'média joint refusé : il exige une URL publique (le modèle qui acceptait le base64 a été retiré)'; },
+        conseil: 'hébergez le média et collez son URL, ou retirez le fichier joint'
+    },
+    inconnu: { prio: 999, http: false, ref: null }
+};
+var REF_MOTIF = /^(?=.{3,64}$)[a-z][a-z0-9_-]{0,15}(?:\/[A-Za-z0-9_.-]{1,40}){1,3}$/;
+
+/* ── LA décision, unique. Aucun appelant ne re-teste un libellé. ── */
+function kindEchec(m) {
+    m = String(m === undefined || m === null ? '' : m);
+    if (/insufficient_user_quota|insufficient.{0,12}quota|pre-consume quota/i.test(m)) return 'quota';
+    if (/video_queue_full|queue is full/i.test(m)) return 'file';
+    if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'cle';
+    if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite';
+    if (/\b400\b|bad request/i.test(m)) return 'requete';
+    if (/\b404\b/.test(m)) return 'route';
+    if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service';
+    if (/réseau|network|failed to fetch|load failed|timeout/i.test(m)) return 'reseau';
+    if (/ffmpeg|montage|assemblage/i.test(m)) return 'assemblage';
+    if (/URL PUBLIQUE|data:/i.test(m)) return 'media';
+    return 'inconnu';
 }
+/* Référence bornée. Composée du préfixe, du statut HTTP (ou de l'errno) et du
+   kind : tout est jeton fixe, donc rien ne peut en sortir. */
+function refEchec(m) {
+    m = String(m === undefined || m === null ? '' : m);
+    var k = kindEchec(m), e = ECHECS[k], morceaux = ['video'];
+    if (e && e.http) {
+        var st = (/\b([45]\d\d)\b/.exec(m) || [])[1];
+        if (st) morceaux.push('http-' + st);
+    }
+    if (k === 'reseau') {
+        var no = (/\b(E[A-Z_]{2,20})\b/.exec(m) || [])[1];
+        if (no) morceaux.push(no);
+    }
+    if (e && e.ref) morceaux.push(e.ref.split('/').pop());
+    var r = morceaux.join('/');
+    return REF_MOTIF.test(r) ? r : 'video/inconnu';
+}
+function classerEchec(m) {
+    m = String(m === undefined || m === null ? '' : m);
+    var e = ECHECS[kindEchec(m)];
+    return e && e.texte ? e.texte(m) : m.slice(0, 140);
+}
+function conseilEchec(m) {
+    var e = ECHECS[kindEchec(m)];
+    return e && e.conseil ? e.conseil : '';
+}
+/* v662 — SEULE une clé refusée est immédiatement fatale. Décidé par le kind,
+   donc survit à un renommage de la phrase. */
+function estFatale(m) { return kindEchec(m) === 'cle'; }
+/* v662 — un SOLDE ÉPUISÉ n'est fatal qu'APRÈS échec du modèle gratuit (la
+   chaîne de replis a été jouée) : à ce stade, rejouer la même impasse sur
+   chaque scène ne sert à rien. Même forme que `estFatale` : un prédicat nommé
+   sur le kind, pas un test sur la phrase rendue. */
+function estDefinitif(m) { return kindEchec(m) === 'quota'; }
+/* v460 — traduit les échecs en cause lisible ET actionnable. Le résumé disait
+   « Aucune vidéo » sans dire pourquoi : le motif n'était que dans la ligne
+   `💥`. v662 — la cause AFFICHÉE est la plus ACTIONNABLE, pas la plus
+   fréquente (mesure du 2026-10-27 : 500 « modèle retiré » ×5 + 403 « quota »
+   donnaient « service momentanément indisponible », qui ne dit rien à
+   corriger). L'ordre vient de `prio`, dans la table. */
+/* Le kind retenu, et le premier message de ce kind (les montants du quota y
+   sont). `causeProbable` et `refPrincipale` partent de la MÊME décision : la
+   référence affichée ne peut donc pas désigner une autre panne que la phrase. */
+function kindPrincipal(echecs) {
+    if (!echecs || !echecs.length) return { kind: '', premier: '', nb: 0 };
+    var compte = {}, kinds = [];
+    echecs.forEach(function (m) {
+        var k = kindEchec(m);
+        if (!compte[k]) { compte[k] = 0; kinds.push(k); }
+        compte[k]++;
+    });
+    kinds.sort(function (a, b) {
+        return (ECHECS[a] ? ECHECS[a].prio : 999) - (ECHECS[b] ? ECHECS[b].prio : 999);
+    });
+    var k = kinds[0], premier = '';
+    for (var i = 0; i < echecs.length; i++) { if (kindEchec(echecs[i]) === k) { premier = echecs[i]; break; } }
+    return { kind: k, premier: premier, nb: compte[k] };
+}
+function causeProbable(echecs) {
+    var p = kindPrincipal(echecs);
+    if (!p.kind) return '';
+    var e = ECHECS[p.kind];
+    var txt = e && e.texte ? e.texte(p.premier) : String(p.premier).slice(0, 140);
+    return (p.nb > 1 ? p.nb + ' échecs : ' : '') + txt + (e && e.conseil ? ' — ' + e.conseil : '');
+}
+/* v664 — la référence de la panne retenue : mêmes tri et prio que la phrase. */
+function refPrincipale(echecs) {
+    var p = kindPrincipal(echecs);
+    return p.kind ? refEchec(p.premier) : '';
+}
+/* v664 — export de test (même convention que __v499/__v660b) : aucun chemin
+   produit ne l'appelle. `table` est exposé pour que le banc puisse MUTER une
+   entrée et prouver que priorité, phrase et conseil en dérivent vraiment. */
+window.__v664 = { gen: 'v664', kind: kindEchec, texte: classerEchec, conseil: conseilEchec,
+                  ref: refEchec, cause: causeProbable, estFatale: estFatale,
+                  definitif: estDefinitif,
+                  principal: kindPrincipal, refCause: refPrincipale,
+                  table: ECHECS, referentiel: REF_MOTIF };
 function stopGeneration() { if (!state.isRunning) return; state.stopRequested = true; logWarn('⏹ Arrêt…'); setStatus('Arrêt…'); }
 
 function updateGenerateBtn() {
