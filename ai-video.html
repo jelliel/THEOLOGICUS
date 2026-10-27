@@ -3435,7 +3435,11 @@ var ECHECS = {
         /* v662 — le fournisseur répond 403 « insufficient_user_quota » avec les
            montants exacts. La branche 403 générique l'appelait « clé refusée » :
            l'utilisateur vérifiait une clé valide pendant que le solde était à
-           0 $. Mesuré le 2026-10-27 : remaining 0,100000 $ / required 0,125000 $. */
+           0 $. Mesuré le 2026-10-27 : remaining 0,100000 $ / required 0,125000 $.
+           v666 — deAPI épuise son plafond en 402 « key_limit_exceeded » (doc
+           deapi_llms.txt) : même cause, même kind. Le nom du fournisseur est
+           porté par le message (« deAPI HTTP … »), sinon la phrase accuserait
+           Agnes d'une panne qui vient de deAPI. */
         texte: function (m) {
             /* Le corps arrive tantôt en JSON (`"remaining":0.1`), tantôt recopié
                en clair par le fournisseur (`remaining: 0.100000`). Les deux
@@ -3443,11 +3447,30 @@ var ECHECS = {
                muette à l'endroit le plus utile. */
             var reste = /remaining["\s]*:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
             var requis = /required["\s]*:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
-            return 'solde Agnes insuffisant' +
+            return 'solde ' + quiFournisseur(m) + ' insuffisant' +
                 (reste ? ' — il reste ' + reste[1] + ' $' : '') +
                 (requis ? ', il faut ' + requis[1] + ' $' : '');
         },
-        conseil: 'rechargez le compte ou utilisez Agnes Video 2.5 Flash (gratuit)'
+        conseil: 'rechargez le compte ou utilisez un modèle gratuit (Agnes Video 2.5 Flash)'
+    },
+    /* v666 — un 403 qui n'est PAS une clé invalide : la clé existe mais n'a pas
+       le droit (documenté chez deAPI : `insufficient_permissions`). Le dire
+       « clé refusée » envoie l'utilisateur re-saisir une clé valide. */
+    perm: {
+        prio: 25, http: true, ref: 'video/perm',
+        texte: function () { return 'clé valide, mais sans le droit demandé (permissions insuffisantes)'; },
+        conseil: 'ce n\'est pas une clé invalide : ne la re-saisissez pas, le détail est dans le journal'
+    },
+    /* v666 — 422 : un paramètre hors bornes du modèle (taille au-dessus de
+       max_pixels, ratio au-dessus de max_ratio…). Le message par champ dit
+       exactement quelle borne est franchie : il doit figurer dans la phrase. */
+    borne: {
+        prio: 45, http: true, ref: 'video/borne',
+        texte: function (m) {
+            var msg = /"(?:message|detail|error)"\s*:\s*"([^"]{8,180})"/i.exec(m) || /"([^"]{8,180})"/.exec(m);
+            return 'paramètre hors bornes du modèle' + (msg ? ' — ' + msg[1] : '');
+        },
+        conseil: 'réduisez la taille ou la durée : le journal donne la borne exacte du modèle'
     },
     file: {
         prio: 30, http: true, ref: 'video/file',
@@ -3456,12 +3479,16 @@ var ECHECS = {
     },
     cle: {
         prio: 20, http: true, ref: 'video/cle',
-        texte: function () { return 'clé Agnes refusée (invalide ou expirée)'; },
+        texte: function (m) { return 'clé ' + quiFournisseur(m) + ' refusée (invalide ou expirée)'; },
         conseil: 'vérifiez-la dans la section API'
     },
     limite: {
         prio: 50, http: true, ref: 'video/limite',
-        texte: function () { return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour)'; },
+        texte: function (m) {
+            return quiFournisseur(m) === 'deAPI'
+                ? 'limite de débit deAPI atteinte (≈1 requête/minute en gratuit)'
+                : 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour)';
+        },
         conseil: 'réessayez plus tard'
     },
     requete: {
@@ -3499,14 +3526,24 @@ var ECHECS = {
     inconnu: { prio: 999, http: false, ref: null }
 };
 var REF_MOTIF = /^(?=.{3,64}$)[a-z][a-z0-9_-]{0,15}(?:\/[A-Za-z0-9_.-]{1,40}){1,3}$/;
+/* Quel fournisseur a parlé. Depuis v666 les erreurs deAPI sont préfixées
+   « deAPI … » : sans ça une panne deAPI était étiquetée « Agnes » (clé refusée,
+   plafond, limite) et l'utilisateur corrigeait le mauvais compte. */
+function quiFournisseur(m) { return /deapi/i.test(String(m === undefined || m === null ? '' : m)) ? 'deAPI' : 'Agnes'; }
 
 /* ── LA décision, unique. Aucun appelant ne re-teste un libellé. ── */
 function kindEchec(m) {
     m = String(m === undefined || m === null ? '' : m);
-    if (/insufficient_user_quota|insufficient.{0,12}quota|pre-consume quota/i.test(m)) return 'quota';
+    /* v666 — 402 = plafond de dépense atteint (deAPI) : c'est un QUOTA, pas une
+       clé refusée. Testé avant la branche 401/403. */
+    if (/insufficient_user_quota|insufficient.{0,12}quota|pre-consume quota|key_limit_exceeded|spend limit|\b402\b/i.test(m)) return 'quota';
     if (/video_queue_full|queue is full/i.test(m)) return 'file';
+    /* v666 — avant « clé refusée » : un 403 de permissions n'accuse pas la clé. */
+    if (/insufficient_permissions|permission denied|forbidden/i.test(m)) return 'perm';
     if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'cle';
     if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite';
+    /* v666 — 422 : paramètre hors bornes du modèle. Avant le 400 générique. */
+    if (/\b422\b|unprocessable/i.test(m)) return 'borne';
     if (/\b400\b|bad request/i.test(m)) return 'requete';
     if (/\b404\b/.test(m)) return 'route';
     if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service';
@@ -5261,7 +5298,9 @@ async function enrichWithMistral(btn, textareaId) {
     }
     var r = await aller(url, init);
     var txt = await r.text();
-    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + txt.slice(0, 200));
+    /* v666 — le nom du fournisseur est porté par l'erreur : la taxonomie s'en
+       sert pour ne pas accuser Agnes d'une panne venue de deAPI. */
+    if (!r.ok) throw new Error('deAPI HTTP ' + r.status + ' ' + txt.slice(0, 200));
     var d = null; try { d = JSON.parse(txt); } catch (e) {}
     var id = d && d.data && d.data.request_id;
     if (!id) throw new Error('pas de request_id : ' + txt.slice(0, 120));
@@ -5289,7 +5328,7 @@ async function enrichWithMistral(btn, textareaId) {
           await addVideoToGallery(url, label, { model: 'deapi:' + slug, scene: label });
           return true;
         }
-        if (st === 'error') throw new Error('job en erreur : ' + String(j.error || j.message || '').slice(0, 120));
+        if (st === 'error') throw new Error('deAPI job en erreur : ' + String(j.error || j.message || '').slice(0, 120));
       }
       await sleep(POLL_MS / 1000);
     }
