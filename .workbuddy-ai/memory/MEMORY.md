@@ -126,6 +126,21 @@ fait lever → « Erreur réseau » à tort) : lire le texte, ne parser que si
 `Content-Type` JSON ou tête `{`. `fetch` rejeté = relais/API injoignable ;
 tout le reste renvoie un statut lisible (valide / invalide / HTTP n).
 
+## AI VIDEO — fournisseurs vidéo (état mesuré le 2026-10-27)
+
+- **Gratuit hébergé : il n'existe quasiment pas.** Agnes 2.5 Flash est gratuit
+  mais sa file est saturée en permanence (503 `video_queue_full`). HF
+  Inference Providers = pay-as-you-go (crédits seulement pour les PRO).
+  Veo 3.1 ≈ 0,15 $/s. Pollinations : vidéo payante.
+- **deAPI (api.deapi.ai)** = sortie de secours : 5 $ de crédits offerts sans
+  CB, modèles ouverts LTX/MiniMax H3, 1 req/min et 15/jour en gratuit.
+  API v2 : `POST /videos/generations` → `request_id`, `GET /jobs/{id}` →
+  `status`/`progress`/`result_url`, `/models?filter[inference_types]=txt2video`.
+  ⚠ Bornes **par modèle** dans `info.limits` (fps, frames, max_pixels,
+  max_ratio) : toujours les lire, ne jamais coder de valeurs en dur.
+- 🔴 « File pleine » est l'état du fournisseur, pas du modèle : ne pas rejouer
+  les autres modèles du même fournisseur avant d'avoir essayé un vrai secours.
+
 ## Sources de médias (v126)
 
 11 sources, 4 groupes (`stock` 3 · `ia` 6 · `image` 1 · `local` 1), via
