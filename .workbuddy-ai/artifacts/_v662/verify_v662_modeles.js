@@ -10,7 +10,9 @@ const fs = require("fs");
 const { chromium } = require("playwright");
 
 const PORT = Number(process.env.PORT || 9111);
-const RACINE = path.resolve(process.env.BENCH_ROOT || "C:/tmp/theoverify");
+/* Chemin PORTABLE : sur le runner CI (Linux) un chemin Windows en dur ne
+   servait aucun fichier -> page 404 -> __v660b absent -> timeout. */
+const RACINE = path.resolve(process.env.BENCH_ROOT || path.resolve(__dirname, "..", "..", ".."));
 const PW = process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright";
 const CHROME = path.join(PW, "chromium-1234", "chrome-win64", "chrome.exe");
 

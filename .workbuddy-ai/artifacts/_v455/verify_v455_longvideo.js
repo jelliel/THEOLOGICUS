@@ -6,8 +6,8 @@ const { chromium } = require('playwright');
 const path = require('path'); const http = require('http'); const fs = require('fs');
 const PORT = 8880; const ROOT = process.env.THEO_ROOT || 'C:/tmp/theoverify';
 const PW = process.env.PW_DIR || 'C:/Users/toshr/AppData/Local/ms-playwright';
-let pass = 0;
-const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 95)}`); if (cond) pass++; };
+let pass = 0; let fail = 0;
+const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}${name}${cond || detail === undefined ? '' : ' — ' + String(detail).slice(0, 95)}`); if (cond) pass++; else fail++; };
 (async () => {
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\//, '') || 'THEOLOGICUS.html';
@@ -288,7 +288,10 @@ const ok = (name, cond, detail) => { console.log(` ${cond ? '[OK] ' : '[ECHEC]'}
   ok('v2.0 : corps inchangé (num_frames + frame_rate + image)', !!c2 && c2.num_frames !== undefined && c2.frame_rate !== undefined && !!c2.image, JSON.stringify(c2).slice(0, 100));
 
   ok('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
-  console.log(`RESULTAT : ${pass}/38`);
-  process.exitCode = pass === 38 ? 0 : 1;
+  /* v662 — plus de total code en dur : il valait 38 et toute assertion
+     ajoutee faisait echouer le banc avec « 39/38 » alors que tout passait.
+     C'est le nombre d'ECHECS qui decide du code de sortie. */
+  console.log(`RESULTAT : ${pass}/${pass + fail} (${fail} echec(s))`);
+  process.exitCode = fail === 0 ? 0 : 1;
   await browser.close(); server.close();
 })().catch(e => { console.log('EXCEPTION BANC :', e); process.exitCode = 1; process.exit(1); });
