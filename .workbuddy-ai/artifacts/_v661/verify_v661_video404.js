@@ -197,9 +197,13 @@ function ok(nom, cond, detail) {
     else arretVu = 0;
   }
   const postsC = appels.filter(x => x.meth === "POST").map(x => x.model);
-  ok("C. 404 sur agnes-video-v2.0 -> repli automatique sur agnes-video-2.5 et succès",
-     fin.galerie >= 1 && /^Scène/.test(String(fin.label || "")) && fin.modele === "agnes-video-2.5" &&
-     postsC[0] === "agnes-video-v2.0" && postsC.includes("agnes-video-2.5"),
+  /* v662 — l'ordre de la chaîne de replis a changé (2.5 Flash d'abord, car
+     gratuit). L'assertion ne fige donc plus le modèle de repli : elle exige un
+     repli RÉEL depuis le modèle en échec vers un AUTRE modèle qui produit. */
+  ok("C. 404 sur le modèle actif -> repli automatique sur un autre modèle et succès",
+     fin.galerie >= 1 && /^Scène/.test(String(fin.label || "")) &&
+     fin.modele && fin.modele !== "agnes-video-v2.0" &&
+     postsC[0] === "agnes-video-v2.0" && postsC.some(m => m && m !== "agnes-video-v2.0"),
      `galerie=${fin.galerie} label=${fin.label} modèle=${fin.modele} repliLog=${fin.repli} POST=${postsC.join(" -> ")}`);
 
   /* D. message final actionnable : la branche 404 de classerEchec doit rendre

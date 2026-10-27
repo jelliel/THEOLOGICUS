@@ -1526,7 +1526,12 @@ window.__v499 = {
                  (cache prompt+modèle), indicateur « gratuit d'abord ».
    C) élégance : barre de phases + ETA globale, galerie enrichie.
    ═══════════════════════════════════════════════════════════════════ */
-const VIDEO_REPLI = 'agnes-video-v2.0';        /* A1 — repli vidéo fiable */
+/* v662 — agnes-video-v2.0 a ete RETIRE par le fournisseur. Mesure du
+   2026-10-27 : POST /v1/videos {model:'agnes-video-v2.0'} -> 500
+   get_channel_failed « Model agnes-video-v2.0 is temporarily unavailable »,
+   et GET /v1/models ne le liste plus (il ne reste que agnes-video-2.5 et
+   agnes-video-2.5-flash). Le repli pointe donc sur 2.5 FLASH, qui est gratuit. */
+const VIDEO_REPLI = 'agnes-video-2.5-flash';
 const SK_CACHE = 'cinema_noir_video_cache_v1'; /* B3 — cache anti-gaspillage */
 
 /* A5 — assainit un prompt avant envoi (caractères de contrôle, longueur). */
@@ -1747,10 +1752,36 @@ function getApiKey() {
     } catch (e) { return ''; }
 }
 function getMistralKey() { try { return (localStorage.getItem(SK.MISTRAL) || '').trim(); } catch (e) { return ''; } }
-function getSelectedModelId() { try { return localStorage.getItem(SK.AGNES_MODEL) || 'agnes-video-v2.0'; } catch (e) { return 'agnes-video-v2.0'; } }
+function getSelectedModelId() {
+    /* v662 — defaut et migration : v2.0 est retire, 2.5 Flash est gratuit. */
+    try {
+        var m = localStorage.getItem(SK.AGNES_MODEL) || 'agnes-video-2.5-flash';
+        if (MODELES_RETIRES[m]) {
+            m = MODELES_RETIRES[m];
+            try { localStorage.setItem(SK.AGNES_MODEL, m); } catch (e2) {}
+        }
+        return m;
+    } catch (e) { return 'agnes-video-2.5-flash'; }
+}
 function loadExtraModels() { try { return JSON.parse(localStorage.getItem(SK.EXTRA_MODELS) || '[]'); } catch (e) { return []; } }
 function saveExtraModels(l) { try { localStorage.setItem(SK.EXTRA_MODELS, JSON.stringify(l)); } catch (e) {} }
-function loadActiveModels() { try { return JSON.parse(localStorage.getItem(SK.ACTIVE_MODELS) || '[]'); } catch (e) { return []; } }
+/* v662 — MODELES RETIRES PAR LE FOURNISSEUR : migration à la lecture.
+   `agnes-video-v2.0` n'existe plus (500 get_channel_failed, absent de
+   /v1/models). Un store qui le garde encore ne produirait plus AUCUNE vidéo,
+   et l'utilisateur n'a aucun moyen de le deviner : on le remplace d'office
+   par 2.5 Flash, gratuit. */
+var MODELES_RETIRES = { 'agnes-video-v2.0': 'agnes-video-2.5-flash' };
+function migrerModelesRetires(liste) {
+    var out = [], change = false;
+    (liste || []).forEach(function (m) {
+        var r = MODELES_RETIRES[m] || m;
+        if (r !== m) change = true;
+        if (out.indexOf(r) < 0) out.push(r);
+    });
+    if (change) { try { localStorage.setItem(SK.ACTIVE_MODELS, JSON.stringify(out)); } catch (e) {} }
+    return out;
+}
+function loadActiveModels() { try { return migrerModelesRetires(JSON.parse(localStorage.getItem(SK.ACTIVE_MODELS) || '[]')); } catch (e) { return []; } }
 function saveActiveModels(l) { try { localStorage.setItem(SK.ACTIVE_MODELS, JSON.stringify(l)); } catch (e) {} }
 function saveDetectedAgnes(m) { try { localStorage.setItem(SK.AGNES_MODELS, JSON.stringify(m)); } catch (e) {} }
 function loadDetectedAgnes() { try { return JSON.parse(localStorage.getItem(SK.AGNES_MODELS) || '[]'); } catch (e) { return []; } }
@@ -2800,6 +2831,7 @@ async function _journaliseErreurFournisseur(res) {
 }
 async function apiFetch(url, options = {}) {
     let lastResponse = null;
+    let attenteFile = 0;   /* v662 — attentes « file vidéo pleine » (budget propre) */
     for (let attempt = 0; attempt < APIFETCH_429_WAITS.length; attempt++) {
         if (state.stopRequested) throw new Error('Arrêt');
         const dernier = attempt === APIFETCH_429_WAITS.length - 1;
@@ -2819,6 +2851,24 @@ async function apiFetch(url, options = {}) {
                 continue;
             }
             if (res.status === 503) {
+                /* v662 — 503 « video_queue_full » : la file du fournisseur est
+                   pleine. Ce n'est pas une panne, c'est une ATTENTE — le
+                   backoff plafonné à 45 s abandonnait au bout de ~5 min alors
+                   que la file se vide en 10 à 30 min. On attend plus longtemps
+                   (jusqu'à 20 min), en le disant clairement, et ces attentes ne
+                   consomment pas le budget d'essais des autres erreurs. */
+                let filee = false;
+                try { const t = await res.clone().text(); filee = /video_queue_full|queue is full/i.test(t); } catch (e) {}
+                if (filee) {
+                    const planF = [60, 120, 180, 240, 300, 300];
+                    if (attenteFile >= planF.length) return res;
+                    const wf = retryAfterSeconds(res, [planF[attenteFile]]);
+                    attenteFile++;
+                    logWarn('⏳ File vidéo du fournisseur pleine (' + attenteFile + '/' + planF.length + ') — reprise dans ' + wf + 's. Elle se vide toute seule ; Agnes Video 2.5 Flash est gratuit.');
+                    setStatus('File vidéo pleine — attente ' + wf + 's');
+                    await sleep(wf * 1000);
+                    continue;
+                }
                 const w = retryAfterSeconds(res, [5, 10, 15, 20, 30, 45][Math.min(attempt, 5)]);
                 logWarn('⚠️ Service temporairement indisponible — 503 — reprise dans ' + w + 's');
                 if (dernier) return res;
@@ -2865,7 +2915,7 @@ async function createVideoTask(prompt, imageDataUri, audioDataUri, modelId, vide
                     '</code> sur <code>' + escapeHtml(base + '/videos') + '</code>' +
                     (cm ? ' (modèle personnalisé)' : ''));
         }
-        throw new Error('HTTP ' + res.status);
+        throw new Error('HTTP ' + res.status + ' ' + err.slice(0, 200).replace(/\s+/g, ' '));
     }
     const data = await res.json();
     const videoId = data.video_id || data.id || data.task_id;
@@ -2959,7 +3009,12 @@ async function pollUntilDone(videoId, modelId, sceneLabel, cm) {
 /* v660b — Export de test (meme convention que window.__v499) : la creation
    d'une tache et le sondage, pour verifier l'URL construite (barres, dialecte
    2.5) sans dependre du fournisseur. Aucun chemin produit ne l'appelle. */
-window.__v660b = { creer: createVideoTask, sonder: pollUntilDone, classer: classerEchec };
+/* v662 — export de test (même convention que __v499/__v660b) : aucun chemin
+   produit ne l'appelle. `cause` et `migrer` permettent de vérifier SANS réseau
+   le classement des causes et la migration des modèles retirés. */
+window.__v660b = { creer: createVideoTask, sonder: pollUntilDone, classer: classerEchec,
+                   cause: causeProbable, migrer: migrerModelesRetires,
+                   defaut: getSelectedModelId };
 
 function fileToDataUri(file) { return new Promise((resolve, reject) => { const r = new FileReader(); r.onload = e => resolve(e.target.result); r.onerror = () => reject(new Error('Erreur')); r.readAsDataURL(file); }); }async function processOneImage(file) {
     const validExts = /\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif|svg|ico|heic|heif|avif|jfif|jpe)$/i;
@@ -3182,10 +3237,16 @@ async function startGeneration() {
             }
         } catch (e) {
             if (e.message === 'Arrêt') { logWarn('⏹ Arrêt'); return; }
-            /* v500 — A4 : échec -> ACTION (au lieu d'un simple message). */
+            /* v662 — SEULE une clé refusée (401) est immédiatement fatale : la
+               relancer ne changera rien, et aucun modèle ne peut aider. Un
+               SOLDE ÉPUISÉ, lui, n'est pas une impasse : le modèle GRATUIT
+               (2.5 Flash) reste accessible. On laisse donc la chaîne de replis
+               s'exécuter d'abord ; le quota ne devient fatal qu'APRÈS, si le
+               gratuit échoue aussi. */
             const cls = classerEchec(String(e && e.message || e));
             if (/clé Agnes refusée/i.test(cls)) {
                 logError('🛑 ' + cls + ' — arrêt du run (inutile de réessayer).');
+                failed++; echecs.push(String(e && e.message || e));
                 state.stopRequested = true;
                 return;
             }
@@ -3209,7 +3270,7 @@ async function startGeneration() {
                 if (cmVid && _est404) {
                     logWarn('⚠️ Le modèle personnalisé <code>' + escapeHtml(modelId) + '</code> ne connaît pas la route vidéo (404) — bascule sur les modèles Agnes par défaut.');
                 }
-                const replis = ['agnes-video-v2.0', 'agnes-video-2.5'].filter(function (m, i, arr) {
+                const replis = ['agnes-video-2.5-flash', 'agnes-video-2.5'].filter(function (m, i, arr) {
                     return m !== modelId && arr.indexOf(m) === i;
                 });
                 for (let ri = 0; ri < replis.length; ri++) {
@@ -3231,6 +3292,13 @@ async function startGeneration() {
             failed++;
             echecs.push(String(e.message || e));
             logError('💥 ' + sceneLabel + ' — ' + escapeHtml(e.message));
+            /* v662 — la chaîne de replis n'a rien pu faire (le modèle gratuit
+               a échoué aussi) : un solde épuisé est alors définitif, on arrête
+               le run au lieu de rejouer la même impasse sur chaque scène. */
+            if (/solde Agnes insuffisant/i.test(cls)) {
+                logError('🛑 ' + cls + ' — arrêt du run (inutile de réessayer).');
+                state.stopRequested = true;
+            }
         }
     };
 
@@ -3293,14 +3361,48 @@ function causeProbable(echecs) {
         if (!compte[c]) { compte[c] = 0; ordre.push(c); }
         compte[c]++;
     });
-    ordre.sort(function (a, b) { return compte[b] - compte[a]; });
-    var principale = ordre[0];
+    /* v662 — la cause AFFICHÉE doit être la plus ACTIONNABLE, pas la plus
+       fréquente. Mesure du 2026-10-27 : 500 « modèle retiré » + 403 « quota »
+       donnaient à l'utilisateur « service du fournisseur momentanément
+       indisponible — réessayez », qui ne dit rien à corriger (réessayer ne
+       rechargera pas le compte). On classe par ordre de priorité explicite. */
+    var PRIORITE = [
+        /solde Agnes insuffisant/i,
+        /clé Agnes refusée/i,
+        /file d'attente vidéo/i,
+        /route vidéo introuvable/i,
+        /requête refusée par le fournisseur/i,
+        /média joint refusé/i,
+        /service du fournisseur momentanément/i,
+        /connexion au fournisseur/i,
+        /assemblage des segments/i
+    ];
+    var principale = ordre[0], trouve = false;
+    for (var p = 0; p < PRIORITE.length && !trouve; p++) {
+        for (var k = 0; k < ordre.length; k++) {
+            if (PRIORITE[p].test(ordre[k])) { principale = ordre[k]; trouve = true; break; }
+        }
+    }
     var nb = compte[principale];
     var txt = nb > 1 ? (nb + ' échecs : ') : '';
     return txt + principale;
 }
 function classerEchec(m) {
     m = String(m || '');
+    /* v662 — QUOTA. Le fournisseur répond 403 « insufficient_user_quota » avec
+       les montants exacts (remaining / required). La branche 403 générique
+       l'appelait « clé Agnes refusée » : l'utilisateur partait vérifier une clé
+       parfaitement valide pendant que le vrai problème était un solde à 0 $.
+       Mesuré le 2026-10-27 : remaining 0,100000 $ / required 0,125000 $. */
+    if (/insufficient_user_quota|insufficient.{0,12}quota|pre-consume quota/i.test(m)) {
+        var reste = /remaining:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
+        var requis = /required:\s*[＄$]?\s*([0-9.]+)/i.exec(m);
+        return 'solde Agnes insuffisant' +
+            (reste ? ' — il reste ' + reste[1] + ' $' : '') +
+            (requis ? ', il faut ' + requis[1] + ' $' : '') +
+            ' ; rechargez le compte ou utilisez Agnes Video 2.5 Flash (gratuit)';
+    }
+    if (/video_queue_full|queue is full/i.test(m)) return 'file d\'attente vidéo du fournisseur pleine — réessayez dans quelques minutes (2.5 Flash est gratuit et souvent disponible)';
     if (/\b(401|403)\b|unauthor|invalid.{0,12}(api.?)?key|clé/i.test(m)) return 'clé Agnes refusée (invalide ou expirée) — vérifiez-la dans la section API';
     if (/\b429\b|trop de requ|limite api|rate.?limit/i.test(m)) return 'limite du plan gratuit atteinte (1 génération/minute, ~500 s de vidéo par jour) — réessayez plus tard';
     if (/\b400\b|bad request/i.test(m)) return 'requête refusée par le fournisseur (paramètre) — le détail est dans le journal';
@@ -3310,7 +3412,7 @@ function classerEchec(m) {
     if (/\b5\d\d\b|indisponible|unavailable/i.test(m)) return 'service du fournisseur momentanément indisponible — réessayez';
     if (/réseau|network|failed to fetch|load failed|timeout/i.test(m)) return 'connexion au fournisseur impossible (réseau ou relais arrêté)';
     if (/ffmpeg|montage|assemblage/i.test(m)) return 'assemblage des segments impossible — les segments restent dans la galerie';
-    if (/URL PUBLIQUE|data:/i.test(m)) return 'média joint refusé par ce modèle — voir le journal';
+    if (/URL PUBLIQUE|data:/i.test(m)) return 'les fichiers joints exigent une URL publique (le modèle qui acceptait le base64 a été retiré) — hébergez le média et collez son URL, ou retirez le fichier joint';
     return m.slice(0, 140);
 }
 function stopGeneration() { if (!state.isRunning) return; state.stopRequested = true; logWarn('⏹ Arrêt…'); setStatus('Arrêt…'); }
@@ -3467,6 +3569,11 @@ async function enrichWithMistral(btn, textareaId) {
     document.querySelectorAll('.section').forEach(s => { if (!s.classList.contains('mode-hidden')) s.classList.add('open'); });
     state.extraModels = loadExtraModels();
     state.activeModels = loadActiveModels();
+    /* v662 — la migration des modèles retirés doit être PERSISTÉE : mesuré,
+       l'état mémoire passait bien à 2.5 Flash mais le store gardait
+       `agnes-video-v2.0`, donc la migration était refaite à chaque démarrage
+       et le modèle mort réapparaissait dès qu'un autre écran relisait la clé. */
+    try { saveActiveModels(state.activeModels); } catch (e) {}
     state.customModels = loadCustomModels();
     try {
         const ch = JSON.parse(localStorage.getItem(SK.CM_CHOICE) || '{}');
@@ -4108,7 +4215,7 @@ async function enrichWithMistral(btn, textareaId) {
           var medias = [b.image, b.audio, b.video].filter(Boolean);
           for (var mi = 0; mi < medias.length; mi++) {
             if (/^data:/i.test(String(medias[mi]))) {
-              throw new Error('Agnes ' + b.model + ' exige des médias par URL PUBLIQUE (fichier joint en base64 refusé). Relancez : l’app bascule normalement sur agnes-video-v2.0.');
+              throw new Error('Agnes ' + b.model + ' exige des médias par URL PUBLIQUE (fichier joint en base64 refusé) ; le modèle qui acceptait le base64 (agnes-video-v2.0) a été retiré par le fournisseur.');
             }
           }
           var corps = {
@@ -4233,17 +4340,17 @@ async function enrichWithMistral(btn, textareaId) {
   /* ── exécution : segments puis assemblage ── */
   async function executer(prompt, img, aud, modelId, vid, sceneLabel) {
     var total = state.durationFrames;
-    /* ── 2.5 n'accepte QUE des médias par URL publique : avec un fichier joint
-       (base64), rien ne se générait et le résumé disait « aucune vidéo ». On
-       bascule sur v2.0, qui les accepte — dit clairement, et le modèle
-       réellement utilisé est celui enregistré dans la galerie. ── */
+    /* ── v662 — les fichiers joints (base64) n'ont PLUS de modèle : le seul
+       qui les acceptait, agnes-video-v2.0, a été retiré par le fournisseur
+       (500 get_channel_failed, mesuré). Basculer dessus comme avant lançait un
+       appel voué à l'échec puis « aucune vidéo ». On le dit clairement. ── */
     if (est25(modelId)) {
       var joints = [img, aud, vid].filter(Boolean);
       var enBase64 = joints.some(function (m) { return /^data:/i.test(String(m)); });
       if (enBase64) {
-        logWarn('⚠️ <code>' + escapeHtml(modelId) + '</code> n’accepte pas les fichiers joints (il exige des URL publiques) → <strong>bascule sur <code>agnes-video-v2.0</code></strong> pour cette génération.');
-        showToast('Image jointe → agnes-video-v2.0', 'warn', 4500);
-        modelId = 'agnes-video-v2.0';
+        var msgJ = modelId + ' exige des médias par URL PUBLIQUE ; le modèle qui acceptait les fichiers joints (agnes-video-v2.0) a été retiré par le fournisseur';
+        logError('❌ Fichier joint en base64 refusé — ' + escapeHtml(msgJ));
+        throw new Error('URL PUBLIQUE : ' + msgJ);
       }
     }
     /* ── modèle 2.5 : durée en SECONDES, segments de 4 à 12 s ── */
@@ -4404,9 +4511,11 @@ async function enrichWithMistral(btn, textareaId) {
     loadDetectedAgnes = function () {
       var l = _loadDet.apply(this, arguments) || [];
       var connus = [
-        { id: 'agnes-video-v2.0', name: 'Agnes Video v2.0', desc: 'Frames 8n+1 (≤441), 24 i/s, images/audio joints' },
-        { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'OpenAI Videos : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' },
-        { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' }
+        /* v662 — agnes-video-v2.0 RETIRE (500 get_channel_failed, absent de
+           /v1/models) : le proposer encore garantissait un échec. 2.5 Flash
+           est gratuit, il passe donc en premier. */
+        { id: 'agnes-video-2.5-flash', name: 'Agnes Video 2.5 Flash', desc: 'Gratuit : 4–12 s par plan, 720P, ≤5 images, ≤3 audio (URL publique)' },
+        { id: 'agnes-video-2.5', name: 'Agnes Video 2.5', desc: 'Payant (~0,125 $ / 5 s) : 4–12 s par plan, 720P→2K, images/audio/vidéo par URL publique' }
       ];
       /* v456 (qui étiquette et trie) se charge AVANT ce module : les modèles
          ajoutés ici échapperaient à son passage. On les étiquette donc à la
