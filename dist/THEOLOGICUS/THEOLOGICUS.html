@@ -36744,6 +36744,11 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
   /* v669 — export de test (même convention que __ANC) : aucun chemin produit
      ne l'appelle. `ouvrir` est le chemin pdf.js de l'application. */
   window.__PFC = { reconstruire: reconstruire, ouvrir: ouvrirAvecPdfJs };
+  /* v671 — LIVROTRADO lit les PDF avec CETTE reconstruction (lignes réelles,
+     ordre de lecture avec colonnes, paragraphes par l'écart vertical). Le nom
+     est explicite : ce n'est pas une sonde de test, c'est un service partagé
+     par deux modules du même fichier. */
+  window.theoReconstruire = reconstruire;
 
   /* Extraction du TEXTE de toutes les pages (pdf.js) -> fichier .txt */
   async function extraireTexte() {
@@ -55173,23 +55178,19 @@ window.continueTradApart = async function (msgId) {
          page entière pouvait ressortir en UN seul paragraphe. On regroupe les
          fragments par ligne, de haut en bas, puis on coupe les paragraphes sur
          les lignes courtes (fin de paragraphe probable dans un livre). */
-      var parY = {};
-      (c.items || []).forEach(function (it) {
-        if (!it || !it.str || !String(it.str).trim()) return;
-        var y = Math.round(it.transform ? it.transform[5] : 0);
-        (parY[y] = parY[y] || []).push(it.str);
-      });
-      var ys = Object.keys(parY).map(Number).sort(function (a, b) { return b - a; });
-      var lignes = ys.map(function (y) { return parY[y].join(' ').replace(/\s+/g, ' ').trim(); }).filter(function (l) { return l.length > 0; });
-      if (!lignes.length) { pagesMuettes++; continue; }
-      total += lignes.join(' ').length;
-      var paras = [], courant = '';
-      lignes.forEach(function (l, i) {
-        courant += (courant ? ' ' : '') + l;
-        var finProbable = (l.length < 60) || (i === lignes.length - 1);
-        if (finProbable && courant.trim().length > 1) { paras.push(courant.trim()); courant = ''; }
-      });
-      if (courant.trim().length > 1) paras.push(courant.trim());
+      /* v671 — MÊME reconstruction que PDFCraft (v669/v670). L'ancien code
+         groupait les fragments par ordonnée seule : deux colonnes sur la même
+         ligne de base donnaient « G1 D1 » (livre entrelacé). Et il devinait les
+         fins de paragraphe sur la LONGUEUR de la ligne (« moins de 60 c. ») :
+         une suite de lignes courtes était découpée en autant de paragraphes,
+         et deux lignes longues fusionnaient en un seul. Ici les paragraphes
+         viennent de l'ÉCART vertical, déjà calculé par `theoReconstruire`. */
+      var r = (typeof window.theoReconstruire === 'function') ? window.theoReconstruire(c) : null;
+      if (!r || !r.lignes.length) { pagesMuettes++; continue; }
+      total += r.texte.length;
+      var paras = r.texte.split(/\n\s*\n/)
+        .map(function (x) { return x.replace(/\s*\n\s*/g, ' ').trim(); })
+        .filter(function (x) { return x.length > 1; });
       if (paras.length) chaps.push({ titre: 'Page ' + p, paragraphes: paras });
     }
     /* Aucun texte du tout : on DIT pourquoi (c'est le cas d'un livre scanné,
