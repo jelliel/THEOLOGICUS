@@ -29227,6 +29227,12 @@ initTafsirVerseTooltip();
     resolve: function(b, f){ return _ancResolve(b, f); },
     occurrences: function(b, t){ return _ancOccurrences(b, t); },
     place: function(b, f, el){ return _ancPlace(b, f, el); },
+    /* v668 — sondes des DEUX chemins qui ECRIVENT une ancre (aucun appel
+       depuis le produit) : `fit` pour un cadre sans ancre, `repair` pour une
+       ancre ancienne sans texte. Permettent de mesurer ce qui est reellement
+       memorise, sans passer par les gestes de l'interface. */
+    fit: function(b, f, el, o){ return _ancFit(b, f, el, o); },
+    repair: function(b, f, s){ return _ancRepair(b, f, s); },
     noeuds: function(b){ return noeudsTexteVisibles(b); },
     norm: function(s){ return _ancNorm(s); },
     shapes: function(){ try { return applyShapes(); } catch (e) { return String(e); } },
@@ -29313,7 +29319,7 @@ initTafsirVerseTooltip();
           var _txtA = _full.slice(_off.start, _off.end).trim();
           if (!_txtA) _txtA = String(target.texte || '').trim();
           if (_txtA) {
-            ancreFig = { start: _off.start, end: _off.end, texte: _txtA.slice(0, 200) };
+            ancreFig = { start: _off.start, end: _off.end, texte: _txtA.slice(0, _ANC_TEXTE_MAX) };
           }
         }
         /* repli 3 — les mots sous le point de clic (aucune selection requise). */
@@ -29537,6 +29543,15 @@ initTafsirVerseTooltip();
      les suivants. Mais un offset nu reste fragile des que le contenu du
      message change (streaming, markdown, regeneration, changement de police
      peut aussi re-brasser les retours). On ancre donc sur le TEXTE. */
+  /* ═══ v668 — BORNE DU TEXTE D'ANCRE ═══
+     🔴 La borne était 200, alors que `ancre.end` gardait la couverture RÉELLE.
+     Un cadre couvrant 364 caractères mémorisait donc 200 caractères : au
+     rechargement, `_ancResolve` ne retrouvait que le préfixe, la plage relue se
+     réduisait à 200 c. et le CENTRE du texte dérivait — mesuré −64 px sur le
+     banc, et les cadres du store réel montent à 321 px de haut (6-10 lignes).
+     Une seule borne, nommée, pour les quatre sites qui écrivent une ancre : la
+     valeur doit couvrir un cadre haut entier sans faire enfler le store. */
+  var _ANC_TEXTE_MAX = 800;
   function _ancNorm(str){
     /* NFKC compose les ligatures, NFD separe les accents, on retire les
        diacritiques, on met en minuscule puis on garde lettres + chiffres :
@@ -29635,7 +29650,7 @@ initTafsirVerseTooltip();
         return r;
       })());
       if (!off || !(off.end > off.start)) return null;
-      return { start: off.start, end: off.end, texte: mot.slice(0, 200) };
+      return { start: off.start, end: off.end, texte: mot.slice(0, _ANC_TEXTE_MAX) };
     } catch (e) {}
     return null;
   }
@@ -29754,7 +29769,7 @@ initTafsirVerseTooltip();
          voulue par l'utilisateur (`ow`/`oh`) et son decalage au texte de tete
          (`ox`/`oy`) ; seule la POSITION suivra le texte. */
       const _r0 = _ancRect(box, st2, st2 + txt2.length);
-      f.ancre = { start: st2, end: st2 + txt2.length, texte: txt2.slice(0, 200) };
+      f.ancre = { start: st2, end: st2 + txt2.length, texte: txt2.slice(0, _ANC_TEXTE_MAX) };
       /* v657b — MEMOIRE DE LA POSITION D'ORIGINE. ancre.px/py est la position
          de la figure AU MOMENT DE LA CREATION de l'ancre (espace contenu).
          C'est la reference CONVERGENTE : au moment de la finalisation, on
@@ -29885,7 +29900,7 @@ initTafsirVerseTooltip();
       const a = Math.max(0, Math.min(an.start | 0, full.length));
       const b = Math.max(a, Math.min(an.end | 0, full.length));
       const t = full.slice(a, b).trim();
-      if (_ancNorm(t).norm) an.texte = t.slice(0, 200);
+      if (_ancNorm(t).norm) an.texte = t.slice(0, _ANC_TEXTE_MAX);
     }
     if (solve) { an.start = solve.start; an.end = solve.end; }
   }
