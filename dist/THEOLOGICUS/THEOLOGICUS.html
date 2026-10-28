@@ -36596,12 +36596,82 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
      à sa source plus tard.
      Limite assumée : pas de détection de colonnes. Sur un PDF à deux colonnes,
      les lignes de même hauteur se suivent (tri haut→bas puis gauche→droite). */
+  /* ═══ v670 — ORDRE DE LECTURE (XY-cut simplifié) ═══
+     Sans découpage, deux colonnes s'entrelacent : les segments de même
+     ordonnée se suivent. On tente d'abord une COUPURE VERTICALE (gouttière
+     qu'aucun segment ne franchit), puis une coupure HORIZONTALE (saut de
+     paragraphe), sinon haut→bas. Les colonnes passent avant les bandes : une
+     gouttière court sur toute la hauteur, un saut de paragraphe non.
+     Si une ligne pleine largeur franchit la gouttière, on ne coupe PAS en
+     colonnes (le titre forme sa propre bande, et la bande suivante se coupe) :
+     mieux vaut un ordre haut→bas qu'un ordre faux. */
+  function _pfcTrierY(ls) {
+    return ls.slice().sort(function (p, q) { return q.y - p.y || p.x - q.x; });
+  }
+  function _pfcBandes(ls) {
+    var t = _pfcTrierY(ls), out = [], cur = [];
+    for (var i = 0; i < t.length; i++) {
+      if (cur.length) {
+        var prec = cur[cur.length - 1];
+        var inter = Math.max(prec.h, t[i].h) || 10;
+        if ((prec.y - t[i].y) > inter * 1.6) { out.push(cur); cur = []; }
+      }
+      cur.push(t[i]);
+    }
+    if (cur.length) out.push(cur);
+    return out;
+  }
+  function _pfcColonnes(ls) {
+    if (ls.length < 4) return [ls];
+    var t = ls.slice().sort(function (p, q) { return p.x - q.x; });
+    var seuil = Math.max(10, (t[0].h || 10) * 1.5);
+    var maxR = -Infinity, g = null, largeur = 0;
+    for (var i = 0; i < t.length; i++) {
+      var L = t[i];
+      if (maxR > -Infinity && (L.x - maxR) >= seuil && (L.x - maxR) > largeur) {
+        g = { fin: maxR, debut: L.x }; largeur = L.x - maxR;
+      }
+      if (L.x + L.w > maxR) maxR = L.x + L.w;
+    }
+    if (!g) return [ls];
+    var gauche = [], droite = [], traverse = false;
+    ls.forEach(function (L) {
+      if (L.x + L.w <= g.fin + 0.5) gauche.push(L);
+      else if (L.x >= g.debut - 0.5) droite.push(L);
+      else traverse = true;
+    });
+    if (traverse || gauche.length < 2 || droite.length < 2) return [ls];
+    return [gauche, droite];
+  }
+  function ordonner(ls, prof) {
+    prof = prof || 0;
+    if (ls.length <= 1 || prof > 4) return _pfcTrierY(ls);
+    var cols = _pfcColonnes(ls);
+    if (cols.length > 1) {
+      var o = [];
+      for (var i = 0; i < cols.length; i++) o = o.concat(ordonner(cols[i], prof + 1));
+      return o;
+    }
+    var bandes = _pfcBandes(ls);
+    if (bandes.length > 1) {
+      var b = [];
+      for (var j = 0; j < bandes.length; j++) b = b.concat(ordonner(bandes[j], prof + 1));
+      return b;
+    }
+    return _pfcTrierY(ls);
+  }
   function reconstruire(contenu) {
     var items = (contenu && contenu.items) || [];
     var brut = [];
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
       if (!it || typeof it.str !== 'string' || !it.str.length) continue;
+      /* v670 — un item qui n'est QUE des blancs ne porte pas de texte : c'est
+         ainsi que pdf.js représente un GRAND écart (mesuré : un item « espace »
+         de 128 pt comble la gouttière entre deux colonnes, x 171,7 → 300, et
+         empêche la coupure). On l'écarte : le trou est déjà lisible dans les
+         abscisses, et le seuil d'espacement remet une espace là où il faut. */
+      if (!it.str.replace(/\s+/g, '').length) continue;
       var tr = it.transform || [1, 0, 0, 1, 0, 0];
       var h = Math.abs(it.height || tr[3] || 10) || 10;
       brut.push({
@@ -36620,31 +36690,46 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       if (!L) { L = { y: b.y, h: b.h, parts: [] }; lignes.push(L); }
       L.parts.push(b);
     }
-    /* 2. dans la ligne : ordre par abscisse, espace seulement s'il y a un TROU.
-       Un trou nul colle (« l' » + « Éternel ») ; au-delà de ~0,12 interligne,
-       c'est une séparation de mots. */
-    lignes.forEach(function (L) {
-      L.parts.sort(function (p, q) { return p.x - q.x; });
-      var txt = '', fin = null, seuil = Math.max(0.6, L.h * 0.12);
-      L.parts.forEach(function (p) {
-        if (fin !== null && (p.x - fin) > seuil && !/\s$/.test(txt) && !/^\s/.test(p.s)) txt += ' ';
-        txt += p.s;
-        fin = p.x + p.w;
+    /* 2. dans chaque rangée : COUPER AUX TROUS. Une rangée peut porter deux
+       colonnes (même ordonnée) : la fusionner donnerait « G1 D1 ». Un trou
+       horizontal de plus de 1,5 interligne sépare deux segments ; en deçà,
+       c'est une séparation de mots (seuil 0,12 interligne : « l' » + « Éternel »
+       collent, deux mots non). */
+    var segments = [];
+    lignes.forEach(function (R) {
+      R.parts.sort(function (p, q) { return p.x - q.x; });
+      var coupe = Math.max(10, (R.h || 10) * 1.5);
+      var cour = [], fin = null;
+      var poser = function () {
+        if (!cour.length) return;
+        var txt = '', f2 = null, esp = Math.max(0.6, R.h * 0.12);
+        cour.forEach(function (p) {
+          if (f2 !== null && (p.x - f2) > esp && !/\s$/.test(txt) && !/^\s/.test(p.s)) txt += ' ';
+          txt += p.s; f2 = p.x + p.w;
+        });
+        txt = txt.replace(/\s+/g, ' ').trim();
+        if (txt) {
+          var x0 = cour[0].x, x1 = 0;
+          cour.forEach(function (p) { x1 = Math.max(x1, p.x + p.w); });
+          segments.push({ txt: txt, x: x0, y: R.y, w: Math.max(0, x1 - x0), h: R.h });
+        }
+        cour = [];
+      };
+      R.parts.forEach(function (p) {
+        if (fin !== null && (p.x - fin) > coupe) poser();
+        cour.push(p); fin = p.x + p.w;
       });
-      L.txt = txt.replace(/\s+/g, ' ').trim();
-      var x0 = L.parts[0].x, x1 = 0;
-      L.parts.forEach(function (p) { x1 = Math.max(x1, p.x + p.w); });
-      L.x = x0; L.w = Math.max(0, x1 - x0);
+      poser();
     });
-    /* 3. haut → bas, puis blanc entre paragraphes */
-    var utiles = lignes.filter(function (L) { return L.txt; });
-    utiles.sort(function (p, q) { return q.y - p.y || p.x - q.x; });
+    /* 3. ORDRE DE LECTURE, puis blanc entre blocs. */
+    var utiles = ordonner(segments);
     var texte = '';
     for (var m = 0; m < utiles.length; m++) {
       if (m > 0) {
         var prec = utiles[m - 1], ecart = prec.y - utiles[m].y;
         var inter = Math.max(prec.h, utiles[m].h) || 10;
-        texte += (ecart > inter * 1.6) ? '\n\n' : '\n';
+        /* ecart < 0 : on est remonté (nouvelle colonne ou nouvelle bande). */
+        texte += (ecart > inter * 1.6 || ecart < 0) ? '\n\n' : '\n';
       }
       texte += utiles[m].txt;
     }
