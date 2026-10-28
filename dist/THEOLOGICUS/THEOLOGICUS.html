@@ -36586,6 +36586,80 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
     } catch (e) { toast('Enregistrement impossible : ' + e.message, 'error'); }
   }
 
+  /* ═══ v669 — LIGNES ET PARAGRAPHES, PAS UNE LIGNE PLATE ═══
+     `items.map(it => it.str).join(' ')` rendait la page ENTIÈRE en une seule
+     ligne : ni saut de ligne, ni paragraphe, ni coordonnée. Inutilisable pour
+     citer ou étudier.
+     On regroupe par ordonnée (`transform[5]`), on ordonne chaque ligne par
+     abscisse, on insère un blanc quand l'écart vertical dépasse 1,6 interligne,
+     et chaque ligne garde sa BOÎTE (x, y, w, h) — de quoi rattacher un passage
+     à sa source plus tard.
+     Limite assumée : pas de détection de colonnes. Sur un PDF à deux colonnes,
+     les lignes de même hauteur se suivent (tri haut→bas puis gauche→droite). */
+  function reconstruire(contenu) {
+    var items = (contenu && contenu.items) || [];
+    var brut = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || typeof it.str !== 'string' || !it.str.length) continue;
+      var tr = it.transform || [1, 0, 0, 1, 0, 0];
+      var h = Math.abs(it.height || tr[3] || 10) || 10;
+      brut.push({
+        s: it.str, x: Number(tr[4]) || 0, y: Number(tr[5]) || 0, h: h,
+        w: (typeof it.width === 'number' && it.width > 0) ? it.width : it.str.length * h * 0.5
+      });
+    }
+    if (!brut.length) return { texte: '', lignes: [] };
+    /* 1. regroupement par ordonnée : tolérance = demi-interligne */
+    var lignes = [];
+    for (var j = 0; j < brut.length; j++) {
+      var b = brut[j], L = null;
+      for (var k = lignes.length - 1; k >= 0 && k >= lignes.length - 8; k--) {
+        if (Math.abs(lignes[k].y - b.y) <= Math.max(b.h, lignes[k].h) * 0.5) { L = lignes[k]; break; }
+      }
+      if (!L) { L = { y: b.y, h: b.h, parts: [] }; lignes.push(L); }
+      L.parts.push(b);
+    }
+    /* 2. dans la ligne : ordre par abscisse, espace seulement s'il y a un TROU.
+       Un trou nul colle (« l' » + « Éternel ») ; au-delà de ~0,12 interligne,
+       c'est une séparation de mots. */
+    lignes.forEach(function (L) {
+      L.parts.sort(function (p, q) { return p.x - q.x; });
+      var txt = '', fin = null, seuil = Math.max(0.6, L.h * 0.12);
+      L.parts.forEach(function (p) {
+        if (fin !== null && (p.x - fin) > seuil && !/\s$/.test(txt) && !/^\s/.test(p.s)) txt += ' ';
+        txt += p.s;
+        fin = p.x + p.w;
+      });
+      L.txt = txt.replace(/\s+/g, ' ').trim();
+      var x0 = L.parts[0].x, x1 = 0;
+      L.parts.forEach(function (p) { x1 = Math.max(x1, p.x + p.w); });
+      L.x = x0; L.w = Math.max(0, x1 - x0);
+    });
+    /* 3. haut → bas, puis blanc entre paragraphes */
+    var utiles = lignes.filter(function (L) { return L.txt; });
+    utiles.sort(function (p, q) { return q.y - p.y || p.x - q.x; });
+    var texte = '';
+    for (var m = 0; m < utiles.length; m++) {
+      if (m > 0) {
+        var prec = utiles[m - 1], ecart = prec.y - utiles[m].y;
+        var inter = Math.max(prec.h, utiles[m].h) || 10;
+        texte += (ecart > inter * 1.6) ? '\n\n' : '\n';
+      }
+      texte += utiles[m].txt;
+    }
+    return {
+      texte: texte,
+      lignes: utiles.map(function (L) {
+        return { txt: L.txt, x: Math.round(L.x * 10) / 10, y: Math.round(L.y * 10) / 10,
+                 w: Math.round(L.w * 10) / 10, h: L.h };
+      })
+    };
+  }
+  /* v669 — export de test (même convention que __ANC) : aucun chemin produit
+     ne l'appelle. `ouvrir` est le chemin pdf.js de l'application. */
+  window.__PFC = { reconstruire: reconstruire, ouvrir: ouvrirAvecPdfJs };
+
   /* Extraction du TEXTE de toutes les pages (pdf.js) -> fichier .txt */
   async function extraireTexte() {
     amorcerPdfJs();
@@ -36597,8 +36671,9 @@ html[data-theme="manuscrit"] body{ background:#1c1710 !important; color:#e8ddc8 
       try {
         var page = await d.pjs.getPage(pg.p + 1);
         var contenu = await page.getTextContent();
-        var texte = contenu.items.map(function (it) { return it.str; }).join(' ');
-        morceaux.push('──── ' + d.name + ' · p.' + (pg.p + 1) + ' ────\n' + texte.trim());
+        /* v669 — lignes et paragraphes réels (voir `reconstruire`). */
+        var r = reconstruire(contenu);
+        morceaux.push('──── ' + d.name + ' · p.' + (pg.p + 1) + ' ────\n' + r.texte);
       } catch (e) {}
     }
     if (!morceaux.length) { toast('Aucun texte extractible', 'info'); return; }
