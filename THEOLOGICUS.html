@@ -29550,15 +29550,37 @@ initTafsirVerseTooltip();
     }
     return { norm: norm, map: map };
   }
-  /* Toutes les positions possibles de `texte` dans le contenu filtre. */
+  /* Toutes les positions possibles de `texte` dans le contenu filtre.
+     ═══ v667 — EXACT D'ABORD (patron `selection_range` de
+     deeptutor/reading/_grounding.py, Apache-2.0) ═══
+     `_ancNorm` ne garde que [a-z0-9] : « Genèse 1,1 » et « Genèse 11 » y
+     deviennent le même « genese11 ». Mesuré le 2026-10-28 : cette fonction
+     renvoyait les DEUX passages, et `_ancResolve` choisissait le plus proche de
+     `ancre.start` — l'offset ayant dérivé, une figure se posait sur un AUTRE
+     verset (« Genèse 11 » au lieu de « Genèse 1,1 »).
+     Quand le texte exact est présent dans la source, lui seul fait foi ; la clé
+     normalisée ne sert plus que de REPLI (apostrophe courbe, tiret variant,
+     espace insécable), avec la même table de correspondance vers la source. */
   function _ancOccurrences(container, texte){
     const nodes = noeudsTexteVisibles(container);
     if (!nodes.length) return [];
     let full = '', starts = [];
     for (let i = 0; i < nodes.length; i++) { starts.push(full.length); full += nodes[i].nodeValue; }
-    const F = _ancNorm(full), T = _ancNorm(texte);
+    const T = _ancNorm(texte);
     if (!T.norm) return [];
-    const out = []; let k = 0;
+    const out = [];
+    /* 1. correspondance EXACTE : aucune ambiguïté possible. */
+    let e = 0;
+    if (texte) {
+      while ((e = full.indexOf(texte, e)) !== -1) {
+        out.push({ start: e, end: e + texte.length, idx: e, exact: 1 });
+        e += 1;
+      }
+    }
+    if (out.length) return out;
+    /* 2. repli : clé normalisée (accents, apostrophes, tirets, blancs). */
+    const F = _ancNorm(full);
+    let k = 0;
     while ((k = F.norm.indexOf(T.norm, k)) !== -1) {
       out.push({ start: F.map[k], end: F.map[k + T.norm.length - 1] + 1, idx: k });
       k += 1;
