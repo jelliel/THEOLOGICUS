@@ -29543,15 +29543,19 @@ initTafsirVerseTooltip();
      les suivants. Mais un offset nu reste fragile des que le contenu du
      message change (streaming, markdown, regeneration, changement de police
      peut aussi re-brasser les retours). On ancre donc sur le TEXTE. */
-  /* ═══ v668 — BORNE DU TEXTE D'ANCRE ═══
-     🔴 La borne était 200, alors que `ancre.end` gardait la couverture RÉELLE.
-     Un cadre couvrant 364 caractères mémorisait donc 200 caractères : au
-     rechargement, `_ancResolve` ne retrouvait que le préfixe, la plage relue se
-     réduisait à 200 c. et le CENTRE du texte dérivait — mesuré −64 px sur le
-     banc, et les cadres du store réel montent à 321 px de haut (6-10 lignes).
-     Une seule borne, nommée, pour les quatre sites qui écrivent une ancre : la
-     valeur doit couvrir un cadre haut entier sans faire enfler le store. */
-  var _ANC_TEXTE_MAX = 800;
+  /* ═══ v672 — BORNE DU TEXTE D'ANCRE : 200, ET CE N'EST PAS ARBITRAIRE ═══
+     🔴 v668 avait porté cette borne à 800 pour que la plage résolue couvre tout
+     le texte couvert. Erreur : cette borne ne règle pas seulement la MÉMOIRE,
+     elle règle la POSITION. Une figure réparée est centrée sur la plage de son
+     ancre (`ancre.cx`), et cette plage, c'est le texte mémorisé. Mesure du
+     2026-10-29 sur une ancre `start=0, end=message` (ce que produit `_ancFit`
+     sur un message d'un seul nœud de texte) :
+        200 c. -> plage 0-200, centre 51 px, hauteur 94
+        800 c. -> plage 0-800, centre 192 px, hauteur 375
+     Soit 141 px de décalage vers le bas pour TOUS les encadrements réparés.
+     On reste donc à 200 : la stabilité de la position prime sur l'étendue de
+     la plage. Une seule constante, pour les quatre sites qui écrivent une ancre. */
+  var _ANC_TEXTE_MAX = 200;
   function _ancNorm(str){
     /* NFKC compose les ligatures, NFD separe les accents, on retire les
        diacritiques, on met en minuscule puis on garde lettres + chiffres :

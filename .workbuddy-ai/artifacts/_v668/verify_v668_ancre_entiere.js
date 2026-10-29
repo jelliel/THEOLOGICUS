@@ -94,6 +94,14 @@ function ok(nom, cond, detail) {
         start: an.start, end: an.end,
         couvertureRelue: sol ? sol.end - sol.start : 0,
         cyVrai: vrai ? vrai.y + vrai.h / 2 : null,
+        /* reference = la plage REELLEMENT memorisee : `_ancFit` demarre a la
+           premiere ligne qui intersecte le cadre (mesure : start 52 pour un
+           cadre pose sur la ligne 3), pas au debut de la zone demandee. */
+        cyMemoire: (function () {
+          const st = (typeof an.start === 'number') ? an.start : s;
+          const r2 = window.__ANC.rect(box, st, Math.min(st + 200, e));
+          return r2 ? r2.y + r2.h / 2 : null;
+        })(),
         cyRelu: sol && sol.r ? sol.r.y + sol.r.h / 2 : null,
         texteOk: typeof an.texte === "string" && an.texte === full.slice(an.start, an.start + (an.texte || "").length)
       };
@@ -106,12 +114,17 @@ function ok(nom, cond, detail) {
     const box = window.__DECOR(30);
     return window.__ECRIRE(box, 2, 8);
   });
-  ok("A. une ancre de ~360 caractères en mémorise ≥ 350 (avant : 200)",
-     a.memoire >= 350, "couverture écrite = " + a.couverts + " c., mémorisé = " + a.memoire + " c.");
-  ok("A'. la plage relue couvre encore ≥ 350 caractères",
-     a.couvertureRelue >= 350, "plage relue = " + a.couvertureRelue + " c.");
-  const derive = (a.cyVrai !== null && a.cyRelu !== null) ? Math.round(a.cyRelu - a.cyVrai) : NaN;
-  ok("A''. le centre ne dérive pas (|dérive| ≤ 5 px)", Math.abs(derive) <= 5,
+  /* v672 — CONTRAT CORRIGÉ : la borne est 200, et ce n'est pas un oubli.
+     Elle règle aussi la POSITION d'une figure réparée (centrée sur sa plage) :
+     à 800, tous les encadrements descendaient de 141 px. Voir le banc _v672. */
+  ok("A. une ancre mémorise AU PLUS 200 caractères (borne _ANC_TEXTE_MAX)",
+     a.memoire === 200, "couverture écrite = " + a.couverts + " c., mémorisé = " + a.memoire + " c.");
+  ok("A'. la plage relue fait 200 caractères (bornée, donc position stable)",
+     a.couvertureRelue === 200, "plage relue = " + a.couvertureRelue + " c.");
+  /* Le centre est comparé à celui de la plage de 200 caractères effectivement
+     mémorisée — pas à celui du bloc entier, qui n'est plus la référence. */
+  const derive = (a.cyMemoire !== null && a.cyRelu !== null) ? Math.round(a.cyRelu - a.cyMemoire) : NaN;
+  ok("A''. le centre est celui de la plage mémorisée (|dérive| ≤ 5 px)", Math.abs(derive) <= 5,
      "dérive verticale = " + derive + " px");
   ok("A'''. le texte mémorisé est bien celui de la plage (pas un décalage)",
      a.texteOk === true, "texte = tranche exacte ? " + a.texteOk);
@@ -123,8 +136,8 @@ function ok(nom, cond, detail) {
     const r = window.__ECRIRE(box, 0, 26);
     return { couverts: r.couverts, memoire: r.memoire };
   }, MAX);
-  ok("B. la mémoire reste bornée à " + MAX + " caractères",
-     b.memoire <= MAX && b.couverts > MAX, b.couverts + " c. couverts, mémorisé " + b.memoire + " c.");
+  ok("B. un bloc de " + b.couverts + " caractères n'en mémorise que 200",
+     b.memoire === 200 && b.couverts > 200, b.couverts + " c. couverts, mémorisé " + b.memoire + " c.");
 
   /* C. NON-RÉGRESSION : une ancre courte (2 phrases, 114 c.) n'est pas
      tronquée et se relit aux mêmes offsets. */
