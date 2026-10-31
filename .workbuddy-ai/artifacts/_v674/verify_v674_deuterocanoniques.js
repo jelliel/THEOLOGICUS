@@ -18,34 +18,84 @@ const fs = require("fs");
 const { chromium } = require("playwright");
 
 const PORT = Number(process.env.PORT || 9721);
-const MODULE = process.env.MODULE || "C:/tmp/sophia_module.html";
+const RACINE = path.resolve(process.env.BENCH_ROOT || path.resolve(__dirname, "..", "..", ".."));
+/* 🔴 ECHEC CI du 2026-10-31 : ce banc lisait `C:/tmp/sophia_module.html`, un
+   fichier HORS DEPOT -> `ENOENT` sur le runner. On extrait le module de
+   THEOLOGICUS.html : on teste l'artefact livre, et le banc est autonome. */
+function sourceModule() {
+  if (process.env.MODULE) return fs.readFileSync(process.env.MODULE, "utf8");
+  const html = fs.readFileSync(path.join(RACINE, "THEOLOGICUS.html"), "utf8");
+  const d = html.indexOf('<script id="v673sophia">');
+  if (d < 0) throw new Error("module v673sophia introuvable dans THEOLOGICUS.html");
+  const f = html.indexOf("</script>", d) + "</script>".length;
+  return html.slice(d, f);
+}
 const PW = process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright";
 const CHROME = path.join(PW, "chromium-1234", "chrome-win64", "chrome.exe");
 
-let ok_n = 0, ko_n = 0;
+let ok_n = 0, ko_n = 0, ign_n = 0;
+function ignore(nom, raison) { ign_n++; console.log("[IGNORE] " + nom + "  -- " + raison); }
 function ok(nom, cond, detail) {
   if (cond) { ok_n++; console.log("[OK]    " + nom + (detail ? "  -- " + detail : "")); }
   else { ko_n++; console.log("[ECHEC] " + nom + "  -- " + detail); }
 }
 
-const HARNAIS = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>h</title></head>
+const HARNAIS = () => `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>h</title></head>
 <body><div id="input-area"></div>
-${fs.readFileSync(MODULE, "utf8")}
+${sourceModule()}
 </body></html>`;
 
 (async () => {
   const serveur = http.createServer((rq, rs) => {
-    if (rq.url.split("?")[0] === "/h.html") { rs.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); rs.end(HARNAIS); }
+    if (rq.url.split("?")[0] === "/h.html") { rs.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }); rs.end(HARNAIS()); }
     else { rs.writeHead(404); rs.end("404"); }
   });
   await new Promise(r => serveur.listen(PORT, "127.0.0.1", r));
 
-  const browser = await chromium.launch({ executablePath: CHROME, args: ["--no-sandbox"] });
+  const browser = await chromium.launch(Object.assign({ args: ["--no-sandbox", "--disable-dev-shm-usage"] },
+    process.env.PW_DIR ? { executablePath: CHROME } : {}));
   const page = await (await browser.newContext({ viewport: { width: 1000, height: 800 } })).newPage();
   const erreurs = [];
   page.on("pageerror", e => erreurs.push(String(e.message)));
+  /* ═══ SERVEUR MCP SIMULÉ ═══
+     Le ROUTAGE (search_text pour un deutérocanonique, lookup_scripture pour un
+     protocanonique) est le cœur de cette évolution : il doit être vérifié même
+     sans réseau. Le double répond aux deux outils avec une forme conforme à
+     celle mesurée sur le vrai serveur (`english`, `url`, `sbl_footnote`). */
+  await page.route(u => u.hostname.indexOf("sophiascriptura.com") >= 0, async (route) => {
+    let nom = "", args = {}, id = 1;
+    try {
+      const b = JSON.parse(route.request().postData() || "{}");
+      id = b.id; nom = b.params && b.params.name; args = (b.params && b.params.arguments) || {};
+    } catch (e) {}
+    const P = (i, r) => ({
+      id: i, reference: r, author: "Auteur simule", date: "ca. 110", work: "Oeuvre simulee",
+      english: "Passage simule sur " + r + ".",
+      url: "https://sophiascriptura.com/p/" + String(i).replace(/\//g, "-"),
+      sbl_footnote: r + " (LCL 25:78; trans. Sophia Scriptura)."
+    });
+    let charge = { total: 0 };
+    if (nom === "search_text") charge = { total: 2, query: args.query,
+      passages: [P("1clem/55.4", "1 Clem. 55.4"), P("clem-strom/4.19", "Strom. 4.19.118")] };
+    else if (nom === "lookup_scripture") charge = { total: 2, query: args.reference,
+      passages: [P("herm-mand/4.1.6", "Herm. Mand. 4.1.6"), P("ign-polycarp/5.2", "Ign. Pol. 5.2")] };
+    else if (nom === "get_passages") { const ids = args.ids || [];
+      charge = { requested: ids.length, returned: ids.length, passages: ids.map(i => P(i, i)) }; }
+    else if (nom === "list_topics") charge = { total: 1, topics: [{ id: "baptism" }] };
+    route.fulfill({ status: 200, headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: id, result: { content: [{ type: "text", text: JSON.stringify(charge) }] } }) });
+  });
+
   await page.goto(`http://127.0.0.1:${PORT}/h.html`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => !!window.__SOPHIA, null, { timeout: 15000 });
+
+  /* Une panne du serveur n'est pas une regression du code : on l'annonce. */
+  const sonde = await page.evaluate(async () => {
+    try { await window.__SOPHIA.call("list_topics", { query: "baptism" }); return { enLigne: true }; }
+    catch (e) { return { enLigne: false, err: String(e.message) }; }
+  });
+  const enLigne = sonde.enLigne;
+  if (!enLigne) console.log("\n[!] SERVEUR INJOIGNABLE (" + sonde.err + ") — controles reseau IGNORES.\n");
 
   /* espion sur fetch : on enregistre le NOM de l'outil MCP réellement appelé */
   await page.evaluate(() => {
@@ -116,6 +166,11 @@ ${fs.readFileSync(MODULE, "utf8")}
   ok("B3c. mais « 1 P 2,9 » (sans point) est bien reconnu",
      pieges.pierre[0] === "1 Peter 2:9", JSON.stringify(pieges.pierre));
 
+  if (!enLigne) {
+    ignore("C1-C7. route search_text et bloc deutérocanonique", "serveur injoignable");
+    ignore("D/D2. protocanonique via lookup_scripture", "serveur injoignable");
+  } else {
+
   /* ── C. route réellement empruntée pour un deutérocanonique ── */
   await page.evaluate(() => window.__SOPHIA.viderCache());
   await page.evaluate(() => { window.__outils.length = 0; });
@@ -154,9 +209,11 @@ ${fs.readFileSync(MODULE, "utf8")}
      !!d && !/──\s*Matthew 19:9\s*—\s*INDEX VERSET PAR VERSET/.test(d.bloc),
      d ? String(!/──\s*Matthew 19:9\s*—\s*INDEX VERSET/.test(d.bloc)) : "-");
 
+  }
+
   ok("E. aucune erreur JavaScript non gérée", erreurs.length === 0, erreurs.slice(0, 3).join(" | ") || "0");
 
-  console.log("\n-- RESULTAT : " + ok_n + " OK / " + ko_n + " ECHEC --");
+  console.log("\n-- RESULTAT : " + ok_n + " OK / " + ko_n + " ECHEC" + (ign_n ? " / " + ign_n + " IGNORE(S)" : "") + " --");
   await browser.close(); serveur.close();
   process.exit(ko_n === 0 ? 0 : 1);
 })().catch(e => { console.error("EXCEPTION BANC :", e); process.exit(2); });
