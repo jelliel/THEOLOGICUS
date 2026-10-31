@@ -105,3 +105,36 @@ Exposer les 8 outils dans `tools`, boucler sur `tool_calls`, réinjecter `role:"
 ---
 
 **Décision attendue** : GO sur l'approche **A** (pré-résolution) pour les tranches 1→4, ou GO direct sur **A+B** ?
+
+
+---
+
+## 8. Deutérocanoniques (ajout v674) — ce que le corpus sait vraiment
+
+Mesuré sur le serveur le 2026-10-31, parce que le contraire aurait produit des
+réponses fausses.
+
+| Ce qu'on envoie | Réponse du serveur |
+|---|---|
+| `Tobit 6:17`, `Judith 8:1`, `Wisdom 2:12`, `Sirach 2:1`, `Baruch 3:38`, `1 Maccabees 2:52`, `Susanna 1:1`, `Bel and the Dragon 1:1`, `1–4 Esdras`, `Prayer of Manasseh`, `Letter of Jeremiah`, `Odes` | **REJET** — « Could not read … as a Bible reference » |
+| `Daniel 13:1`, `Daniel 14:1`, `Esther 14:1`, `Esther 16:1`, `Psalm 151` (numérotation catholique) | acceptés, **0 résultat** |
+| `search_text("Tobit")` / `"Judith"` / `"Maccabees"` / `"Baruch"` | **65 / 49 / 108 / 206 résultats** |
+
+**Conclusion** : l'index *verset par verset* ne couvre pas ces livres ; le *texte*
+des Pères les mentionne. Envoyer un deutérocanonique à `lookup_scripture`
+donnerait donc un zéro trompeur — un zéro qui laisserait croire que les Pères ne
+les citent pas, alors que le corpus ne sait simplement pas les indexer.
+
+### Décision retenue
+
+1. **Les 17 livres sont détectés** (FR, EN, abréviations : `Tb`, `Jdt`, `Sg`,
+   `Si`, `Ba`, `1 M`, `Suz`, `Pr Man`, `1 Esd`, `Ép Jér`, `Ps 151`…).
+2. Ils sont marqués `deutero` et **routés vers `search_text`**, jamais vers
+   `lookup_scripture`.
+3. Le bloc injecté porte un en-tête explicite :
+   `INDEX VERSET PAR VERSET NON DISPONIBLE` + « ne pas les présenter comme des
+   citations de ce verset », et une consigne 4b qui interdit au modèle de
+   conclure quoi que ce soit sur une prétendue absence de citation.
+4. 🔴 Piège écarté : autoriser les abréviations d'une lettre faisait de
+   « 1 p. 12 » (page 12) une référence à **1 Pierre 12**. Une lettre seule
+   suivie d'un **point** est rejetée ; `1 P 2,9` reste reconnu. Vérifié (B3a/B3c).
