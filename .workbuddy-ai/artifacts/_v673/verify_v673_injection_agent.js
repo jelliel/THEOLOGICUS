@@ -12,7 +12,20 @@ const fs = require("fs");
 const { chromium } = require("playwright");
 
 const PORT = Number(process.env.PORT || 9692);
-const RACINE = path.resolve(process.env.BENCH_ROOT || "C:/tmp/theoverify");
+/* 🔴 ECHEC CI du 2026-10-31 (2e tour) : cette ligne gardait "C:/tmp/theoverify"
+   en dur. J'avais corrige le chemin du MODULE mais pas celui de l'APPLICATION :
+   sur le runner le dossier n'existe pas, le serveur repondait 404, la page
+   etait vide (141 caracteres, 0 module) et le banc echouait sur sa premisse.
+   On remonte depuis __dirname jusqu'au dossier qui contient THEOLOGICUS.html. */
+function trouverRacine() {
+  let d = __dirname;
+  for (let i = 0; i < 6; i++) {
+    if (fs.existsSync(path.join(d, "THEOLOGICUS.html"))) return d;
+    d = path.dirname(d);
+  }
+  return path.resolve(process.env.BENCH_ROOT || process.cwd());
+}
+const RACINE = path.resolve(process.env.BENCH_ROOT || trouverRacine());
 const PW = process.env.PW_DIR || "C:/Users/toshr/AppData/Local/ms-playwright";
 const CHROME = path.join(PW, "chromium-1234", "chrome-win64", "chrome.exe");
 
@@ -25,6 +38,14 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
 function ignore(nom, raison) { ign_n++; console.log("[IGNORE] " + nom + "  -- " + raison); }
 
 (async () => {
+  /* garde-fou : si l'application n'est pas la, on le dit AVANT de naviguer
+     (sinon on mesure une page vide et on cherche au mauvais endroit). */
+  const APP = path.join(RACINE, "THEOLOGICUS.html");
+  if (!fs.existsSync(APP)) {
+    console.error("[ECHEC] application introuvable : " + APP + " (racine=" + RACINE + ")");
+    process.exit(1);
+  }
+
   const serveur = http.createServer((rq, rs) => {
     let p = decodeURIComponent(rq.url.split("?")[0]);
     if (p === "/") p = "/THEOLOGICUS.html";
