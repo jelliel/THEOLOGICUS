@@ -100,7 +100,32 @@ function ignore(nom, raison) { ign_n++; console.log("[IGNORE] " + nom + "  -- " 
 
   await page.addInitScript(() => { try { localStorage.setItem("theologicus_wizard_skipped", "1"); } catch (e) {} });
   await page.goto(`http://127.0.0.1:${PORT}/THEOLOGICUS.html`, { waitUntil: "domcontentloaded", timeout: 60000 });
-  await page.waitForFunction(() => !!(window.__SOPHIA && window.sendMessage), null, { timeout: 30000 }).catch(() => {});
+  /* 🔴 Sur un runner chargé (5 shards en parallèle, 2 cœurs), l'app de 8 Mo
+     n'est pas prête dans les 30 s. Le `.catch(() => {})` d'origine AVALAIT ce
+     délai : le banc mesurait ensuite le vide et échouait sur sa prémisse sans
+     dire pourquoi. On attend plus longtemps, on recharge une fois, et on
+     DIAGNOSTIQUE au lieu de deviner. */
+  const attendreAppli = (ms) => page.waitForFunction(
+    () => typeof window.__SOPHIA === "object" && typeof window.sendMessage === "function",
+    null, { timeout: ms }).then(() => true).catch(() => false);
+
+  let appli = await attendreAppli(60000);
+  if (!appli) {
+    console.log("[DIAG] application non prête après 60 s — rechargement unique…");
+    try { await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 }); } catch (e) {}
+    appli = await attendreAppli(60000);
+  }
+  if (!appli) {
+    const d = await page.evaluate(() => ({
+      sophia: typeof window.__SOPHIA,
+      send: typeof window.sendMessage,
+      scripts: document.querySelectorAll("script[id]").length,
+      module: !!document.getElementById("v673sophia"),
+      taille: document.documentElement ? document.documentElement.innerHTML.length : -1,
+      titre: document.title
+    })).catch(e => ({ erreur: String(e.message) }));
+    console.log("[DIAG] " + JSON.stringify(d));
+  }
   await pause(2500);
 
   /* on remplace le transport du modèle : même origine, flux SSE controle */
