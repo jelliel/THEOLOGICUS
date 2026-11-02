@@ -20863,7 +20863,7 @@ async function exportData() {
       source: "THEOLOGICUS",
       data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: await db.getAll('auto_backups') || [], localStorage: ls }
     };
-    const json = JSON.stringify(payload, null, 2);
+    const json = JSON.stringify(payload);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
     /* v65 — sur natif on transmet le TEXTE, pas un base64. Construire le
        base64 d'un backup de 35 Mo (btoa(unescape(encodeURIComponent(...))))
@@ -20873,29 +20873,79 @@ async function exportData() {
        Desktop inchange : app.py continue de recevoir `data64`. */
     let isNative = false;
     try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch(e){}
-    /* 1) Sauvegarde directe dans le dossier de l'application via le serveur
-          local (dossier de l'exe, sous-dossier backups/). */
+    /* v680 — export CHUNKÉ : le JSON peut faire 50+ Mo. On l'envoie en
+       MORCEAUX de ~2 Mo (base64 par morceau, mémoire bornée à un seul
+       morceau) pour éviter « Out of memory » du rendu WebView. Le serveur
+       reconstitue le fichier (proxy_server._save_data, mode chunk). Petit
+       backup (< 2 Mo) : un seul POST brut, comme avant. */
+    function exporterParMorceaux(nom, texte) {
+      var CHUNK = 2 * 1024 * 1024; // 2 Mo de texte par morceau
+      /* Découpe SÛRE : on n'arrête jamais un morceau au milieu d'une paire de
+         substituts (emoji / certains CJK). Autrement encodeURIComponent lève
+         « URIError: malformed URI » sur le substitut haut orphelin et le
+         morceau échoue -> perte de données silencieuse. Les morceaux se
+         chevauchent-ils ? Non : on recule la fin d'UN code unit et le morceau
+         suivant démarre à cette même position, donc la partition est
+         contiguë et complète (réassemblage binaire identique côté serveur). */
+      function decouperSurs(s, taille) {
+        var parts = [], i = 0, n = s.length;
+        while (i < n) {
+          var fin = Math.min(i + taille, n);
+          if (fin < n) {
+            var c = s.charCodeAt(fin - 1);
+            if (c >= 0xD800 && c <= 0xDBFF) { // substitut haut -> reculer d'un
+              fin -= 1;
+              if (fin <= i) fin = i + 1; // garde-fou (ne devrait pas arriver)
+            }
+          }
+          parts.push(s.slice(i, fin));
+          i = fin;
+        }
+        return parts;
+      }
+      var pieces = decouperSurs(texte, CHUNK);
+      if (pieces.length === 1) {
+        return fetch('/save-data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: nom, text: pieces[0] })
+        }).then(function (r) {
+          if (!r.ok) return null;
+          return r.json().then(function (j) { return (j && j.path) || 'backups'; });
+        });
+      }
+      var total = pieces.length;
+      var finalPath = null;
+      var seq = Promise.resolve();
+      for (var i = 0; i < total; i++) {
+        (function (idx) {
+          seq = seq.then(function () {
+            var b64;
+            try { b64 = btoa(unescape(encodeURIComponent(pieces[idx]))); }
+            catch (e) { throw new Error('encodage morceau ' + idx); }
+            return fetch('/save-data', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: nom, chunk: b64, index: idx, total: total })
+            }).then(function (r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            }).then(function (j) {
+              if (idx === total - 1) finalPath = (j && j.path) || 'backups';
+            });
+          });
+        })(i);
+      }
+      return seq.then(function () { return finalPath; });
+    }
     try {
-      /* v679 — desktop : on envoie le JSON BRUT (text), PAS du base64.
-         btoa(unescape(encodeURIComponent(json))) sur 50+ Mo gonflait ~70 Mo
-         en mémoire et avortait la connexion (WinError 10053) -> aucun fichier
-         écrit et toast « succès » mensonger. Le serveur sait décoder le texte
-         brut (proxy_server._save_data accepte désormais `text`). */
-      const body = { filename: filename, text: json };
-      const res = await fetch('/save-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) {
-        const j = await res.json().catch(() => ({}));
-        toast("Données exportées avec succès !" + (j.path ? " (" + j.path + ")" : ""), "success");
+      const chemin = await exporterParMorceaux(filename, json);
+      if (chemin) {
+        toast("Données exportées avec succès !" + (chemin.indexOf('backups') >= 0 ? " (" + chemin + ")" : ""), "success");
         return;
       }
-      throw new Error('HTTP ' + res.status);
+      throw new Error('serveur');
     } catch(serverErr) {
-      /* 2) Repli. Dans la WebView (exe/APK) le téléchargement de blob URL
-         ÉCHOUE silencieusement (pas d'erreur levée) -> un toast « succès »
+      /* 2) Repli honnête. Dans la WebView (exe/APK) le téléchargement de blob
+         URL ÉCHOUE silencieusement (pas d'erreur levée) -> un toast « succès »
          serait mensonger. On signale donc honnêtement l'échec et on montre
          le dossier des sauvegardes plutôt que de prétendre un download. */
       console.warn('[export] serveur indisponible ou connexion avortée', serverErr);

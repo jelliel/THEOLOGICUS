@@ -2859,6 +2859,33 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             extensions = ('.json', '.md', '.markdown', '.txt', '.pdf')
             if not filename or not filename.lower().endswith(extensions):
                 raise ValueError('nom de fichier invalide')
+            # v680 — export CHUNKÉ : le client envoie {filename, chunk:<base64>,
+            # index, total} pour borner la mémoire du rendu WebView (évite
+            # « Out of memory » sur les gros backups). Concaténation BINAIRE des
+            # morceaux puis écriture atomique sur le dernier.
+            backup_dir = _backups_dir()  # v604 — surchargeable (bancs)
+            os.makedirs(backup_dir, exist_ok=True)
+            out_path = os.path.join(backup_dir, filename)
+            if 'chunk' in req and 'index' in req and 'total' in req:
+                idx = int(req['index']); tot = int(req['total'])
+                part = out_path + '.part'
+                with open(part, 'wb' if idx == 0 else 'ab') as f:
+                    f.write(base64.b64decode(req['chunk'] or b''))
+                if idx == tot - 1:
+                    os.replace(part, out_path)  # écriture atomique
+                    if filename.startswith('THEOLOGICUS-conversations-'):
+                        try: purger_backups_conversations(backup_dir, garder=30)
+                        except Exception: pass
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "path": out_path}).encode())
+                else:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"ok": True, "chunk": idx}).encode())
+                return
             # v679 — accepte le JSON BRUT (text) en plus du base64 : côté desktop,
             # encoder 50+ Mo en base64 dans le navigateur provoquait un pic
             # mémoire et l'avortement de la connexion (WinError 10053) -> aucun
@@ -2871,9 +2898,6 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 data = base64.b64decode(req.get('data64') or b'')
             if not data:
                 raise ValueError('contenu vide')
-            backup_dir = _backups_dir()  # v604 — surchargeable (bancs)
-            os.makedirs(backup_dir, exist_ok=True)
-            out_path = os.path.join(backup_dir, filename)
             tmp_path = out_path + '.tmp'
             with open(tmp_path, 'wb') as f:
                 f.write(data)
