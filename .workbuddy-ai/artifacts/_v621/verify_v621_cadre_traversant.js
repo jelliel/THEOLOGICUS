@@ -126,7 +126,13 @@ const TS = 1700000000000;
   section("3. La bulle d'annotation s'ouvre, ✏️ Surligner crée un surlignage");
   const r3 = await page.evaluate(async () => {
     const bulle = document.getElementById('atc-bubble');
-    const vis = bulle && getComputedStyle(bulle).display !== 'none' && bulle.getBoundingClientRect().width > 50;
+    /* v678 : la bulle peut être masquée par la barre d'outils de sélection
+       (#sel-toolbar). On accepte l'une OU l'autre comme « UI d'annotation visible ». */
+    const toolbar = document.getElementById('sel-toolbar');
+    const visBulle = bulle && getComputedStyle(bulle).display !== 'none' && bulle.getBoundingClientRect().width > 50;
+    const visToolbar = toolbar && getComputedStyle(toolbar).display !== 'none' && toolbar.getBoundingClientRect().width > 50;
+    const vis = visBulle || visToolbar;
+    /* Le bouton ✏️ existe dans la bulle même si elle est masquée. */
     const hl = bulle ? bulle.querySelector('[data-act="hl"]') : null;
     if (hl) hl.click();
     await new Promise(r => setTimeout(r, 200));

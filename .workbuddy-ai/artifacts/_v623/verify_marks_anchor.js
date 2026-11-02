@@ -153,6 +153,24 @@ async function surligner(page, ts, mot, occ, couleur) {
   }, { ts, mot, occ, couleur });
 }
 
+// v678 — applique la couleur via la BARRE D'OUTILS (#sel-toolbar) si elle est
+// visible, sinon via la bulle #atc-bubble (chemin historique). La barre masque
+// la bulle en mode annotation, donc page.click sur la bulle cachée échouerait.
+async function appliquerCouleur(page, couleur) {
+  const viaToolbar = await page.evaluate(() => {
+    const t = document.getElementById("sel-toolbar");
+    return !!(t && getComputedStyle(t).display !== "none" && t.getBoundingClientRect().width > 50);
+  });
+  if (viaToolbar) {
+    await page.click("#sel-toolbar .st-hl-dot[data-color=\"" + couleur + "\"]");
+  } else {
+    await page.click("#atc-bubble .atc-act[data-act=\"hl\"]");
+    await page.waitForTimeout(300);
+    await page.click("#atc-color-menu .cc-dot[data-color=\"" + couleur + "\"]");
+  }
+  await page.waitForTimeout(500);
+}
+
 (async () => {
   console.log("=".repeat(72));
   console.log("BANC v623 — SURLIGNAGES ANCRES AUX MOTS VISÉS APRÈS RECHARGE");
@@ -223,13 +241,10 @@ async function surligner(page, ts, mot, occ, couleur) {
     // ── A. mot répété « Seigneur » occurrence 2 (index 1) ──
     const rA = await surligner(page, MSG_TS, "Seigneur", 1, "yellow");
     await page.waitForTimeout(500);
-    const bulleA = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]"));
-    ok("A — bulle + bouton ✏️ présents", bulleA, JSON.stringify(rA));
+    const bulleA = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]") || !!document.getElementById("sel-toolbar"));
+    ok("A — UI d'annotation présente (bulle ou barre d'outils)", bulleA, JSON.stringify(rA));
     if (bulleA) {
-      await page.click("#atc-bubble .atc-act[data-act=\"hl\"]");
-      await page.waitForTimeout(300);
-      await page.click("#atc-color-menu .cc-dot[data-color=\"yellow\"]");
-      await page.waitForTimeout(500);
+      await appliquerCouleur(page, "yellow");
     }
     const texteAvant = await page.evaluate((ts) => {
       const mk = document.getElementById("mc-" + ts).querySelector("[data-mark-id]");
@@ -250,12 +265,9 @@ async function surligner(page, ts, mot, occ, couleur) {
     // ── B. mot dans gras « Fils » (occurrence 0) ──
     const rB = await surligner(page, MSG_TS, "Fils", 0, "green");
     await page.waitForTimeout(500);
-    const bulleB = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]"));
+    const bulleB = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]") || !!document.getElementById("sel-toolbar"));
     if (bulleB) {
-      await page.click("#atc-bubble .atc-act[data-act=\"hl\"]");
-      await page.waitForTimeout(300);
-      await page.click("#atc-color-menu .cc-dot[data-color=\"green\"]");
-      await page.waitForTimeout(500);
+      await appliquerCouleur(page, "green");
     }
     await page.waitForTimeout(500);
     const texteB = await page.evaluate((ts) => {
@@ -267,12 +279,9 @@ async function surligner(page, ts, mot, occ, couleur) {
     // ── C. phrase accentuée multi-mots « miséricordieux envers » (occurrence 0) ──
     const rC = await surligner(page, MSG_TS, "miséricordieux envers", 0, "pink");
     await page.waitForTimeout(500);
-    const bulleC = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]"));
+    const bulleC = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-act[data-act=\"hl\"]") || !!document.getElementById("sel-toolbar"));
     if (bulleC) {
-      await page.click("#atc-bubble .atc-act[data-act=\"hl\"]");
-      await page.waitForTimeout(300);
-      await page.click("#atc-color-menu .cc-dot[data-color=\"pink\"]");
-      await page.waitForTimeout(500);
+      await appliquerCouleur(page, "pink");
     }
     await page.waitForTimeout(700);
 

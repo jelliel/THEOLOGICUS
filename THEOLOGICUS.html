@@ -20876,9 +20876,12 @@ async function exportData() {
     /* 1) Sauvegarde directe dans le dossier de l'application via le serveur
           local (dossier de l'exe, sous-dossier backups/). */
     try {
-      const body = isNative
-        ? { filename: filename, text: json }
-        : { filename: filename, data64: btoa(unescape(encodeURIComponent(json))) };
+      /* v679 — desktop : on envoie le JSON BRUT (text), PAS du base64.
+         btoa(unescape(encodeURIComponent(json))) sur 50+ Mo gonflait ~70 Mo
+         en mémoire et avortait la connexion (WinError 10053) -> aucun fichier
+         écrit et toast « succès » mensonger. Le serveur sait décoder le texte
+         brut (proxy_server._save_data accepte désormais `text`). */
+      const body = { filename: filename, text: json };
       const res = await fetch('/save-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -20891,8 +20894,29 @@ async function exportData() {
       }
       throw new Error('HTTP ' + res.status);
     } catch(serverErr) {
-      /* 2) Repli : téléchargement navigateur (dossier Téléchargements) */
-      console.warn('[export] serveur indisponible, repli téléchargement', serverErr);
+      /* 2) Repli. Dans la WebView (exe/APK) le téléchargement de blob URL
+         ÉCHOUE silencieusement (pas d'erreur levée) -> un toast « succès »
+         serait mensonger. On signale donc honnêtement l'échec et on montre
+         le dossier des sauvegardes plutôt que de prétendre un download. */
+      console.warn('[export] serveur indisponible ou connexion avortée', serverErr);
+      var inWebView = !!window.Capacitor;
+      if (inWebView) {
+        try {
+          var dossier = null;
+          try {
+            var rv = await fetch('/reveal-exports?dry=1');
+            var rj = await rv.json();
+            dossier = rj && rj.dossier;
+          } catch (e) {}
+          toast("Échec de l'export : le fichier n'a pas pu être écrit." +
+                (dossier ? " Dossier des sauvegardes : " + dossier : " Vérifiez le dossier « backups » de l'application."),
+                "error");
+        } catch (e) {
+          toast("Échec de l'export : vérifiez le dossier « backups » de l'application.", "error");
+        }
+        return;
+      }
+      /* Navigateur classique : le téléchargement direct fonctionne. */
       const blob = new Blob([json], { type:"application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

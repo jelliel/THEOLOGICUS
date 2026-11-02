@@ -2859,7 +2859,16 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             extensions = ('.json', '.md', '.markdown', '.txt', '.pdf')
             if not filename or not filename.lower().endswith(extensions):
                 raise ValueError('nom de fichier invalide')
-            data = base64.b64decode(req.get('data64') or b'')
+            # v679 — accepte le JSON BRUT (text) en plus du base64 : côté desktop,
+            # encoder 50+ Mo en base64 dans le navigateur provoquait un pic
+            # mémoire et l'avortement de la connexion (WinError 10053) -> aucun
+            # fichier écrit et toast « succès » mensonger. Le texte brut évite
+            # cette étape d'encodage.
+            raw = req.get('text')
+            if raw is not None:
+                data = raw.encode('utf-8') if isinstance(raw, str) else bytes(raw)
+            else:
+                data = base64.b64decode(req.get('data64') or b'')
             if not data:
                 raise ValueError('contenu vide')
             backup_dir = _backups_dir()  # v604 — surchargeable (bancs)
