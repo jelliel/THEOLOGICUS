@@ -1,21 +1,18 @@
-/* v682 — SÉLECTION DANS UN COMMENTAIRE AFFICHÉ (#atc-tip).
-   Demande utilisateur (corrigée) : « restaure l'ancien add to chat et
-   intègre-le au commentaire » — on veut l'ANCIENNE bulle « Add to chat »
-   (classique) quand on sélectionne du texte dans un commentaire, PAS la
-   barre v678 (réservée aux messages).
-
-   Banc DÉTERMINISTE : on sème les structures DOM exactes sur lesquelles le
-   code se branche (#atc-tip / .message-content), sans dépendre du pipeline de
-   rendu asynchrone des messages (qui rend le banc instable). Le banc v678
-   couvre déjà le rendu réel des messages.
+/* v683 — BULLE CLASSIQUE « Add to chat » UNIVERSELLE.
+   Demande utilisateur : « je ne veux plus la barre v678 ; je veux que l'ancienne
+   bulle « Add to chat » soit universelle » (messages, commentaires, hors message).
+   La barre v678-sel-toolbar a été RETIRÉE du HTML.
 
    On vérifie :
-   1. module v678 présent ;
-   2. sélection DANS un #atc-tip → bulle classique #atc-bubble VISIBLE
-      (avec .atc-main « Add to chat ») ET #sel-toolbar MASQUÉE ;
-   3. sélection DANS un .message-content → #sel-toolbar VISIBLE (inchangé) ;
-   4. sélection hors message/commentaire → #sel-toolbar masquée (négatif) ;
-   5. aucune erreur JS.
+   1. la bulle classique est exposée (window.__atcBubble) ;
+   2. sélection DANS un commentaire (#atc-tip) → bulle classique #atc-bubble ;
+   3. sélection DANS un message (.message-content) → bulle classique (universelle) ;
+   4. sélection hors message → bulle classique (universelle) ;
+   5. la barre v678 #sel-toolbar N'EXISTE PLUS ;
+   6. aucune erreur JS.
+
+   Banc DÉTERMINISTE (sème #atc-tip / .message-content), indépendant du rendu
+   asynchrone des messages.
 */
 const path = require("path");
 const http = require("http");
@@ -48,8 +45,6 @@ const visible = (page, sel) => page.evaluate((q) => {
   const st = getComputedStyle(b);
   return st.display !== "none" && b.offsetWidth > 0 && b.offsetHeight > 0;
 }, sel);
-
-/* Sélectionne tout le contenu d'un élément et simule le mouseup (glisser souris). */
 const selectionner = (page, sel) => page.evaluate((q) => {
   const el = document.querySelector(q);
   if (!el) return false;
@@ -91,7 +86,7 @@ const selectionner = (page, sel) => page.evaluate((q) => {
   await page.goto(`http://127.0.0.1:${PORT}/THEOLOGICUS.html`, { waitUntil: "domcontentloaded", timeout: 90000 });
 
   const attendreAppli = (ms) => page.waitForFunction(
-    () => typeof window.__v678SelToolbar === "object" && typeof window.sendMessage === "function",
+    () => typeof window.__atcBubble === "object" && typeof window.sendMessage === "function",
     null, { timeout: ms }).then(() => true).catch(() => false);
 
   let appli = await attendreAppli(90000);
@@ -102,7 +97,7 @@ const selectionner = (page, sel) => page.evaluate((q) => {
   }
   if (!appli) {
     const d = await page.evaluate(() => ({
-      v678: typeof window.__v678SelToolbar, send: typeof window.sendMessage,
+      bubble: typeof window.__atcBubble, send: typeof window.sendMessage,
       modules: document.querySelectorAll("script[id]").length
     })).catch(e => ({ erreur: String(e.message) }));
     console.log("[DIAG] " + JSON.stringify(d));
@@ -110,10 +105,12 @@ const selectionner = (page, sel) => page.evaluate((q) => {
 
   await page.route(u => u.hostname.indexOf("sophiascriptura.com") >= 0, route => route.abort());
 
-  ok("M1 module __v678SelToolbar exposé",
-    await page.evaluate(() => typeof window.__v678SelToolbar === "object"));
+  ok("M1 bulle classique exposée (window.__atcBubble)",
+    await page.evaluate(() => typeof window.__atcBubble === "object"));
+  ok("M2 barre v678 #sel-toolbar absente du DOM (module retiré)",
+    await page.evaluate(() => !document.getElementById("sel-toolbar") && !document.getElementById("v678-sel-toolbar")));
 
-  /* C1 — sélection DANS un commentaire (#atc-tip) → ANCIENNE bulle #atc-bubble. */
+  /* C1 — sélection DANS un commentaire (#atc-tip) → bulle classique. */
   await page.evaluate(() => {
     const tip = document.createElement("div");
     tip.id = "atc-tip";
@@ -123,41 +120,42 @@ const selectionner = (page, sel) => page.evaluate((q) => {
   ok("C1a #atc-tip semé", await page.evaluate(() => !!document.getElementById("atc-tip")));
   await selectionner(page, "#atc-tip .atc-tip-a");
   await pause(800);
+  ok("C1b sélection dans le commentaire → bulle classique #atc-bubble visible",
+    await visible(page, "#atc-bubble"));
+  ok("C1c la bulle classique contient « Add to chat » (.atc-main)",
+    await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-main")));
 
-  const bubbleVis = await visible(page, "#atc-bubble");
-  const barVisC1 = await visible(page, "#sel-toolbar");
-  const hasMain = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-main"));
-  ok("C1b sélection dans le commentaire → bulle classique #atc-bubble visible", bubbleVis);
-  ok("C1c la bulle classique contient « Add to chat » (.atc-main)", hasMain);
-  ok("C1d la barre v678 #sel-toolbar reste MASQUÉE dans le commentaire", !barVisC1);
-
-  /* C2 — sélection DANS un message (.message-content) → barre v678 visible. */
+  /* C2 — sélection DANS un message → bulle classique AUSSI (universelle). */
   await page.evaluate(() => {
     const msg = document.createElement("div");
     msg.className = "message"; msg.dataset.msgId = "12345";
     const mc = document.createElement("div");
     mc.className = "message-content"; mc.id = "mc-12345";
-    mc.textContent = "Un message de test avec du texte a selectionner pour la barre.";
+    mc.textContent = "Un message de test avec du texte a selectionner pour la bulle.";
     msg.appendChild(mc); document.body.appendChild(msg);
   });
   await selectionner(page, ".message-content#mc-12345");
   await pause(800);
-  const barVisC2 = await visible(page, "#sel-toolbar");
-  ok("C2 sélection dans un message → barre v678 #sel-toolbar visible (normal)", barVisC2);
+  ok("C2 sélection dans un message → bulle classique #atc-bubble visible (universelle)",
+    await visible(page, "#atc-bubble"));
 
-  /* C3 — NÉGATIF : sélection hors message/commentaire → pas de barre v678. */
+  /* C3 — sélection hors message → bulle classique (universelle). */
   await page.evaluate(() => {
     const p = document.createElement("p");
-    p.id = "v682-plain";
-    p.textContent = "Texte libre hors message pour le controle negatif du banc.";
+    p.id = "v683-plain";
+    p.textContent = "Texte libre hors message pour verifier la bulle universelle.";
     document.body.appendChild(p);
   });
-  await selectionner(page, "#v682-plain");
+  await selectionner(page, "#v683-plain");
   await pause(800);
-  const barVisC3 = await visible(page, "#sel-toolbar");
-  ok("C3 hors message/commentaire → pas de barre v678 (négatif)", !barVisC3);
+  ok("C3 sélection hors message → bulle classique #atc-bubble visible (universelle)",
+    await visible(page, "#atc-bubble"));
 
-  ok("C4 aucune erreur JS", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
+  /* C4 — aucune barre v678 ne réapparaît. */
+  ok("C4 #sel-toolbar n'existe jamais (v678 retiré)",
+    await page.evaluate(() => !document.getElementById("sel-toolbar")));
+
+  ok("C5 aucune erreur JS", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
 
   await browser.close();
   serveur.close();
