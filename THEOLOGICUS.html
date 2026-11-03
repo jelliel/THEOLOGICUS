@@ -28805,7 +28805,7 @@ initTafsirVerseTooltip();
     const range = sel.getRangeAt(0);
     const c = range.commonAncestorContainer;
     const el = (c.nodeType === 3) ? c.parentElement : c;
-    if (el && el.closest && el.closest('input, textarea, [contenteditable="true"], #atc-bubble, #atc-ask-popover, #atc-note-panel, #share-popup-active, #atc-tip')) return;
+    if (el && el.closest && el.closest('input, textarea, [contenteditable="true"], #atc-bubble, #atc-ask-popover, #atc-note-panel, #share-popup-active')) return;
     const msgEl = el && el.closest ? el.closest('.message, .message-content') : null;
     let ts = null;
     let hlId = null;
@@ -28817,6 +28817,16 @@ initTafsirVerseTooltip();
         const hits = msgEl.querySelectorAll('.atc-hl');
         for (const h of hits) { if (range.intersectsNode(h)) { hlId = h.dataset.hlId; break; } }
       } catch(e) {}
+    } else {
+      /* v681 — sélection DANS un commentaire affiché (ex. #atc-tip) : on
+         résout le msgTs depuis l'ancêtre [data-msg-ts] (posé par showTipFor)
+         pour que la barre flottante (Add to chat + outils) s'affiche comme
+         dans une conversation normale. Pas de hlId (sélection hors message). */
+      const dtEl = el && el.closest ? el.closest('[data-msg-ts]') : null;
+      if (dtEl && dtEl.dataset && dtEl.dataset.msgTs) {
+        ts = parseInt(dtEl.dataset.msgTs, 10);
+        if (!ts) { window._atcSel = null; return; }
+      } else { window._atcSel = null; return; }
     }
     window._atcSel = {
       text: text,
@@ -31950,11 +31960,16 @@ const idx = fullM.norm.indexOf(txtM.norm);
     if (!hlEl || !hlEl.isConnected) { closeAtcTip(); return; }
     const a = findAnn(hlEl.dataset.hlId);
     if (!a) return;
+    /* v681 — msgTs source pour que la sélection DANS le commentaire ouvre la
+       barre flottante (Add to chat + outils) comme dans une conversation. */
+    let _mts = null;
+    (state.messages || []).forEach(function(m){ if (m.annotations && m.annotations.indexOf(a) >= 0) _mts = m.ts; });
     const prev = document.getElementById('atc-tip');
     const samePos = prev && prev._forHl === hlEl;
     closeAtcTip();
     const tip = document.createElement('div');
     tip.id = 'atc-tip';
+    if (_mts != null) tip.dataset.msgTs = String(_mts);
     tip.innerHTML = buildTipHTML(a);
     tip._forHl = hlEl;
     tip.addEventListener('mouseenter', function(){ clearTimeout(tip._hideT); });
@@ -71314,6 +71329,7 @@ body.theo-read #atc-nav-bar{display:none !important}
 
   function applyHighlight(color) {
     if (!currentSel) return;
+    if (!selDansMessage(currentSel)) { if (typeof toast === 'function') toast("Sélectionnez le texte dans le message pour le surligner", 'info'); return; }
     var s = currentSel;
     hideToolbar();
     /* highlightSelection est une fonction LOCALE du module atc, non exposée
@@ -71341,9 +71357,10 @@ body.theo-read #atc-nav-bar{display:none !important}
   }
 
   function applyShape(shapeItem) {
-    if (!currentSel) return; hideToolbar();
+    if (!currentSel) return;
     var s = currentSel;
-    if (!s.msgTs) { if (typeof toast === 'function') toast("L'encadrement exige un message porteur", 'info'); return; }
+    if (!s.msgTs || !selDansMessage(s)) { if (typeof toast === 'function') toast("L'encadrement s'applique au message : sélectionnez le texte dans le message", 'info'); return; }
+    hideToolbar();
     if (typeof window.insertFigureAt === 'function') {
       var target = { msgTs: s.msgTs, selRect: s.rect, range: s.range, texte: s.text,
         clientX: s.rect ? s.rect.left + s.rect.width / 2 : 10,
@@ -71396,6 +71413,18 @@ body.theo-read #atc-nav-bar{display:none !important}
   }
 
   function hideToolbar() { if (toolbar) toolbar.style.display = 'none'; hideMore(); currentSel = null; }
+
+  /* v681 — une sélection faite DANS un commentaire affiché (#atc-tip) a un
+     msgTs (source) mais sa plage est HORS du message : surligner/encadrer ne
+     peuvent pas s'y appliquer (la plage ne correspond à aucun texte message).
+     On le détecte pour désactiver proprement ces deux actions dans ce contexte. */
+  function selDansMessage(s) {
+    if (!s || !s.msgTs) return false;
+    var mc = document.getElementById('mc-' + s.msgTs);
+    if (!mc) return false;
+    try { return !!(s.range && s.range.commonAncestorContainer && mc.contains(s.range.commonAncestorContainer)); }
+    catch (e) { return false; }
+  }
 
   /* ── Stratégie : intercepter APRÈS detectSelectionAndShow ──
      detectSelectionAndShow (module atc) se déclenche sur mouseup avec un
