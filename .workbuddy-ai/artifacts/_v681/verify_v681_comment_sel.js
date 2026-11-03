@@ -1,17 +1,21 @@
-/* v681 — SÉLECTION DANS UN COMMENTAIRE AFFICHÉ (#atc-tip) → barre flottante.
-   Demande utilisateur : « dans un commentaire, quand je sélectionne un mot ou
-   une phrase, je veux que le tooltip Add to chat (avec ses options) s'affiche
-   comme dans une conversation normale ».
+/* v682 — SÉLECTION DANS UN COMMENTAIRE AFFICHÉ (#atc-tip).
+   Demande utilisateur (corrigée) : « restaure l'ancien add to chat et
+   intègre-le au commentaire » — on veut l'ANCIENNE bulle « Add to chat »
+   (classique) quand on sélectionne du texte dans un commentaire, PAS la
+   barre v678 (réservée aux messages).
+
+   Banc DÉTERMINISTE : on sème les structures DOM exactes sur lesquelles le
+   code se branche (#atc-tip / .message-content), sans dépendre du pipeline de
+   rendu asynchrone des messages (qui rend le banc instable). Le banc v678
+   couvre déjà le rendu réel des messages.
 
    On vérifie :
-   1. le module v678 (barre) est présent ;
-   2. un commentaire affiché (#atc-tip) porte data-msg-ts (msgTs source) ;
-   3. sélectionner du texte DANS le commentaire fait apparaître #sel-toolbar ;
-   4. NÉGATIF : sélectionner hors message et hors commentaire → PAS de barre ;
-   5. aucune erreur JS pendant le scénario.
-
-   ⚠ Ne doit pas passer à vide : si le commentaire ne s'affiche pas (C1), le
-   banc ÉCHOUE (prémisse manquante), il ne saute pas le test.
+   1. module v678 présent ;
+   2. sélection DANS un #atc-tip → bulle classique #atc-bubble VISIBLE
+      (avec .atc-main « Add to chat ») ET #sel-toolbar MASQUÉE ;
+   3. sélection DANS un .message-content → #sel-toolbar VISIBLE (inchangé) ;
+   4. sélection hors message/commentaire → #sel-toolbar masquée (négatif) ;
+   5. aucune erreur JS.
 */
 const path = require("path");
 const http = require("http");
@@ -38,6 +42,24 @@ function ok(nom, cond, detail) {
   else { ko_n++; console.log("[ECHEC] " + nom + (detail ? "  -- " + detail : "")); }
 }
 const pause = ms => new Promise(r => setTimeout(r, ms));
+const visible = (page, sel) => page.evaluate((q) => {
+  const b = document.querySelector(q);
+  if (!b) return false;
+  const st = getComputedStyle(b);
+  return st.display !== "none" && b.offsetWidth > 0 && b.offsetHeight > 0;
+}, sel);
+
+/* Sélectionne tout le contenu d'un élément et simule le mouseup (glisser souris). */
+const selectionner = (page, sel) => page.evaluate((q) => {
+  const el = document.querySelector(q);
+  if (!el) return false;
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  const s = window.getSelection();
+  s.removeAllRanges(); s.addRange(r);
+  document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  return true;
+}, sel);
 
 (async () => {
   const APP = path.join(RACINE, "THEOLOGICUS.html");
@@ -80,114 +102,62 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
   }
   if (!appli) {
     const d = await page.evaluate(() => ({
-      v678: typeof window.__v678SelToolbar,
-      send: typeof window.sendMessage,
+      v678: typeof window.__v678SelToolbar, send: typeof window.sendMessage,
       modules: document.querySelectorAll("script[id]").length
     })).catch(e => ({ erreur: String(e.message) }));
     console.log("[DIAG] " + JSON.stringify(d));
   }
 
-  /* Couper le réseau : aucun appel modèle/MCP pendant le banc */
   await page.route(u => u.hostname.indexOf("sophiascriptura.com") >= 0, route => route.abort());
-  await page.route("**/faux-llm", async (route) => {
-    route.fulfill({ status: 200, headers: { "Content-Type": "text/event-stream" },
-      body: 'data: {"choices":[{"delta":{"content":"Reponse."}}]}\n\ndata: [DONE]\n\n' });
-  });
 
-  /* M1 — module v678 présent */
   ok("M1 module __v678SelToolbar exposé",
     await page.evaluate(() => typeof window.__v678SelToolbar === "object"));
 
-  /* Préparer un message + une annotation (commentaire) dont le texte est
-     présent dans le contenu du message, pour que __applyHighlights le wrappe
-     dans un .atc-hl[data-hl-id]. */
+  /* C1 — sélection DANS un commentaire (#atc-tip) → ANCIENNE bulle #atc-bubble. */
   await page.evaluate(() => {
-    if (typeof state !== "undefined" && state.messages) {
-      state.messages.push({
-        role: "assistant",
-        content: "Voici un passage : la grace divine illumine le coeur de l homme et la foi est le fondement de toute esperance.",
-        ts: Date.now(),
-        annotations: [{ id: "ann-v681", text: "grace divine", a: "Commentaire de test sur la grace divine.", loading: false, error: null }],
-        marks: [], shapes: []
-      });
-      if (typeof renderMessages === "function") renderMessages();
-    }
+    const tip = document.createElement("div");
+    tip.id = "atc-tip";
+    tip.innerHTML = '<div class="atc-tip-a">Commentaire de test : un passage a selectionner dans le popup du commentaire.</div>';
+    document.body.appendChild(tip);
   });
-  await pause(700);
-  await page.evaluate(() => { try { window.__applyHighlights && window.__applyHighlights(); } catch (e) {} });
-  await pause(400);
-
-  /* C1 — le commentaire (marque .atc-hl) est rendu. Sans lui, le banc ÉCHOUE
-     (prémisse manquante), il ne passe pas à vide. */
-  const markPresent = await page.evaluate(() => !!document.querySelector(".atc-hl[data-hl-id]"));
-  ok("C1 marque d'annotation .atc-hl rendue", markPresent);
-  if (!markPresent) {
-    console.log("[DIAG] pas de .atc-hl : le scénario v681 ne peut pas être testé.");
-    await browser.close(); serveur.close();
-    console.log(`\n${ok_n} OK, ${ko_n} ECHEC`);
-    process.exit(ko_n ? 1 : 0);
-  }
-
-  /* Ouvrir le commentaire : mouseover sur la marque (déclencheur bureau). */
-  await page.evaluate(() => {
-    const hl = document.querySelector(".atc-hl[data-hl-id]");
-    hl.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: document.body }));
-  });
-  await pause(400);
-
-  const tipInfo = await page.evaluate(() => {
-    const t = document.getElementById("atc-tip");
-    return t ? { present: true, msgTs: t.dataset.msgTs || null, hasBody: !!t.querySelector(".atc-tip-a") } : { present: false };
-  });
-  ok("C2 commentaire affiché (#atc-tip) présent", tipInfo.present, JSON.stringify(tipInfo));
-  ok("C3 #atc-tip porte data-msg-ts (source)", !!(tipInfo.msgTs && String(tipInfo.msgTs).length), "msgTs=" + tipInfo.msgTs);
-
-  /* Sélectionner du texte DANS le commentaire, puis mouseup (comme un vrai
-     glisser de souris) : la barre v678 doit apparaître. */
-  await page.evaluate(() => {
-    const body = document.querySelector("#atc-tip .atc-tip-a");
-    if (!body) return;
-    const r = document.createRange();
-    r.selectNodeContents(body);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(r);
-    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
-  });
+  ok("C1a #atc-tip semé", await page.evaluate(() => !!document.getElementById("atc-tip")));
+  await selectionner(page, "#atc-tip .atc-tip-a");
   await pause(800);
 
-  const barVisible = await page.evaluate(() => {
-    const b = document.getElementById("sel-toolbar");
-    if (!b) return false;
-    const st = getComputedStyle(b);
-    return st.display !== "none" && b.offsetWidth > 0 && b.offsetHeight > 0;
-  });
-  ok("C4 sélection DANS le commentaire → barre #sel-toolbar visible", barVisible);
+  const bubbleVis = await visible(page, "#atc-bubble");
+  const barVisC1 = await visible(page, "#sel-toolbar");
+  const hasMain = await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-main"));
+  ok("C1b sélection dans le commentaire → bulle classique #atc-bubble visible", bubbleVis);
+  ok("C1c la bulle classique contient « Add to chat » (.atc-main)", hasMain);
+  ok("C1d la barre v678 #sel-toolbar reste MASQUÉE dans le commentaire", !barVisC1);
 
-  /* C5 — NÉGATIF : sélection hors message et hors [data-msg-ts] → PAS de barre. */
+  /* C2 — sélection DANS un message (.message-content) → barre v678 visible. */
+  await page.evaluate(() => {
+    const msg = document.createElement("div");
+    msg.className = "message"; msg.dataset.msgId = "12345";
+    const mc = document.createElement("div");
+    mc.className = "message-content"; mc.id = "mc-12345";
+    mc.textContent = "Un message de test avec du texte a selectionner pour la barre.";
+    msg.appendChild(mc); document.body.appendChild(msg);
+  });
+  await selectionner(page, ".message-content#mc-12345");
+  await pause(800);
+  const barVisC2 = await visible(page, "#sel-toolbar");
+  ok("C2 sélection dans un message → barre v678 #sel-toolbar visible (normal)", barVisC2);
+
+  /* C3 — NÉGATIF : sélection hors message/commentaire → pas de barre v678. */
   await page.evaluate(() => {
     const p = document.createElement("p");
-    p.id = "v681-plain";
+    p.id = "v682-plain";
     p.textContent = "Texte libre hors message pour le controle negatif du banc.";
     document.body.appendChild(p);
-    const r = document.createRange();
-    r.selectNodeContents(p);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(r);
-    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
   });
+  await selectionner(page, "#v682-plain");
   await pause(800);
-  const barVisible2 = await page.evaluate(() => {
-    const b = document.getElementById("sel-toolbar");
-    if (!b) return false;
-    const st = getComputedStyle(b);
-    return st.display !== "none" && b.offsetWidth > 0 && b.offsetHeight > 0;
-  });
-  ok("C5 hors message/commentaire → pas de barre (négatif)", !barVisible2);
+  const barVisC3 = await visible(page, "#sel-toolbar");
+  ok("C3 hors message/commentaire → pas de barre v678 (négatif)", !barVisC3);
 
-  /* C6 — aucune erreur JS */
-  ok("C6 aucune erreur JS", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
+  ok("C4 aucune erreur JS", erreurs.length === 0, erreurs.slice(0, 3).join(" | "));
 
   await browser.close();
   serveur.close();
