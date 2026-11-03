@@ -125,6 +125,17 @@ const selectionner = (page, sel) => page.evaluate((q) => {
   ok("C1c la bulle classique contient « Add to chat » (.atc-main)",
     await page.evaluate(() => !!document.querySelector("#atc-bubble .atc-main")));
 
+  /* C1d — la bulle doit être AU-DESSUS du commentaire (z-index bulle > tip). */
+  const zcmp = await page.evaluate(() => {
+    const b = document.getElementById("atc-bubble");
+    const t = document.getElementById("atc-tip");
+    if (!b || !t) return { bz: null, tz: null };
+    return { bz: parseInt(getComputedStyle(b).zIndex, 10), tz: parseInt(getComputedStyle(t).zIndex, 10) };
+  });
+  ok("C1d bulle AU-DESSUS du commentaire (z-index bulle > tip)",
+    Number.isFinite(zcmp.bz) && Number.isFinite(zcmp.tz) && zcmp.bz > zcmp.tz,
+    JSON.stringify(zcmp));
+
   /* C2 — sélection DANS un message → bulle classique AUSSI (universelle). */
   await page.evaluate(() => {
     const msg = document.createElement("div");

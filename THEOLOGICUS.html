@@ -28748,6 +28748,16 @@ initTafsirVerseTooltip();
   function showBubble(){
     const s = window._atcSel; if (!s) return;
     const b = ensureBubble(); b.style.display = 'flex';
+    /* v684 — sélection DANS un commentaire affiché (#atc-tip, z-index
+       --z-bulle+1) : la bulle « Add to chat » doit passer DEVANT le
+       commentaire, sinon elle est masquée par lui. Hors commentaire, on
+       laisse le z-index CSS (--z-bulle). */
+    try {
+      const _c = s.range && s.range.commonAncestorContainer;
+      const _host = _c ? (_c.nodeType === 3 ? _c.parentElement : _c) : null;
+      const _dansTip = _host && _host.closest && _host.closest('#atc-tip');
+      b.style.zIndex = _dansTip ? 'calc(var(--z-bulle, 100000) + 3)' : '';
+    } catch (e) { b.style.zIndex = ''; }
     const universal = !s.msgTs;
     /* v41 — au doigt, on ne garde que « Add to chat ». Les 11 autres actions
        (Note, Google, Wikipedia, Bible, Bible Hub, Surligner, Partager,
