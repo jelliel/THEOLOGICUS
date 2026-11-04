@@ -22,6 +22,27 @@ from http.server import ThreadingHTTPServer
 
 import proxy_server
 
+# v685 — POURQUOI CE BLOC. Au démarrage, l'UI interroge /libretranslate/status
+# et /supertonic/status, qui SONDENT des interpréteurs Python candidats
+# (`py -3`, `python`, `python3`) pour trouver celui qui sait lancer le service.
+# Si un candidat est un Python CASSÉ (très souvent le stub Microsoft Store
+# `python.exe`, ou une install dont une DLL ne s'initialise pas), Windows
+# affiche la boîte système « python.exe - Application Error (0xc0000142) »
+# AVANT que le code ne puisse réagir. L'app essaie ensuite un bon candidat et
+# fonctionne — mais le dialogue inquiète l'utilisateur pour rien.
+# SEM_FAILCRITICALERRORS est HÉRITÉ par les sous-processus : l'échec est alors
+# renvoyé au code (qui passe au candidat suivant) au lieu d'afficher un dialogue.
+if os.name == "nt":
+    try:
+        import ctypes
+        _kernel32 = ctypes.windll.kernel32
+        try:
+            _kernel32.SetErrorMode(_kernel32.GetErrorMode() | 0x0001)
+        except Exception:
+            _kernel32.SetErrorMode(0x0001)
+    except Exception:
+        pass
+
 
 def app_dir() -> str:
     """Dossier contenant l'exe (mode figé) ou app.py (mode script)."""
