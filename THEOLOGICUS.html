@@ -20863,11 +20863,21 @@ async function exportData() {
        rendre un poste à l'identique. */
     const ls = {};
     try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch (e) {}
+    /* v688 — « garder les 3 dernières ». Le store auto_backups contient 7
+       entrées, chacune une COPIE COMPLÈTE des conversations (~45,6 Mo) :
+       318,9 Mo de redondance sur un backup de 369,5 Mo (mesuré). On n'exporte
+       donc que les 3 plus récentes. RIEN n'est supprimé de la base : seul le
+       contenu du fichier exporté est filtré, et la restauration reste
+       compatible (importData remet ce qu'il reçoit). */
+    const autoAll = await db.getAll('auto_backups') || [];
+    const autoExport = autoAll.slice()
+      .sort(function (a, b) { return (Number(b && b.ts) || 0) - (Number(a && a.ts) || 0); })
+      .slice(0, 3);
     const payload = {
       version: "2.2",
       exported: new Date().toISOString(),
       source: "THEOLOGICUS",
-      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: await db.getAll('auto_backups') || [], localStorage: ls }
+      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: autoExport, localStorage: ls }
     };
     const json = JSON.stringify(payload);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
