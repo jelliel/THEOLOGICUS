@@ -91,10 +91,19 @@ function ok(label, cond, detail) {
   }));
   ok('le panneau affiche le temps liturgique du jour', pan.temps);
   ok('la note d’honnêteté (missel) est présente', pan.note);
+  /* v686 — Ce test cherchait « octobre » EN DUR. Il ne pouvait donc passer
+     que si la semaine précédente chevauchait octobre (1ers jours de novembre).
+     Le 10 novembre 2026, « aujourd'hui − 7 jours » est entièrement en novembre :
+     faux échec, et la CI bloquait la publication. On vérifie désormais le
+     COMPORTEMENT : reculer d'une semaine doit réellement changer le rendu
+     (r.fmt contient la date). Indépendant de la date du jour. */
+  const avantNav = await page.evaluate(() => document.getElementById('v577-corps').textContent);
   await page.evaluate(() => document.getElementById('v577-prev').click());
   await page.waitForTimeout(150);
-  const nav = await page.evaluate(() => document.getElementById('v577-corps').textContent.indexOf('octobre') !== -1);
-  ok('navigation ◀ (semaine précédente) fonctionne', nav);
+  const apresNav = await page.evaluate(() => document.getElementById('v577-corps').textContent);
+  const nav = apresNav !== avantNav && apresNav.length > 100;
+  ok('navigation ◀ (semaine précédente) modifie le rendu', nav,
+     'avant=' + avantNav.length + ' apres=' + apresNav.length);
   await page.evaluate(() => document.getElementById('v577-auj').click());
   await page.waitForTimeout(150);
 
