@@ -1466,8 +1466,14 @@
 
 /* ── iPad / iOS touch fixes ─────────────────────────────── */
 /* Force GPU compositing + prevent tap delay */
-button, a, input, textarea, select, [onclick], .hud-btn, .theo-ref, .bible-ref {
+button, a, [onclick], .hud-btn, .theo-ref, .bible-ref {
   -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+/* v686 — NE PAS appliquer -webkit-touch-callout:none aux champs de saisie :
+   il supprime le menu « Coller » de l'appui long sur iOS/Android WebView.
+   On garde seulement touch-action:manipulation (évite le délai de tap). */
+input, textarea, select {
   touch-action: manipulation;
 }
 /* Ensure backdrop-filter containers don't swallow events */
@@ -27295,6 +27301,14 @@ if (document.readyState === 'loading') {
     devtoolsInit = true;
     document.addEventListener('contextmenu', function (e) {
       if (e.target && e.target.closest && e.target.closest('.atc-mark')) return; // surlignage : clic droit autorisé
+      /* v686 — SUR ANDROID/WebView, l'appui long sur un champ émet
+         `contextmenu` : c'est lui qui fait apparaître le menu natif « Coller ».
+         preventDefault() ici empêchait de coller la clé API (Honor X8b :
+         « j'appuie longtemps, ça ne me donne rien »). On laisse donc le menu
+         NATIF sur TOUS les champs éditables ; la protection DevTools reste
+         active sur le reste du document. */
+      if (e.target && e.target.closest && e.target.closest(
+            'input, textarea, select, [contenteditable]')) return;
       e.preventDefault();
     });
     document.addEventListener('keydown', function (e) {
