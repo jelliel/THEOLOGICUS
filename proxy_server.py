@@ -25,6 +25,23 @@ except Exception:
 # v542 — overridable via THEO_BENCH_PORT pour des bancs lancés en parallèle
 # (évite la collision sur le port 8765 partagé). Défaut inchangé.
 PORT = int(os.environ.get('THEO_BENCH_PORT') or 8765)
+import threading as _ctrl_threading
+# v693 — PLAN DE CONTRÔLE MCP (optionnel).
+# DÉSACTIVÉ tant que THEO_CONTROL_TOKEN n'est pas défini : aucune route,
+# aucune surface supplémentaire pour les installations existantes.
+# Même activé, les routes ne répondent QU'à une adresse de bouclage et
+# exigent le jeton dans l'en-tête X-Theo-Control-Token. Le jeton n'apparaît
+# dans aucun log. Il est injecté dans la page SERVIE (même origine) pour que
+# l'app puisse policer la boîte aux lettres ; une page tierce ne peut pas
+# l'exploiter (en-tête personnalisé => prévol CORS refusé par le relais).
+CTRL_TOKEN = os.environ.get('THEO_CONTROL_TOKEN', '')
+CTRL_VERROU = _ctrl_threading.Lock()
+CTRL_FILE = []
+CTRL_RESULTATS = {}
+CTRL_SEQ = [0]
+CTRL_MAX_CMD = 64
+CTRL_MAX_RESULT = 128
+
 # v486 — relais FreeLLMAPI : la cible (hôte:port) est PORTÉE PAR L'URL
 # (/fla/<host>:<port>/…), plus en dur. Cela autorise un routeur sur un port
 # personnalisé (zéro config côté app) tout en GARDANT l'anti-SSRF : le
@@ -2111,7 +2128,103 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
+
+    def _ctrl_ok(self):
+        if not CTRL_TOKEN:
+            return False
+        if self.client_address[0] not in ('127.0.0.1', '::1'):
+            return False
+        return self.headers.get('X-Theo-Control-Token', '') == CTRL_TOKEN
+
+    def _ctrl_404(self):
+        self.send_response(404)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(b'{"error":"not found"}')
+
+    def _ctrl_submit(self):
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        corps = self._lire_corps_json()
+        cmd = corps.get('command') if isinstance(corps, dict) else ''
+        args = corps.get('args', {}) if isinstance(corps, dict) else {}
+        if not isinstance(cmd, str) or not cmd or not isinstance(args, dict):
+            self._json_response({'error': 'requete invalide'})
+            return
+        with CTRL_VERROU:
+            if len(CTRL_FILE) >= CTRL_MAX_CMD:
+                CTRL_FILE.pop(0)
+            CTRL_SEQ[0] += 1
+            ident = 'cmd_%d' % CTRL_SEQ[0]
+            CTRL_FILE.append({'id': ident, 'command': cmd[:64], 'args': args})
+        self._json_response({'id': ident})
+
+    def _ctrl_pending(self):
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        with CTRL_VERROU:
+            cmds = list(CTRL_FILE)
+            CTRL_FILE[:] = []
+        self._json_response({'commands': cmds})
+
+    def _ctrl_result_post(self):
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        corps = self._lire_corps_json()
+        if not isinstance(corps, dict) or not corps.get('id'):
+            self._json_response({'error': 'requete invalide'})
+            return
+        with CTRL_VERROU:
+            if len(CTRL_RESULTATS) >= CTRL_MAX_RESULT:
+                try:
+                    CTRL_RESULTATS.pop(next(iter(CTRL_RESULTATS)))
+                except Exception:
+                    pass
+            CTRL_RESULTATS[str(corps['id'])] = {
+                'result': corps.get('result'),
+                'error': corps.get('error')
+            }
+        self._json_response({'ok': True})
+
+    def _ctrl_result_get(self):
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        q = parse_qs(urlparse(self.path).query)
+        ident = str((q.get('id') or [''])[0])
+        with CTRL_VERROU:
+            r = CTRL_RESULTATS.pop(ident, None)
+        self._json_response(r if r is not None else {'pending': True})
+
+    def _html_avec_jeton(self, body):
+        """Injecte le jeton de contrôle dans la page SERVIE, uniquement si le
+        plan de contrôle est actif. Le jeton n'est alors lisible que par le
+        script same-origin de l'app ; une page tierce ne peut pas l'utiliser
+        (en-tête personnalisé => prévol CORS refusé par le relais).
+        """
+        if not CTRL_TOKEN or not body:
+            return body
+        try:
+            jeton_js = json.dumps(CTRL_TOKEN)
+            balise = ('<script>window.__THEO_CONTROL_TOKEN__=' + jeton_js + ';</script>').encode('utf-8')
+            ind = body.lower().find(b'</head>')
+            if ind < 0:
+                return body
+            return body[:ind] + balise + body[ind:]
+        except Exception:
+            return body
+
     def do_GET(self):
+        if self.path.split('?')[0] == '/theo-control/pending':
+            self._ctrl_pending()
+            return
+        if self.path.split('?')[0] == '/theo-control/result':
+            self._ctrl_result_get()
+            return
+
         # v117 — sonde d'identité (voir PING_TOKEN). Ultra-légère et sans cache :
         # elle est appelée par le lanceur au démarrage, avant toute fenêtre.
         if self.path.split('?')[0] == '/__theologicus_ping':
@@ -2428,13 +2541,23 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Expires', '0')
                 self.end_headers()
                 with open(file_path, 'rb') as f:
-                    self.wfile.write(f.read())
+                    contenu = f.read()
+                if ext == '.html' and path.lstrip('/').lower() == 'theologicus.html':
+                    contenu = self._html_avec_jeton(contenu)
+                self.wfile.write(contenu)
             else:
                 self.send_error(404, f'File not found: {path}')
             return
         self.send_error(404)
 
     def do_POST(self):
+        if self.path.split('?')[0] == '/theo-control/submit':
+            self._ctrl_submit()
+            return
+        if self.path.split('?')[0] == '/theo-control/result':
+            self._ctrl_result_post()
+            return
+
         # v485 — relais local FreeLLMAPI (même origine que l'app).
         if self.path.startswith('/fla/'):
             self._fla_proxy()

@@ -72044,6 +72044,170 @@ body.theo-read #atc-nav-bar{display:none !important}
 })();
 </script>
 
+<script id="v693-controle">
+/* ══════════════════════════════════════════════════════════════════════════
+   v693 — PLAN DE CONTRÔLE BORNÉ (pont MCP)
+
+   Le proxy desktop expose une boîte aux lettres locale, DÉSACTIVÉE par
+   défaut (THEO_CONTROL_TOKEN). Ce module la poll et exécute une LISTE
+   BLANCHE de commandes en LECTURE SEULE.
+
+   🔴 Jamais : clés API, écriture, suppression, exécution de code, réglages.
+   🔴 Le proxy injecte son jeton dans la page SERVIE (même origine) sous
+      window.__THEO_CONTROL_TOKEN__ ; on le renvoie en en-tête. Une page
+      tierce ne peut pas l'exploiter : en-tête personnalisé = prévol CORS
+      refusé par le relais (les commandes sont de toute façon en lecture
+      seule). Sans jeton, on se tait.
+   🔴 Aucun effet si le proxy est absent (APK WebView) : fetch échoue, on
+      se tait. Aucune erreur console, aucune interruption de l'appli.
+   🔴 Aucun ajout dans .header-controls (bancs v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v693Controle) return;
+
+  var DELAI = 2000;
+  var _occupe = false;
+  var _commandes = {
+    ping: function () {
+      var n = 0;
+      try { n = document.querySelectorAll('script[id]').length; } catch (e) {}
+      return { ok: true, module: 'v693-controle', modules: n };
+    },
+    list_conversations: async function (a) {
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('chats') || [];
+      return tous.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (c) {
+        return {
+          id: c.id, title: String(c.title || '').slice(0, 120),
+          updated: c.updated || 0, channel: c.channel || '',
+          msgCount: ((c.messages || []).filter(function (m) { return m.role !== 'system'; })).length
+        };
+      });
+    },
+    search_conversations: async function (a) {
+      var q = String(a.query || '').toLowerCase().trim();
+      if (!q) return [];
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('chats') || [];
+      var sortie = [], limite = Math.min(10, Number(a.limit) || 10);
+      for (var i = 0; i < tous.length && sortie.length < limite; i++) {
+        var c = tous[i], msgs = c.messages || [];
+        for (var j = 0; j < msgs.length; j++) {
+          var contenu = String(msgs[j].content || '').toLowerCase();
+          var pos = contenu.indexOf(q);
+          if (pos < 0) continue;
+          var debut = Math.max(0, pos - 60);
+          sortie.push({
+            id: c.id, title: String(c.title || '').slice(0, 120),
+            extrait: String(msgs[j].content || '').slice(debut, debut + 180)
+          });
+          break;
+        }
+      }
+      return sortie;
+    },
+    read_conversation: async function (a) {
+      var d = DB(); if (!d) return null;
+      var c = await d.get('chats', String(a.id || ''));
+      if (!c) return null;
+      var limite = Math.min(20, Math.max(1, Number(a.limit) || 20));
+      return {
+        id: c.id, title: String(c.title || '').slice(0, 120), channel: c.channel || '',
+        messages: (c.messages || []).slice(-limite).map(function (m) {
+          return { role: m.role, content: String(m.content || '').slice(0, 2000), ts: m.ts || 0 };
+        })
+      };
+    },
+    list_channels: function () {
+      try {
+        var cs = (window.__v691Canaux && window.__v691Canaux.CANAUX) || [];
+        return cs.map(function (c) { return { id: c.id, nom: c.nom, desc: c.desc }; });
+      } catch (e) { return []; }
+    },
+    list_agents: async function (a) {
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('agents') || [];
+      return tous.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (g) {
+        return { id: g.id, name: String(g.name || '').slice(0, 120), desc: String(g.desc || '').slice(0, 200) };
+      });
+    },
+    list_routines: async function (a) {
+      try {
+        var rs = (window.__v692Routines && await window.__v692Routines.lire()) || [];
+        return rs.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (r) {
+          return { id: r.id, nom: r.nom, type: r.type, actif: !!r.actif, prochaine: r.prochaine || 0 };
+        });
+      } catch (e) { return []; }
+    },
+    get_config: function () {
+      var st = ETAT();
+      return {
+        model: (st && st.model) || '',
+        channel: (st && st.channel) || '',
+        agent: ((st && st.agent && st.agent.name) || '').slice(0, 120)
+      };
+    }
+  };
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function interdite(nom) { return Object.prototype.hasOwnProperty.call(_commandes, nom); }
+  function entetes() {
+    var h = { 'Content-Type': 'application/json' };
+    var t = (typeof window.__THEO_CONTROL_TOKEN__ === 'string') ? window.__THEO_CONTROL_TOKEN__ : '';
+    if (t) h['X-Theo-Control-Token'] = t;
+    return h;
+  }
+
+  async function executer(cmd) {
+    var nom = String(cmd.command || '');
+    if (!interdite(nom)) return { error: 'commande non autorisée' };
+    try {
+      var args = (cmd.args && typeof cmd.args === 'object') ? cmd.args : {};
+      var r = await _commandes[nom](args);
+      return { result: r === undefined ? null : r };
+    } catch (e) {
+      return { error: String(e && e.message ? e.message : e) };
+    }
+  }
+
+  async function boucle() {
+    if (_occupe) return;
+    _occupe = true;
+    try {
+      var rep = await fetch('/theo-control/pending', { cache: 'no-store', headers: entetes() });
+      if (!rep.ok) return;
+      var j = await rep.json();
+      var cmds = (j && j.commands) || [];
+      for (var i = 0; i < cmds.length; i++) {
+        var reponse = await executer(cmds[i]);
+        try {
+          await fetch('/theo-control/result', {
+            method: 'POST',
+            headers: entetes(),
+            body: JSON.stringify({ id: cmds[i].id, result: reponse.result, error: reponse.error })
+          });
+        } catch (e) {}
+      }
+    } catch (e) {
+      /* silencieux : proxy absent (APK), serveur éteint, réseau coupé */
+    } finally { _occupe = false; }
+  }
+
+  setInterval(function () { boucle().catch(function () {}); }, DELAI);
+  setTimeout(function () { boucle().catch(function () {}); }, 1500);
+
+  window.__v693Controle = {
+    boucle: boucle,
+    executer: executer,
+    commandes: Object.keys(_commandes)
+  };
+})();
+</script>
+</script>
+</script>
+
 </body>
 </html>
 </html>

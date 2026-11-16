@@ -128,6 +128,7 @@ comparateur de traductions.
 | `android/` | Projet Capacitor 8 (`com.theologicus.app`, minSdk 24) |
 | `mobile/www/` | Généré par `tools/prepare_mobile.py` — **ne pas éditer à la main** |
 | `.github/workflows/build-apk.yml` | Construit et publie l'APK **et** les livrables Windows |
+| `tools/theo_mcp.py` | Serveur MCP stdio optionnel : pilote l'app en lecture seule via le proxy |
 
 À chaque poussée sur `main` touchant `THEOLOGICUS.html` ou un corpus, la CI
 reconstruit et publie une nouvelle version.
@@ -167,6 +168,33 @@ export APK_KEYSTORE_PASS="..." APK_KEYSTORE_ALIAS="theologicus"
 Sans `APK_VERSION_NAME`, l'APK s'annonce `1.0.<code>` alors que le HTML
 embarque la bonne version. La clé de signature n'est pas dans le dépôt : sans
 elle, l'APK produite **ne peut pas** mettre à jour une installation existante.
+
+---
+
+## Contrôle MCP (optionnel, lecture seule)
+
+Le proxy et l'app peuvent exposer une boîte aux lettres locale permettant à un
+client MCP externe d'interroger THEOLOGICUS (conversations, canaux, agents,
+routines, configuration sans clé). **Rien n'est actif par défaut** : il faut
+définir `THEO_CONTROL_TOKEN` côté proxy **au démarrage**, puis démarrer le
+serveur MCP avec le même jeton.
+
+```bash
+# 1) proxy local, avec le plan de contrôle activé
+THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" python proxy_server.py
+
+# 2) serveur MCP stdio (à brancher dans un client MCP)
+THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" \
+THEO_CONTROL_URL="http://127.0.0.1:8765" python tools/theo_mcp.py
+```
+
+Huit outils `theo_*` sont exposés (`theo_ping`, `theo_list_conversations`,
+`theo_search_conversations`, `theo_read_conversation`, `theo_list_channels`,
+`theo_list_agents`, `theo_list_routines`, `theo_get_config`). Le pont est
+volontairement **en lecture seule** : aucune clé API, aucune écriture,
+aucune suppression, aucune exécution de code. Les routes ne répondent qu'en
+bouclage et exigent le jeton. Sans jeton, l'app ne polle rien et l'APK
+/WebView reste muette — aucune surface supplémentaire.
 
 ---
 
