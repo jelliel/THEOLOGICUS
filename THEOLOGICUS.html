@@ -71077,6 +71077,425 @@ body.theo-read #atc-nav-bar{display:none !important}
 
 
 
+<script id="v690-equipe">
+/* ══════════════════════════════════════════════════════════════════════════
+   v690 — PACK D'ÉQUIPE .md + ROUTAGE AUTO DES AGENTS
+
+   Inspiré d'OpenMausBot (paquets d'équipe Markdown/YAML, salles « Auto »),
+   mais adapté à THEOLOGICUS : aucun Node, aucun Electron, aucun CLI local,
+   aucun appel réseau supplémentaire. Tout tourne dans le fichier unique.
+
+   DEUX CHOSES QUI N'EXISTAIENT PAS :
+     1. un .md VRAIMENT réimportable (v583 dit explicitement que son .md est
+        un document de LECTURE, et que seul le JSON se réimporte) ;
+     2. un routage automatique entre les agents déjà présents — au lieu
+        d'obliger l'utilisateur à deviner lequel choisir avant d'écrire.
+
+   ROUTAGE SANS LATENCE : heuristique locale sur les mots du message. Zéro
+   appel API, zéro milliseconde réseau. Si aucun agent ne correspond, on
+   garde l'agent courant (dégradation silencifique, jamais de blocage).
+
+   SÉCURITÉ (identique aux paquets OpenMausBot, adapté) :
+     - aucun identifiant n'écrase un agent existant ;
+     - clés apiKey/key/token/secret/password REFUSÉES et jamais stockées ;
+     - seuls les champs d'agent connus sont copiés ; aucune conversation,
+       aucun réglage, aucune permission ne transite ;
+     - l'import n'active aucun agent automatiquement ;
+     - bornes dures : 30 agents, 200 000 caractères.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v690Equipe) return;
+
+  var AUTO_VALUE = '__AUTO__';
+  var FLAG = 'theologicus_auto_agent_v1';
+  var MAX_AGENTS = 30;
+  var MAX_TEXTE = 200000;
+  var CLES_INTERDITES = /^(apikey|api_key|apikeyclient|key|token|secret|password|motdepasse|mot_de_passe|authorization|credential)$/i;
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function txt(id) { try { var e = document.getElementById(id); return e ? e.value : ''; } catch (e) { return ''; } }
+
+  /* ────────────────────────── frontmatter ───────────────────────────── */
+
+  function valeurBrute(s) {
+    var v = String(s == null ? '' : s).trim();
+    if (v.length >= 2 && ((v.charAt(0) === '"' && v.charAt(v.length - 1) === '"') ||
+                          (v.charAt(0) === "'" && v.charAt(v.length - 1) === "'"))) {
+      v = v.slice(1, -1);
+    }
+    if (/^\[.*\]$/.test(v)) {
+      return v.slice(1, -1).split(',').map(function (x) { return valeurBrute(x); }).filter(Boolean);
+    }
+    return v;
+  }
+
+  function parseFrontmatter(texte) {
+    var t = String(texte == null ? '' : texte).replace(/\r\n/g, '\n');
+    if (t.length > MAX_TEXTE) throw new Error('Paquet trop volumineux (limite : ' + MAX_TEXTE + ' caractères)');
+    var lignes = t.split('\n');
+    if (!lignes.length || lignes[0].trim() !== '---') throw new Error('Frontmatter absent : la première ligne doit être ---');
+    var fin = -1;
+    for (var i = 1; i < lignes.length; i++) { if (lignes[i].trim() === '---') { fin = i; break; } }
+    if (fin < 0) throw new Error('Frontmatter non fermé');
+
+    var paquet = { name: '', description: '', version: 1, agents: [] };
+    var courant = null, dansAgents = false;
+    var RE = /^(\s*)(?:-\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/;
+
+    for (var j = 1; j < fin; j++) {
+      var l = lignes[j];
+      if (!l.trim() || /^\s*#/.test(l)) continue;
+      var m = l.match(RE);
+      if (!m) continue;
+      var indent = m[1].length, cle = m[2].toLowerCase(), brut = m[3];
+      if (CLES_INTERDITES.test(cle)) throw new Error('Clé interdite dans le paquet : ' + cle);
+
+      if (indent === 0 && cle !== 'agents') dansAgents = false;
+      if (indent === 0 && cle === 'agents') { dansAgents = true; continue; }
+
+      if (dansAgents) {
+        if (/^\s*-/.test(l)) { courant = {}; paquet.agents.push(courant); }
+        if (courant && indent >= 2) { courant[cle] = valeurBrute(brut); }
+        continue;
+      }
+      paquet[cle] = valeurBrute(brut);
+    }
+    return paquet;
+  }
+
+  function valider(p) {
+    if (!p || !p.agents || !p.agents.length) throw new Error('Aucun agent dans le paquet');
+    if (p.agents.length > MAX_AGENTS) throw new Error('Trop d’agents (maximum ' + MAX_AGENTS + ')');
+    p.agents.forEach(function (a) {
+      if (!a.id || !/^[A-Za-z0-9_-]{1,64}$/.test(String(a.id))) throw new Error('Identifiant d’agent invalide : ' + a.id);
+      if (!a.name) throw new Error('Nom manquant pour l’agent ' + a.id);
+      ['name', 'desc', 'instructions', 'primer', 'forbidden', 'style'].forEach(function (k) {
+        if (a[k] !== undefined && typeof a[k] !== 'string') a[k] = String(a[k]);
+      });
+      if (a.tags !== undefined && !Array.isArray(a.tags)) a.tags = [String(a.tags)];
+      if (a.temp !== undefined) a.temp = Number(a.temp);
+    });
+    return p;
+  }
+
+  async function importer(texte) {
+    var p = valider(parseFrontmatter(texte));
+    var d = DB();
+    if (!d) throw new Error('IndexedDB indisponible');
+    var poses = 0, ignores = 0;
+    for (var i = 0; i < p.agents.length; i++) {
+      var a = p.agents[i], existant = null;
+      try { existant = await d.get('agents', a.id); } catch (e) {}
+      if (existant) { ignores++; continue; }
+      var agent = {
+        id: a.id,
+        name: a.name,
+        desc: a.desc || '',
+        tags: Array.isArray(a.tags) ? a.tags : [],
+        instructions: a.instructions || '',
+        primer: a.primer || '',
+        style: a.style || 'detaille',
+        forbidden: a.forbidden || '',
+        created: Date.now(),
+        source: 'v690:' + (p.name || 'equipe')
+      };
+      var t = Number(a.temp);
+      if (a.temp !== undefined && isFinite(t)) { agent.temp = t; agent.temperature = t; }
+      await d.put('agents', agent);
+      poses++;
+    }
+    if (poses) { try { if (typeof loadAgents === 'function') await loadAgents(); } catch (e) {} }
+    return { poses: poses, ignores: ignores, nom: p.name || 'Équipe' };
+  }
+
+  function quote(s) {
+    return '"' + String(s == null ? '' : s).replace(/\r\n|\n|\r/g, ' ').replace(/"/g, '\\"') + '"';
+  }
+
+  async function exporter() {
+    var d = DB(), tous = [];
+    if (d) { try { tous = await d.getAll('agents') || []; } catch (e) {} }
+    var l = ['---', 'name: ' + quote('Équipe THEOLOGICUS'),
+             'description: ' + quote('Export des agents — aucun secret, aucune conversation'),
+             'version: 1', 'agents:'];
+    tous.forEach(function (a) {
+      l.push('  - id: ' + quote(a.id));
+      l.push('    name: ' + quote(a.name));
+      l.push('    desc: ' + quote(a.desc || ''));
+      l.push('    tags: [' + (Array.isArray(a.tags) ? a.tags.map(quote).join(', ') : '') + ']');
+      l.push('    instructions: ' + quote(a.instructions || ''));
+      l.push('    primer: ' + quote(a.primer || ''));
+      l.push('    style: ' + quote(a.style || 'detaille'));
+      l.push('    forbidden: ' + quote(a.forbidden || ''));
+      var t = a.temperature !== undefined ? a.temperature : a.temp;
+      if (t !== undefined && isFinite(Number(t))) l.push('    temp: ' + Number(t));
+    });
+    l.push('---', '', '# Équipe THEOLOGICUS', '',
+           'Paquet réimportable : coller ce document dans ÉQUIPE → Importer.', '',
+           'Les agents existants ne sont jamais écrasés. Aucune clé ni conversation ne figure dans ce document.');
+    return l.join('\n');
+  }
+
+  /* ─────────────────────── routage local (0 latence) ─────────────────── */
+
+  var STOP = ['les', 'des', 'une', 'dans', 'pour', 'avec', 'cette', 'son', 'ses', 'est', 'que', 'qui',
+              'quand', 'comment', 'pourquoi', 'quel', 'quelle', 'quels', 'quelles', 'est-ce', 'sans',
+              'sur', 'par', 'plus', 'très', 'bien', 'aussi', 'mais', 'donc', 'puis', 'aux', 'du', 'de',
+              'la', 'le', 'un', 'et', 'en', 'ou', 'ce', 'se', 'il', 'elle', 'on', 'nous', 'vous',
+              'the', 'and', 'for', 'with', 'this', 'that', 'from', 'are', 'was', 'were', 'what'];
+
+  function norm(s) {
+    return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  function mots(texte) {
+    return norm(texte).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function (w) {
+      return w.length >= 3 && STOP.indexOf(w) < 0;
+    });
+  }
+
+  function choisir(texte, agents) {
+    if (!Array.isArray(agents) || !agents.length) return null;
+    var ms = mots(texte);
+    if (!ms.length) return null;
+    var meilleur = null, meilleurScore = 0;
+    agents.forEach(function (a) {
+      if (a.desactive) return;
+      var court = norm([a.name, a.desc, (Array.isArray(a.tags) ? a.tags.join(' ') : '')].join(' '));
+      var long = norm([a.instructions, a.primer, a.forbidden].join(' '));
+      var sc = 0;
+      ms.forEach(function (w) {
+        if (court.indexOf(w) >= 0) sc += 6;
+        else if (long.indexOf(w) >= 0) sc += 2;
+      });
+      if (sc > meilleurScore) { meilleurScore = sc; meilleur = a; }
+    });
+    return meilleur;
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v690-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(760px,94vw);max-height:88vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">ÉQUIPE — paquet .md et routage automatique</h3>' +
+      '<button type="button" id="v690-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.6rem .9rem;font-size:11px;color:var(--text-secondary)">Collez un paquet .md ci-dessous, ou choisissez un fichier. Les agents déjà présents ne sont jamais écrasés.</div>' +
+      '<textarea id="v690-texte" spellcheck="false" style="flex:1;min-height:230px;margin:0 .9rem .6rem;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px;padding:.6rem;font:11px/1.5 Consolas,monospace;resize:vertical"></textarea>' +
+      '<input type="file" id="v690-fichier" accept=".md,.txt" style="margin:0 .9rem .5rem;font-size:11px;color:var(--text-secondary)">' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:0 .9rem .8rem">' +
+      '<button type="button" id="v690-importer">Importer l’équipe</button>' +
+      '<button type="button" id="v690-exporter">Exporter tous les agents</button>' +
+      '<button type="button" id="v690-copier">Copier</button>' +
+      '<button type="button" id="v690-fichier-sauver">Enregistrer le .md</button>' +
+      '</div><div id="v690-info" style="font-size:11px;color:var(--text-secondary);padding:0 .9rem .8rem"></div></div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v690-x').onclick = fermer;
+
+    document.getElementById('v690-fichier').onchange = function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { document.getElementById('v690-texte').value = String(r.result || ''); };
+      r.readAsText(f);
+    };
+
+    document.getElementById('v690-importer').onclick = async function () {
+      var info = document.getElementById('v690-info');
+      try {
+        var r = await importer(document.getElementById('v690-texte').value);
+        info.textContent = 'Importé : ' + r.poses + ' agent(s), ' + r.ignores + ' ignoré(s) (déjà présents).';
+        toast('Équipe « ' + r.nom + ' » importée : ' + r.poses + ' agent(s)', 'success');
+      } catch (err) { info.textContent = 'Échec : ' + (err && err.message ? err.message : String(err)); }
+    };
+
+    document.getElementById('v690-exporter').onclick = async function () {
+      try {
+        document.getElementById('v690-texte').value = await exporter();
+        document.getElementById('v690-info').textContent = 'Paquet généré — aucun secret ni conversation.';
+      } catch (err) {
+        document.getElementById('v690-info').textContent = 'Échec : ' + (err && err.message ? err.message : String(err));
+      }
+    };
+
+    document.getElementById('v690-copier').onclick = function () {
+      var ta = document.getElementById('v690-texte');
+      ta.focus(); ta.select();
+      var fait = false;
+      try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(ta.value); fait = true; } } catch (e) {}
+      if (!fait) { try { document.execCommand('copy'); fait = true; } catch (e) {} }
+      toast(fait ? 'Paquet copié' : 'Copie impossible — sélectionnez le texte', fait ? 'success' : 'warn');
+    };
+
+    document.getElementById('v690-fichier-sauver').onclick = function () {
+      var contenu = document.getElementById('v690-texte').value || '';
+      var nom = 'equipe-theologicus.md';
+      try {
+        var u = URL.createObjectURL(new Blob([contenu], { type: 'text/markdown;charset=utf-8' }));
+        var a = document.createElement('a'); a.href = u; a.download = nom;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(u); } catch (e) {} }, 1000);
+        document.getElementById('v690-info').textContent = 'Fichier ' + nom + ' envoyé au téléchargement.';
+      } catch (e) {
+        document.getElementById('v690-info').textContent = 'Téléchargement indisponible — utilisez Copier.';
+      }
+    };
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+  }
+
+  /* ───────────────────── option AUTO dans le sélecteur ───────────────── */
+
+  function injecterOption() {
+    var sel = document.getElementById('agent-select');
+    if (!sel) return;
+    var opt = document.getElementById('v690-auto-option');
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.id = 'v690-auto-option';
+      opt.value = AUTO_VALUE;
+      opt.textContent = '◇ AUTO (choix automatique)';
+      opt.title = 'Choisit automatiquement l’agent selon les mots du message — sans appel réseau supplémentaire';
+    }
+    if (!Array.prototype.some.call(sel.options, function (o) { return o.value === AUTO_VALUE; })) {
+      try { sel.insertBefore(opt, sel.options[1] || null); } catch (e) { sel.appendChild(opt); }
+    }
+    var mob = document.getElementById('agent-select-mob');
+    if (mob && !Array.prototype.some.call(mob.options, function (o) { return o.value === AUTO_VALUE; })) {
+      var opt2 = opt.cloneNode(true); opt2.removeAttribute('id');
+      try { mob.insertBefore(opt2, mob.options[1] || null); } catch (e) { mob.appendChild(opt2); }
+    }
+    if (localStorage.getItem(FLAG) === '1') {
+      sel.value = AUTO_VALUE;
+      if (mob) mob.value = AUTO_VALUE;
+    }
+    var chip = document.getElementById('v690-chip');
+    if (!chip && sel.parentNode) {
+      chip = document.createElement('span');
+      chip.id = 'v690-chip';
+      chip.setAttribute('style', 'font-size:9px;opacity:.55;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis');
+      try { sel.parentNode.insertBefore(chip, sel.nextSibling); } catch (e) {}
+    }
+  }
+
+  function initUI() {
+    var ctrls = document.querySelector('.header-controls');
+    if (ctrls && !document.getElementById('v690-btn')) {
+      var b = document.createElement('button');
+      b.className = 'hud-btn';
+      b.id = 'v690-btn';
+      b.textContent = 'ÉQUIPE';
+      b.title = 'Paquet d’équipe .md réimportable et routage automatique des agents';
+      b.onclick = ouvrirModale;
+      var ref = document.getElementById('agent-select');
+      try { ctrls.insertBefore(b, ref || null); } catch (e) { ctrls.appendChild(b); }
+    }
+    injecterOption();
+  }
+
+  /* Le capture sur document intercepte AVANT les onchange historiques :
+     sans cela, db.get('agents','__AUTO__') renverrait undefined et écraserait
+     l'agent courant. Les autres valeurs passent normalement. */
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t || !t.id || (t.id !== 'agent-select' && t.id !== 'agent-select-mob')) return;
+    if (t.value === AUTO_VALUE) {
+      e.stopImmediatePropagation();
+      try {
+        localStorage.setItem(FLAG, '1');
+        var s = document.getElementById('agent-select'), m = document.getElementById('agent-select-mob');
+        if (s) s.value = AUTO_VALUE;
+        if (m) m.value = AUTO_VALUE;
+        var chip = document.getElementById('v690-chip');
+        if (chip) chip.textContent = '◇ routage auto';
+        toast('Routage automatique activé — l’agent sera choisi d’après votre message', 'info');
+      } catch (err) {}
+      return;
+    }
+    try {
+      localStorage.removeItem(FLAG);
+      var c = document.getElementById('v690-chip');
+      if (c) c.textContent = '';
+    } catch (err) {}
+  }, true);
+
+  /* Relais : le routage doit voir le TEXTE du message, pas la sélection.
+     On s'insère dans la chaîne sendMessage sans la réécrire. */
+  var _envoi = window.sendMessage;
+  if (typeof _envoi === 'function') {
+    window.sendMessage = async function (overrideText) {
+      try {
+        var sel = document.getElementById('agent-select');
+        var actif = sel && sel.value === AUTO_VALUE;
+        if (!actif) {
+          var mob = document.getElementById('agent-select-mob');
+          actif = !!(mob && mob.value === AUTO_VALUE);
+        }
+        if (actif) {
+          var st = ETAT(), d = DB();
+          var texte = overrideText || txt('user-input');
+          var agents = d ? (await d.getAll('agents') || []) : [];
+          var gagnant = choisir(texte, agents);
+          if (gagnant && st) {
+            st.agent = gagnant;
+            try {
+              var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
+              if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+              var chip = document.getElementById('v690-chip');
+              if (chip) chip.textContent = '◇ ' + gagnant.name;
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+      return _envoi.apply(this, arguments);
+    };
+  }
+
+  /* loadAgents() reconstruit le select : on doit réinjecter AUTO après. */
+  var _load = window.loadAgents;
+  if (typeof _load === 'function') {
+    window.loadAgents = async function () {
+      var r = await _load.apply(this, arguments);
+      injecterOption();
+      return r;
+    };
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  /* filet : certaines initialisations recréent le sélecteur après coup */
+  setTimeout(demarrer, 1200);
+
+  window.__v690Equipe = {
+    AUTO_VALUE: AUTO_VALUE,
+    parser: parseFrontmatter,
+    valider: valider,
+    importer: importer,
+    exporter: exporter,
+    choisir: choisir,
+    injecterOption: injecterOption
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
