@@ -72208,6 +72208,222 @@ body.theo-read #atc-nav-bar{display:none !important}
 </script>
 </script>
 
+<script id="v695-mcp">
+/* ══════════════════════════════════════════════════════════════════════════
+   v695 — PONT MCP VISIBLE DANS L'APP
+
+   Le pont de contrôle est actif dès le démarrage (v694), mais il était
+   INVISIBLE : pour l'utiliser, il fallait aller le chercher dans
+   %LOCALAPPDATA% à la main. Ce module l'affiche et fournit un bouton
+   « copier la configuration ».
+
+   🔴 Bouton dans le panneau Archives, JAMAIS dans .header-controls
+      (v597/v598 mesurent sa largeur au pixel près).
+   🔴 On interroge /theo-control/status, JAMAIS /theo-control/pending :
+      pending VIDE la file des commandes et ferait perdre celles en attente.
+   🔴 Aucune écriture : cet écran ne fait que LIRE l'état et copier du texte.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v695Mcp) return;
+
+  var modale = null;
+
+  function jeton() {
+    return (typeof window.__THEO_CONTROL_TOKEN__ === 'string') ? window.__THEO_CONTROL_TOKEN__ : '';
+  }
+  function info() {
+    var i = (typeof window.__THEO_CONTROL_INFO__ === 'object' && window.__THEO_CONTROL_INFO__) || {};
+    return i;
+  }
+  function entetes() {
+    var h = { 'Content-Type': 'application/json' };
+    var t = jeton();
+    if (t) h['X-Theo-Control-Token'] = t;
+    return h;
+  }
+  function dire(msg, kind) {
+    try { if (typeof toast === 'function') toast(msg, kind || 'info'); } catch (e) {}
+  }
+
+  async function etat() {
+    try {
+      var r = await fetch('/theo-control/status', { cache: 'no-store', headers: entetes() });
+      if (!r.ok) return { actif: false, raison: 'statut=' + r.status };
+      var j = await r.json() || {};
+      j.actif = true;
+      return j;
+    } catch (e) {
+      return { actif: false, raison: 'proxy injoignable' };
+    }
+  }
+
+  async function configuration() {
+    try {
+      var r = await fetch('/theo-control/config', { cache: 'no-store', headers: entetes() });
+      if (r.ok) return await r.json();
+    } catch (e) {}
+    // Repli : config HTTP seule, construite depuis ce que le proxy a injecté.
+    var i = info();
+    return {
+      mcpServers: {
+        'theologicus-http': {
+          type: 'http',
+          url: i.mcp || '',
+          headers: { 'X-Theo-Control-Token': jeton() }
+        }
+      }
+    };
+  }
+
+  async function copier(texte, libelle) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(texte);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = texte;
+        ta.setAttribute('style', 'position:fixed;top:0;left:0;opacity:0');
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+      dire(libelle + ' copié', 'success');
+      return true;
+    } catch (e) {
+      dire('Copie impossible — Selecting the text manually', 'error');
+      return false;
+    }
+  }
+
+  function champ(label, valeur, copie) {
+    var d = document.createElement('div');
+    d.setAttribute('style', 'display:flex;flex-direction:column;gap:2px;padding:5px 0;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))');
+    var l = document.createElement('div');
+    l.setAttribute('style', 'font-size:9px;letter-spacing:1px;opacity:.7;text-transform:uppercase');
+    l.textContent = label;
+    var v = document.createElement('div');
+    v.setAttribute('style', 'font-size:11px;word-break:break-all;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap');
+    var s = document.createElement('span');
+    s.setAttribute('style', 'flex:1;min-width:0');
+    s.textContent = valeur;
+    v.appendChild(s);
+    if (copie) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('style', 'padding:2px 6px;font-size:9px;letter-spacing:1px');
+      b.textContent = 'COPIER';
+      b.onclick = function () { copier(valeur, label); };
+      v.appendChild(b);
+    }
+    d.appendChild(l); d.appendChild(v);
+    return d;
+  }
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v695-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(620px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Pont MCP</h3>' +
+      '<span id="v695-etat" style="font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:3px;border:1px solid currentColor">…</span>' +
+      '<button type="button" id="v695-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.55rem .9rem;font-size:11px;color:var(--text-secondary);line-height:1.5">' +
+      'Le pont est <b>en lecture seule</b> : conversations, canaux, agents, routines — aucune clé, aucune écriture, aucun code. ' +
+      'Ajoutez la configuration ci-dessous à votre client MCP.</div>' +
+      '<div id="v695-champs" style="padding:0 .9rem"></div>' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:.6rem .9rem .8rem">' +
+      '<button type="button" id="v695-copier-config">Copier la configuration</button>' +
+      '<button type="button" id="v695-copier-http">Copier l’URL HTTP</button>' +
+      '</div>' +
+      '<div id="v695-info" style="font-size:10px;color:var(--text-secondary);padding:0 .9rem .8rem;line-height:1.5"></div>' +
+      '</div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v695-x').onclick = fermer;
+
+    document.getElementById('v695-copier-config').onclick = async function () {
+      var cfg = await configuration();
+      await copier(JSON.stringify(cfg, null, 2), 'Configuration');
+    };
+    document.getElementById('v695-copier-http').onclick = async function () {
+      var i = info();
+      var cfg = await configuration();
+      var srv = (cfg.mcpServers && cfg.mcpServers['theologicus-http']) || {};
+      await copier(srv.url || i.mcp || '', 'URL');
+    };
+    return modale;
+  }
+
+  async function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+    var champs = document.getElementById('v695-champs');
+    champs.innerHTML = '';
+    var badge = document.getElementById('v695-etat');
+    badge.textContent = '…';
+    badge.setAttribute('style', 'font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:3px;border:1px solid currentColor');
+    document.getElementById('v695-info').textContent = 'Interrogation du proxy…';
+
+    var s = await etat();
+    var i = info();
+    if (!s.actif) {
+      badge.textContent = 'INACTIF';
+      badge.style.color = '#8a8f9c';
+      champs.appendChild(champ('Pont', 'inactif — ' + (s.raison || 'proxy injoignable')));
+      document.getElementById('v695-info').textContent =
+        'Le pont n’est joignable sur cette instance. Il s’active avec le proxy local ' +
+        '(application Windows ou THEOLOGICUS.bat) ; sur APK/WebView il reste muet, faute de proxy Python.';
+      return;
+    }
+    badge.textContent = 'ACTIF';
+    badge.style.color = '#4ade80';
+    champs.appendChild(champ('URL MCP (HTTP)', s.mcp || i.mcp || '', true));
+    champs.appendChild(champ('Adresse locale', s.url || i.url || '', true));
+    champs.appendChild(champ('Fichier de configuration', s.config || i.config || '', true));
+    champs.appendChild(champ('Commandes disponibles', String(s.outils || 0) + ' (lecture seule)'));
+    champs.appendChild(champ('Jeton', jeton() ? jeton().slice(0, 6) + '…' + jeton().slice(-4) : '—', true));
+    document.getElementById('v695-info').textContent =
+      'Dans votre client MCP, collez la configuration : la variante « theologicus-http » fonctionne ' +
+      'sans Python ; la variante « theologicus » lance tools/theo_mcp.py.';
+  }
+
+  function initUI() {
+    /* 🔴 Jamais dans .header-controls : v597/v598 mesurent sa largeur. */
+    var ref = document.getElementById('v692-btn') ||
+              document.getElementById('v691-btn') ||
+              document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v695-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v695-btn';
+      b.textContent = 'MCP';
+      b.title = 'Pont MCP — configuration pour les clients MCP';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = function () { ouvrirModale().catch(function () {}); };
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v695Mcp = {
+    ouvrir: ouvrirModale,
+    etat: etat,
+    configuration: configuration
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>

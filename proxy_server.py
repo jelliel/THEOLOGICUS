@@ -94,6 +94,51 @@ def _ctrl_token():
         return jeton
 
 
+def _ctrl_outils():
+    """Liste canonique des outils (tools/theo_tools.json), source UNIQUE.
+
+    La même liste sert au transport stdio (tools/theo_mcp.py) et au transport
+    HTTP (POST /mcp) : une seule à mettre à jour quand on ajoute une
+    commande (v697).
+    """
+    chemin = os.path.join(SERVE_DIR, 'tools', 'theo_tools.json')
+    try:
+        with open(chemin, 'r', encoding='utf-8') as f:
+            return (json.load(f) or {}).get('tools') or []
+    except Exception:
+        return []
+
+
+def _ctrl_config_donnees(port=None, outils_dir=None):
+    """Configuration MCP prête à l'emploi : stdio ET http.
+
+    - stdio : lance tools/theo_mcp.py (nécessite Python chez l'utilisateur).
+    - http  : parle directement au proxy (AUCUN Python requis) — c'est la
+      seule option qui marche dans l'exe installé et sur Android.
+    """
+    jeton = _ctrl_token()
+    p = int(port or PORT)
+    d = outils_dir or os.path.join(SERVE_DIR, 'tools')
+    url = "http://127.0.0.1:%d" % p
+    return {
+        "mcpServers": {
+            "theologicus": {
+                "command": "python",
+                "args": [os.path.join(d, 'theo_mcp.py')],
+                "env": {
+                    "THEO_CONTROL_URL": url,
+                    "THEO_CONTROL_TOKEN": jeton,
+                },
+            },
+            "theologicus-http": {
+                "type": "http",
+                "url": url + "/mcp",
+                "headers": {"X-Theo-Control-Token": jeton},
+            },
+        }
+    }
+
+
 def _ctrl_configurer(port=None, outils_dir=None):
     """Dépose la configuration MCP prête à l'emploi et retourne son chemin.
 
@@ -101,21 +146,8 @@ def _ctrl_configurer(port=None, outils_dir=None):
     `outils_dir` permet à l'exe de pointer ses propres tools/ (copiés par la
     CI), au lieu du dossier source de PyInstaller.
     """
-    jeton = _ctrl_token()
     p = int(port or PORT)
-    d = outils_dir or os.path.join(SERVE_DIR, 'tools')
-    cfg = {
-        "mcpServers": {
-            "theologicus": {
-                "command": "python",
-                "args": [os.path.join(d, 'theo_mcp.py')],
-                "env": {
-                    "THEO_CONTROL_URL": "http://127.0.0.1:%d" % p,
-                    "THEO_CONTROL_TOKEN": jeton,
-                },
-            }
-        }
-    }
+    cfg = _ctrl_config_donnees(port, outils_dir)
     chemin = os.path.join(_app_data_dir(), CTRL_NOM_CONFIG)
     try:
         avec_bom = json.dumps(cfg, ensure_ascii=False, indent=2)
@@ -141,6 +173,44 @@ def _ctrl_configurer(port=None, outils_dir=None):
     except Exception:
         pass
     return chemin
+
+
+def _ctrl_emettre(nom, arguments):
+    """Dépose une commande dans la boîte aux lettres et retourne son identifiant.
+
+    File bornée : au-delà de CTRL_MAX_CMD, la plus ancienne est abandonnée
+    (un client mort ne doit pas faire grossir la file indéfiniment).
+    """
+    with CTRL_VERROU:
+        if len(CTRL_FILE) >= CTRL_MAX_CMD:
+            CTRL_FILE.pop(0)
+        CTRL_SEQ[0] += 1
+        ident = 'cmd_%d' % CTRL_SEQ[0]
+        args = arguments if isinstance(arguments, dict) else {}
+        CTRL_FILE.append({'id': ident, 'command': str(nom)[:64], 'args': args})
+        return ident
+
+
+def _ctrl_appeler(nom, arguments, delai=15.0):
+    """Passe une commande à l'application et ATTEND son résultat.
+
+    L'app polle la boîte aux lettres toutes les 2 s : on patiente donc
+    jusqu'à `delai` secondes. Renvoie {'result': ...} ou {'error': ...}.
+    """
+    ident = _ctrl_emettre(nom, arguments)
+    if not ident:
+        return {'error': "commande refusee"}
+    pas = 0.1
+    tours = max(1, int(delai / pas))
+    for _ in range(tours):
+        time.sleep(pas)
+        with CTRL_VERROU:
+            r = CTRL_RESULTATS.pop(ident, None)
+        if r is not None:
+            if r.get('error'):
+                return {'error': r.get('error')}
+            return {'result': r.get('result')}
+    return {'error': "delai depasse - l'application THEOLOGICUS est-elle ouverte ?"}
 
 # v486 — relais FreeLLMAPI : la cible (hôte:port) est PORTÉE PAR L'URL
 # (/fla/<host>:<port>/…), plus en dur. Cela autorise un routeur sur un port
@@ -2253,12 +2323,7 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         if not isinstance(cmd, str) or not cmd or not isinstance(args, dict):
             self._json_response({'error': 'requete invalide'})
             return
-        with CTRL_VERROU:
-            if len(CTRL_FILE) >= CTRL_MAX_CMD:
-                CTRL_FILE.pop(0)
-            CTRL_SEQ[0] += 1
-            ident = 'cmd_%d' % CTRL_SEQ[0]
-            CTRL_FILE.append({'id': ident, 'command': cmd[:64], 'args': args})
+        ident = _ctrl_emettre(cmd, args)
         self._json_response({'id': ident})
 
     def _ctrl_pending(self):
@@ -2300,18 +2365,134 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             r = CTRL_RESULTATS.pop(ident, None)
         self._json_response(r if r is not None else {'pending': True})
 
+    def _ctrl_config_get(self):
+        """Configuration MCP prête à l'emploi (stdio + http), en JSON.
+
+        L'app s'en sert pour proposer un bouton « copier la configuration ».
+        Le jeton figure déjà dans la page servie : rien de neuf n'est exposé.
+        """
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        self._json_response(_ctrl_config_donnees())
+
+    def _ctrl_status(self):
+        """État du pont, SANS toucher la file des commandes.
+
+        🔴 `/theo-control/pending` VIDE la file : l'utiliser comme simple
+        sonde de statut ferait perdre les commandes en attente. Cette route
+        ne lit que des compteurs.
+        """
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        with CTRL_VERROU:
+            en_attente = len(CTRL_FILE)
+        p = int(PORT)
+        self._json_response({
+            'ok': True,
+            'port': p,
+            'url': "http://127.0.0.1:%d" % p,
+            'mcp': "http://127.0.0.1:%d/mcp" % p,
+            'config': os.path.join(_app_data_dir(), CTRL_NOM_CONFIG),
+            'en_attente': en_attente,
+            'outils': len(_ctrl_outils()),
+        })
+
+    def _mcp_http(self):
+        """Transport MCP « streamable HTTP » : POST /mcp, JSON-RPC 2.0.
+
+        Pourquoi ce transport en plus du stdio : le client stdio doit lancer
+        `python tools/theo_mcp.py`, donc il faut PYTHON chez l'utilisateur.
+        Dans l'exe installé il n'y en a pas, et sur Android encore moins. En
+        HTTP, le client MCP parle directement au proxy — aucun Python, aucun
+        processus à lancer.
+
+        Même garde-fous que le stdio : bouclage + jeton + liste blanche de
+        commandes en lecture seule.
+        """
+        if not self._ctrl_ok():
+            self._ctrl_404()
+            return
+        corps = self._lire_corps_json()
+        if not isinstance(corps, dict):
+            self._json_response({
+                'jsonrpc': '2.0', 'id': None,
+                'error': {'code': -32700, 'message': 'requete invalide'},
+            })
+            return
+        ident = corps.get('id')
+        methode = corps.get('method')
+        if ident is None:
+            # Notification : on n'a rien à répondre.
+            self.send_response(202)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
+        if methode == 'initialize':
+            self._json_response({
+                'jsonrpc': '2.0', 'id': ident,
+                'result': {
+                    'protocolVersion': '2024-11-05',
+                    'capabilities': {'tools': {}},
+                    'serverInfo': {'name': 'theologicus-mcp', 'version': '1.0.0'},
+                },
+            })
+            return
+        if methode == 'ping':
+            self._json_response({'jsonrpc': '2.0', 'id': ident, 'result': {}})
+            return
+        if methode == 'tools/list':
+            self._json_response({
+                'jsonrpc': '2.0', 'id': ident,
+                'result': {'tools': _ctrl_outils()},
+            })
+            return
+        if methode == 'tools/call':
+            params = corps.get('params') or {}
+            nom = str(params.get('name') or '')
+            # theo_ping -> ping : même appariement que le client stdio, sinon
+            # la commande arrive à l'app sous un nom hors liste blanche.
+            if nom.startswith('theo_'):
+                nom = nom[5:]
+            r = _ctrl_appeler(nom, params.get('arguments'))
+            texte = json.dumps(r, ensure_ascii=False)
+            self._json_response({
+                'jsonrpc': '2.0', 'id': ident,
+                'result': {'content': [{'type': 'text', 'text': texte}]},
+            })
+            return
+        self._json_response({
+            'jsonrpc': '2.0', 'id': ident,
+            'error': {'code': -32601, 'message': 'methode inconnue : ' + str(methode)},
+        })
+
     def _html_avec_jeton(self, body):
         """Injecte le jeton de contrôle dans la page SERVIE, uniquement si le
         plan de contrôle est actif. Le jeton n'est alors lisible que par le
         script same-origin de l'app ; une page tierce ne peut pas l'utiliser
         (en-tête personnalisé => prévol CORS refusé par le relais).
+
+        v695 — on injecte aussi __THEO_CONTROL_INFO__ (port, URL, chemin de la
+        configuration) : l'app peut ainsi afficher l'état du pont et proposer
+        un bouton « copier la configuration » sans rien deviner.
         """
         jeton = _ctrl_token()
         if not jeton or not body:
             return body
         try:
-            jeton_js = json.dumps(jeton)
-            balise = ('<script>window.__THEO_CONTROL_TOKEN__=' + jeton_js + ';</script>').encode('utf-8')
+            p = int(PORT)
+            info = {
+                'port': p,
+                'url': "http://127.0.0.1:%d" % p,
+                'mcp': "http://127.0.0.1:%d/mcp" % p,
+                'config': os.path.join(_app_data_dir(), CTRL_NOM_CONFIG),
+            }
+            balise = (
+                '<script>window.__THEO_CONTROL_TOKEN__=' + json.dumps(jeton) +
+                ';window.__THEO_CONTROL_INFO__=' + json.dumps(info, ensure_ascii=False) +
+                ';</script>'
+            ).encode('utf-8')
             ind = body.lower().find(b'</head>')
             if ind < 0:
                 return body
@@ -2325,6 +2506,29 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             return
         if self.path.split('?')[0] == '/theo-control/result':
             self._ctrl_result_get()
+            return
+        if self.path.split('?')[0] == '/theo-control/config':
+            self._ctrl_config_get()
+            return
+        if self.path.split('?')[0] == '/theo-control/status':
+            self._ctrl_status()
+            return
+        if self.path.split('?')[0] == '/mcp':
+            # Un client MCP peut sonder GET /mcp (flux SSE). On répond un
+            # JSON propre plutôt que de laisser la page statique répondre :
+            # un 404 en HTML fait échouer l client's negociation.
+            self.send_response(405)
+            body = json.dumps({
+                'error': 'transport POST uniquement',
+                'endpoint': "http://127.0.0.1:%d/mcp" % int(PORT),
+            }).encode('utf-8')
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except Exception:
+                pass
             return
 
         # v117 — sonde d'identité (voir PING_TOKEN). Ultra-légère et sans cache :
@@ -2658,6 +2862,9 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             return
         if self.path.split('?')[0] == '/theo-control/result':
             self._ctrl_result_post()
+            return
+        if self.path.split('?')[0] == '/mcp':
+            self._mcp_http()
             return
 
         # v485 — relais local FreeLLMAPI (même origine que l'app).

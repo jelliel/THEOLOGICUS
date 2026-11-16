@@ -362,6 +362,8 @@ jobs:
           # être présent dans l'installation, sinon la config déposée pointe
           # vers un fichier absent.
           Copy-Item tools/theo_mcp.py dist/THEOLOGICUS/tools/ -Force
+          # v695 — liste canonique des outils (stdio ET transport HTTP).
+          Copy-Item tools/theo_tools.json dist/THEOLOGICUS/tools/ -Force
           Copy-Item tools/supertonic/LICENSE dist/THEOLOGICUS/tools/supertonic/ -Force
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
           $v = "$env:VERSION_NAME"

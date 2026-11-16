@@ -129,6 +129,7 @@ comparateur de traductions.
 | `mobile/www/` | Généré par `tools/prepare_mobile.py` — **ne pas éditer à la main** |
 | `.github/workflows/build-apk.yml` | Construit et publie l'APK **et** les livrables Windows |
 | `tools/theo_mcp.py` | Serveur MCP stdio optionnel : pilote l'app en lecture seule via le proxy |
+| `tools/theo_tools.json` | Liste canonique des outils MCP — source unique pour les transports stdio et HTTP |
 
 À chaque poussée sur `main` touchant `THEOLOGICUS.html` ou un corpus, la CI
 reconstruit et publie une nouvelle version.
@@ -180,10 +181,18 @@ est généré puis mémorisé dans `%LOCALAPPDATA%\THEOLOGICUS\`
 réellement retenu y est consigné (8765 peut être occupé).
 
 Un fichier de configuration prêt à l'emploi est déposé au même endroit :
-`theologicus_mcp.json`. Il contient déjà la commande, le chemin du client
-stdio et les variables `THEO_CONTROL_URL` / `THEO_CONTROL_TOKEN`. Il suffit
-de l'ajouter à ton client MCP (Claude Desktop, etc.) — le client lancera
-lui-même `tools/theo_mcp.py` avec le bon jeton.
+`theologicus_mcp.json`. L'application l'affiche aussi : bouton **MCP** dans le
+panneau Archives, avec l'état du pont et un bouton « copier la configuration ».
+
+Deux variantes sont proposées, à choisir dans votre client MCP :
+
+| Variante | Nécessite Python ? | Comment |
+|---|---|---|
+| `theologicus-http` | **non** | `POST http://127.0.0.1:<port>/mcp` + en-tête `X-Theo-Control-Token`. Marche dans l'exe installé et depuis un autre appareil. |
+| `theologicus` | oui | lance `tools/theo_mcp.py` (transport stdio). |
+
+Préférez `theologicus-http` : elle fonctionne même sans Python installé, et
+c'est la seule qui ouvre la voie à Android.
 
 `THEO_CONTROL_TOKEN` reste pris en charge et **prioritaire** si tu préfères
 imposer ton propre secret (utile pour un déploiement ou un banc) :
@@ -194,12 +203,14 @@ THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" python proxy_server.py
 
 Huit outils `theo_*` sont exposés (`theo_ping`, `theo_list_conversations`,
 `theo_search_conversations`, `theo_read_conversation`, `theo_list_channels`,
-`theo_list_agents`, `theo_list_routines`, `theo_get_config`). Le pont est
-volontairement **en lecture seule** : aucune clé API, aucune écriture,
-aucune suppression, aucune exécution de code. Les routes ne répondent qu'en
-bouclage et exigent le jeton ; une page tierce ne peut pas l'exploiter
-(en-tête personnalisé => prévol CORS refusé). L'APK/WebView n'a pas de proxy
-Python : le module reste silencieux, sans surface supplémentaire.
+`theo_list_agents`, `theo_list_routines`, `theo_get_config`). La liste vit
+dans `tools/theo_tools.json`, source unique partagée par les deux transports.
+
+Le pont est volontairement **en lecture seule** : aucune clé API, aucune
+écriture, aucune suppression, aucune exécution de code. Les routes ne
+répondent qu'en bouclage et exigent le jeton ; une page tierce ne peut pas
+l'exploiter (en-tête personnalisé => prévol CORS refusé). L'APK/WebView n'a
+pas de proxy Python : le module reste silencieux, sans surface supplémentaire.
 
 ---
 

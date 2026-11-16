@@ -1,0 +1,68 @@
+{
+  "_comment": "Liste canonique des outils du pont MCP THEOLOGICUS. Source UNIQUE : lue par tools/theo_mcp.py (stdio) ET par proxy_server.py (transport HTTP). v695 — ne pas dupliquer cette liste ailleurs.",
+  "tools": [
+    {
+      "name": "theo_ping",
+      "description": "Vérifie que le pont THEOLOGICUS répond.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "theo_list_conversations",
+      "description": "Liste les conversations (sans contenu).",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }
+      }
+    },
+    {
+      "name": "theo_search_conversations",
+      "description": "Cherche une expression dans les conversations et renvoie un extrait borné.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 10 }
+        }
+      }
+    },
+    {
+      "name": "theo_read_conversation",
+      "description": "Lit les derniers messages d'une conversation (plafonné).",
+      "inputSchema": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 20 }
+        }
+      }
+    },
+    {
+      "name": "theo_list_channels",
+      "description": "Liste les canaux d'étude.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "theo_list_agents",
+      "description": "Liste les agents (nom et description).",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }
+      }
+    },
+    {
+      "name": "theo_list_routines",
+      "description": "Liste les routines et leur état (actif / prochaine échéance).",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 50 } }
+      }
+    },
+    {
+      "name": "theo_get_config",
+      "description": "Renvoie modèle, canal et agent courants — jamais de clé API.",
+      "inputSchema": { "type": "object", "properties": {} }
+    }
+  ]
+}

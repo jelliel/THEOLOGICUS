@@ -738,6 +738,11 @@ def main() -> int:
               f"Fermez l'application ou libérez un port.", file=sys.stderr)
         return 1
 
+    # v695 — le proxy doit connaître le port RÉEL : le pont MCP l'injecte
+    # dans la page servie (URL, config). 8765 peut être occupé et le repli
+    # est déterministe mais différent du port par défaut.
+    proxy_server.PORT = port
+
     url = f"http://127.0.0.1:{port}/THEOLOGICUS.html"
     # v2xx — adresse réseau (LAN) pour ouverture depuis un autre appareil.
     lan_ip = get_lan_ip()

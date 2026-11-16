@@ -27,21 +27,16 @@ import urllib.request
 URL = (os.environ.get("THEO_CONTROL_URL") or "http://127.0.0.1:8765").rstrip("/")
 JETON = os.environ.get("THEO_CONTROL_TOKEN", "")
 
-OUTILS = [
-    {"name": "theo_ping", "description": "Vérifie que le pont THEOLOGICUS répond.", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "theo_list_conversations", "description": "Liste les conversations (sans contenu).",
-     "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 50}}}},
-    {"name": "theo_search_conversations", "description": "Cherche une expression dans les conversations et renvoie un extrait borné.",
-     "inputSchema": {"type": "object", "required": ["query"], "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}}}},
-    {"name": "theo_read_conversation", "description": "Lit les derniers messages d'une conversation (plafonné).",
-     "inputSchema": {"type": "object", "required": ["id"], "properties": {"id": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}}},
-    {"name": "theo_list_channels", "description": "Liste les canaux d'étude.", "inputSchema": {"type": "object", "properties": {}}},
-    {"name": "theo_list_agents", "description": "Liste les agents (nom et description).",
-     "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 50}}}},
-    {"name": "theo_list_routines", "description": "Liste les routines et leur état (actif / prochaine échéance).",
-     "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 50}}}},
-    {"name": "theo_get_config", "description": "Renvoie modèle, canal et agent courants — jamais de clé API.", "inputSchema": {"type": "object", "properties": {}}},
-]
+# v695 — la liste des outils est dans tools/theo_tools.json, source UNIQUE
+# partagée avec le transport HTTP du proxy. Dupliquer la liste ici et là
+# avait déjà coûté une dérive (v697 ajoute des commandes en écriture).
+_FICHIER_OUTILS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theo_tools.json")
+try:
+    with open(_FICHIER_OUTILS, "r", encoding="utf-8") as _f:
+        OUTILS = json.load(_f).get("tools") or []
+except Exception as _e:
+    sys.stderr.write("theo_mcp : liste d'outils introuvable (%s)\n" % _e)
+    OUTILS = []
 
 NOMS = {o["name"]: o["name"].replace("theo_", "", 1) for o in OUTILS}
 
