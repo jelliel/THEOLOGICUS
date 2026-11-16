@@ -201,6 +201,22 @@ imposer ton propre secret (utile pour un déploiement ou un banc) :
 THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" python proxy_server.py
 ```
 
+### Depuis un autre appareil (téléphone, tablette)
+
+Par défaut, les routes ne répondent qu'en bouclage : aucune surface réseau.
+Pour piloter CE THEOLOGICUS depuis un autre appareil du même réseau, démarrez
+le proxy avec :
+
+```bash
+THEO_CONTROL_LAN=1   # ou THEO_CONTROL_LAN=true
+```
+
+Le jeton reste exigé et circule dans l'URL ou le corps de la requête (jamais
+en en-tête personnalisé : le prévol CORS du navigateur client le refuserait).
+Côté APK, le panneau **MCP** propose alors « Pont distant » : URL + jeton du
+bureau, bouton TESTER, et la page pilote l'instance de bureau. Sans
+`THEO_CONTROL_LAN`, ce réglage ne fonctionne pas — c'est voulu.
+
 Treize outils `theo_*` sont exposés. Huit en **lecture seule**
 (`theo_ping`, `theo_list_conversations`, `theo_search_conversations`,
 `theo_read_conversation`, `theo_list_channels`, `theo_list_agents`,

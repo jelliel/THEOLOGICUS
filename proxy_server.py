@@ -39,6 +39,14 @@ import secrets as _ctrl_secrets
 # prévol CORS refusé par le relais). Commandes toutes en lecture seule.
 CTRL_TOKEN_EXPLICITE = os.environ.get('THEO_CONTROL_TOKEN', '')
 CTRL_TOKEN = CTRL_TOKEN_EXPLICITE
+# v698 — EXPOSITION RÉSEAU, DÉSACTIVÉE PAR DÉFAUT.
+# Sans THEO_CONTROL_LAN, les routes ne répondent QU'en bouclage : aucune
+# installation existante ne gagne de surface réseau. Avec THEO_CONTROL_LAN=1,
+# un autre appareil du réseau peut piloter CE THEOLOGICUS (téléphone, tablette).
+# Le jeton reste exigé ; sur le réseau il circule dans le CORPS ou l'URL
+# (jamais en en-tête personnalisé : un en-tête inconnu fait échouer le prévol
+# CORS du navigateur de l'appareil client).
+CTRL_LAN = str(os.environ.get('THEO_CONTROL_LAN', '')).lower() in ('1', 'true', 'oui', 'yes')
 CTRL_VERROU = _ctrl_threading.Lock()
 CTRL_FILE = []
 CTRL_RESULTATS = {}
@@ -2299,13 +2307,33 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
 
-    def _ctrl_ok(self):
+    def _ctrl_jeton_client(self, corps=None):
+        """Jeton fourni par le client : en-tête (bouclage), corps ou URL (réseau).
+
+        🔴 Sur le RÉSEAU, un en-tête personnalisé fait ÉCHOUER le prévol CORS
+        du navigateur client : il ne peut donc pas servir de canal. On accepte
+        alors le jeton dans le corps JSON (`token`) ou dans l'URL (`?token=…`).
+        """
+        jeton = _ctrl_token()
+        if not jeton:
+            return ''
+        if self.headers.get('X-Theo-Control-Token', '') == jeton:
+            return jeton
+        if isinstance(corps, dict) and corps.get('token') == jeton:
+            return jeton
+        q = parse_qs(urlparse(self.path).query)
+        if (q.get('token') or [''])[0] == jeton:
+            return jeton
+        return ''
+
+    def _ctrl_ok(self, corps=None):
         jeton = _ctrl_token()
         if not jeton:
             return False
-        if self.client_address[0] not in ('127.0.0.1', '::1'):
+        local = self.client_address[0] in ('127.0.0.1', '::1')
+        if not local and not CTRL_LAN:
             return False
-        return self.headers.get('X-Theo-Control-Token', '') == jeton
+        return self._ctrl_jeton_client(corps) == jeton
 
     def _ctrl_404(self):
         self.send_response(404)
@@ -2314,10 +2342,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(b'{"error":"not found"}')
 
     def _ctrl_submit(self):
-        if not self._ctrl_ok():
+        corps = self._lire_corps_json()
+        if not self._ctrl_ok(corps):
             self._ctrl_404()
             return
-        corps = self._lire_corps_json()
         cmd = corps.get('command') if isinstance(corps, dict) else ''
         args = corps.get('args', {}) if isinstance(corps, dict) else {}
         if not isinstance(cmd, str) or not cmd or not isinstance(args, dict):
@@ -2336,10 +2364,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self._json_response({'commands': cmds})
 
     def _ctrl_result_post(self):
-        if not self._ctrl_ok():
+        corps = self._lire_corps_json()
+        if not self._ctrl_ok(corps):
             self._ctrl_404()
             return
-        corps = self._lire_corps_json()
         if not isinstance(corps, dict) or not corps.get('id'):
             self._json_response({'error': 'requete invalide'})
             return
@@ -2411,10 +2439,10 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         Même garde-fous que le stdio : bouclage + jeton + liste blanche de
         commandes en lecture seule.
         """
-        if not self._ctrl_ok():
+        corps = self._lire_corps_json()
+        if not self._ctrl_ok(corps):
             self._ctrl_404()
             return
-        corps = self._lire_corps_json()
         if not isinstance(corps, dict):
             self._json_response({
                 'jsonrpc': '2.0', 'id': None,

@@ -72168,8 +72168,27 @@ body.theo-read #atc-nav-bar{display:none !important}
   function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
   function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
   function interdite(nom) { return Object.prototype.hasOwnProperty.call(_commandes, nom); }
+  var CLE_DISTANT = 'theologicus-pont-distant';
+
+  /* v698 — PONT DISTANT : sur Android il n'y a PAS de proxy Python, donc
+     rien à poler en local. L'utilisateur peut alors brancher l'APK sur le
+     THEOLOGICUS de son bureau (URL + jeton), stocké dans localStorage.
+     Le jeton voyage dans l'URL/corps : un en-tête personnalisé ferait
+     échouer le prévol CORS du WebView. */
+  function distant() {
+    try {
+      var d = JSON.parse(localStorage.getItem(CLE_DISTANT) || 'null');
+      if (d && typeof d.url === 'string' && d.url && typeof d.token === 'string' && d.token) {
+        return { url: String(d.url).replace(/\/+$/, ''), token: String(d.token) };
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function entetes() {
     var h = { 'Content-Type': 'application/json' };
+    var d = distant();
+    if (d) return h;
     var t = (typeof window.__THEO_CONTROL_TOKEN__ === 'string') ? window.__THEO_CONTROL_TOKEN__ : '';
     if (t) h['X-Theo-Control-Token'] = t;
     return h;
@@ -72191,17 +72210,22 @@ body.theo-read #atc-nav-bar{display:none !important}
     if (_occupe) return;
     _occupe = true;
     try {
-      var rep = await fetch('/theo-control/pending', { cache: 'no-store', headers: entetes() });
+      var d = distant();
+      var b = d ? d.url : '';
+      var chemin = b + '/theo-control/pending' + (d ? '?token=' + encodeURIComponent(d.token) : '');
+      var rep = await fetch(chemin, { cache: 'no-store', headers: entetes() });
       if (!rep.ok) return;
       var j = await rep.json();
       var cmds = (j && j.commands) || [];
       for (var i = 0; i < cmds.length; i++) {
         var reponse = await executer(cmds[i]);
         try {
-          await fetch('/theo-control/result', {
+          var corps = { id: cmds[i].id, result: reponse.result, error: reponse.error };
+          if (d) corps.token = d.token;
+          await fetch(b + '/theo-control/result', {
             method: 'POST',
             headers: entetes(),
-            body: JSON.stringify({ id: cmds[i].id, result: reponse.result, error: reponse.error })
+            body: JSON.stringify(corps)
           });
         } catch (e) {}
       }
@@ -72217,9 +72241,11 @@ body.theo-read #atc-nav-bar{display:none !important}
     boucle: boucle,
     executer: executer,
     ajouter: ajouter,
+    distant: distant,
     commandes: _liste_commandes
   };
 })();
+</script>
 </script>
 </script>
 </script>
@@ -72314,6 +72340,84 @@ body.theo-read #atc-nav-bar{display:none !important}
     }
   }
 
+  var CLE_DISTANT = 'theologicus-pont-distant';
+
+  function lireDistant() {
+    try {
+      var d = JSON.parse(localStorage.getItem(CLE_DISTANT) || 'null');
+      if (d && d.url && d.token) return { url: String(d.url), token: String(d.token) };
+    } catch (e) {}
+    return null;
+  }
+
+  function ecrireDistant(d) {
+    try {
+      if (d && d.url && d.token) localStorage.setItem(CLE_DISTANT, JSON.stringify({ url: String(d.url).replace(/\/+$/, ''), token: String(d.token) }));
+      else localStorage.removeItem(CLE_DISTANT);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* v698 — Tester un pont DISTANT (le THEOLOGICUS de bureau, depuis l'APK).
+     Le jeton voyage dans l'URL : un en-tête personnalisé ferait échouer le
+     prévol CORS du WebView. */
+  async function testerDistant(url, jeton) {
+    try {
+      var u = String(url || '').replace(/\/+$/, '') + '/theo-control/status?token=' + encodeURIComponent(jeton || '');
+      var r = await fetch(u, { cache: 'no-store' });
+      if (!r.ok) return { ok: false, detail: 'statut=' + r.status };
+      var j = await r.json();
+      return { ok: !!(j && j.ok), outils: (j && j.outils) || 0, port: (j && j.port) || '' };
+    } catch (e) {
+      return { ok: false, detail: 'injoignable' };
+    }
+  }
+
+  function champDistant(conteneur) {
+    var d = lireDistant();
+    var bloc = document.createElement('div');
+    bloc.id = 'v695-distant';
+    bloc.setAttribute('style', 'padding:6px 0;border-top:1px solid var(--ui-border,var(--glass-border,#2a2a3a))');
+    bloc.innerHTML =
+      '<div style="font-size:9px;letter-spacing:1px;opacity:.7;text-transform:uppercase;margin:6px 0 4px">Pont distant — piloter un THEOLOGICUS de bureau</div>' +
+      '<input id="v695-dist-url" placeholder="https://192.168.1.10:8443" value="' + (d ? d.url.replace(/"/g, '&quot;') : '') + '" style="width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;background:transparent;color:inherit;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:6px">' +
+      '<input id="v695-dist-jeton" type="password" placeholder="Jeton du pont de bureau" value="' + (d ? d.token.replace(/"/g, '&quot;') : '') + '" style="width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;margin-top:6px;background:transparent;color:inherit;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:6px">' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:6px">' +
+      '<button type="button" id="v695-dist-tester" style="padding:3px 8px;font-size:9px;letter-spacing:1px">TESTER</button>' +
+      '<button type="button" id="v695-dist-enregistrer" style="padding:3px 8px;font-size:9px;letter-spacing:1px">ENREGISTRER</button>' +
+      '<button type="button" id="v695-dist-effacer" style="padding:3px 8px;font-size:9px;letter-spacing:1px">EFFACER</button>' +
+      '</div>' +
+      '<div id="v695-dist-etat" style="font-size:10px;margin-top:4px"></div>' +
+      '<div class="field-hint" style="font-size:10px;margin-top:4px">Côté bureau, démarrez avec THEO_CONTROL_LAN=1 pour autoriser le réseau. Le jeton est celui affiché par le panneau MCP du bureau.</div>';
+    conteneur.appendChild(bloc);
+
+    var lireChamps = function () {
+      return { url: document.getElementById('v695-dist-url').value.trim(), token: document.getElementById('v695-dist-jeton').value.trim() };
+    };
+    document.getElementById('v695-dist-tester').onclick = async function () {
+      var f = lireChamps();
+      if (!f.url || !f.token) { dire('URL et jeton requis', 'error'); return; }
+      var etat = document.getElementById('v695-dist-etat');
+      etat.textContent = 'Test…';
+      var r = await testerDistant(f.url, f.token);
+      etat.textContent = r.ok ? ('Actif — ' + r.outils + ' outils' + (r.port ? ' (port ' + r.port + ')' : '')) : ('Injoignable : ' + (r.detail || '?'));
+      etat.style.color = r.ok ? '#4ade80' : '#f87171';
+    };
+    document.getElementById('v695-dist-enregistrer').onclick = function () {
+      var f = lireChamps();
+      if (!f.url || !f.token) { dire('URL et jeton requis', 'error'); return; }
+      ecrireDistant(f);
+      dire('Pont distant enregistré', 'success');
+    };
+    document.getElementById('v695-dist-effacer').onclick = function () {
+      ecrireDistant(null);
+      document.getElementById('v695-dist-url').value = '';
+      document.getElementById('v695-dist-jeton').value = '';
+      document.getElementById('v695-dist-etat').textContent = '';
+      dire('Pont distant effacé', 'info');
+    };
+  }
+
   function champ(label, valeur, copie) {
     var d = document.createElement('div');
     d.setAttribute('style', 'display:flex;flex-direction:column;gap:2px;padding:5px 0;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))');
@@ -72395,8 +72499,9 @@ body.theo-read #atc-nav-bar{display:none !important}
       badge.style.color = '#8a8f9c';
       champs.appendChild(champ('Pont', 'inactif — ' + (s.raison || 'proxy injoignable')));
       document.getElementById('v695-info').textContent =
-        'Le pont n’est joignable sur cette instance. Il s’active avec le proxy local ' +
-        '(application Windows ou THEOLOGICUS.bat) ; sur APK/WebView il reste muet, faute de proxy Python.';
+        'Sur Android, aucun proxy Python : branchez l’APK sur le THEOLOGICUS de votre bureau ci-dessous. ' +
+        'Sur Windows, le pont s’active avec le proxy local (application ou THEOLOGICUS.bat).';
+      champDistant(champs);
       return;
     }
     badge.textContent = 'ACTIF';
@@ -72436,9 +72541,13 @@ body.theo-read #atc-nav-bar{display:none !important}
   window.__v695Mcp = {
     ouvrir: ouvrirModale,
     etat: etat,
-    configuration: configuration
+    configuration: configuration,
+    testerDistant: testerDistant,
+    lireDistant: lireDistant,
+    ecrireDistant: ecrireDistant
   };
 })();
+</script>
 </script>
 
 <script id="v696-voix">
