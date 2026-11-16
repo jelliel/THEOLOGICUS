@@ -132,8 +132,8 @@ const SIGNATURE = () => {
   await page.waitForFunction(() => {
     const p = document.querySelector('.header-controls').parentElement;
     const ap = getComputedStyle(p, '::after');
-    return !p.classList.contains('v597-deborde') && (parseFloat(ap.opacity) || 0) < 0.01;
-  }, null, { timeout: 4000 }).catch(() => {});
+    return !p.classList.contains('v597-deborde') && (parseFloat(ap.opacity) || 0) === 0;
+  }, null, { timeout: 6000 }).catch(() => {});
   b4 = await page.evaluate(ETAT);
   ok("aucun débordement", b4.reste <= 1, "largeur=" + largeur + " reste = " + b4.reste + " px");
   ok("aucun signal affiché", b4.classe === false && b4.opacite === 0, JSON.stringify({ classe: b4.classe, op: b4.opacite }));

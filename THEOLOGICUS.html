@@ -20372,6 +20372,7 @@ async function archiveEntireSession() {
      id: state.chatId,
      model: state.model,
      agentId: state.agent?.id,
+     channel: (typeof state !== 'undefined' && state.channel) ? state.channel : '',
      messages: _safeMsg1,
      title: _safeMsg1.slice(1).find(m=>m.role==='user')?.content?.slice(0,50) || "Nouvelle conversation",
      updated: now(),
@@ -20425,6 +20426,7 @@ function markChatDirty() { _dirtyChat = true; }
      id: state.chatId,
      model: state.model,
      agentId: state.agent?.id,
+     channel: (typeof state !== 'undefined' && state.channel) ? state.channel : '',
      messages: _safeMsg2,
      title: _safeMsg2.slice(1).find(m=>m.role==='user')?.content?.slice(0,50) || "Nouvelle conversation",
      updated: now(),
@@ -71505,6 +71507,231 @@ body.theo-read #atc-nav-bar{display:none !important}
 })();
 </script>
 </script>
+</script>
+
+<script id="v691-canaux">
+/* ══════════════════════════════════════════════════════════════════════════
+   v691 — CANAUX D'ÉTUDE
+
+   Un canal = un contexte de travail séparé (Bible, Grec, Hébreu,
+   Apologétique) avec SON transcript et SES instructions de prompt.
+
+   🔴 CONTRAINTE D'ARCHITECTURE : on ne réécrit PAS la machine à états.
+   Chaque canal pointe vers une conversation ORDINAIRE du store `chats`.
+   Basculer = sauvegarder la conversation courante puis charger (ou créer)
+   celle du canal. Le champ `channel` est ajouté au payload (compatible :
+   les anciennes conversations n'en ont pas).
+
+   🔴 CONTRAINTE DE MISE EN PAGE : RIEN dans `.header-controls` (bancs
+   v597/v598). Le bouton vit dans le panneau ARCHIVES, à côté de NOUVEAU.
+
+   🔴 Aucun appel réseau, aucun module externe, aucune dépendance.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v691Canaux) return;
+
+  var CLE_INDEX = 'theologicus_canaux_v1';
+  var CLE_ACTIF = 'theologicus_canal_actif_v1';
+
+  var CANAUX = [
+    { id: 'bible', nom: 'Bible', desc: 'Étude biblique générale, contextes et synthèses',
+      instructions: 'Contexte d’étude : Bible. Privilégie la lecture du texte dans son contexte canonique et littéraire. Distingue clairement le texte, son interprétation et l’application.' },
+    { id: 'grec', nom: 'Grec biblique', desc: 'Nouveau Testament, morphologie et sémantique',
+      instructions: 'Contexte d’étude : grec biblique. Donne les formes grecques, la racine, la morphologie et le champ sémantique. Compare les traductions quand elles divergent. Signale les structures poétiques et les jeux de mots.' },
+    { id: 'hebreu', nom: 'Hébreu biblique', desc: 'Ancien Testament, racines et binyanim',
+      instructions: 'Contexte d’étude : hébreu biblique. Donne la forme massorétique, la translittération, la racine consonantielle, le binyan et le parallèle dans les autres traductions anciennes.' },
+    { id: 'apologetique', nom: 'Apologétique', desc: 'Arguments, objections et rigueur des sources',
+      instructions: 'Contexte d’étude : apologétique. Présente d’abord la position adverse dans sa forme la plus forte, puis la réponse. Chaque affirmation doit être sourcée. Signale explicitement les points débattus.' }
+  ];
+  var PAR_ID = {};
+  CANAUX.forEach(function (c) { PAR_ID[c.id] = c; });
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function lireIndex() {
+    try { var o = JSON.parse(localStorage.getItem(CLE_INDEX) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e) { return {}; }
+  }
+  function ecrireIndex(i) { try { localStorage.setItem(CLE_INDEX, JSON.stringify(i)); } catch (e) {} }
+
+  function titreCanal(c) { return '[' + c.nom + '] — ' + c.desc; }
+
+  /* ── prompt : chaque canal ajoute SON bloc, avant le prompt historique ── */
+  var _prompt = window.buildSystemPrompt;
+  if (typeof _prompt === 'function') {
+    window.buildSystemPrompt = function () {
+      var p = _prompt.apply(this, arguments);
+      var st = ETAT();
+      var c = st && PAR_ID[st.channel];
+      if (c) p = '[CANAL D’ÉTUDE : ' + c.nom + ']\n' + c.instructions + '\n\n' + p;
+      return p;
+    };
+  }
+
+  function majPrompt() {
+    var st = ETAT();
+    if (!st) return;
+    try {
+      var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
+      if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+    } catch (e) {}
+  }
+
+  async function chatDuCanal(id) {
+    var d = DB(); if (!d) return null;
+    var idx = lireIndex();
+    var cid = idx[id];
+    if (!cid) return null;
+    var chat = null;
+    try { chat = await d.get('chats', cid); } catch (e) {}
+    return chat ? cid : null;
+  }
+
+  async function activer(id) {
+    var st = ETAT(), canal = PAR_ID[id];
+    if (!st) return { ok: false, err: 'État indisponible' };
+    if (!canal) return { ok: false, err: 'Canal inconnu : ' + id };
+
+    /* On-tagge AVANT la sauvegarde : le payload lit state.channel. */
+    st.channel = id;
+    try { localStorage.setItem(CLE_ACTIF, id); } catch (e) {}
+    majPrompt();
+    try { if (typeof saveChat === 'function') await saveChat(); } catch (e) {}
+
+    var cid = await chatDuCanal(id);
+    var cree = false;
+    if (cid) {
+      try { if (typeof loadChat === 'function') await loadChat(cid); }
+      catch (e) { return { ok: false, err: 'Chargement impossible' }; }
+    } else {
+      try { if (typeof newChat === 'function') await newChat(); }
+      catch (e) { return { ok: false, err: 'Création impossible' }; }
+      cid = st.chatId;
+      var idx = lireIndex(); idx[id] = cid; ecrireIndex(idx);
+      cree = true;
+    }
+    st.channel = id;
+    majPrompt();
+    try { if (typeof saveChat === 'function') await saveChat(); } catch (e) {}
+    try { if (typeof renderArchives === 'function') renderArchives(); } catch (e) {}
+    var titre = titreCanal(canal);
+    try {
+      var h = document.getElementById('v691-titre');
+      if (h) h.textContent = titre;
+    } catch (e) {}
+    return { ok: true, id: id, chatId: cid, cree: cree, titre: titre };
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v691-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    var html = '<div style="width:min(620px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 id="v691-titre" style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Canaux d’étude</h3>' +
+      '<button type="button" id="v691-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.6rem .9rem;font-size:11px;color:var(--text-secondary)">Chaque canal garde sa propre conversation et ses propres instructions de prompt.</div>' +
+      '<div id="v691-liste" style="display:flex;flex-direction:column;gap:6px;padding:0 .9rem .6rem"></div>' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:0 .9rem .8rem">' +
+      '<button type="button" id="v691-nouveau">Nouvelle conversation dans ce canal</button>' +
+      '</div><div id="v691-info" style="font-size:11px;color:var(--text-secondary);padding:0 .9rem .8rem"></div></div>';
+    modale.innerHTML = html;
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v691-x').onclick = fermer;
+
+    var liste = document.getElementById('v691-liste');
+    CANAUX.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = 'v691-canal-' + c.id;
+      b.setAttribute('data-canal', c.id);
+      b.setAttribute('style', 'text-align:left;padding:.6rem .7rem;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px;background:transparent;color:var(--text,#e8e6e0);cursor:pointer');
+      b.innerHTML = '<div style="font-size:12px;font-weight:500">' + c.nom + '</div>' +
+                    '<div style="font-size:10px;opacity:.65">' + c.desc + '</div>';
+      b.onclick = async function () {
+        var r = await activer(c.id);
+        var info = document.getElementById('v691-info');
+        if (r.ok) {
+          info.textContent = (r.cree ? 'Canal créé' : 'Canal restauré') + ' — ' + r.nom;
+          toast('Canal « ' + c.nom + ' » actif', 'success');
+          peindre();
+        } else { info.textContent = 'Échec : ' + r.err; }
+      };
+      liste.appendChild(b);
+    });
+
+    function peindre() {
+      var st = ETAT();
+      CANAUX.forEach(function (c) {
+        var b = document.getElementById('v691-canal-' + c.id);
+        if (!b) return;
+        b.style.borderColor = (st && st.channel === c.id) ? 'var(--ui-accent,var(--cyan,#e5c15a))' : 'var(--ui-border,var(--glass-border,#2a2a3a))';
+      });
+    }
+
+    document.getElementById('v691-nouveau').onclick = async function () {
+      var st = ETAT();
+      if (!st) return;
+      var id = st.channel || 'bible';
+      var idx = lireIndex();
+      delete idx[id];
+      ecrireIndex(idx);
+      var r = await activer(id);
+      document.getElementById('v691-info').textContent = r.ok ? 'Nouvelle conversation créée dans ce canal' : 'Échec : ' + r.err;
+    };
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+  }
+
+  function initUI() {
+    /* 🔴 Jamais dans .header-controls : v597/v598 mesurent sa largeur. */
+    var ref = document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v691-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v691-btn';
+      b.textContent = 'CANAUX';
+      b.title = 'Canaux d’étude — conversation et instructions séparées';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = ouvrirModale;
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+    var st = ETAT();
+    if (st && !st.channel) {
+      try {
+        var actif = localStorage.getItem(CLE_ACTIF);
+        if (actif && PAR_ID[actif]) st.channel = actif;
+      } catch (e) {}
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v691Canaux = {
+    CANAUX: CANAUX,
+    activer: activer,
+    lireIndex: lireIndex,
+    titreCanal: titreCanal,
+    majPrompt: majPrompt
+  };
+})();
 </script>
 
 </body>
