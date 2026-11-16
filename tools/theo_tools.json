@@ -63,6 +63,51 @@
       "name": "theo_get_config",
       "description": "Renvoie modèle, canal et agent courants — jamais de clé API.",
       "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "theo_new_conversation",
+      "description": "Ouvre une nouvelle conversation et renvoie son identifiant.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "theo_send_message",
+      "description": "Envoie un message à l'agent et renvoie sa réponse. APPEL LLM : consomme des crédits.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["texte"],
+        "properties": {
+          "texte": { "type": "string", "description": "Message à envoyer (4000 caractères max)." }
+        }
+      }
+    },
+    {
+      "name": "theo_activate_channel",
+      "description": "Active un canal d'étude (bible, grec, hebreu, apologetique).",
+      "inputSchema": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string" } }
+      }
+    },
+    {
+      "name": "theo_toggle_routine",
+      "description": "Active ou met en pause une routine d'étude.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["id"],
+        "properties": { "id": { "type": "string" } }
+      }
+    },
+    {
+      "name": "theo_narrate",
+      "description": "Fait lire un texte à voix haute par le moteur de lecture vocale.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["texte"],
+        "properties": {
+          "texte": { "type": "string", "description": "Texte à lire (4000 caractères max)." }
+        }
+      }
     }
   ]
 }

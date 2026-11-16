@@ -90,8 +90,14 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
   }
 
   const cmds = await page.evaluate(() => window.__v693Controle.commandes);
-  ok('liste blanche de 8 commandes', cmds.length === 8, cmds.join(', '));
-  ok('aucune commande d’écriture dans la liste blanche',
+  /* 🔴 Assertion de PRÉSENCE, pas de décompte : la liste blanche s'enrichit
+     (v697 ajoute des commandes d'écriture), mais les 8 commandes de lecture
+     doivent TOUJOURS être là. Présence > nombre. */
+  const lectureSeule = ['ping', 'list_conversations', 'search_conversations', 'read_conversation',
+    'list_channels', 'list_agents', 'list_routines', 'get_config'];
+  ok('les 8 commandes en lecture seule sont présentes',
+    lectureSeule.every(c => cmds.indexOf(c) >= 0), cmds.join(', '));
+  ok('aucune commande DESTRUCTRIVE (suppression, exécution, clé)',
     !cmds.some(c => /delete|write|set|exec|key|config_set/i.test(c)), cmds.join(', '));
 
   const soumis = await requete(port, '/theo-control/submit', { command: 'ping', args: {} }, TOKEN);
@@ -131,7 +137,14 @@ const pause = ms => new Promise(r => setTimeout(r, ms));
   const lignes = String(mcp.stdout || '').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean);
   const init = lignes.find(x => x.id === 1), liste = lignes.find(x => x.id === 2), appel = lignes.find(x => x.id === 3);
   ok('MCP initialize répond', !!init && init.result.protocolVersion === '2024-11-05', JSON.stringify(init && init.result));
-  ok('MCP tools/list expose 8 outils', !!liste && liste.result.tools.length === 8, String(liste && liste.result.tools.length));
+  /* 🔴 PRÉSENCE des 8 outils de lecture seule (pas un décompte : la liste
+     s'enrichit à chaque version — v697 ajoute les commandes d'écriture). */
+  const outilsStd = (liste && liste.result && liste.result.tools || []).map(t => t.name);
+  const lectureSeuleStd = ['theo_ping', 'theo_list_conversations', 'theo_search_conversations',
+    'theo_read_conversation', 'theo_list_channels', 'theo_list_agents',
+    'theo_list_routines', 'theo_get_config'];
+  ok('MCP stdio expose les 8 outils de lecture seule',
+    lectureSeuleStd.every(n => outilsStd.indexOf(n) >= 0), outilsStd.join(', '));
   let contenu = null;
   try { contenu = JSON.parse(appel.result.content[0].text); } catch (e) {}
   ok('MCP tools/call atteint l’application', !!contenu && !!contenu.result && contenu.result.ok === true, JSON.stringify(contenu));

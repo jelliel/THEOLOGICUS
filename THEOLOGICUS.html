@@ -72150,6 +72150,21 @@ body.theo-read #atc-nav-bar{display:none !important}
     }
   };
 
+  var _liste_commandes = Object.keys(_commandes);
+
+  /* v697 — CROCHET D'ENREGISTREMENT.
+     Une commande s'ajoute par `window.__v693Controle.ajouter(nom, fn)` : les
+     modules suivants (v697 écriture) enrichissent la liste blanche SANS
+     réécrire ce module, et la liste exposée reste vivante. */
+  function ajouter(nom, fn) {
+    if (typeof nom !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(nom)) return false;
+    if (typeof fn !== 'function') return false;
+    if (Object.prototype.hasOwnProperty.call(_commandes, nom)) return false;
+    _commandes[nom] = fn;
+    _liste_commandes.push(nom);
+    return true;
+  }
+
   function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
   function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
   function interdite(nom) { return Object.prototype.hasOwnProperty.call(_commandes, nom); }
@@ -72201,9 +72216,11 @@ body.theo-read #atc-nav-bar{display:none !important}
   window.__v693Controle = {
     boucle: boucle,
     executer: executer,
-    commandes: Object.keys(_commandes)
+    ajouter: ajouter,
+    commandes: _liste_commandes
   };
 })();
+</script>
 </script>
 </script>
 </script>
@@ -72572,6 +72589,165 @@ body.theo-read #atc-nav-bar{display:none !important}
     narrerDerniere: narrerDerniere
   };
 })();
+</script>
+
+<script id="v697-ecriture">
+/* ══════════════════════════════════════════════════════════════════════════
+   v697 — COMMANDES D'ÉCRITURE (liste blanche bornée)
+
+   Jusqu'ici le pont MCP était STRICTEMENT en lecture seule. Ici, cinq
+   actions d'écriture s'y ajoutent — et rien d'autre.
+
+   🔴 Ce qui reste INTERDIT, définitivement :
+      supprimer une conversation, lire ou écrire une clé API, exécuter du
+      code, écrire un fichier, modifier un réglage hors de la liste.
+   🔴 Chaque commande vérifie ses arguments et renvoie une erreur explicite
+      au lieu de lever une exception.
+   🔴 `send_message` déclenche un appel LLM : c'est le seul point qui peut
+      coûter des crédits. Il est donc explicite, borné (4000 caractères) et
+      le client reçoit la réponse.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v697Ecriture) return;
+
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function erreur(e) { return { error: String(e && e.message ? e.message : e) }; }
+
+  /* 🔴 Une commande NE DOIT PAS BLOQUER LE PONT.
+     La boucle de l'app traite les commandes UNE PAR UNE : si l'une ne rend
+     jamais la main (sans clé API, sendMessage attend une saisie), toutes les
+     suivantes expirent. On borne donc chaque commande qui peut attendre. */
+  function avecDelai(promesse, ms, message) {
+    return new Promise(function (resolve) {
+      var fini = false;
+      var t = setTimeout(function () {
+        if (fini) return;
+        fini = true;
+        resolve({ error: message || ('delai depasse (' + ms + ' ms)') });
+      }, ms);
+      Promise.resolve(promesse).then(function (v) {
+        if (fini) return;
+        fini = true;
+        clearTimeout(t);
+        resolve(v);
+      }, function (e) {
+        if (fini) return;
+        fini = true;
+        clearTimeout(t);
+        resolve(erreur(e));
+      });
+    });
+  }
+
+  /* ── new_conversation ──────────────────────────────────────────────── */
+  async function newConversation(a) {
+    try {
+      if (typeof window.newChat !== 'function') return { error: 'creation indisponible' };
+      await window.newChat();
+      var st = ETAT();
+      return {
+        ok: true,
+        chatId: (st && st.chatId) ? String(st.chatId) : '',
+        titre: (st && st.title) ? String(st.title).slice(0, 120) : 'Nouvelle conversation'
+      };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── send_message ───────────────────────────────────────────────────── */
+  async function sendMessage(a) {
+    try {
+      var texte = String((a && (a.texte || a.text)) || '').trim();
+      if (!texte) return { error: 'texte vide' };
+      if (texte.length > 4000) return { error: 'texte trop long (4000 caracteres max)' };
+      if (typeof window.sendMessage !== 'function') return { error: 'envoi indisponible' };
+      /* 8 s : largement sous le délai du transport (15 s), donc le client
+         reçoit une erreur CLAIRE au lieu d'un délai générique — et la
+         commande ne bloque JAMAIS la file des suivantes. */
+      await avecDelai(window.sendMessage(texte), 8000,
+        'pas de reponse dans le delai (cle API configuree ?)');
+      var st = ETAT();
+      var msgs = (st && st.messages) ? st.messages : [];
+      var dernier = null;
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i] && msgs[i].role === 'assistant') { dernier = msgs[i]; break; }
+      }
+      return {
+        ok: true,
+        chatId: (st && st.chatId) ? String(st.chatId) : '',
+        reponse: dernier ? String(dernier.content || '').slice(0, 4000) : ''
+      };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── activate_channel ───────────────────────────────────────────────── */
+  async function activateChannel(a) {
+    try {
+      var id = String((a && (a.id || a.canal)) || '').trim();
+      if (!id) return { error: 'canal manquant' };
+      var c = window.__v691Canaux;
+      if (!c || typeof c.activer !== 'function') return { error: 'canaux indisponibles' };
+      var connus = (c.CANAUX || []).map(function (x) { return x.id; });
+      if (connus.indexOf(id) < 0) return { error: 'canal inconnu : ' + id };
+      var r = await c.activer(id);
+      return { ok: !!(r && r.ok), canal: id, cree: !!(r && r.cree) };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── toggle_routine ─────────────────────────────────────────────────── */
+  async function toggleRoutine(a) {
+    try {
+      var id = String((a && (a.id || a.routine)) || '').trim();
+      if (!id) return { error: 'routine manquante' };
+      var r = window.__v692Routines;
+      if (!r || typeof r.basculer !== 'function') return { error: 'routines indisponibles' };
+      var res = await r.basculer(id);
+      if (!res) return { error: 'routine inconnue : ' + id };
+      return { ok: true, id: id, nom: String(res.nom || ''), actif: !!res.actif };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── narrate ────────────────────────────────────────────────────────── */
+  async function narrate(a) {
+    try {
+      var texte = String((a && (a.texte || a.text)) || '').trim();
+      if (!texte) return { error: 'texte vide' };
+      if (texte.length > 4000) return { error: 'texte trop long (4000 caracteres max)' };
+      var v = window.__v696Voix;
+      if (!v || typeof v.narrer !== 'function') return { error: 'voix indisponible' };
+      var r = v.narrer(texte);
+      return { ok: !!(r && r.ok), segments: (r && r.segments) || 0 };
+    } catch (e) { return erreur(e); }
+  }
+
+  function enregistrer() {
+    var ctrl = window.__v693Controle;
+    if (!ctrl || typeof ctrl.ajouter !== 'function') return false;
+    ctrl.ajouter('new_conversation', newConversation);
+    ctrl.ajouter('send_message', sendMessage);
+    ctrl.ajouter('activate_channel', activateChannel);
+    ctrl.ajouter('toggle_routine', toggleRoutine);
+    ctrl.ajouter('narrate', narrate);
+    return true;
+  }
+
+  function demarrer() {
+    try { enregistrer(); } catch (e) {}
+    /* Filet de sécurité : si le module v693 n'est pas encore là, on
+       réessaie un peu plus tard (ordre de chargement des scripts). */
+    setTimeout(function () { try { enregistrer(); } catch (e) {} }, 600);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+
+  window.__v697Ecriture = {
+    enregistrer: enregistrer,
+    commandes: ['new_conversation', 'send_message', 'activate_channel', 'toggle_routine', 'narrate']
+  };
+})();
+</script>
+</script>
 </script>
 
 </body>

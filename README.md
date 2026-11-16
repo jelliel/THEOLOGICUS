@@ -201,10 +201,18 @@ imposer ton propre secret (utile pour un déploiement ou un banc) :
 THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" python proxy_server.py
 ```
 
-Huit outils `theo_*` sont exposés (`theo_ping`, `theo_list_conversations`,
-`theo_search_conversations`, `theo_read_conversation`, `theo_list_channels`,
-`theo_list_agents`, `theo_list_routines`, `theo_get_config`). La liste vit
-dans `tools/theo_tools.json`, source unique partagée par les deux transports.
+Treize outils `theo_*` sont exposés. Huit en **lecture seule**
+(`theo_ping`, `theo_list_conversations`, `theo_search_conversations`,
+`theo_read_conversation`, `theo_list_channels`, `theo_list_agents`,
+`theo_list_routines`, `theo_get_config`) et cinq en écriture bornée, depuis
+v697 (`theo_new_conversation`, `theo_send_message`, `theo_activate_channel`,
+`theo_toggle_routine`, `theo_narrate`). La liste vit dans
+`tools/theo_tools.json`, source unique partagée par les deux transports.
+
+⚠️ `theo_send_message` déclenche un **appel LLM** : il consomme des crédits.
+Il est borné (4000 caractères, 8 s sans réponse) et n'exécute jamais de code.
+Toujours interdits : suppression de conversations, lecture/écriture de clés
+API, exécution de code, écriture de fichiers.
 
 Le pont est volontairement **en lecture seule** : aucune clé API, aucune
 écriture, aucune suppression, aucune exécution de code. Les routes ne

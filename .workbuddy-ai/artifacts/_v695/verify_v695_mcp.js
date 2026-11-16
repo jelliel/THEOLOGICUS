@@ -88,8 +88,14 @@ function ouNull(txt) { try { return JSON.parse(txt); } catch (e) { return null; 
 
   const liste = await requete(port, '/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, TOKEN);
   const jl = ouNull(liste.body);
-  ok('MCP HTTP tools/list expose 8 outils', !!(jl && jl.result && jl.result.tools) && jl.result.tools.length === 8,
-    String(jl && jl.result && jl.result.tools && jl.result.tools.length));
+  /* 🔴 PRÉSENCE des outils de lecture seule, pas un décompte : la liste
+     s'enrichit (v697), mais les 8 de base doivent toujours être exposés. */
+  const outilsBase = ['theo_ping', 'theo_list_conversations', 'theo_search_conversations',
+    'theo_read_conversation', 'theo_list_channels', 'theo_list_agents',
+    'theo_list_routines', 'theo_get_config'];
+  const nomsOutils = (jl && jl.result && jl.result.tools || []).map(t => t.name);
+  ok('MCP HTTP expose les 8 outils de lecture seule', outilsBase.every(n => nomsOutils.indexOf(n) >= 0),
+    nomsOutils.join(', '));
 
   /* 🔴 /theo-control/status ne doit PAS vider la file. */
   await requete(port, '/theo-control/submit', { command: 'ping', args: {} }, TOKEN);
