@@ -72424,6 +72424,156 @@ body.theo-read #atc-nav-bar{display:none !important}
 })();
 </script>
 
+<script id="v696-voix">
+/* ══════════════════════════════════════════════════════════════════════════
+   v696 — NARRATION AUTOMATIQUE DES RÉPONSES
+
+   La lecture vocale existe déjà (bouton ▶ LIRE par message, « tout lire »,
+   trois moteurs : système / ElevenLabs / Supertonic 3). Ce qui manquait :
+   lire SANS cliquer. Ici, chaque réponse de l'agent est lue dès qu'elle
+   arrive — si l'utilisateur l'a demandé.
+
+   🔴 DÉSACTIVÉ par défaut : une case à cocher dans PARAMÈTRES →
+      Lecture vocale. Rien ne change pour qui ne l'active pas.
+   🔴 Réutilise la chaîne de lecture EXISTANTE (cleanMd → prosodyPreprocess →
+      splitByLanguage → ttsEmission) : pas de moteur neuf, pas de réglage
+      dupliqué, mêmes voix, même traitement de la langue.
+   🔴 S'interrompt si une lecture est déjà en cours (l'utilisateur a la main).
+   🔴 Aucun élément ajouté dans .header-controls (v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v696Voix) return;
+
+  var CLE = 'theologicus-tts-auto';
+
+  function autoActif() {
+    try { return localStorage.getItem(CLE) === '1'; } catch (e) { return false; }
+  }
+
+  function reglerAuto(on) {
+    try { localStorage.setItem(CLE, on ? '1' : '0'); } catch (e) {}
+    try {
+      var c = document.getElementById('tts-auto-lecture');
+      if (c) c.checked = !!on;
+    } catch (e) {}
+    return !!on;
+  }
+
+  /* Narration d'UN texte (pas de toute la conversation). */
+  function narrer(texte) {
+    if (!texte) return { ok: false, err: 'texte vide' };
+    if (typeof ttsEmission !== 'function') return { ok: false, err: 'moteur TTS absent' };
+    var brut = String(texte);
+    try {
+      /* Même ordre que speakConversation : markdown nettoyé d'abord, puis
+         prosodie — l'inverse casserait la détection de ton. */
+      if (typeof cleanMd === 'function') brut = cleanMd(brut);
+      if (typeof prosodyPreprocess === 'function') brut = prosodyPreprocess(brut);
+    } catch (e) {}
+    var segments = [];
+    try {
+      segments = (typeof splitByLanguage === 'function') ? splitByLanguage(brut) : [];
+    } catch (e) {}
+    if (!segments || !segments.length) segments = [{ text: brut, lang: 'francais' }];
+    var i = 0;
+    function suivant() {
+      if (i >= segments.length) return;
+      var s = segments[i++] || {};
+      try {
+        ttsEmission(s.text || '', s.lang || 'francais', function () {
+          setTimeout(suivant, 120);
+        }, function () { /* une segment en échec n'interrompt pas la suite */ });
+      } catch (e) {}
+    }
+    suivant();
+    return { ok: true, segments: segments.length };
+  }
+
+  /* Narration de la DERNIÈRE réponse de l'agent (si l'auto est active). */
+  function narrerDerniere() {
+    try {
+      if (!autoActif()) return { ok: false, ignore: 'auto desactive' };
+      /* L'utilisateur a la main : on ne s'interrompt pas. */
+      try {
+        if (typeof isSpeaking !== 'undefined' && isSpeaking) {
+          return { ok: false, ignore: 'lecture en cours' };
+        }
+      } catch (e) {}
+      var msgs = (typeof state !== 'undefined' && state && state.messages) ? state.messages : [];
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i] && msgs[i].role === 'assistant') return narrer(msgs[i].content);
+      }
+      return { ok: false, err: 'aucune reponse' };
+    } catch (e) {
+      return { ok: false, err: String(e && e.message ? e.message : e) };
+    }
+  }
+
+  function installerUI() {
+    try {
+      var panneau = document.getElementById('settings-panneau-tts');
+      if (!panneau || document.getElementById('v696-auto-group')) return;
+      var ref = document.getElementById('tts-narration');
+      var groupe = ref && ref.closest ? ref.closest('.field-group') : null;
+      var div = document.createElement('div');
+      div.className = 'field-group';
+      div.id = 'v696-auto-group';
+      div.innerHTML =
+        '<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" id="tts-auto-lecture" style="width:auto;margin:0">' +
+        '<span>🔊 Lire automatiquement les réponses</span></label>' +
+        '<div class="field-hint">Chaque réponse de l’agent est lue dès qu’elle arrive, avec le moteur et la langue choisis ci-dessus. ' +
+        'Le bouton « ▶ LIRE » reste là pour relire à la demande. Désactivé par défaut.</div>';
+      if (groupe && groupe.parentNode) {
+        groupe.parentNode.insertBefore(div, groupe.nextSibling);
+      } else {
+        panneau.insertBefore(div, panneau.firstChild);
+      }
+      var c = document.getElementById('tts-auto-lecture');
+      if (c) {
+        c.checked = autoActif();
+        c.onchange = function () {
+          reglerAuto(c.checked);
+          try { if (typeof toast === 'function') toast(c.checked ? 'Lecture automatique activée' : 'Lecture automatique désactivée', 'success'); } catch (e) {}
+        };
+      }
+    } catch (e) {}
+  }
+
+  function brancher() {
+    /* Même idiom que les modules voisins (v690, v692) : on s'insère dans la
+       chaîne sans la réécrire. On est le dernier wrapper → la narration
+       part une fois la réponse ENREGISTRÉE. */
+    var _envoi = window.sendMessage;
+    if (typeof _envoi === 'function' && !_envoi.__v696) {
+      window.sendMessage = async function () {
+        var r = await _envoi.apply(this, arguments);
+        try { narrerDerniere(); } catch (e) {}
+        return r;
+      };
+      window.sendMessage.__v696 = true;
+    }
+  }
+
+  function demarrer() {
+    try { installerUI(); } catch (e) {}
+    try { brancher(); } catch (e) {}
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v696Voix = {
+    auto: autoActif,
+    reglerAuto: reglerAuto,
+    narrer: narrer,
+    narrerDerniere: narrerDerniere
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
