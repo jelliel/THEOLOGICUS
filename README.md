@@ -171,21 +171,25 @@ elle, l'APK produite **ne peut pas** mettre à jour une installation existante.
 
 ---
 
-## Contrôle MCP (optionnel, lecture seule)
+## Contrôle MCP (actif au démarrage, lecture seule)
 
-Le proxy et l'app peuvent exposer une boîte aux lettres locale permettant à un
-client MCP externe d'interroger THEOLOGICUS (conversations, canaux, agents,
-routines, configuration sans clé). **Rien n'est actif par défaut** : il faut
-définir `THEO_CONTROL_TOKEN` côté proxy **au démarrage**, puis démarrer le
-serveur MCP avec le même jeton.
+THEOLOGICUS démarre **automatiquement** son pont de contrôle local. Aucune
+variable d'environnement à poser : au premier lancement, un jeton aléatoire
+est généré puis mémorisé dans `%LOCALAPPDATA%\THEOLOGICUS\`
+(`~/THEOLOGICUS/` hors Windows), et réutilisé à chaque ouverture. Le port
+réellement retenu y est consigné (8765 peut être occupé).
+
+Un fichier de configuration prêt à l'emploi est déposé au même endroit :
+`theologicus_mcp.json`. Il contient déjà la commande, le chemin du client
+stdio et les variables `THEO_CONTROL_URL` / `THEO_CONTROL_TOKEN`. Il suffit
+de l'ajouter à ton client MCP (Claude Desktop, etc.) — le client lancera
+lui-même `tools/theo_mcp.py` avec le bon jeton.
+
+`THEO_CONTROL_TOKEN` reste pris en charge et **prioritaire** si tu préfères
+imposer ton propre secret (utile pour un déploiement ou un banc) :
 
 ```bash
-# 1) proxy local, avec le plan de contrôle activé
 THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" python proxy_server.py
-
-# 2) serveur MCP stdio (à brancher dans un client MCP)
-THEO_CONTROL_TOKEN="un-jeton-long-et-aleatoire" \
-THEO_CONTROL_URL="http://127.0.0.1:8765" python tools/theo_mcp.py
 ```
 
 Huit outils `theo_*` sont exposés (`theo_ping`, `theo_list_conversations`,
@@ -193,8 +197,9 @@ Huit outils `theo_*` sont exposés (`theo_ping`, `theo_list_conversations`,
 `theo_list_agents`, `theo_list_routines`, `theo_get_config`). Le pont est
 volontairement **en lecture seule** : aucune clé API, aucune écriture,
 aucune suppression, aucune exécution de code. Les routes ne répondent qu'en
-bouclage et exigent le jeton. Sans jeton, l'app ne polle rien et l'APK
-/WebView reste muette — aucune surface supplémentaire.
+bouclage et exigent le jeton ; une page tierce ne peut pas l'exploiter
+(en-tête personnalisé => prévol CORS refusé). L'APK/WebView n'a pas de proxy
+Python : le module reste silencieux, sans surface supplémentaire.
 
 ---
 

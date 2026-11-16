@@ -358,6 +358,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist/THEOLOGICUS/tools/supertonic | Out-Null
           Copy-Item tools/start_supertonic.py dist/THEOLOGICUS/tools/ -Force
           Copy-Item tools/supertonic/helper.py dist/THEOLOGICUS/tools/supertonic/ -Force
+          # v694 — le pont MCP est actif au démarrage : le client stdio doit
+          # être présent dans l'installation, sinon la config déposée pointe
+          # vers un fichier absent.
+          Copy-Item tools/theo_mcp.py dist/THEOLOGICUS/tools/ -Force
           Copy-Item tools/supertonic/LICENSE dist/THEOLOGICUS/tools/supertonic/ -Force
           Set-Content -Path dist/THEOLOGICUS/theologicus_keys.json -Value '{"mistral": ""}'
           $v = "$env:VERSION_NAME"

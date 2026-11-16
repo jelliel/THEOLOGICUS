@@ -780,6 +780,18 @@ def main() -> int:
             print("[X] Le serveur local n'a pas démarré.", file=sys.stderr)
             return 1
 
+    # v694 — plan de contrôle MCP actif dès le démarrage : le jeton est généré
+    # et mémorisé au premier lancement, la configuration client est déposée
+    # dans le dossier de données (survit aux mises à jour). Le port RÉEL est
+    # consigné car 8765 peut être occupé et le repli est déterministe.
+    try:
+        chemin_cfg = proxy_server._ctrl_configurer(
+            port, outils_dir=os.path.join(base, "tools")
+        )
+        print(f"[OK] Pont MCP actif — configuration : {chemin_cfg}")
+    except Exception as e:
+        print(f"[!] Pont MCP non configuré : {e}", file=sys.stderr)
+
     if os.environ.get("THEOLOGICUS_NO_WINDOW"):
         print(f"[OK] Serveur prêt : {url}  (Ctrl+C pour arrêter)")
         if lan_url:

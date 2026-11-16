@@ -26,21 +26,121 @@ except Exception:
 # (évite la collision sur le port 8765 partagé). Défaut inchangé.
 PORT = int(os.environ.get('THEO_BENCH_PORT') or 8765)
 import threading as _ctrl_threading
-# v693 — PLAN DE CONTRÔLE MCP (optionnel).
-# DÉSACTIVÉ tant que THEO_CONTROL_TOKEN n'est pas défini : aucune route,
-# aucune surface supplémentaire pour les installations existantes.
-# Même activé, les routes ne répondent QU'à une adresse de bouclage et
-# exigent le jeton dans l'en-tête X-Theo-Control-Token. Le jeton n'apparaît
-# dans aucun log. Il est injecté dans la page SERVIE (même origine) pour que
-# l'app puisse policer la boîte aux lettres ; une page tierce ne peut pas
-# l'exploiter (en-tête personnalisé => prévol CORS refusé par le relais).
-CTRL_TOKEN = os.environ.get('THEO_CONTROL_TOKEN', '')
+import secrets as _ctrl_secrets
+# v693 — PLAN DE CONTRÔLE MCP ; v694 — ACTIVATION AUTOMATIQUE AU DÉMARRAGE.
+# Un jeton est généré et mémorisé au premier lancement dans le dossier de
+# données utilisateur, puis réutilisé : plus aucune variable d'environnement
+# à poser. THEO_CONTROL_TOKEN reste prioritaire quand il est fourni (bancs,
+# déploiement qui veut son propre secret).
+# Les routes ne répondent QU'en bouclage et exigent le jeton dans l'en-tête
+# X-Theo-Control-Token. Le jeton n'est jamais loggé. Il est injecté dans la
+# page SERVIE (même origine) pour que l'app puisse policer la boîte aux
+# lettres ; une page tierce ne peut pas l'exploiter (en-tête personnalisé =>
+# prévol CORS refusé par le relais). Commandes toutes en lecture seule.
+CTRL_TOKEN_EXPLICITE = os.environ.get('THEO_CONTROL_TOKEN', '')
+CTRL_TOKEN = CTRL_TOKEN_EXPLICITE
 CTRL_VERROU = _ctrl_threading.Lock()
 CTRL_FILE = []
 CTRL_RESULTATS = {}
 CTRL_SEQ = [0]
 CTRL_MAX_CMD = 64
 CTRL_MAX_RESULT = 128
+CTRL_NOM_FICHIER = 'theologicus_control.json'
+CTRL_NOM_CONFIG = 'theologicus_mcp.json'
+
+
+def _ctrl_chemin():
+    """Fichier du jeton, HORS du dossier d'installation (survit aux MAJ)."""
+    return os.path.join(_app_data_dir(), CTRL_NOM_FICHIER)
+
+
+def _ctrl_token():
+    """Jeton de contrôle : explicite si fourni, sinon généré et persisté.
+
+    🔴 LAZY : appelé au premier acces, jamais à l'import. En mode exe,
+    app.py redéfinit SERVE_DIR APRÈS l'import ; un calcul à l'import figerait
+    le mauvais chemin. Ici la résolution est différée, donc correcte.
+    """
+    global CTRL_TOKEN
+    if CTRL_TOKEN:
+        return CTRL_TOKEN
+    with CTRL_VERROU:
+        if CTRL_TOKEN:
+            return CTRL_TOKEN
+        chemin = _ctrl_chemin()
+        donnees = {}
+        try:
+            if os.path.isfile(chemin):
+                with open(chemin, 'r', encoding='utf-8') as f:
+                    donnees = json.load(f) or {}
+        except Exception:
+            donnees = {}
+        if not isinstance(donnees, dict):
+            donnees = {}
+        jeton = donnees.get('token')
+        if not isinstance(jeton, str) or len(jeton) < 32:
+            jeton = _ctrl_secrets.token_urlsafe(32)
+            donnees['token'] = jeton
+            try:
+                with open(chemin, 'w', encoding='utf-8') as f:
+                    json.dump(donnees, f, ensure_ascii=False, indent=2)
+                try:
+                    os.chmod(chemin, 0o600)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+        CTRL_TOKEN = jeton
+        return jeton
+
+
+def _ctrl_configurer(port=None, outils_dir=None):
+    """Dépose la configuration MCP prête à l'emploi et retourne son chemin.
+
+    `port` est le port RÉEL retenu par app.py (8765 peut être occupé).
+    `outils_dir` permet à l'exe de pointer ses propres tools/ (copiés par la
+    CI), au lieu du dossier source de PyInstaller.
+    """
+    jeton = _ctrl_token()
+    p = int(port or PORT)
+    d = outils_dir or os.path.join(SERVE_DIR, 'tools')
+    cfg = {
+        "mcpServers": {
+            "theologicus": {
+                "command": "python",
+                "args": [os.path.join(d, 'theo_mcp.py')],
+                "env": {
+                    "THEO_CONTROL_URL": "http://127.0.0.1:%d" % p,
+                    "THEO_CONTROL_TOKEN": jeton,
+                },
+            }
+        }
+    }
+    chemin = os.path.join(_app_data_dir(), CTRL_NOM_CONFIG)
+    try:
+        avec_bom = json.dumps(cfg, ensure_ascii=False, indent=2)
+        with open(chemin, 'w', encoding='utf-8') as f:
+            f.write(avec_bom)
+        try:
+            os.chmod(chemin, 0o600)
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # Tracez le port réel dans le fichier de jeton : utile au diagnostic et
+    # à l'app si elle veut afficher l'état du pont.
+    try:
+        with open(_ctrl_chemin(), 'r', encoding='utf-8') as f:
+            donnees = json.load(f) or {}
+        if not isinstance(donnees, dict):
+            donnees = {}
+        donnees['port'] = p
+        donnees['config'] = chemin
+        with open(_ctrl_chemin(), 'w', encoding='utf-8') as f:
+            json.dump(donnees, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    return chemin
 
 # v486 — relais FreeLLMAPI : la cible (hôte:port) est PORTÉE PAR L'URL
 # (/fla/<host>:<port>/…), plus en dur. Cela autorise un routeur sur un port
@@ -2130,11 +2230,12 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
 
 
     def _ctrl_ok(self):
-        if not CTRL_TOKEN:
+        jeton = _ctrl_token()
+        if not jeton:
             return False
         if self.client_address[0] not in ('127.0.0.1', '::1'):
             return False
-        return self.headers.get('X-Theo-Control-Token', '') == CTRL_TOKEN
+        return self.headers.get('X-Theo-Control-Token', '') == jeton
 
     def _ctrl_404(self):
         self.send_response(404)
@@ -2205,10 +2306,11 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         script same-origin de l'app ; une page tierce ne peut pas l'utiliser
         (en-tête personnalisé => prévol CORS refusé par le relais).
         """
-        if not CTRL_TOKEN or not body:
+        jeton = _ctrl_token()
+        if not jeton or not body:
             return body
         try:
-            jeton_js = json.dumps(CTRL_TOKEN)
+            jeton_js = json.dumps(jeton)
             balise = ('<script>window.__THEO_CONTROL_TOKEN__=' + jeton_js + ';</script>').encode('utf-8')
             ind = body.lower().find(b'</head>')
             if ind < 0:
@@ -3607,6 +3709,13 @@ if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     # v538 — rétention : borner un magasin hérité AVANT de servir quoi que ce soit.
     _store_elaguer_demarrage()
+    # v694 — plan de contrôle actif dès le démarrage : jeton persisté et
+    # configuration client déposée, sans aucune variable d'environnement.
+    try:
+        chemin_cfg = _ctrl_configurer(PORT)
+        print("[OK] Pont MCP actif — configuration : " + chemin_cfg)
+    except Exception as e:
+        print("[!] Pont MCP non configuré : " + str(e))
     # v441 — MULTI-THREADS. HTTPServer est mono-thread : un long appel IA
     # (génération vidéo, traduction de masse, chat) BLOQUAIT toutes les
     # autres requêtes — y compris le rafraîchissement de la page — pendant
