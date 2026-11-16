@@ -114,20 +114,31 @@ function ok(nom, cond, detail) {
 
   const g2 = await page.evaluate(() => window.__v691Canaux.activer('grec'));
   const restaure = await page.evaluate(async () => {
-    const db = await new Promise((res, rej) => {
-      const r = indexedDB.open('THEOLOGICUS_AI_DB', 5);
-      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-    });
-    const chat = await new Promise((res, rej) => {
-      const q = db.transaction('chats', 'readonly').objectStore('chats').get(window.__v691Canaux.lireIndex().grec);
-      q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
-    });
-    db.close();
-    const userMsgs = ((chat && chat.messages) || []).filter(m => m.role === 'user').map(m => m.content);
-    return { canal: state.channel, chatId: state.chatId, tag: chat && chat.channel, userMsgs };
+    /* Sous charge parallèle, l'écriture IndexedDB peut prendre quelques
+       centaines de ms de plus que le retour de saveChat(). On attend la
+       CONDITION (le message présent), pas un délai fixe — l'assertion
+       reste identique et échoue si le message n'arrive jamais. */
+    let chat = null, userMsgs = [], tentative = 0;
+    for (; tentative < 20; tentative++) {
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('THEOLOGICUS_AI_DB', 5);
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+      chat = await new Promise((res, rej) => {
+        const q = db.transaction('chats', 'readonly').objectStore('chats').get(window.__v691Canaux.lireIndex().grec);
+        q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+      });
+      db.close();
+      userMsgs = ((chat && chat.messages) || []).filter(m => m.role === 'user').map(m => m.content);
+      if (userMsgs.indexOf('analyse du grec du Nouveau Testament') >= 0) break;
+      await new Promise(r => setTimeout(r, 150));
+    }
+    return { canal: state.channel, chatId: state.chatId, tag: chat && chat.channel, userMsgs,
+             tentative: tentative, enMemoire: (state.messages || []).filter(m => m.role === 'user').map(m => m.content) };
   });
   ok('retour au grec = même conversation', g2.ok && g2.cree === false && restaure.chatId === g1.chatId, restaure.chatId);
-  ok('transcript du grec préservé', restaure.userMsgs.indexOf('analyse du grec du Nouveau Testament') >= 0, JSON.stringify(restaure.userMsgs));
+  ok('transcript du grec préservé', restaure.userMsgs.indexOf('analyse du grec du Nouveau Testament') >= 0,
+    JSON.stringify({ idb: restaure.userMsgs, memoire: restaure.enMemoire, lectures: restaure.tentative }));
   ok('champ channel persisté dans la conversation', restaure.tag === 'grec', String(restaure.tag));
   ok('canal courant restauré', restaure.canal === 'grec', restaure.canal);
 
