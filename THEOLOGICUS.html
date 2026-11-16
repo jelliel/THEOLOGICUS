@@ -71371,7 +71371,10 @@ body.theo-read #atc-nav-bar{display:none !important}
       opt = document.createElement('option');
       opt.id = 'v690-auto-option';
       opt.value = AUTO_VALUE;
-      opt.textContent = '◇ AUTO (choix automatique)';
+      /* 🔴 Libellé COURT : le select a une largeur intrinsèque en HTML.
+         Un libellé long (« choix automatique ») l'élargissait de 23 px et
+         cassait le banc v597 à 1920 px. L'info va dans le title. */
+      opt.textContent = '◇ AUTO';
       opt.title = 'Choisit automatiquement l’agent selon les mots du message — sans appel réseau supplémentaire';
     }
     if (!Array.prototype.some.call(sel.options, function (o) { return o.value === AUTO_VALUE; })) {
@@ -71386,26 +71389,35 @@ body.theo-read #atc-nav-bar{display:none !important}
       sel.value = AUTO_VALUE;
       if (mob) mob.value = AUTO_VALUE;
     }
-    var chip = document.getElementById('v690-chip');
-    if (!chip && sel.parentNode) {
-      chip = document.createElement('span');
-      chip.id = 'v690-chip';
-      chip.setAttribute('style', 'font-size:9px;opacity:.55;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis');
-      try { sel.parentNode.insertBefore(chip, sel.nextSibling); } catch (e) {}
-    }
+    /* 🔴 Aucun ajout dans .header-controls : les bancs v597/v598 mesurent
+       la largeur exacte de la barre à 1920 px. Le retour du routage passe
+       par le LIBELLÉ de l'option AUTO (largeur du select déjà bornée en CSS). */
+  }
+
+  var _titresInitiaux = {};
+  function setAutoInfo(texte) {
+    ['agent-select', 'agent-select-mob'].forEach(function (id) {
+      var s = document.getElementById(id);
+      if (!s) return;
+      if (_titresInitiaux[id] === undefined) _titresInitiaux[id] = s.title || '';
+      s.title = texte ? ('Routage automatique — ' + texte) : _titresInitiaux[id];
+    });
   }
 
   function initUI() {
-    var ctrls = document.querySelector('.header-controls');
-    if (ctrls && !document.getElementById('v690-btn')) {
+    /* Le bouton vit dans la modale AGENTS, à côté des autres imports :
+       zéro pixel ajouté à l'en-tête (v597/v598). */
+    var ref = document.getElementById('generate-more-agents-btn');
+    if (ref && !document.getElementById('v690-btn')) {
       var b = document.createElement('button');
-      b.className = 'hud-btn';
+      b.className = 'btn-ghost';
       b.id = 'v690-btn';
       b.textContent = 'ÉQUIPE';
       b.title = 'Paquet d’équipe .md réimportable et routage automatique des agents';
+      b.style.fontSize = '10px';
+      b.style.padding = '5px 10px';
       b.onclick = ouvrirModale;
-      var ref = document.getElementById('agent-select');
-      try { ctrls.insertBefore(b, ref || null); } catch (e) { ctrls.appendChild(b); }
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
     }
     injecterOption();
   }
@@ -71423,16 +71435,14 @@ body.theo-read #atc-nav-bar{display:none !important}
         var s = document.getElementById('agent-select'), m = document.getElementById('agent-select-mob');
         if (s) s.value = AUTO_VALUE;
         if (m) m.value = AUTO_VALUE;
-        var chip = document.getElementById('v690-chip');
-        if (chip) chip.textContent = '◇ routage auto';
+        setAutoInfo('actif — l’agent sera choisi d’après le message');
         toast('Routage automatique activé — l’agent sera choisi d’après votre message', 'info');
       } catch (err) {}
       return;
     }
     try {
       localStorage.removeItem(FLAG);
-      var c = document.getElementById('v690-chip');
-      if (c) c.textContent = '';
+      setAutoInfo('');
     } catch (err) {}
   }, true);
 
@@ -71458,8 +71468,7 @@ body.theo-read #atc-nav-bar{display:none !important}
             try {
               var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
               if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
-              var chip = document.getElementById('v690-chip');
-              if (chip) chip.textContent = '◇ ' + gagnant.name;
+              setAutoInfo('dernier agent : ' + gagnant.name);
             } catch (e) {}
           }
         }
@@ -71494,6 +71503,8 @@ body.theo-read #atc-nav-bar{display:none !important}
     injecterOption: injecterOption
   };
 })();
+</script>
+</script>
 </script>
 
 </body>

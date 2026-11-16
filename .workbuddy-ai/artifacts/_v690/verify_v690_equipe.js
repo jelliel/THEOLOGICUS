@@ -114,14 +114,18 @@ function ok(nom, cond, detail) {
 
   const ui = await page.evaluate(() => {
     const sel = document.getElementById('agent-select');
+    const b = document.getElementById('v690-btn');
     return {
       option: !!(sel && Array.from(sel.options).some(o => o.value === '__AUTO__')),
-      bouton: !!document.getElementById('v690-btn'),
-      titre: (document.getElementById('v690-btn') || {}).title || ''
+      bouton: !!b,
+      dansModale: !!(b && b.closest('#agent-modal')),
+      pasDansHeader: !(b && b.closest('.header-controls')),
+      titre: (b || {}).title || ''
     };
   });
   ok('option AUTO présente dans #agent-select', ui.option);
-  ok('bouton ÉQUIPE injecté dans l’en-tête', ui.bouton, ui.titre);
+  ok('bouton ÉQUIPE injecté dans la modale AGENTS', ui.bouton && ui.dansModale, ui.titre);
+  ok('aucun ajout dans .header-controls (bancs v597/v598)', ui.pasDansHeader);
 
   const parse = await page.evaluate((md) => {
     const api = window.__v690Equipe;
@@ -233,11 +237,14 @@ function ok(nom, cond, detail) {
     return {
       flag: localStorage.getItem('theologicus_auto_agent_v1'),
       value: sel.value,
-      chip: (document.getElementById('v690-chip') || {}).textContent || ''
+      libelle: (Array.from(sel.options).find(o => o.value === '__AUTO__') || {}).textContent || '',
+      titre: sel.title || '',
+      titreOption: (Array.from(sel.options).find(o => o.value === '__AUTO__') || {}).title || ''
     };
   });
   ok('sélection AUTO mémorisée', auto.flag === '1' && auto.value === '__AUTO__', auto.flag + ' / ' + auto.value);
-  ok('indicateur de routage affiché', /routage auto/.test(auto.chip), auto.chip);
+  ok('libellé AUTO court (aucun impact largeur)', auto.libelle === '◇ AUTO', auto.libelle);
+  ok('routage signalé dans le tooltip du select', /Routage automatique/.test(auto.titre), auto.titre);
 
   const prompt = await page.evaluate(async () => {
     const captures = [];
