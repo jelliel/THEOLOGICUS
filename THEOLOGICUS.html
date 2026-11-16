@@ -71734,6 +71734,316 @@ body.theo-read #atc-nav-bar{display:none !important}
 })();
 </script>
 
+<script id="v692-routines">
+/* ══════════════════════════════════════════════════════════════════════════
+   v692 — ROUTINES D'ÉTUDE LOCALES
+
+   Inspiré des déclencheurs OpenMausBot, adapté à une app WebView :
+     - une routine = une question préparée dans le canal prévu, à l'heure dite ;
+     - AUCUN appel IA en arrière-plan (pas de coût surprises, pas de requête
+       qui échoue en silence) — l'utilisateur appuie sur ENVOYER ;
+     - fonctionne quand l'application est OUVERTE (pas de service OS) ;
+     - une routine nouvellement créée arrive EN PAUSE (règle OpenMausBot) ;
+     - si la question précédente n'a pas été envoyée, on SAUTE l'occurrence
+       au lieu d'empiler les files (règle anti-queues d'OpenMausBot).
+
+   Stockage : magasin `settings` existant, clé `routines_v1`. Aucun nouveau
+   store, aucun changement de version IndexedDB. Aucun ajout dans
+   `.header-controls` (bancs v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v692Routines) return;
+
+  var CLE = 'routines_v1';
+  var INTERVALLE = 30000;
+  var _cache = null;
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function nouveauId() { return 'rt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function lireMemoire() { return _cache; }
+
+  async function lire() {
+    if (_cache) return _cache;
+    var d = DB();
+    if (!d) { _cache = []; return _cache; }
+    try {
+      var s = await d.get('settings', CLE);
+      _cache = (s && Array.isArray(s.value)) ? s.value : [];
+    } catch (e) { _cache = []; }
+    return _cache;
+  }
+
+  async function sauvegarder(liste) {
+    _cache = liste;
+    var d = DB();
+    if (!d) return;
+    try { await d.put('settings', { id: CLE, value: liste }); } catch (e) {}
+  }
+
+  function prochaineApres(r, depuis) {
+    var now = depuis || Date.now();
+    if (r.type === 'minutes') return now + Math.max(1, Number(r.minutes) || 60) * 60000;
+    if (r.type === 'daily') {
+      var parts = String(r.heure || '09:00').split(':');
+      var h = Number(parts[0]) || 0, m = Number(parts[1]) || 0;
+      var d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+      return d.getTime();
+    }
+    if (r.type === 'once') return r.prochaine || null;
+    return null;
+  }
+
+  function libelleFrequence(r) {
+    if (r.type === 'minutes') return 'Toutes les ' + r.minutes + ' min';
+    if (r.type === 'daily') return 'Chaque jour à ' + r.heure;
+    if (r.type === 'once') return 'Une fois';
+    return '';
+  }
+
+  function formater(ts) {
+    if (!ts) return '—';
+    try { return new Date(ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return String(ts); }
+  }
+
+  async function creer(donnees) {
+    var liste = await lire();
+    var r = {
+      id: nouveauId(),
+      nom: String(donnees.nom || 'Routine').slice(0, 80),
+      message: String(donnees.message || '').slice(0, 4000),
+      canal: donnees.canal || '',
+      type: ['minutes', 'daily', 'once'].indexOf(donnees.type) >= 0 ? donnees.type : 'minutes',
+      minutes: Math.max(1, Number(donnees.minutes) || 60),
+      heure: /^\d{1,2}:\d{2}$/.test(donnees.heure || '') ? donnees.heure : '09:00',
+      actif: false,
+      enCours: false,
+      dernier: 0,
+      prochaine: 0
+    };
+    if (r.type === 'once') {
+      r.prochaine = new Date(donnees.quand || Date.now() + 3600000).getTime();
+    } else {
+      r.prochaine = prochaineApres(r, Date.now());
+    }
+    liste.push(r);
+    await sauvegarder(liste);
+    return r;
+  }
+
+  async function basculer(id) {
+    var liste = await lire();
+    for (var i = 0; i < liste.length; i++) {
+      if (liste[i].id === id) {
+        liste[i].actif = !liste[i].actif;
+        if (liste[i].actif && !liste[i].prochaine) liste[i].prochaine = prochaineApres(liste[i], Date.now());
+        await sauvegarder(liste);
+        return liste[i];
+      }
+    }
+    return null;
+  }
+
+  async function supprimer(id) {
+    var liste = await lire();
+    liste = liste.filter(function (r) { return r.id !== id; });
+    await sauvegarder(liste);
+    return liste;
+  }
+
+  /* Une seule passe de décision. `maintenant` est injectable pour le banc. */
+  async function tick(maintenant) {
+    var now = Number(maintenant) || Date.now();
+    var liste = await lire();
+    var change = false, declenchees = [], sautees = [];
+
+    for (var i = 0; i < liste.length; i++) {
+      var r = liste[i];
+      if (!r.actif || !r.prochaine || r.prochaine > now) continue;
+
+      /* Règle anti-file : une occurrence non consommée interdit la suivante. */
+      if (r.enCours) {
+        sautees.push(r.id);
+        r.prochaine = prochaineApres(r, now);
+        change = true;
+        continue;
+      }
+
+      var input = document.getElementById('user-input');
+      var enAttente = !!(input && input.value && input.value === r.message);
+      if (enAttente) {
+        sautees.push(r.id);
+        r.prochaine = prochaineApres(r, now);
+        r.enCours = true;
+        change = true;
+        continue;
+      }
+
+      if (r.canal && window.__v691Canaux) {
+        try { await window.__v691Canaux.activer(r.canal); } catch (e) {}
+      }
+      if (input) {
+        input.value = r.message;
+        try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+        try { if (typeof autoResizeTextarea === 'function') autoResizeTextarea(); } catch (e) {}
+      }
+      r.dernier = now;
+      r.enCours = true;
+      declenchees.push(r.id);
+      if (r.type === 'once') r.actif = false;
+      else r.prochaine = prochaineApres(r, now);
+      change = true;
+      toast('Routine « ' + r.nom + ' » préparée dans le composeur', 'info');
+    }
+    if (change) await sauvegarder(liste);
+    return { declenchees: declenchees, sautees: sautees, liste: liste };
+  }
+
+  /* L'envoi consomme la routine en attente. */
+  var _envoi = window.sendMessage;
+  if (typeof _envoi === 'function') {
+    window.sendMessage = async function () {
+      try {
+        var liste = await lire();
+        var input = document.getElementById('user-input');
+        var texte = (arguments[0] || (input && input.value) || '').trim();
+        var mod = false;
+        liste.forEach(function (r) {
+          if (r.enCours && texte && r.message === texte) { r.enCours = false; mod = true; }
+        });
+        if (mod) await sauvegarder(liste);
+      } catch (e) {}
+      return _envoi.apply(this, arguments);
+    };
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v692-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(720px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Routines d’étude</h3>' +
+      '<button type="button" id="v692-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.5rem .9rem;font-size:11px;color:var(--text-secondary)">Prépare une question dans le canal choisi. Nouvelle routine = en pause. Ne fonctionne que lorsque l’application est ouverte.</div>' +
+      '<div id="v692-liste" style="display:flex;flex-direction:column;gap:6px;padding:0 .9rem .5rem;overflow:auto"></div>' +
+      '<div style="border-top:1px solid var(--ui-border,var(--glass-border,#2a2a3a));padding:.6rem .9rem;display:flex;flex-direction:column;gap:6px">' +
+      '<div style="font-size:11px;color:var(--text-secondary)">NOUVELLE ROUTINE</div>' +
+      '<input id="v692-nom" placeholder="Nom (ex. Lecture du jour)" style="padding:.4rem;border-radius:6px;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<textarea id="v692-message" placeholder="Question à préparer" style="min-height:54px;padding:.4rem;border-radius:6px;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));resize:vertical"></textarea>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<select id="v692-canal" style="font-size:11px"><option value="">Canal actuel</option></select>' +
+      '<select id="v692-type" style="font-size:11px"><option value="minutes">Toutes les N minutes</option><option value="daily">Chaque jour</option><option value="once">Une fois</option></select>' +
+      '<input id="v692-minutes" type="number" min="1" value="120" style="width:78px;font-size:11px">' +
+      '<input id="v692-heure" type="time" value="09:00" style="font-size:11px">' +
+      '<input id="v692-quand" type="datetime-local" style="font-size:11px">' +
+      '<button type="button" id="v692-ajouter">Ajouter (en pause)</button>' +
+      '</div><div id="v692-info" style="font-size:11px;color:var(--text-secondary)"></div></div></div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v692-x').onclick = fermer;
+
+    var selCanal = document.getElementById('v692-canal');
+    try {
+      var canaux = (window.__v691Canaux && window.__v691Canaux.CANAUX) || [];
+      canaux.forEach(function (c) {
+        var o = document.createElement('option'); o.value = c.id; o.textContent = c.nom; selCanal.appendChild(o);
+      });
+    } catch (e) {}
+
+    function rafraichir() {
+      lire().then(function (liste) {
+        var box = document.getElementById('v692-liste');
+        box.innerHTML = '';
+        if (!liste.length) { box.textContent = 'Aucune routine.'; return; }
+        liste.forEach(function (r) {
+          var ligne = document.createElement('div');
+          ligne.setAttribute('style', 'display:flex;align-items:center;gap:.5rem;padding:.5rem;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px');
+          ligne.innerHTML = '<div style="flex:1;min-width:0"><div style="font-size:12px">' + r.nom + '</div>' +
+            '<div style="font-size:10px;opacity:.65">' + libelleFrequence(r) + ' · prochaine : ' + formater(r.prochaine) + '</div></div>';
+          var b = document.createElement('button'); b.type = 'button';
+          b.textContent = r.actif ? 'PAUSE' : 'ACTIVER';
+          b.onclick = async function () { await basculer(r.id); rafraichir(); };
+          var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕';
+          x.onclick = async function () { await supprimer(r.id); rafraichir(); };
+          ligne.appendChild(b); ligne.appendChild(x);
+          box.appendChild(ligne);
+        });
+      });
+    }
+
+    document.getElementById('v692-ajouter').onclick = async function () {
+      var info = document.getElementById('v692-info');
+      var type = document.getElementById('v692-type').value;
+      var r = await creer({
+        nom: document.getElementById('v692-nom').value,
+        message: document.getElementById('v692-message').value,
+        canal: document.getElementById('v692-canal').value,
+        type: type,
+        minutes: document.getElementById('v692-minutes').value,
+        heure: document.getElementById('v692-heure').value,
+        quand: document.getElementById('v692-quand').value
+      });
+      info.textContent = 'Routine « ' + r.nom + ' » créée EN PAUSE. Prochaine : ' + formater(r.prochaine);
+      rafraichir();
+    };
+
+    modale.addEventListener('v692-ouvert', rafraichir);
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+    modale.dispatchEvent(new Event('v692-ouvert'));
+  }
+
+  function initUI() {
+    var ref = document.getElementById('v691-btn') || document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v692-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v692-btn';
+      b.textContent = 'ROUTINES';
+      b.title = 'Routines d’étude — questions préparées à heure dite';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = ouvrirModale;
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+  setInterval(function () { tick(Date.now()).catch(function () {}); }, INTERVALLE);
+
+  window.__v692Routines = {
+    lire: lire,
+    lireMemoire: lireMemoire,
+    sauvegarder: sauvegarder,
+    creer: creer,
+    basculer: basculer,
+    supprimer: supprimer,
+    tick: tick,
+    prochaineApres: prochaineApres
+  };
+})();
+</script>
+
 </body>
 </html>
 </html>
