@@ -43279,6 +43279,10 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
     } else {
       init = { method: 'POST', headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: cfg.model, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, temperature: 0 }) };
     }
+    /* v702 — une sonde de jauge ne doit JAMAIS hériter du délai de 180 s
+       du transport natif (corps non streamé) : c'est ce qui figeait la
+       modale à 0/48. 8 s max par modèle, puis on passe au suivant. */
+    try { init.__theoDelaiMs = 8000; } catch (e) {}
     var t0 = performance.now();
     try {
       var res = await fetch(apiEndpoint(cfg.endpoint), init);
@@ -43310,7 +43314,8 @@ html.v35-reduce-fx .vo-bar, html.v35-reduce-fx .vo-dot{ animation:none; }
       c.ms = ms; c.det = c.det || msg;
       return c;
     } catch (e) {
-      return { kind: 2, ico: '🔴', lbl: 'Injoignable (réseau / serveur local)', ms: Math.round(performance.now() - t0), det: String((e && e.message) || e).slice(0, 120) };
+      var expire = !!(e && e.delaiExpire);
+      return { kind: 2, ico: expire ? '⏱' : '🔴', lbl: expire ? 'Délai dépassé (8 s)' : 'Injoignable (réseau / serveur local)', ms: Math.round(performance.now() - t0), det: String((e && e.message) || e).slice(0, 120) };
     }
   }
 
