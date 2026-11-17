@@ -1466,8 +1466,14 @@
 
 /* ── iPad / iOS touch fixes ─────────────────────────────── */
 /* Force GPU compositing + prevent tap delay */
-button, a, input, textarea, select, [onclick], .hud-btn, .theo-ref, .bible-ref {
+button, a, [onclick], .hud-btn, .theo-ref, .bible-ref {
   -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+/* v686 — NE PAS appliquer -webkit-touch-callout:none aux champs de saisie :
+   il supprime le menu « Coller » de l'appui long sur iOS/Android WebView.
+   On garde seulement touch-action:manipulation (évite le délai de tap). */
+input, textarea, select {
   touch-action: manipulation;
 }
 /* Ensure backdrop-filter containers don't swallow events */
@@ -20366,6 +20372,7 @@ async function archiveEntireSession() {
      id: state.chatId,
      model: state.model,
      agentId: state.agent?.id,
+     channel: (typeof state !== 'undefined' && state.channel) ? state.channel : '',
      messages: _safeMsg1,
      title: _safeMsg1.slice(1).find(m=>m.role==='user')?.content?.slice(0,50) || "Nouvelle conversation",
      updated: now(),
@@ -20419,6 +20426,7 @@ function markChatDirty() { _dirtyChat = true; }
      id: state.chatId,
      model: state.model,
      agentId: state.agent?.id,
+     channel: (typeof state !== 'undefined' && state.channel) ? state.channel : '',
      messages: _safeMsg2,
      title: _safeMsg2.slice(1).find(m=>m.role==='user')?.content?.slice(0,50) || "Nouvelle conversation",
      updated: now(),
@@ -20857,13 +20865,23 @@ async function exportData() {
        rendre un poste à l'identique. */
     const ls = {};
     try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); ls[k] = localStorage.getItem(k); } } catch (e) {}
+    /* v688 — « garder les 3 dernières ». Le store auto_backups contient 7
+       entrées, chacune une COPIE COMPLÈTE des conversations (~45,6 Mo) :
+       318,9 Mo de redondance sur un backup de 369,5 Mo (mesuré). On n'exporte
+       donc que les 3 plus récentes. RIEN n'est supprimé de la base : seul le
+       contenu du fichier exporté est filtré, et la restauration reste
+       compatible (importData remet ce qu'il reçoit). */
+    const autoAll = await db.getAll('auto_backups') || [];
+    const autoExport = autoAll.slice()
+      .sort(function (a, b) { return (Number(b && b.ts) || 0) - (Number(a && a.ts) || 0); })
+      .slice(0, 3);
     const payload = {
       version: "2.2",
       exported: new Date().toISOString(),
       source: "THEOLOGICUS",
-      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: await db.getAll('auto_backups') || [], localStorage: ls }
+      data: { chats, agents, global_memory: mems, learnings: await db.getAll('learnings') || [], settings, app_config: appConfig ? [appConfig] : [], auto_backups: autoExport, localStorage: ls }
     };
-    const json = JSON.stringify(payload, null, 2);
+    const json = JSON.stringify(payload);
     const filename = `THEOLOGICUS-backup-${new Date().toISOString().slice(0,10)}.theologicus.json`;
     /* v65 — sur natif on transmet le TEXTE, pas un base64. Construire le
        base64 d'un backup de 35 Mo (btoa(unescape(encodeURIComponent(...))))
@@ -20873,26 +20891,100 @@ async function exportData() {
        Desktop inchange : app.py continue de recevoir `data64`. */
     let isNative = false;
     try { isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch(e){}
-    /* 1) Sauvegarde directe dans le dossier de l'application via le serveur
-          local (dossier de l'exe, sous-dossier backups/). */
+    /* v680 — export CHUNKÉ : le JSON peut faire 50+ Mo. On l'envoie en
+       MORCEAUX de ~2 Mo (base64 par morceau, mémoire bornée à un seul
+       morceau) pour éviter « Out of memory » du rendu WebView. Le serveur
+       reconstitue le fichier (proxy_server._save_data, mode chunk). Petit
+       backup (< 2 Mo) : un seul POST brut, comme avant. */
+    function exporterParMorceaux(nom, texte) {
+      var CHUNK = 2 * 1024 * 1024; // 2 Mo de texte par morceau
+      /* Découpe SÛRE : on n'arrête jamais un morceau au milieu d'une paire de
+         substituts (emoji / certains CJK). Autrement encodeURIComponent lève
+         « URIError: malformed URI » sur le substitut haut orphelin et le
+         morceau échoue -> perte de données silencieuse. Les morceaux se
+         chevauchent-ils ? Non : on recule la fin d'UN code unit et le morceau
+         suivant démarre à cette même position, donc la partition est
+         contiguë et complète (réassemblage binaire identique côté serveur). */
+      function decouperSurs(s, taille) {
+        var parts = [], i = 0, n = s.length;
+        while (i < n) {
+          var fin = Math.min(i + taille, n);
+          if (fin < n) {
+            var c = s.charCodeAt(fin - 1);
+            if (c >= 0xD800 && c <= 0xDBFF) { // substitut haut -> reculer d'un
+              fin -= 1;
+              if (fin <= i) fin = i + 1; // garde-fou (ne devrait pas arriver)
+            }
+          }
+          parts.push(s.slice(i, fin));
+          i = fin;
+        }
+        return parts;
+      }
+      var pieces = decouperSurs(texte, CHUNK);
+      if (pieces.length === 1) {
+        return fetch('/save-data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: nom, text: pieces[0] })
+        }).then(function (r) {
+          if (!r.ok) return null;
+          return r.json().then(function (j) { return (j && j.path) || 'backups'; });
+        });
+      }
+      var total = pieces.length;
+      var finalPath = null;
+      var seq = Promise.resolve();
+      for (var i = 0; i < total; i++) {
+        (function (idx) {
+          seq = seq.then(function () {
+            var b64;
+            try { b64 = btoa(unescape(encodeURIComponent(pieces[idx]))); }
+            catch (e) { throw new Error('encodage morceau ' + idx); }
+            return fetch('/save-data', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filename: nom, chunk: b64, index: idx, total: total })
+            }).then(function (r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            }).then(function (j) {
+              if (idx === total - 1) finalPath = (j && j.path) || 'backups';
+            });
+          });
+        })(i);
+      }
+      return seq.then(function () { return finalPath; });
+    }
     try {
-      const body = isNative
-        ? { filename: filename, text: json }
-        : { filename: filename, data64: btoa(unescape(encodeURIComponent(json))) };
-      const res = await fetch('/save-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) {
-        const j = await res.json().catch(() => ({}));
-        toast("Données exportées avec succès !" + (j.path ? " (" + j.path + ")" : ""), "success");
+      const chemin = await exporterParMorceaux(filename, json);
+      if (chemin) {
+        toast("Données exportées avec succès !" + (chemin.indexOf('backups') >= 0 ? " (" + chemin + ")" : ""), "success");
         return;
       }
-      throw new Error('HTTP ' + res.status);
+      throw new Error('serveur');
     } catch(serverErr) {
-      /* 2) Repli : téléchargement navigateur (dossier Téléchargements) */
-      console.warn('[export] serveur indisponible, repli téléchargement', serverErr);
+      /* 2) Repli honnête. Dans la WebView (exe/APK) le téléchargement de blob
+         URL ÉCHOUE silencieusement (pas d'erreur levée) -> un toast « succès »
+         serait mensonger. On signale donc honnêtement l'échec et on montre
+         le dossier des sauvegardes plutôt que de prétendre un download. */
+      console.warn('[export] serveur indisponible ou connexion avortée', serverErr);
+      var inWebView = !!window.Capacitor;
+      if (inWebView) {
+        try {
+          var dossier = null;
+          try {
+            var rv = await fetch('/reveal-exports?dry=1');
+            var rj = await rv.json();
+            dossier = rj && rj.dossier;
+          } catch (e) {}
+          toast("Échec de l'export : le fichier n'a pas pu être écrit." +
+                (dossier ? " Dossier des sauvegardes : " + dossier : " Vérifiez le dossier « backups » de l'application."),
+                "error");
+        } catch (e) {
+          toast("Échec de l'export : vérifiez le dossier « backups » de l'application.", "error");
+        }
+        return;
+      }
+      /* Navigateur classique : le téléchargement direct fonctionne. */
       const blob = new Blob([json], { type:"application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -27221,6 +27313,14 @@ if (document.readyState === 'loading') {
     devtoolsInit = true;
     document.addEventListener('contextmenu', function (e) {
       if (e.target && e.target.closest && e.target.closest('.atc-mark')) return; // surlignage : clic droit autorisé
+      /* v686 — SUR ANDROID/WebView, l'appui long sur un champ émet
+         `contextmenu` : c'est lui qui fait apparaître le menu natif « Coller ».
+         preventDefault() ici empêchait de coller la clé API (Honor X8b :
+         « j'appuie longtemps, ça ne me donne rien »). On laisse donc le menu
+         NATIF sur TOUS les champs éditables ; la protection DevTools reste
+         active sur le reste du document. */
+      if (e.target && e.target.closest && e.target.closest(
+            'input, textarea, select, [contenteditable]')) return;
       e.preventDefault();
     });
     document.addEventListener('keydown', function (e) {
@@ -28674,6 +28774,16 @@ initTafsirVerseTooltip();
   function showBubble(){
     const s = window._atcSel; if (!s) return;
     const b = ensureBubble(); b.style.display = 'flex';
+    /* v684 — sélection DANS un commentaire affiché (#atc-tip, z-index
+       --z-bulle+1) : la bulle « Add to chat » doit passer DEVANT le
+       commentaire, sinon elle est masquée par lui. Hors commentaire, on
+       laisse le z-index CSS (--z-bulle). */
+    try {
+      const _c = s.range && s.range.commonAncestorContainer;
+      const _host = _c ? (_c.nodeType === 3 ? _c.parentElement : _c) : null;
+      const _dansTip = _host && _host.closest && _host.closest('#atc-tip');
+      b.style.zIndex = _dansTip ? 'calc(var(--z-bulle, 100000) + 3)' : '';
+    } catch (e) { b.style.zIndex = ''; }
     const universal = !s.msgTs;
     /* v41 — au doigt, on ne garde que « Add to chat ». Les 11 autres actions
        (Note, Google, Wikipedia, Bible, Bible Hub, Surligner, Partager,
@@ -28731,7 +28841,10 @@ initTafsirVerseTooltip();
     const range = sel.getRangeAt(0);
     const c = range.commonAncestorContainer;
     const el = (c.nodeType === 3) ? c.parentElement : c;
-    if (el && el.closest && el.closest('input, textarea, [contenteditable="true"], #atc-bubble, #atc-ask-popover, #atc-note-panel, #share-popup-active, #atc-tip')) return;
+    /* v683 — la bulle classique « Add to chat » est UNIVERSELLE (messages,
+       commentaires, hors message). La barre v678 a été retirée : on autorise
+       donc aussi la sélection dans un commentaire affiché (#atc-tip). */
+    if (el && el.closest && el.closest('input, textarea, [contenteditable="true"], #atc-bubble, #atc-ask-popover, #atc-note-panel, #share-popup-active')) return;
     const msgEl = el && el.closest ? el.closest('.message, .message-content') : null;
     let ts = null;
     let hlId = null;
@@ -70966,6 +71079,2102 @@ body.theo-read #atc-nav-bar{display:none !important}
 
 
 
+<script id="v690-equipe">
+/* ══════════════════════════════════════════════════════════════════════════
+   v690 — PACK D'ÉQUIPE .md + ROUTAGE AUTO DES AGENTS
+
+   Inspiré d'OpenMausBot (paquets d'équipe Markdown/YAML, salles « Auto »),
+   mais adapté à THEOLOGICUS : aucun Node, aucun Electron, aucun CLI local,
+   aucun appel réseau supplémentaire. Tout tourne dans le fichier unique.
+
+   DEUX CHOSES QUI N'EXISTAIENT PAS :
+     1. un .md VRAIMENT réimportable (v583 dit explicitement que son .md est
+        un document de LECTURE, et que seul le JSON se réimporte) ;
+     2. un routage automatique entre les agents déjà présents — au lieu
+        d'obliger l'utilisateur à deviner lequel choisir avant d'écrire.
+
+   ROUTAGE SANS LATENCE : heuristique locale sur les mots du message. Zéro
+   appel API, zéro milliseconde réseau. Si aucun agent ne correspond, on
+   garde l'agent courant (dégradation silencifique, jamais de blocage).
+
+   SÉCURITÉ (identique aux paquets OpenMausBot, adapté) :
+     - aucun identifiant n'écrase un agent existant ;
+     - clés apiKey/key/token/secret/password REFUSÉES et jamais stockées ;
+     - seuls les champs d'agent connus sont copiés ; aucune conversation,
+       aucun réglage, aucune permission ne transite ;
+     - l'import n'active aucun agent automatiquement ;
+     - bornes dures : 30 agents, 200 000 caractères.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v690Equipe) return;
+
+  var AUTO_VALUE = '__AUTO__';
+  var FLAG = 'theologicus_auto_agent_v1';
+  var MAX_AGENTS = 30;
+  var MAX_TEXTE = 200000;
+  var CLES_INTERDITES = /^(apikey|api_key|apikeyclient|key|token|secret|password|motdepasse|mot_de_passe|authorization|credential)$/i;
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function txt(id) { try { var e = document.getElementById(id); return e ? e.value : ''; } catch (e) { return ''; } }
+
+  /* ────────────────────────── frontmatter ───────────────────────────── */
+
+  function valeurBrute(s) {
+    var v = String(s == null ? '' : s).trim();
+    if (v.length >= 2 && ((v.charAt(0) === '"' && v.charAt(v.length - 1) === '"') ||
+                          (v.charAt(0) === "'" && v.charAt(v.length - 1) === "'"))) {
+      v = v.slice(1, -1);
+    }
+    if (/^\[.*\]$/.test(v)) {
+      return v.slice(1, -1).split(',').map(function (x) { return valeurBrute(x); }).filter(Boolean);
+    }
+    return v;
+  }
+
+  function parseFrontmatter(texte) {
+    var t = String(texte == null ? '' : texte).replace(/\r\n/g, '\n');
+    if (t.length > MAX_TEXTE) throw new Error('Paquet trop volumineux (limite : ' + MAX_TEXTE + ' caractères)');
+    var lignes = t.split('\n');
+    if (!lignes.length || lignes[0].trim() !== '---') throw new Error('Frontmatter absent : la première ligne doit être ---');
+    var fin = -1;
+    for (var i = 1; i < lignes.length; i++) { if (lignes[i].trim() === '---') { fin = i; break; } }
+    if (fin < 0) throw new Error('Frontmatter non fermé');
+
+    var paquet = { name: '', description: '', version: 1, agents: [] };
+    var courant = null, dansAgents = false;
+    var RE = /^(\s*)(?:-\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/;
+
+    for (var j = 1; j < fin; j++) {
+      var l = lignes[j];
+      if (!l.trim() || /^\s*#/.test(l)) continue;
+      var m = l.match(RE);
+      if (!m) continue;
+      var indent = m[1].length, cle = m[2].toLowerCase(), brut = m[3];
+      if (CLES_INTERDITES.test(cle)) throw new Error('Clé interdite dans le paquet : ' + cle);
+
+      if (indent === 0 && cle !== 'agents') dansAgents = false;
+      if (indent === 0 && cle === 'agents') { dansAgents = true; continue; }
+
+      if (dansAgents) {
+        if (/^\s*-/.test(l)) { courant = {}; paquet.agents.push(courant); }
+        if (courant && indent >= 2) { courant[cle] = valeurBrute(brut); }
+        continue;
+      }
+      paquet[cle] = valeurBrute(brut);
+    }
+    return paquet;
+  }
+
+  function valider(p) {
+    if (!p || !p.agents || !p.agents.length) throw new Error('Aucun agent dans le paquet');
+    if (p.agents.length > MAX_AGENTS) throw new Error('Trop d’agents (maximum ' + MAX_AGENTS + ')');
+    p.agents.forEach(function (a) {
+      if (!a.id || !/^[A-Za-z0-9_-]{1,64}$/.test(String(a.id))) throw new Error('Identifiant d’agent invalide : ' + a.id);
+      if (!a.name) throw new Error('Nom manquant pour l’agent ' + a.id);
+      ['name', 'desc', 'instructions', 'primer', 'forbidden', 'style'].forEach(function (k) {
+        if (a[k] !== undefined && typeof a[k] !== 'string') a[k] = String(a[k]);
+      });
+      if (a.tags !== undefined && !Array.isArray(a.tags)) a.tags = [String(a.tags)];
+      if (a.temp !== undefined) a.temp = Number(a.temp);
+    });
+    return p;
+  }
+
+  async function importer(texte) {
+    var p = valider(parseFrontmatter(texte));
+    var d = DB();
+    if (!d) throw new Error('IndexedDB indisponible');
+    var poses = 0, ignores = 0;
+    for (var i = 0; i < p.agents.length; i++) {
+      var a = p.agents[i], existant = null;
+      try { existant = await d.get('agents', a.id); } catch (e) {}
+      if (existant) { ignores++; continue; }
+      var agent = {
+        id: a.id,
+        name: a.name,
+        desc: a.desc || '',
+        tags: Array.isArray(a.tags) ? a.tags : [],
+        instructions: a.instructions || '',
+        primer: a.primer || '',
+        style: a.style || 'detaille',
+        forbidden: a.forbidden || '',
+        created: Date.now(),
+        source: 'v690:' + (p.name || 'equipe')
+      };
+      var t = Number(a.temp);
+      if (a.temp !== undefined && isFinite(t)) { agent.temp = t; agent.temperature = t; }
+      await d.put('agents', agent);
+      poses++;
+    }
+    if (poses) { try { if (typeof loadAgents === 'function') await loadAgents(); } catch (e) {} }
+    return { poses: poses, ignores: ignores, nom: p.name || 'Équipe' };
+  }
+
+  function quote(s) {
+    return '"' + String(s == null ? '' : s).replace(/\r\n|\n|\r/g, ' ').replace(/"/g, '\\"') + '"';
+  }
+
+  async function exporter() {
+    var d = DB(), tous = [];
+    if (d) { try { tous = await d.getAll('agents') || []; } catch (e) {} }
+    var l = ['---', 'name: ' + quote('Équipe THEOLOGICUS'),
+             'description: ' + quote('Export des agents — aucun secret, aucune conversation'),
+             'version: 1', 'agents:'];
+    tous.forEach(function (a) {
+      l.push('  - id: ' + quote(a.id));
+      l.push('    name: ' + quote(a.name));
+      l.push('    desc: ' + quote(a.desc || ''));
+      l.push('    tags: [' + (Array.isArray(a.tags) ? a.tags.map(quote).join(', ') : '') + ']');
+      l.push('    instructions: ' + quote(a.instructions || ''));
+      l.push('    primer: ' + quote(a.primer || ''));
+      l.push('    style: ' + quote(a.style || 'detaille'));
+      l.push('    forbidden: ' + quote(a.forbidden || ''));
+      var t = a.temperature !== undefined ? a.temperature : a.temp;
+      if (t !== undefined && isFinite(Number(t))) l.push('    temp: ' + Number(t));
+    });
+    l.push('---', '', '# Équipe THEOLOGICUS', '',
+           'Paquet réimportable : coller ce document dans ÉQUIPE → Importer.', '',
+           'Les agents existants ne sont jamais écrasés. Aucune clé ni conversation ne figure dans ce document.');
+    return l.join('\n');
+  }
+
+  /* ─────────────────────── routage local (0 latence) ─────────────────── */
+
+  var STOP = ['les', 'des', 'une', 'dans', 'pour', 'avec', 'cette', 'son', 'ses', 'est', 'que', 'qui',
+              'quand', 'comment', 'pourquoi', 'quel', 'quelle', 'quels', 'quelles', 'est-ce', 'sans',
+              'sur', 'par', 'plus', 'très', 'bien', 'aussi', 'mais', 'donc', 'puis', 'aux', 'du', 'de',
+              'la', 'le', 'un', 'et', 'en', 'ou', 'ce', 'se', 'il', 'elle', 'on', 'nous', 'vous',
+              'the', 'and', 'for', 'with', 'this', 'that', 'from', 'are', 'was', 'were', 'what'];
+
+  function norm(s) {
+    return String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  function mots(texte) {
+    return norm(texte).replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function (w) {
+      return w.length >= 3 && STOP.indexOf(w) < 0;
+    });
+  }
+
+  function choisir(texte, agents) {
+    if (!Array.isArray(agents) || !agents.length) return null;
+    var ms = mots(texte);
+    if (!ms.length) return null;
+    var meilleur = null, meilleurScore = 0;
+    agents.forEach(function (a) {
+      if (a.desactive) return;
+      var court = norm([a.name, a.desc, (Array.isArray(a.tags) ? a.tags.join(' ') : '')].join(' '));
+      var long = norm([a.instructions, a.primer, a.forbidden].join(' '));
+      var sc = 0;
+      ms.forEach(function (w) {
+        if (court.indexOf(w) >= 0) sc += 6;
+        else if (long.indexOf(w) >= 0) sc += 2;
+      });
+      if (sc > meilleurScore) { meilleurScore = sc; meilleur = a; }
+    });
+    return meilleur;
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v690-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(760px,94vw);max-height:88vh;margin-top:5vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">ÉQUIPE — paquet .md et routage automatique</h3>' +
+      '<button type="button" id="v690-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.6rem .9rem;font-size:11px;color:var(--text-secondary)">Collez un paquet .md ci-dessous, ou choisissez un fichier. Les agents déjà présents ne sont jamais écrasés.</div>' +
+      '<textarea id="v690-texte" spellcheck="false" style="flex:1;min-height:230px;margin:0 .9rem .6rem;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px;padding:.6rem;font:11px/1.5 Consolas,monospace;resize:vertical"></textarea>' +
+      '<input type="file" id="v690-fichier" accept=".md,.txt" style="margin:0 .9rem .5rem;font-size:11px;color:var(--text-secondary)">' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:0 .9rem .8rem">' +
+      '<button type="button" id="v690-importer">Importer l’équipe</button>' +
+      '<button type="button" id="v690-exporter">Exporter tous les agents</button>' +
+      '<button type="button" id="v690-copier">Copier</button>' +
+      '<button type="button" id="v690-fichier-sauver">Enregistrer le .md</button>' +
+      '</div><div id="v690-info" style="font-size:11px;color:var(--text-secondary);padding:0 .9rem .8rem"></div></div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v690-x').onclick = fermer;
+
+    document.getElementById('v690-fichier').onchange = function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () { document.getElementById('v690-texte').value = String(r.result || ''); };
+      r.readAsText(f);
+    };
+
+    document.getElementById('v690-importer').onclick = async function () {
+      var info = document.getElementById('v690-info');
+      try {
+        var r = await importer(document.getElementById('v690-texte').value);
+        info.textContent = 'Importé : ' + r.poses + ' agent(s), ' + r.ignores + ' ignoré(s) (déjà présents).';
+        toast('Équipe « ' + r.nom + ' » importée : ' + r.poses + ' agent(s)', 'success');
+      } catch (err) { info.textContent = 'Échec : ' + (err && err.message ? err.message : String(err)); }
+    };
+
+    document.getElementById('v690-exporter').onclick = async function () {
+      try {
+        document.getElementById('v690-texte').value = await exporter();
+        document.getElementById('v690-info').textContent = 'Paquet généré — aucun secret ni conversation.';
+      } catch (err) {
+        document.getElementById('v690-info').textContent = 'Échec : ' + (err && err.message ? err.message : String(err));
+      }
+    };
+
+    document.getElementById('v690-copier').onclick = function () {
+      var ta = document.getElementById('v690-texte');
+      ta.focus(); ta.select();
+      var fait = false;
+      try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(ta.value); fait = true; } } catch (e) {}
+      if (!fait) { try { document.execCommand('copy'); fait = true; } catch (e) {} }
+      toast(fait ? 'Paquet copié' : 'Copie impossible — sélectionnez le texte', fait ? 'success' : 'warn');
+    };
+
+    document.getElementById('v690-fichier-sauver').onclick = function () {
+      var contenu = document.getElementById('v690-texte').value || '';
+      var nom = 'equipe-theologicus.md';
+      try {
+        var u = URL.createObjectURL(new Blob([contenu], { type: 'text/markdown;charset=utf-8' }));
+        var a = document.createElement('a'); a.href = u; a.download = nom;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { try { URL.revokeObjectURL(u); } catch (e) {} }, 1000);
+        document.getElementById('v690-info').textContent = 'Fichier ' + nom + ' envoyé au téléchargement.';
+      } catch (e) {
+        document.getElementById('v690-info').textContent = 'Téléchargement indisponible — utilisez Copier.';
+      }
+    };
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+  }
+
+  /* ───────────────────── option AUTO dans le sélecteur ───────────────── */
+
+  function injecterOption() {
+    var sel = document.getElementById('agent-select');
+    if (!sel) return;
+    var opt = document.getElementById('v690-auto-option');
+    if (!opt) {
+      opt = document.createElement('option');
+      opt.id = 'v690-auto-option';
+      opt.value = AUTO_VALUE;
+      /* 🔴 Libellé COURT : le select a une largeur intrinsèque en HTML.
+         Un libellé long (« choix automatique ») l'élargissait de 23 px et
+         cassait le banc v597 à 1920 px. L'info va dans le title. */
+      opt.textContent = '◇ AUTO';
+      opt.title = 'Choisit automatiquement l’agent selon les mots du message — sans appel réseau supplémentaire';
+    }
+    if (!Array.prototype.some.call(sel.options, function (o) { return o.value === AUTO_VALUE; })) {
+      try { sel.insertBefore(opt, sel.options[1] || null); } catch (e) { sel.appendChild(opt); }
+    }
+    var mob = document.getElementById('agent-select-mob');
+    if (mob && !Array.prototype.some.call(mob.options, function (o) { return o.value === AUTO_VALUE; })) {
+      var opt2 = opt.cloneNode(true); opt2.removeAttribute('id');
+      try { mob.insertBefore(opt2, mob.options[1] || null); } catch (e) { mob.appendChild(opt2); }
+    }
+    if (localStorage.getItem(FLAG) === '1') {
+      sel.value = AUTO_VALUE;
+      if (mob) mob.value = AUTO_VALUE;
+    }
+    /* 🔴 Aucun ajout dans .header-controls : les bancs v597/v598 mesurent
+       la largeur exacte de la barre à 1920 px. Le retour du routage passe
+       par le LIBELLÉ de l'option AUTO (largeur du select déjà bornée en CSS). */
+  }
+
+  var _titresInitiaux = {};
+  function setAutoInfo(texte) {
+    ['agent-select', 'agent-select-mob'].forEach(function (id) {
+      var s = document.getElementById(id);
+      if (!s) return;
+      if (_titresInitiaux[id] === undefined) _titresInitiaux[id] = s.title || '';
+      s.title = texte ? ('Routage automatique — ' + texte) : _titresInitiaux[id];
+    });
+  }
+
+  function initUI() {
+    /* Le bouton vit dans la modale AGENTS, à côté des autres imports :
+       zéro pixel ajouté à l'en-tête (v597/v598). */
+    var ref = document.getElementById('generate-more-agents-btn');
+    if (ref && !document.getElementById('v690-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v690-btn';
+      b.textContent = 'ÉQUIPE';
+      b.title = 'Paquet d’équipe .md réimportable et routage automatique des agents';
+      b.style.fontSize = '10px';
+      b.style.padding = '5px 10px';
+      b.onclick = ouvrirModale;
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+    injecterOption();
+  }
+
+  /* Le capture sur document intercepte AVANT les onchange historiques :
+     sans cela, db.get('agents','__AUTO__') renverrait undefined et écraserait
+     l'agent courant. Les autres valeurs passent normalement. */
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t || !t.id || (t.id !== 'agent-select' && t.id !== 'agent-select-mob')) return;
+    if (t.value === AUTO_VALUE) {
+      e.stopImmediatePropagation();
+      try {
+        localStorage.setItem(FLAG, '1');
+        var s = document.getElementById('agent-select'), m = document.getElementById('agent-select-mob');
+        if (s) s.value = AUTO_VALUE;
+        if (m) m.value = AUTO_VALUE;
+        setAutoInfo('actif — l’agent sera choisi d’après le message');
+        toast('Routage automatique activé — l’agent sera choisi d’après votre message', 'info');
+      } catch (err) {}
+      return;
+    }
+    try {
+      localStorage.removeItem(FLAG);
+      setAutoInfo('');
+    } catch (err) {}
+  }, true);
+
+  /* Relais : le routage doit voir le TEXTE du message, pas la sélection.
+     On s'insère dans la chaîne sendMessage sans la réécrire. */
+  var _envoi = window.sendMessage;
+  if (typeof _envoi === 'function') {
+    window.sendMessage = async function (overrideText) {
+      try {
+        var sel = document.getElementById('agent-select');
+        var actif = sel && sel.value === AUTO_VALUE;
+        if (!actif) {
+          var mob = document.getElementById('agent-select-mob');
+          actif = !!(mob && mob.value === AUTO_VALUE);
+        }
+        if (actif) {
+          var st = ETAT(), d = DB();
+          var texte = overrideText || txt('user-input');
+          var agents = d ? (await d.getAll('agents') || []) : [];
+          var gagnant = choisir(texte, agents);
+          if (gagnant && st) {
+            st.agent = gagnant;
+            try {
+              var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
+              if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+              setAutoInfo('dernier agent : ' + gagnant.name);
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+      return _envoi.apply(this, arguments);
+    };
+  }
+
+  /* loadAgents() reconstruit le select : on doit réinjecter AUTO après. */
+  var _load = window.loadAgents;
+  if (typeof _load === 'function') {
+    window.loadAgents = async function () {
+      var r = await _load.apply(this, arguments);
+      injecterOption();
+      return r;
+    };
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  /* filet : certaines initialisations recréent le sélecteur après coup */
+  setTimeout(demarrer, 1200);
+
+  window.__v690Equipe = {
+    AUTO_VALUE: AUTO_VALUE,
+    parser: parseFrontmatter,
+    valider: valider,
+    importer: importer,
+    exporter: exporter,
+    choisir: choisir,
+    injecterOption: injecterOption
+  };
+})();
+</script>
+</script>
+</script>
+
+<script id="v691-canaux">
+/* ══════════════════════════════════════════════════════════════════════════
+   v691 — CANAUX D'ÉTUDE
+
+   Un canal = un contexte de travail séparé (Bible, Grec, Hébreu,
+   Apologétique) avec SON transcript et SES instructions de prompt.
+
+   🔴 CONTRAINTE D'ARCHITECTURE : on ne réécrit PAS la machine à états.
+   Chaque canal pointe vers une conversation ORDINAIRE du store `chats`.
+   Basculer = sauvegarder la conversation courante puis charger (ou créer)
+   celle du canal. Le champ `channel` est ajouté au payload (compatible :
+   les anciennes conversations n'en ont pas).
+
+   🔴 CONTRAINTE DE MISE EN PAGE : RIEN dans `.header-controls` (bancs
+   v597/v598). Le bouton vit dans le panneau ARCHIVES, à côté de NOUVEAU.
+
+   🔴 Aucun appel réseau, aucun module externe, aucune dépendance.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v691Canaux) return;
+
+  var CLE_INDEX = 'theologicus_canaux_v1';
+  var CLE_ACTIF = 'theologicus_canal_actif_v1';
+
+  var CANAUX = [
+    { id: 'bible', nom: 'Bible', desc: 'Étude biblique générale, contextes et synthèses',
+      instructions: 'Contexte d’étude : Bible. Privilégie la lecture du texte dans son contexte canonique et littéraire. Distingue clairement le texte, son interprétation et l’application.' },
+    { id: 'grec', nom: 'Grec biblique', desc: 'Nouveau Testament, morphologie et sémantique',
+      instructions: 'Contexte d’étude : grec biblique. Donne les formes grecques, la racine, la morphologie et le champ sémantique. Compare les traductions quand elles divergent. Signale les structures poétiques et les jeux de mots.' },
+    { id: 'hebreu', nom: 'Hébreu biblique', desc: 'Ancien Testament, racines et binyanim',
+      instructions: 'Contexte d’étude : hébreu biblique. Donne la forme massorétique, la translittération, la racine consonantielle, le binyan et le parallèle dans les autres traductions anciennes.' },
+    { id: 'apologetique', nom: 'Apologétique', desc: 'Arguments, objections et rigueur des sources',
+      instructions: 'Contexte d’étude : apologétique. Présente d’abord la position adverse dans sa forme la plus forte, puis la réponse. Chaque affirmation doit être sourcée. Signale explicitement les points débattus.' }
+  ];
+  var PAR_ID = {};
+  CANAUX.forEach(function (c) { PAR_ID[c.id] = c; });
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function lireIndex() {
+    try { var o = JSON.parse(localStorage.getItem(CLE_INDEX) || '{}'); return (o && typeof o === 'object') ? o : {}; }
+    catch (e) { return {}; }
+  }
+  function ecrireIndex(i) { try { localStorage.setItem(CLE_INDEX, JSON.stringify(i)); } catch (e) {} }
+
+  function titreCanal(c) { return '[' + c.nom + '] — ' + c.desc; }
+
+  /* ── prompt : chaque canal ajoute SON bloc, avant le prompt historique ── */
+  var _prompt = window.buildSystemPrompt;
+  if (typeof _prompt === 'function') {
+    window.buildSystemPrompt = function () {
+      var p = _prompt.apply(this, arguments);
+      var st = ETAT();
+      var c = st && PAR_ID[st.channel];
+      if (c) p = '[CANAL D’ÉTUDE : ' + c.nom + ']\n' + c.instructions + '\n\n' + p;
+      return p;
+    };
+  }
+
+  function majPrompt() {
+    var st = ETAT();
+    if (!st) return;
+    try {
+      var sys = (st.messages || []).find(function (m) { return m.role === 'system'; });
+      if (sys && typeof buildSystemPrompt === 'function') sys.content = buildSystemPrompt();
+    } catch (e) {}
+  }
+
+  async function chatDuCanal(id) {
+    var d = DB(); if (!d) return null;
+    var idx = lireIndex();
+    var cid = idx[id];
+    if (!cid) return null;
+    var chat = null;
+    try { chat = await d.get('chats', cid); } catch (e) {}
+    return chat ? cid : null;
+  }
+
+  async function activer(id) {
+    var st = ETAT(), canal = PAR_ID[id];
+    if (!st) return { ok: false, err: 'État indisponible' };
+    if (!canal) return { ok: false, err: 'Canal inconnu : ' + id };
+
+    /* On-tagge AVANT la sauvegarde : le payload lit state.channel. */
+    st.channel = id;
+    try { localStorage.setItem(CLE_ACTIF, id); } catch (e) {}
+    majPrompt();
+    try { if (typeof saveChat === 'function') await saveChat(); } catch (e) {}
+
+    var cid = await chatDuCanal(id);
+    var cree = false;
+    if (cid) {
+      try { if (typeof loadChat === 'function') await loadChat(cid); }
+      catch (e) { return { ok: false, err: 'Chargement impossible' }; }
+    } else {
+      try { if (typeof newChat === 'function') await newChat(); }
+      catch (e) { return { ok: false, err: 'Création impossible' }; }
+      cid = st.chatId;
+      var idx = lireIndex(); idx[id] = cid; ecrireIndex(idx);
+      cree = true;
+    }
+    st.channel = id;
+    majPrompt();
+    try { if (typeof saveChat === 'function') await saveChat(); } catch (e) {}
+    try { if (typeof renderArchives === 'function') renderArchives(); } catch (e) {}
+    var titre = titreCanal(canal);
+    try {
+      var h = document.getElementById('v691-titre');
+      if (h) h.textContent = titre;
+    } catch (e) {}
+    return { ok: true, id: id, chatId: cid, cree: cree, titre: titre };
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v691-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    var html = '<div style="width:min(620px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 id="v691-titre" style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Canaux d’étude</h3>' +
+      '<button type="button" id="v691-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.6rem .9rem;font-size:11px;color:var(--text-secondary)">Chaque canal garde sa propre conversation et ses propres instructions de prompt.</div>' +
+      '<div id="v691-liste" style="display:flex;flex-direction:column;gap:6px;padding:0 .9rem .6rem"></div>' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:0 .9rem .8rem">' +
+      '<button type="button" id="v691-nouveau">Nouvelle conversation dans ce canal</button>' +
+      '</div><div id="v691-info" style="font-size:11px;color:var(--text-secondary);padding:0 .9rem .8rem"></div></div>';
+    modale.innerHTML = html;
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v691-x').onclick = fermer;
+
+    var liste = document.getElementById('v691-liste');
+    CANAUX.forEach(function (c) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = 'v691-canal-' + c.id;
+      b.setAttribute('data-canal', c.id);
+      b.setAttribute('style', 'text-align:left;padding:.6rem .7rem;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px;background:transparent;color:var(--text,#e8e6e0);cursor:pointer');
+      b.innerHTML = '<div style="font-size:12px;font-weight:500">' + c.nom + '</div>' +
+                    '<div style="font-size:10px;opacity:.65">' + c.desc + '</div>';
+      b.onclick = async function () {
+        var r = await activer(c.id);
+        var info = document.getElementById('v691-info');
+        if (r.ok) {
+          info.textContent = (r.cree ? 'Canal créé' : 'Canal restauré') + ' — ' + r.nom;
+          toast('Canal « ' + c.nom + ' » actif', 'success');
+          peindre();
+        } else { info.textContent = 'Échec : ' + r.err; }
+      };
+      liste.appendChild(b);
+    });
+
+    function peindre() {
+      var st = ETAT();
+      CANAUX.forEach(function (c) {
+        var b = document.getElementById('v691-canal-' + c.id);
+        if (!b) return;
+        b.style.borderColor = (st && st.channel === c.id) ? 'var(--ui-accent,var(--cyan,#e5c15a))' : 'var(--ui-border,var(--glass-border,#2a2a3a))';
+      });
+    }
+
+    document.getElementById('v691-nouveau').onclick = async function () {
+      var st = ETAT();
+      if (!st) return;
+      var id = st.channel || 'bible';
+      var idx = lireIndex();
+      delete idx[id];
+      ecrireIndex(idx);
+      var r = await activer(id);
+      document.getElementById('v691-info').textContent = r.ok ? 'Nouvelle conversation créée dans ce canal' : 'Échec : ' + r.err;
+    };
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+  }
+
+  function initUI() {
+    /* 🔴 Jamais dans .header-controls : v597/v598 mesurent sa largeur. */
+    var ref = document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v691-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v691-btn';
+      b.textContent = 'CANAUX';
+      b.title = 'Canaux d’étude — conversation et instructions séparées';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = ouvrirModale;
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+    var st = ETAT();
+    if (st && !st.channel) {
+      try {
+        var actif = localStorage.getItem(CLE_ACTIF);
+        if (actif && PAR_ID[actif]) st.channel = actif;
+      } catch (e) {}
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v691Canaux = {
+    CANAUX: CANAUX,
+    activer: activer,
+    lireIndex: lireIndex,
+    titreCanal: titreCanal,
+    majPrompt: majPrompt
+  };
+})();
+</script>
+
+<script id="v692-routines">
+/* ══════════════════════════════════════════════════════════════════════════
+   v692 — ROUTINES D'ÉTUDE LOCALES
+
+   Inspiré des déclencheurs OpenMausBot, adapté à une app WebView :
+     - une routine = une question préparée dans le canal prévu, à l'heure dite ;
+     - AUCUN appel IA en arrière-plan (pas de coût surprises, pas de requête
+       qui échoue en silence) — l'utilisateur appuie sur ENVOYER ;
+     - fonctionne quand l'application est OUVERTE (pas de service OS) ;
+     - une routine nouvellement créée arrive EN PAUSE (règle OpenMausBot) ;
+     - si la question précédente n'a pas été envoyée, on SAUTE l'occurrence
+       au lieu d'empiler les files (règle anti-queues d'OpenMausBot).
+
+   Stockage : magasin `settings` existant, clé `routines_v1`. Aucun nouveau
+   store, aucun changement de version IndexedDB. Aucun ajout dans
+   `.header-controls` (bancs v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v692Routines) return;
+
+  var CLE = 'routines_v1';
+  var INTERVALLE = 30000;
+  var _cache = null;
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function toast(m, k) { try { if (typeof window.toast === 'function') window.toast(m, k || 'info'); } catch (e) {} }
+  function nouveauId() { return 'rt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function lireMemoire() { return _cache; }
+
+  async function lire() {
+    if (_cache) return _cache;
+    var d = DB();
+    if (!d) { _cache = []; return _cache; }
+    try {
+      var s = await d.get('settings', CLE);
+      _cache = (s && Array.isArray(s.value)) ? s.value : [];
+    } catch (e) { _cache = []; }
+    return _cache;
+  }
+
+  async function sauvegarder(liste) {
+    _cache = liste;
+    var d = DB();
+    if (!d) return;
+    try { await d.put('settings', { id: CLE, value: liste }); } catch (e) {}
+  }
+
+  function prochaineApres(r, depuis) {
+    var now = depuis || Date.now();
+    if (r.type === 'minutes') return now + Math.max(1, Number(r.minutes) || 60) * 60000;
+    if (r.type === 'daily') {
+      var parts = String(r.heure || '09:00').split(':');
+      var h = Number(parts[0]) || 0, m = Number(parts[1]) || 0;
+      var d = new Date(now);
+      d.setHours(h, m, 0, 0);
+      if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+      return d.getTime();
+    }
+    if (r.type === 'once') return r.prochaine || null;
+    return null;
+  }
+
+  function libelleFrequence(r) {
+    if (r.type === 'minutes') return 'Toutes les ' + r.minutes + ' min';
+    if (r.type === 'daily') return 'Chaque jour à ' + r.heure;
+    if (r.type === 'once') return 'Une fois';
+    return '';
+  }
+
+  function formater(ts) {
+    if (!ts) return '—';
+    try { return new Date(ts).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
+    catch (e) { return String(ts); }
+  }
+
+  async function creer(donnees) {
+    var liste = await lire();
+    var r = {
+      id: nouveauId(),
+      nom: String(donnees.nom || 'Routine').slice(0, 80),
+      message: String(donnees.message || '').slice(0, 4000),
+      canal: donnees.canal || '',
+      type: ['minutes', 'daily', 'once'].indexOf(donnees.type) >= 0 ? donnees.type : 'minutes',
+      minutes: Math.max(1, Number(donnees.minutes) || 60),
+      heure: /^\d{1,2}:\d{2}$/.test(donnees.heure || '') ? donnees.heure : '09:00',
+      actif: false,
+      enCours: false,
+      dernier: 0,
+      prochaine: 0
+    };
+    if (r.type === 'once') {
+      r.prochaine = new Date(donnees.quand || Date.now() + 3600000).getTime();
+    } else {
+      r.prochaine = prochaineApres(r, Date.now());
+    }
+    liste.push(r);
+    await sauvegarder(liste);
+    return r;
+  }
+
+  async function basculer(id) {
+    var liste = await lire();
+    for (var i = 0; i < liste.length; i++) {
+      if (liste[i].id === id) {
+        liste[i].actif = !liste[i].actif;
+        if (liste[i].actif && !liste[i].prochaine) liste[i].prochaine = prochaineApres(liste[i], Date.now());
+        await sauvegarder(liste);
+        return liste[i];
+      }
+    }
+    return null;
+  }
+
+  async function supprimer(id) {
+    var liste = await lire();
+    liste = liste.filter(function (r) { return r.id !== id; });
+    await sauvegarder(liste);
+    return liste;
+  }
+
+  /* Une seule passe de décision. `maintenant` est injectable pour le banc. */
+  async function tick(maintenant) {
+    var now = Number(maintenant) || Date.now();
+    var liste = await lire();
+    var change = false, declenchees = [], sautees = [];
+
+    for (var i = 0; i < liste.length; i++) {
+      var r = liste[i];
+      if (!r.actif || !r.prochaine || r.prochaine > now) continue;
+
+      /* Règle anti-file : une occurrence non consommée interdit la suivante. */
+      if (r.enCours) {
+        sautees.push(r.id);
+        r.prochaine = prochaineApres(r, now);
+        change = true;
+        continue;
+      }
+
+      var input = document.getElementById('user-input');
+      var enAttente = !!(input && input.value && input.value === r.message);
+      if (enAttente) {
+        sautees.push(r.id);
+        r.prochaine = prochaineApres(r, now);
+        r.enCours = true;
+        change = true;
+        continue;
+      }
+
+      if (r.canal && window.__v691Canaux) {
+        try { await window.__v691Canaux.activer(r.canal); } catch (e) {}
+      }
+      if (input) {
+        input.value = r.message;
+        try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+        try { if (typeof autoResizeTextarea === 'function') autoResizeTextarea(); } catch (e) {}
+      }
+      r.dernier = now;
+      r.enCours = true;
+      declenchees.push(r.id);
+      if (r.type === 'once') r.actif = false;
+      else r.prochaine = prochaineApres(r, now);
+      change = true;
+      toast('Routine « ' + r.nom + ' » préparée dans le composeur', 'info');
+    }
+    if (change) await sauvegarder(liste);
+    return { declenchees: declenchees, sautees: sautees, liste: liste };
+  }
+
+  /* L'envoi consomme la routine en attente. */
+  var _envoi = window.sendMessage;
+  if (typeof _envoi === 'function') {
+    window.sendMessage = async function () {
+      try {
+        var liste = await lire();
+        var input = document.getElementById('user-input');
+        var texte = (arguments[0] || (input && input.value) || '').trim();
+        var mod = false;
+        liste.forEach(function (r) {
+          if (r.enCours && texte && r.message === texte) { r.enCours = false; mod = true; }
+        });
+        if (mod) await sauvegarder(liste);
+      } catch (e) {}
+      return _envoi.apply(this, arguments);
+    };
+  }
+
+  /* ─────────────────────────── interface ─────────────────────────────── */
+
+  var modale = null;
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v692-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(720px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Routines d’étude</h3>' +
+      '<button type="button" id="v692-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.5rem .9rem;font-size:11px;color:var(--text-secondary)">Prépare une question dans le canal choisi. Nouvelle routine = en pause. Ne fonctionne que lorsque l’application est ouverte.</div>' +
+      '<div id="v692-liste" style="display:flex;flex-direction:column;gap:6px;padding:0 .9rem .5rem;overflow:auto"></div>' +
+      '<div style="border-top:1px solid var(--ui-border,var(--glass-border,#2a2a3a));padding:.6rem .9rem;display:flex;flex-direction:column;gap:6px">' +
+      '<div style="font-size:11px;color:var(--text-secondary)">NOUVELLE ROUTINE</div>' +
+      '<input id="v692-nom" placeholder="Nom (ex. Lecture du jour)" style="padding:.4rem;border-radius:6px;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<textarea id="v692-message" placeholder="Question à préparer" style="min-height:54px;padding:.4rem;border-radius:6px;background:var(--ui-bg,var(--bg-dark,#0a0a12));color:var(--text,#e8e6e0);border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));resize:vertical"></textarea>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+      '<select id="v692-canal" style="font-size:11px"><option value="">Canal actuel</option></select>' +
+      '<select id="v692-type" style="font-size:11px"><option value="minutes">Toutes les N minutes</option><option value="daily">Chaque jour</option><option value="once">Une fois</option></select>' +
+      '<input id="v692-minutes" type="number" min="1" value="120" style="width:78px;font-size:11px">' +
+      '<input id="v692-heure" type="time" value="09:00" style="font-size:11px">' +
+      '<input id="v692-quand" type="datetime-local" style="font-size:11px">' +
+      '<button type="button" id="v692-ajouter">Ajouter (en pause)</button>' +
+      '</div><div id="v692-info" style="font-size:11px;color:var(--text-secondary)"></div></div></div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v692-x').onclick = fermer;
+
+    var selCanal = document.getElementById('v692-canal');
+    try {
+      var canaux = (window.__v691Canaux && window.__v691Canaux.CANAUX) || [];
+      canaux.forEach(function (c) {
+        var o = document.createElement('option'); o.value = c.id; o.textContent = c.nom; selCanal.appendChild(o);
+      });
+    } catch (e) {}
+
+    function rafraichir() {
+      lire().then(function (liste) {
+        var box = document.getElementById('v692-liste');
+        box.innerHTML = '';
+        if (!liste.length) { box.textContent = 'Aucune routine.'; return; }
+        liste.forEach(function (r) {
+          var ligne = document.createElement('div');
+          ligne.setAttribute('style', 'display:flex;align-items:center;gap:.5rem;padding:.5rem;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:8px');
+          ligne.innerHTML = '<div style="flex:1;min-width:0"><div style="font-size:12px">' + r.nom + '</div>' +
+            '<div style="font-size:10px;opacity:.65">' + libelleFrequence(r) + ' · prochaine : ' + formater(r.prochaine) + '</div></div>';
+          var b = document.createElement('button'); b.type = 'button';
+          b.textContent = r.actif ? 'PAUSE' : 'ACTIVER';
+          b.onclick = async function () { await basculer(r.id); rafraichir(); };
+          var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕';
+          x.onclick = async function () { await supprimer(r.id); rafraichir(); };
+          ligne.appendChild(b); ligne.appendChild(x);
+          box.appendChild(ligne);
+        });
+      });
+    }
+
+    document.getElementById('v692-ajouter').onclick = async function () {
+      var info = document.getElementById('v692-info');
+      var type = document.getElementById('v692-type').value;
+      var r = await creer({
+        nom: document.getElementById('v692-nom').value,
+        message: document.getElementById('v692-message').value,
+        canal: document.getElementById('v692-canal').value,
+        type: type,
+        minutes: document.getElementById('v692-minutes').value,
+        heure: document.getElementById('v692-heure').value,
+        quand: document.getElementById('v692-quand').value
+      });
+      info.textContent = 'Routine « ' + r.nom + ' » créée EN PAUSE. Prochaine : ' + formater(r.prochaine);
+      rafraichir();
+    };
+
+    modale.addEventListener('v692-ouvert', rafraichir);
+    return modale;
+  }
+
+  function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+    modale.dispatchEvent(new Event('v692-ouvert'));
+  }
+
+  function initUI() {
+    var ref = document.getElementById('v691-btn') || document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v692-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v692-btn';
+      b.textContent = 'ROUTINES';
+      b.title = 'Routines d’étude — questions préparées à heure dite';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = ouvrirModale;
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+  setInterval(function () { tick(Date.now()).catch(function () {}); }, INTERVALLE);
+
+  window.__v692Routines = {
+    lire: lire,
+    lireMemoire: lireMemoire,
+    sauvegarder: sauvegarder,
+    creer: creer,
+    basculer: basculer,
+    supprimer: supprimer,
+    tick: tick,
+    prochaineApres: prochaineApres
+  };
+})();
+</script>
+
+<script id="v693-controle">
+/* ══════════════════════════════════════════════════════════════════════════
+   v693 — PLAN DE CONTRÔLE BORNÉ (pont MCP)
+
+   Le proxy desktop expose une boîte aux lettres locale, DÉSACTIVÉE par
+   défaut (THEO_CONTROL_TOKEN). Ce module la poll et exécute une LISTE
+   BLANCHE de commandes en LECTURE SEULE.
+
+   🔴 Jamais : clés API, écriture, suppression, exécution de code, réglages.
+   🔴 Le proxy injecte son jeton dans la page SERVIE (même origine) sous
+      window.__THEO_CONTROL_TOKEN__ ; on le renvoie en en-tête. Une page
+      tierce ne peut pas l'exploiter : en-tête personnalisé = prévol CORS
+      refusé par le relais (les commandes sont de toute façon en lecture
+      seule). Sans jeton, on se tait.
+   🔴 Aucun effet si le proxy est absent (APK WebView) : fetch échoue, on
+      se tait. Aucune erreur console, aucune interruption de l'appli.
+   🔴 Aucun ajout dans .header-controls (bancs v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v693Controle) return;
+
+  var DELAI = 2000;
+  var _occupe = false;
+  var _commandes = {
+    ping: function () {
+      var n = 0;
+      try { n = document.querySelectorAll('script[id]').length; } catch (e) {}
+      return { ok: true, module: 'v693-controle', modules: n };
+    },
+    list_conversations: async function (a) {
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('chats') || [];
+      return tous.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (c) {
+        return {
+          id: c.id, title: String(c.title || '').slice(0, 120),
+          updated: c.updated || 0, channel: c.channel || '',
+          msgCount: ((c.messages || []).filter(function (m) { return m.role !== 'system'; })).length
+        };
+      });
+    },
+    search_conversations: async function (a) {
+      var q = String(a.query || '').toLowerCase().trim();
+      if (!q) return [];
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('chats') || [];
+      var sortie = [], limite = Math.min(10, Number(a.limit) || 10);
+      for (var i = 0; i < tous.length && sortie.length < limite; i++) {
+        var c = tous[i], msgs = c.messages || [];
+        for (var j = 0; j < msgs.length; j++) {
+          var contenu = String(msgs[j].content || '').toLowerCase();
+          var pos = contenu.indexOf(q);
+          if (pos < 0) continue;
+          var debut = Math.max(0, pos - 60);
+          sortie.push({
+            id: c.id, title: String(c.title || '').slice(0, 120),
+            extrait: String(msgs[j].content || '').slice(debut, debut + 180)
+          });
+          break;
+        }
+      }
+      return sortie;
+    },
+    read_conversation: async function (a) {
+      var d = DB(); if (!d) return null;
+      var c = await d.get('chats', String(a.id || ''));
+      if (!c) return null;
+      var limite = Math.min(20, Math.max(1, Number(a.limit) || 20));
+      return {
+        id: c.id, title: String(c.title || '').slice(0, 120), channel: c.channel || '',
+        messages: (c.messages || []).slice(-limite).map(function (m) {
+          return { role: m.role, content: String(m.content || '').slice(0, 2000), ts: m.ts || 0 };
+        })
+      };
+    },
+    list_channels: function () {
+      try {
+        var cs = (window.__v691Canaux && window.__v691Canaux.CANAUX) || [];
+        return cs.map(function (c) { return { id: c.id, nom: c.nom, desc: c.desc }; });
+      } catch (e) { return []; }
+    },
+    list_agents: async function (a) {
+      var d = DB(); if (!d) return [];
+      var tous = await d.getAll('agents') || [];
+      return tous.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (g) {
+        return { id: g.id, name: String(g.name || '').slice(0, 120), desc: String(g.desc || '').slice(0, 200) };
+      });
+    },
+    list_routines: async function (a) {
+      try {
+        var rs = (window.__v692Routines && await window.__v692Routines.lire()) || [];
+        return rs.slice(0, Math.min(50, Number(a.limit) || 50)).map(function (r) {
+          return { id: r.id, nom: r.nom, type: r.type, actif: !!r.actif, prochaine: r.prochaine || 0 };
+        });
+      } catch (e) { return []; }
+    },
+    get_config: function () {
+      var st = ETAT();
+      return {
+        model: (st && st.model) || '',
+        channel: (st && st.channel) || '',
+        agent: ((st && st.agent && st.agent.name) || '').slice(0, 120)
+      };
+    }
+  };
+
+  var _liste_commandes = Object.keys(_commandes);
+
+  /* v697 — CROCHET D'ENREGISTREMENT.
+     Une commande s'ajoute par `window.__v693Controle.ajouter(nom, fn)` : les
+     modules suivants (v697 écriture) enrichissent la liste blanche SANS
+     réécrire ce module, et la liste exposée reste vivante. */
+  function ajouter(nom, fn) {
+    if (typeof nom !== 'string' || !/^[a-z][a-z0-9_]{0,63}$/.test(nom)) return false;
+    if (typeof fn !== 'function') return false;
+    if (Object.prototype.hasOwnProperty.call(_commandes, nom)) return false;
+    _commandes[nom] = fn;
+    _liste_commandes.push(nom);
+    return true;
+  }
+
+  function DB() { try { return (typeof db !== 'undefined' && db) ? db : null; } catch (e) { return null; } }
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function interdite(nom) { return Object.prototype.hasOwnProperty.call(_commandes, nom); }
+  var CLE_DISTANT = 'theologicus-pont-distant';
+
+  /* v698 — PONT DISTANT : sur Android il n'y a PAS de proxy Python, donc
+     rien à poler en local. L'utilisateur peut alors brancher l'APK sur le
+     THEOLOGICUS de son bureau (URL + jeton), stocké dans localStorage.
+     Le jeton voyage dans l'URL/corps : un en-tête personnalisé ferait
+     échouer le prévol CORS du WebView. */
+  function distant() {
+    try {
+      var d = JSON.parse(localStorage.getItem(CLE_DISTANT) || 'null');
+      if (d && typeof d.url === 'string' && d.url && typeof d.token === 'string' && d.token) {
+        return { url: String(d.url).replace(/\/+$/, ''), token: String(d.token) };
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function entetes() {
+    var h = { 'Content-Type': 'application/json' };
+    var d = distant();
+    if (d) return h;
+    var t = (typeof window.__THEO_CONTROL_TOKEN__ === 'string') ? window.__THEO_CONTROL_TOKEN__ : '';
+    if (t) h['X-Theo-Control-Token'] = t;
+    return h;
+  }
+
+  async function executer(cmd) {
+    var nom = String(cmd.command || '');
+    if (!interdite(nom)) return { error: 'commande non autorisée' };
+    try {
+      var args = (cmd.args && typeof cmd.args === 'object') ? cmd.args : {};
+      var r = await _commandes[nom](args);
+      return { result: r === undefined ? null : r };
+    } catch (e) {
+      return { error: String(e && e.message ? e.message : e) };
+    }
+  }
+
+  async function boucle() {
+    if (_occupe) return;
+    _occupe = true;
+    try {
+      var d = distant();
+      var b = d ? d.url : '';
+      var chemin = b + '/theo-control/pending' + (d ? '?token=' + encodeURIComponent(d.token) : '');
+      var rep = await fetch(chemin, { cache: 'no-store', headers: entetes() });
+      if (!rep.ok) return;
+      var j = await rep.json();
+      var cmds = (j && j.commands) || [];
+      for (var i = 0; i < cmds.length; i++) {
+        var reponse = await executer(cmds[i]);
+        try {
+          var corps = { id: cmds[i].id, result: reponse.result, error: reponse.error };
+          if (d) corps.token = d.token;
+          await fetch(b + '/theo-control/result', {
+            method: 'POST',
+            headers: entetes(),
+            body: JSON.stringify(corps)
+          });
+        } catch (e) {}
+      }
+    } catch (e) {
+      /* silencieux : proxy absent (APK), serveur éteint, réseau coupé */
+    } finally { _occupe = false; }
+  }
+
+  setInterval(function () { boucle().catch(function () {}); }, DELAI);
+  setTimeout(function () { boucle().catch(function () {}); }, 1500);
+
+  window.__v693Controle = {
+    boucle: boucle,
+    executer: executer,
+    ajouter: ajouter,
+    distant: distant,
+    commandes: _liste_commandes
+  };
+})();
+</script>
+</script>
+</script>
+</script>
+</script>
+
+<script id="v695-mcp">
+/* ══════════════════════════════════════════════════════════════════════════
+   v695 — PONT MCP VISIBLE DANS L'APP
+
+   Le pont de contrôle est actif dès le démarrage (v694), mais il était
+   INVISIBLE : pour l'utiliser, il fallait aller le chercher dans
+   %LOCALAPPDATA% à la main. Ce module l'affiche et fournit un bouton
+   « copier la configuration ».
+
+   🔴 Bouton dans le panneau Archives, JAMAIS dans .header-controls
+      (v597/v598 mesurent sa largeur au pixel près).
+   🔴 On interroge /theo-control/status, JAMAIS /theo-control/pending :
+      pending VIDE la file des commandes et ferait perdre celles en attente.
+   🔴 Aucune écriture : cet écran ne fait que LIRE l'état et copier du texte.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v695Mcp) return;
+
+  var modale = null;
+
+  function jeton() {
+    return (typeof window.__THEO_CONTROL_TOKEN__ === 'string') ? window.__THEO_CONTROL_TOKEN__ : '';
+  }
+  function info() {
+    var i = (typeof window.__THEO_CONTROL_INFO__ === 'object' && window.__THEO_CONTROL_INFO__) || {};
+    return i;
+  }
+  function entetes() {
+    var h = { 'Content-Type': 'application/json' };
+    var t = jeton();
+    if (t) h['X-Theo-Control-Token'] = t;
+    return h;
+  }
+  function dire(msg, kind) {
+    try { if (typeof toast === 'function') toast(msg, kind || 'info'); } catch (e) {}
+  }
+
+  async function etat() {
+    try {
+      var r = await fetch('/theo-control/status', { cache: 'no-store', headers: entetes() });
+      if (!r.ok) return { actif: false, raison: 'statut=' + r.status };
+      var j = await r.json() || {};
+      j.actif = true;
+      return j;
+    } catch (e) {
+      return { actif: false, raison: 'proxy injoignable' };
+    }
+  }
+
+  async function configuration() {
+    try {
+      var r = await fetch('/theo-control/config', { cache: 'no-store', headers: entetes() });
+      if (r.ok) return await r.json();
+    } catch (e) {}
+    // Repli : config HTTP seule, construite depuis ce que le proxy a injecté.
+    var i = info();
+    return {
+      mcpServers: {
+        'theologicus-http': {
+          type: 'http',
+          url: i.mcp || '',
+          headers: { 'X-Theo-Control-Token': jeton() }
+        }
+      }
+    };
+  }
+
+  async function copier(texte, libelle) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(texte);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = texte;
+        ta.setAttribute('style', 'position:fixed;top:0;left:0;opacity:0');
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+      dire(libelle + ' copié', 'success');
+      return true;
+    } catch (e) {
+      dire('Copie impossible — Selecting the text manually', 'error');
+      return false;
+    }
+  }
+
+  var CLE_DISTANT = 'theologicus-pont-distant';
+
+  function lireDistant() {
+    try {
+      var d = JSON.parse(localStorage.getItem(CLE_DISTANT) || 'null');
+      if (d && d.url && d.token) return { url: String(d.url), token: String(d.token) };
+    } catch (e) {}
+    return null;
+  }
+
+  function ecrireDistant(d) {
+    try {
+      if (d && d.url && d.token) localStorage.setItem(CLE_DISTANT, JSON.stringify({ url: String(d.url).replace(/\/+$/, ''), token: String(d.token) }));
+      else localStorage.removeItem(CLE_DISTANT);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  /* v698 — Tester un pont DISTANT (le THEOLOGICUS de bureau, depuis l'APK).
+     Le jeton voyage dans l'URL : un en-tête personnalisé ferait échouer le
+     prévol CORS du WebView. */
+  async function testerDistant(url, jeton) {
+    try {
+      var u = String(url || '').replace(/\/+$/, '') + '/theo-control/status?token=' + encodeURIComponent(jeton || '');
+      var r = await fetch(u, { cache: 'no-store' });
+      if (!r.ok) return { ok: false, detail: 'statut=' + r.status };
+      var j = await r.json();
+      return { ok: !!(j && j.ok), outils: (j && j.outils) || 0, port: (j && j.port) || '' };
+    } catch (e) {
+      return { ok: false, detail: 'injoignable' };
+    }
+  }
+
+  function champDistant(conteneur) {
+    var d = lireDistant();
+    var bloc = document.createElement('div');
+    bloc.id = 'v695-distant';
+    bloc.setAttribute('style', 'padding:6px 0;border-top:1px solid var(--ui-border,var(--glass-border,#2a2a3a))');
+    bloc.innerHTML =
+      '<div style="font-size:9px;letter-spacing:1px;opacity:.7;text-transform:uppercase;margin:6px 0 4px">Pont distant — piloter un THEOLOGICUS de bureau</div>' +
+      '<input id="v695-dist-url" placeholder="https://192.168.1.10:8443" value="' + (d ? d.url.replace(/"/g, '&quot;') : '') + '" style="width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;background:transparent;color:inherit;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:6px">' +
+      '<input id="v695-dist-jeton" type="password" placeholder="Jeton du pont de bureau" value="' + (d ? d.token.replace(/"/g, '&quot;') : '') + '" style="width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;margin-top:6px;background:transparent;color:inherit;border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:6px">' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-top:6px">' +
+      '<button type="button" id="v695-dist-tester" style="padding:3px 8px;font-size:9px;letter-spacing:1px">TESTER</button>' +
+      '<button type="button" id="v695-dist-enregistrer" style="padding:3px 8px;font-size:9px;letter-spacing:1px">ENREGISTRER</button>' +
+      '<button type="button" id="v695-dist-effacer" style="padding:3px 8px;font-size:9px;letter-spacing:1px">EFFACER</button>' +
+      '</div>' +
+      '<div id="v695-dist-etat" style="font-size:10px;margin-top:4px"></div>' +
+      '<div class="field-hint" style="font-size:10px;margin-top:4px">Côté bureau, démarrez avec THEO_CONTROL_LAN=1 pour autoriser le réseau. Le jeton est celui affiché par le panneau MCP du bureau.</div>';
+    conteneur.appendChild(bloc);
+
+    var lireChamps = function () {
+      return { url: document.getElementById('v695-dist-url').value.trim(), token: document.getElementById('v695-dist-jeton').value.trim() };
+    };
+    document.getElementById('v695-dist-tester').onclick = async function () {
+      var f = lireChamps();
+      if (!f.url || !f.token) { dire('URL et jeton requis', 'error'); return; }
+      var etat = document.getElementById('v695-dist-etat');
+      etat.textContent = 'Test…';
+      var r = await testerDistant(f.url, f.token);
+      etat.textContent = r.ok ? ('Actif — ' + r.outils + ' outils' + (r.port ? ' (port ' + r.port + ')' : '')) : ('Injoignable : ' + (r.detail || '?'));
+      etat.style.color = r.ok ? '#4ade80' : '#f87171';
+    };
+    document.getElementById('v695-dist-enregistrer').onclick = function () {
+      var f = lireChamps();
+      if (!f.url || !f.token) { dire('URL et jeton requis', 'error'); return; }
+      ecrireDistant(f);
+      dire('Pont distant enregistré', 'success');
+    };
+    document.getElementById('v695-dist-effacer').onclick = function () {
+      ecrireDistant(null);
+      document.getElementById('v695-dist-url').value = '';
+      document.getElementById('v695-dist-jeton').value = '';
+      document.getElementById('v695-dist-etat').textContent = '';
+      dire('Pont distant effacé', 'info');
+    };
+  }
+
+  function champ(label, valeur, copie) {
+    var d = document.createElement('div');
+    d.setAttribute('style', 'display:flex;flex-direction:column;gap:2px;padding:5px 0;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))');
+    var l = document.createElement('div');
+    l.setAttribute('style', 'font-size:9px;letter-spacing:1px;opacity:.7;text-transform:uppercase');
+    l.textContent = label;
+    var v = document.createElement('div');
+    v.setAttribute('style', 'font-size:11px;word-break:break-all;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap');
+    var s = document.createElement('span');
+    s.setAttribute('style', 'flex:1;min-width:0');
+    s.textContent = valeur;
+    v.appendChild(s);
+    if (copie) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('style', 'padding:2px 6px;font-size:9px;letter-spacing:1px');
+      b.textContent = 'COPIER';
+      b.onclick = function () { copier(valeur, label); };
+      v.appendChild(b);
+    }
+    d.appendChild(l); d.appendChild(v);
+    return d;
+  }
+
+  function construireModale() {
+    if (modale) return modale;
+    modale = document.createElement('div');
+    modale.id = 'v695-modal';
+    modale.setAttribute('style', 'position:fixed;inset:0;z-index:var(--z-popup,5000);display:none;align-items:flex-start;justify-content:center;background:rgba(2,6,12,.72)');
+    modale.innerHTML =
+      '<div style="width:min(620px,94vw);max-height:86vh;margin-top:6vh;display:flex;flex-direction:column;background:var(--ui-panel,var(--bg,#101522));border:1px solid var(--ui-border,var(--glass-border,#2a2a3a));border-radius:12px;overflow:hidden">' +
+      '<div style="display:flex;align-items:center;gap:.5rem;padding:.7rem .9rem;border-bottom:1px solid var(--ui-border,var(--glass-border,#2a2a3a))">' +
+      '<h3 style="margin:0;font-size:.92rem;color:var(--ui-accent,var(--cyan,#e5c15a));flex:1">Pont MCP</h3>' +
+      '<span id="v695-etat" style="font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:3px;border:1px solid currentColor">…</span>' +
+      '<button type="button" id="v695-x" style="background:none;border:none;color:inherit;font-size:16px;cursor:pointer">✕</button></div>' +
+      '<div style="padding:.55rem .9rem;font-size:11px;color:var(--text-secondary);line-height:1.5">' +
+      'Le pont est <b>en lecture seule</b> : conversations, canaux, agents, routines — aucune clé, aucune écriture, aucun code. ' +
+      'Ajoutez la configuration ci-dessous à votre client MCP.</div>' +
+      '<div id="v695-champs" style="padding:0 .9rem"></div>' +
+      '<div style="display:flex;gap:.4rem;flex-wrap:wrap;padding:.6rem .9rem .8rem">' +
+      '<button type="button" id="v695-copier-config">Copier la configuration</button>' +
+      '<button type="button" id="v695-copier-http">Copier l’URL HTTP</button>' +
+      '</div>' +
+      '<div id="v695-info" style="font-size:10px;color:var(--text-secondary);padding:0 .9rem .8rem;line-height:1.5"></div>' +
+      '</div>';
+    document.body.appendChild(modale);
+
+    var fermer = function () { modale.style.display = 'none'; };
+    modale.addEventListener('click', function (e) { if (e.target === modale) fermer(); });
+    document.getElementById('v695-x').onclick = fermer;
+
+    document.getElementById('v695-copier-config').onclick = async function () {
+      var cfg = await configuration();
+      await copier(JSON.stringify(cfg, null, 2), 'Configuration');
+    };
+    document.getElementById('v695-copier-http').onclick = async function () {
+      var i = info();
+      var cfg = await configuration();
+      var srv = (cfg.mcpServers && cfg.mcpServers['theologicus-http']) || {};
+      await copier(srv.url || i.mcp || '', 'URL');
+    };
+    return modale;
+  }
+
+  async function ouvrirModale() {
+    construireModale();
+    modale.style.display = 'flex';
+    var champs = document.getElementById('v695-champs');
+    champs.innerHTML = '';
+    var badge = document.getElementById('v695-etat');
+    badge.textContent = '…';
+    badge.setAttribute('style', 'font-size:9px;letter-spacing:1px;padding:2px 6px;border-radius:3px;border:1px solid currentColor');
+    document.getElementById('v695-info').textContent = 'Interrogation du proxy…';
+
+    var s = await etat();
+    var i = info();
+    if (!s.actif) {
+      badge.textContent = 'INACTIF';
+      badge.style.color = '#8a8f9c';
+      champs.appendChild(champ('Pont', 'inactif — ' + (s.raison || 'proxy injoignable')));
+      document.getElementById('v695-info').textContent =
+        'Sur Android, aucun proxy Python : branchez l’APK sur le THEOLOGICUS de votre bureau ci-dessous. ' +
+        'Sur Windows, le pont s’active avec le proxy local (application ou THEOLOGICUS.bat).';
+      champDistant(champs);
+      return;
+    }
+    badge.textContent = 'ACTIF';
+    badge.style.color = '#4ade80';
+    champs.appendChild(champ('URL MCP (HTTP)', s.mcp || i.mcp || '', true));
+    champs.appendChild(champ('Adresse locale', s.url || i.url || '', true));
+    champs.appendChild(champ('Fichier de configuration', s.config || i.config || '', true));
+    champs.appendChild(champ('Commandes disponibles', String(s.outils || 0) + ' (lecture seule)'));
+    champs.appendChild(champ('Jeton', jeton() ? jeton().slice(0, 6) + '…' + jeton().slice(-4) : '—', true));
+    document.getElementById('v695-info').textContent =
+      'Dans votre client MCP, collez la configuration : la variante « theologicus-http » fonctionne ' +
+      'sans Python ; la variante « theologicus » lance tools/theo_mcp.py.';
+  }
+
+  function initUI() {
+    /* 🔴 Jamais dans .header-controls : v597/v598 mesurent sa largeur. */
+    var ref = document.getElementById('v692-btn') ||
+              document.getElementById('v691-btn') ||
+              document.getElementById('archives-new-btn');
+    if (ref && !document.getElementById('v695-btn')) {
+      var b = document.createElement('button');
+      b.className = 'btn-ghost';
+      b.id = 'v695-btn';
+      b.textContent = 'MCP';
+      b.title = 'Pont MCP — configuration pour les clients MCP';
+      b.style.cssText = 'padding:3px 8px;font-size:9px;border-radius:3px;letter-spacing:1px;margin-left:4px';
+      b.onclick = function () { ouvrirModale().catch(function () {}); };
+      try { ref.insertAdjacentElement('afterend', b); } catch (e) { ref.parentNode.appendChild(b); }
+    }
+  }
+
+  function demarrer() { try { initUI(); } catch (e) {} }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v695Mcp = {
+    ouvrir: ouvrirModale,
+    etat: etat,
+    configuration: configuration,
+    testerDistant: testerDistant,
+    lireDistant: lireDistant,
+    ecrireDistant: ecrireDistant
+  };
+})();
+</script>
+</script>
+
+<script id="v696-voix">
+/* ══════════════════════════════════════════════════════════════════════════
+   v696 — NARRATION AUTOMATIQUE DES RÉPONSES
+
+   La lecture vocale existe déjà (bouton ▶ LIRE par message, « tout lire »,
+   trois moteurs : système / ElevenLabs / Supertonic 3). Ce qui manquait :
+   lire SANS cliquer. Ici, chaque réponse de l'agent est lue dès qu'elle
+   arrive — si l'utilisateur l'a demandé.
+
+   🔴 DÉSACTIVÉ par défaut : une case à cocher dans PARAMÈTRES →
+      Lecture vocale. Rien ne change pour qui ne l'active pas.
+   🔴 Réutilise la chaîne de lecture EXISTANTE (cleanMd → prosodyPreprocess →
+      splitByLanguage → ttsEmission) : pas de moteur neuf, pas de réglage
+      dupliqué, mêmes voix, même traitement de la langue.
+   🔴 S'interrompt si une lecture est déjà en cours (l'utilisateur a la main).
+   🔴 Aucun élément ajouté dans .header-controls (v597/v598).
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v696Voix) return;
+
+  var CLE = 'theologicus-tts-auto';
+
+  function autoActif() {
+    try { return localStorage.getItem(CLE) === '1'; } catch (e) { return false; }
+  }
+
+  function reglerAuto(on) {
+    try { localStorage.setItem(CLE, on ? '1' : '0'); } catch (e) {}
+    try {
+      var c = document.getElementById('tts-auto-lecture');
+      if (c) c.checked = !!on;
+    } catch (e) {}
+    return !!on;
+  }
+
+  /* Narration d'UN texte (pas de toute la conversation). */
+  function narrer(texte) {
+    if (!texte) return { ok: false, err: 'texte vide' };
+    if (typeof ttsEmission !== 'function') return { ok: false, err: 'moteur TTS absent' };
+    var brut = String(texte);
+    try {
+      /* Même ordre que speakConversation : markdown nettoyé d'abord, puis
+         prosodie — l'inverse casserait la détection de ton. */
+      if (typeof cleanMd === 'function') brut = cleanMd(brut);
+      if (typeof prosodyPreprocess === 'function') brut = prosodyPreprocess(brut);
+    } catch (e) {}
+    var segments = [];
+    try {
+      segments = (typeof splitByLanguage === 'function') ? splitByLanguage(brut) : [];
+    } catch (e) {}
+    if (!segments || !segments.length) segments = [{ text: brut, lang: 'francais' }];
+    var i = 0;
+    function suivant() {
+      if (i >= segments.length) return;
+      var s = segments[i++] || {};
+      try {
+        ttsEmission(s.text || '', s.lang || 'francais', function () {
+          setTimeout(suivant, 120);
+        }, function () { /* une segment en échec n'interrompt pas la suite */ });
+      } catch (e) {}
+    }
+    suivant();
+    return { ok: true, segments: segments.length };
+  }
+
+  /* Narration de la DERNIÈRE réponse de l'agent (si l'auto est active). */
+  function narrerDerniere() {
+    try {
+      if (!autoActif()) return { ok: false, ignore: 'auto desactive' };
+      /* L'utilisateur a la main : on ne s'interrompt pas. */
+      try {
+        if (typeof isSpeaking !== 'undefined' && isSpeaking) {
+          return { ok: false, ignore: 'lecture en cours' };
+        }
+      } catch (e) {}
+      var msgs = (typeof state !== 'undefined' && state && state.messages) ? state.messages : [];
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i] && msgs[i].role === 'assistant') return narrer(msgs[i].content);
+      }
+      return { ok: false, err: 'aucune reponse' };
+    } catch (e) {
+      return { ok: false, err: String(e && e.message ? e.message : e) };
+    }
+  }
+
+  function installerUI() {
+    try {
+      var panneau = document.getElementById('settings-panneau-tts');
+      if (!panneau || document.getElementById('v696-auto-group')) return;
+      var ref = document.getElementById('tts-narration');
+      var groupe = ref && ref.closest ? ref.closest('.field-group') : null;
+      var div = document.createElement('div');
+      div.className = 'field-group';
+      div.id = 'v696-auto-group';
+      div.innerHTML =
+        '<label style="display:flex;align-items:center;gap:8px;margin-top:4px;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" id="tts-auto-lecture" style="width:auto;margin:0">' +
+        '<span>🔊 Lire automatiquement les réponses</span></label>' +
+        '<div class="field-hint">Chaque réponse de l’agent est lue dès qu’elle arrive, avec le moteur et la langue choisis ci-dessus. ' +
+        'Le bouton « ▶ LIRE » reste là pour relire à la demande. Désactivé par défaut.</div>';
+      if (groupe && groupe.parentNode) {
+        groupe.parentNode.insertBefore(div, groupe.nextSibling);
+      } else {
+        panneau.insertBefore(div, panneau.firstChild);
+      }
+      var c = document.getElementById('tts-auto-lecture');
+      if (c) {
+        c.checked = autoActif();
+        c.onchange = function () {
+          reglerAuto(c.checked);
+          try { if (typeof toast === 'function') toast(c.checked ? 'Lecture automatique activée' : 'Lecture automatique désactivée', 'success'); } catch (e) {}
+        };
+      }
+    } catch (e) {}
+  }
+
+  function brancher() {
+    /* Même idiom que les modules voisins (v690, v692) : on s'insère dans la
+       chaîne sans la réécrire. On est le dernier wrapper → la narration
+       part une fois la réponse ENREGISTRÉE. */
+    var _envoi = window.sendMessage;
+    if (typeof _envoi === 'function' && !_envoi.__v696) {
+      window.sendMessage = async function () {
+        var r = await _envoi.apply(this, arguments);
+        try { narrerDerniere(); } catch (e) {}
+        return r;
+      };
+      window.sendMessage.__v696 = true;
+    }
+  }
+
+  function demarrer() {
+    try { installerUI(); } catch (e) {}
+    try { brancher(); } catch (e) {}
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 1200);
+
+  window.__v696Voix = {
+    auto: autoActif,
+    reglerAuto: reglerAuto,
+    narrer: narrer,
+    narrerDerniere: narrerDerniere
+  };
+})();
+</script>
+
+<script id="v697-ecriture">
+/* ══════════════════════════════════════════════════════════════════════════
+   v697 — COMMANDES D'ÉCRITURE (liste blanche bornée)
+
+   Jusqu'ici le pont MCP était STRICTEMENT en lecture seule. Ici, cinq
+   actions d'écriture s'y ajoutent — et rien d'autre.
+
+   🔴 Ce qui reste INTERDIT, définitivement :
+      supprimer une conversation, lire ou écrire une clé API, exécuter du
+      code, écrire un fichier, modifier un réglage hors de la liste.
+   🔴 Chaque commande vérifie ses arguments et renvoie une erreur explicite
+      au lieu de lever une exception.
+   🔴 `send_message` déclenche un appel LLM : c'est le seul point qui peut
+      coûter des crédits. Il est donc explicite, borné (4000 caractères) et
+      le client reçoit la réponse.
+   ══════════════════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+  if (window.__v697Ecriture) return;
+
+  function ETAT() { try { return (typeof state !== 'undefined' && state) ? state : null; } catch (e) { return null; } }
+  function erreur(e) { return { error: String(e && e.message ? e.message : e) }; }
+
+  /* 🔴 Une commande NE DOIT PAS BLOQUER LE PONT.
+     La boucle de l'app traite les commandes UNE PAR UNE : si l'une ne rend
+     jamais la main (sans clé API, sendMessage attend une saisie), toutes les
+     suivantes expirent. On borne donc chaque commande qui peut attendre. */
+  function avecDelai(promesse, ms, message) {
+    return new Promise(function (resolve) {
+      var fini = false;
+      var t = setTimeout(function () {
+        if (fini) return;
+        fini = true;
+        resolve({ error: message || ('delai depasse (' + ms + ' ms)') });
+      }, ms);
+      Promise.resolve(promesse).then(function (v) {
+        if (fini) return;
+        fini = true;
+        clearTimeout(t);
+        resolve(v);
+      }, function (e) {
+        if (fini) return;
+        fini = true;
+        clearTimeout(t);
+        resolve(erreur(e));
+      });
+    });
+  }
+
+  /* ── new_conversation ──────────────────────────────────────────────── */
+  async function newConversation(a) {
+    try {
+      if (typeof window.newChat !== 'function') return { error: 'creation indisponible' };
+      await window.newChat();
+      var st = ETAT();
+      return {
+        ok: true,
+        chatId: (st && st.chatId) ? String(st.chatId) : '',
+        titre: (st && st.title) ? String(st.title).slice(0, 120) : 'Nouvelle conversation'
+      };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── send_message ───────────────────────────────────────────────────── */
+  async function sendMessage(a) {
+    try {
+      var texte = String((a && (a.texte || a.text)) || '').trim();
+      if (!texte) return { error: 'texte vide' };
+      if (texte.length > 4000) return { error: 'texte trop long (4000 caracteres max)' };
+      if (typeof window.sendMessage !== 'function') return { error: 'envoi indisponible' };
+      /* 8 s : largement sous le délai du transport (15 s), donc le client
+         reçoit une erreur CLAIRE au lieu d'un délai générique — et la
+         commande ne bloque JAMAIS la file des suivantes. */
+      await avecDelai(window.sendMessage(texte), 8000,
+        'pas de reponse dans le delai (cle API configuree ?)');
+      var st = ETAT();
+      var msgs = (st && st.messages) ? st.messages : [];
+      var dernier = null;
+      for (var i = msgs.length - 1; i >= 0; i--) {
+        if (msgs[i] && msgs[i].role === 'assistant') { dernier = msgs[i]; break; }
+      }
+      return {
+        ok: true,
+        chatId: (st && st.chatId) ? String(st.chatId) : '',
+        reponse: dernier ? String(dernier.content || '').slice(0, 4000) : ''
+      };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── activate_channel ───────────────────────────────────────────────── */
+  async function activateChannel(a) {
+    try {
+      var id = String((a && (a.id || a.canal)) || '').trim();
+      if (!id) return { error: 'canal manquant' };
+      var c = window.__v691Canaux;
+      if (!c || typeof c.activer !== 'function') return { error: 'canaux indisponibles' };
+      var connus = (c.CANAUX || []).map(function (x) { return x.id; });
+      if (connus.indexOf(id) < 0) return { error: 'canal inconnu : ' + id };
+      var r = await c.activer(id);
+      return { ok: !!(r && r.ok), canal: id, cree: !!(r && r.cree) };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── toggle_routine ─────────────────────────────────────────────────── */
+  async function toggleRoutine(a) {
+    try {
+      var id = String((a && (a.id || a.routine)) || '').trim();
+      if (!id) return { error: 'routine manquante' };
+      var r = window.__v692Routines;
+      if (!r || typeof r.basculer !== 'function') return { error: 'routines indisponibles' };
+      var res = await r.basculer(id);
+      if (!res) return { error: 'routine inconnue : ' + id };
+      return { ok: true, id: id, nom: String(res.nom || ''), actif: !!res.actif };
+    } catch (e) { return erreur(e); }
+  }
+
+  /* ── narrate ────────────────────────────────────────────────────────── */
+  async function narrate(a) {
+    try {
+      var texte = String((a && (a.texte || a.text)) || '').trim();
+      if (!texte) return { error: 'texte vide' };
+      if (texte.length > 4000) return { error: 'texte trop long (4000 caracteres max)' };
+      var v = window.__v696Voix;
+      if (!v || typeof v.narrer !== 'function') return { error: 'voix indisponible' };
+      var r = v.narrer(texte);
+      return { ok: !!(r && r.ok), segments: (r && r.segments) || 0 };
+    } catch (e) { return erreur(e); }
+  }
+
+  function enregistrer() {
+    var ctrl = window.__v693Controle;
+    if (!ctrl || typeof ctrl.ajouter !== 'function') return false;
+    ctrl.ajouter('new_conversation', newConversation);
+    ctrl.ajouter('send_message', sendMessage);
+    ctrl.ajouter('activate_channel', activateChannel);
+    ctrl.ajouter('toggle_routine', toggleRoutine);
+    ctrl.ajouter('narrate', narrate);
+    return true;
+  }
+
+  function demarrer() {
+    try { enregistrer(); } catch (e) {}
+    /* Filet de sécurité : si le module v693 n'est pas encore là, on
+       réessaie un peu plus tard (ordre de chargement des scripts). */
+    setTimeout(function () { try { enregistrer(); } catch (e) {} }, 600);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+
+  window.__v697Ecriture = {
+    enregistrer: enregistrer,
+    commandes: ['new_conversation', 'send_message', 'activate_channel', 'toggle_routine', 'narrate']
+  };
+})();
+</script>
+</script>
+</script>
+
+<script id="v699-genealogie">
+/* ═══ v699 : généalogie parchemin interactive dans les schémas ═══
+   Quand un schéma parle de la généalogie de Jésus (David + Jésus/Nathan
+   + au moins trois repères), la carte est remplacée par la présentation
+   parchemin : deux colonnes reliées, pastilles, cartes Salomon / Nathan.
+   Le contenu d'origine reste en mémoire : le bouton ARBRE le restitue.
+   Tout est en DÉLÉGATION (les cartes sont re-rendues à chaque message).
+   Aucun contrôle n'est ajouté à .header-controls (v597/v598). */
+(function () {
+  'use strict';
+
+  var REPERES = ['David', 'Jesus', 'Nathan', 'Abraham', 'Salomon', 'Joseph', 'Isaac', 'Jacob', 'Marie'];
+  function norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  function estGenealogie(card) {
+    if (!card || !card.classList || card.classList.contains('v699-genealogie') || card.__v699Orig) return false;
+    var t = norm(card.textContent || '');
+    var n = 0;
+    for (var i = 0; i < REPERES.length; i++) if (t.indexOf(norm(REPERES[i])) !== -1) n++;
+    /* Nathan est aussi un prophète : exiger un repère de lignée évite
+       de transformer un schéma doctrinal qui citerait David et Nathan. */
+    var ancres = ['salomon','abraham','booz','jesse','isaac','jacob'];
+    var a = 0;
+    for (var k = 0; k < ancres.length; k++) if (t.indexOf(ancres[k]) !== -1) a++;
+    var boxes = card.querySelectorAll('.schema-box').length;
+    return t.indexOf('david') !== -1 &&
+           (t.indexOf('jesus') !== -1 || t.indexOf('nathan') !== -1) &&
+           n >= 4 && a >= 1 && boxes >= 4;
+  }
+
+  /* ── données vérifiées (AELF Mt 1,1-17 ; Lc 3,23-38) ──
+     « Nom~note~1 » : le 1 marque une figure clé. L'orthographe de la
+     capture cible est conservée, les variantes bibliques sont dans
+     les fiches. */
+  var SECTIONS = [
+    { t: '1. D’Adam à Abraham', r: 'Lc 3,23-38', src: 'Luc 3', c: [
+      ['Adam','Seth','Énos','Caïnan','Malaléel','Jared','Hénoc','Mathusalem','Lamech','Noé'],
+      ['Salé','Héber','Phaleg','Ragau','Sarug','Nachor','Thara','Abraham~~1']
+    ]},
+    { t: '2. D’Abraham à David', r: 'Mt 1,2-6 ; Lc 3,31-34', src: 'Matthieu 1 · Luc 3', c: [
+      ['Isaac','Jacob','Juda~la tribu~1','Pharès~et Zara, de Thamar','Esrom','Aram','Aminadab'],
+      ['Naasson','Salmon~épouse : Rahab','Booz~épouse : Ruth','Obed','Jessé','David~roi~1']
+    ]}
+  ];
+  var BRANCHES = [
+    { id: 'salomon', t: 'Branche de Salomon', r: 'Matthieu 1,6-16 · lignée légale de Joseph', src: 'Matthieu 1', n: [
+      'Salomon~mère : la femme d’Urie~1','Roboam','Abia','Asa','Josaphat','Joram','Ozias','Joatham',
+      'Achaz','Ézéchias','Manassé','Amon','Josias','Jékonias~à l’époque de l’exil','Salathiel',
+      'Zorobabel','Abioud','Éliakim','Azor','Sadok','Akim','Élioud','Éléazar','Mattane','Jacob',
+      'Joseph~époux de Marie~1','Jésus~que l’on appelle Christ~1'
+    ]},
+    { id: 'nathan', t: 'Branche de Nathan', r: 'Luc 3,23-31 · lignée de Héli, côté Marie selon la Tradition', src: 'Luc 3', n: [
+      'Nathan~fils de David~1','Mattatha','Menna','Méléa','Éliakim','Jonam','Joseph','Juda','Syméon',
+      'Lévi','Matthate','Jorim','Éliézer','Jésus~ancêtre, v. 29','Er','Elmadam','Kosam','Addi','Melki',
+      'Néri','Salathiel','Zorobabel','Résa','Joanane','Joda','Josek','Séméine','Mattathias','Maath',
+      'Naggaï','Hesli','Nahoum','Amos','Mattathias','Joseph','Jannaï','Melki','Lévi','Matthate',
+      'Éli','Joseph','Jésus~fils de Marie~1'
+    ]}
+  ];
+  var FICHES = {
+    'Abraham': ['Patriarche', 'Lc 3,34 · Mt 1,2', 'Ancêtre commun des deux généalogies.'],
+    'Isaac': ['Patriarche', 'Mt 1,2 · Lc 3,34', 'Fils d’Abraham, père de Jacob.'],
+    'Jacob': ['Patriarche', 'Mt 1,2 · Lc 3,34', 'Père de Juda et de ses frères.'],
+    'Juda': ['Fils de Jacob — la tribu', 'Mt 1,2-3', 'De son union avec Thamar naissent Pharès et Zara.'],
+    'Pharès': ['Fils de Juda', 'Mt 1,3', 'Jumeau de Zara, né de Thamar.'],
+    'David': ['Roi d’Israël', 'Mt 1,6 · Lc 3,31', 'Les deux lignées partent de David, par Salomon et par Nathan.'],
+    'Salomon': ['Roi d’Israël', 'Mt 1,6', 'Fils de David et de la femme d’Ourie.'],
+    'Nathan': ['Fils de David', 'Lc 3,31', 'Lignée non royale : côté Marie selon la Tradition.'],
+    'Booz': ['Ancêtre de David', 'Mt 1,5 · Lc 3,32', 'Fils de Salmon et de Rahab ; époux de Ruth.'],
+    'Salmon': ['Ancêtre de David', 'Mt 1,4-5', 'De son union avec Rahab naît Booz.'],
+    'Joseph': ['Époux de Marie', 'Mt 1,16 · Lc 3,23', 'Père légal selon Matthieu, père « considéré » selon Luc.'],
+    'Jésus': ['Le Christ', 'Mt 1,16 · Lc 3,23', 'Fils de Marie ; les deux évangélistes donnent deux ascendance distinctes.']
+  };
+  var VARIANTES = {
+    'Énos':'Énos (Lc 3,38)', 'Caïnan':'Kaïnam (Lc 3,36/38)', 'Malaléel':'Maléléel (Lc 3,37)',
+    'Hénoc':'Hénok (Lc 3,37)', 'Lamech':'Lamek (Lc 3,37)', 'Salé':'Sala (Lc 3,35)',
+    'Héber':'Éber (Lc 3,35)', 'Phaleg':'Phalek (Lc 3,35)', 'Ragau':'Ragaou (Lc 3,35)',
+    'Sarug':'Sérouk (Lc 3,35)', 'Nachor':'Nakor (Lc 3,34)', 'Obed':'Jobed (Mt 1,5)',
+    'Naasson':'Naassone (Mt 1,4)', 'Salmon':'Salmone (Mt 1,4)', 'Nathan':'Natham (Lc 3,31)',
+    'Mattatha':'Matthate (Lc 3,24/29)', 'Méléa':'Méléa (Lc 3,31)', 'Jonam':'Jonam (Lc 3,30)',
+    'Syméon':'Syméon (Lc 3,30)', 'Séméine':'Séméine (Lc 3,26)', 'Josek':'Josek (Lc 3,26)',
+    'Joda':'Joda (Lc 3,26)', 'Joanane':'Joanane (Lc 3,27)', 'Résa':'Résa (Lc 3,27)',
+    'Néri':'Néri (Lc 3,27)', 'Kosam':'Kosam (Lc 3,28)', 'Elmadam':'Elmadam (Lc 3,28)',
+    'Nahoum':'Nahoum (Lc 3,25)', 'Hesli':'Hesli (Lc 3,25)', 'Naggaï':'Naggaï (Lc 3,25)',
+    'Maath':'Maath (Lc 3,26)', 'Mattane':'Mattane (Mt 1,15)', 'Jékonias':'Jékonias (Mt 1,11)',
+    'Sadok':'Sadok (Mt 1,14)', 'Akim':'Akim (Mt 1,14)', 'Élioud':'Élioud (Mt 1,14)',
+    'Abioud':'Abioud (Mt 1,13)'
+  };
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function item(x) { var a = String(x).split('~'); return { nom: a[0], note: a[1] || '', cle: a[2] === '1' }; }
+
+  function css() {
+    return [
+'.schema-card.v699-genealogie{--v699-fond:#faf8f3;--v699-encre:#2b2118;--v699-muted:#6b5b45;--v699-trait:#c9b99b;--v699-violet:#5b3a87;--v699-or:#a9631f;--v699-or-fond:#f7e7cd;--v699-or-bord:#d8aa68;--v699-vert:#256c67;--v699-vert-fond:#dcf0ec;--v699-vert-bord:#8fc9bf;background:var(--v699-fond);color:var(--v699-encre);font-family:Georgia,"Times New Roman",serif}',
+'.schema-card.v699-genealogie.schema-night{--v699-fond:#171923;--v699-encre:#ece5d8;--v699-muted:#b0a693;--v699-trait:#4b463c;--v699-violet:#c4a3ff;--v699-or-fond:#3a2c1c;--v699-vert-fond:#18352f;--v699-or-bord:#8a6634;--v699-vert-bord:#4b8a80}',
+'.schema-card.v699-genealogie .schema-v699-titre{font-size:19px;font-weight:500;margin:0 0 8px}',
+'.schema-card.v699-genealogie .schema-v699-sous{font-size:13px;font-style:italic;color:var(--v699-muted);margin:0 0 12px}',
+'.schema-card.v699-genealogie .schema-tools.v699-bar{justify-content:flex-start;flex-wrap:wrap;margin:0 0 14px;padding-bottom:10px}',
+'.schema-card.v699-genealogie .v699-search{font-family:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--v699-trait);border-radius:5px;background:var(--v699-fond);color:var(--v699-encre);min-width:150px;outline:none}',
+'.schema-card.v699-genealogie .v699-search:focus{border-color:var(--v699-violet)}',
+'.schema-card.v699-genealogie button.schema-tool{font-family:inherit;font-size:10px}',
+'.schema-card.v699-genealogie button.schema-tool[aria-pressed="true"]{background:var(--v699-encre);color:var(--v699-fond)}',
+'.schema-card.v699-genealogie .schema-v699-sec{margin:18px 0 0}',
+'.schema-card.v699-genealogie .schema-v699-sec>h3{font-size:16px;font-weight:500;margin:0 0 10px;cursor:pointer;user-select:none}',
+'.schema-card.v699-genealogie .schema-v699-sec .ref{font-size:12px;font-style:italic;color:var(--v699-muted);font-weight:400}',
+'.schema-card.v699-genealogie .schema-v699-sec.plie .schema-v699-corps{display:none}',
+'.schema-card.v699-genealogie .schema-v699-cols{display:grid;grid-template-columns:1fr 1fr;gap:40px}',
+'.schema-card.v699-genealogie .schema-v699-lignee{position:relative;padding-left:23px}',
+'.schema-card.v699-genealogie .schema-v699-lignee::before{content:"";position:absolute;left:5px;top:10px;bottom:10px;border-left:1px solid var(--v699-trait)}',
+'.schema-card.v699-genealogie .schema-v699-pers{position:relative;display:flex;flex-wrap:wrap;gap:6px;padding:3px 5px;margin:0 -5px;border-radius:5px;cursor:pointer;transition:background .15s,opacity .15s}',
+'.schema-card.v699-genealogie .schema-v699-point{position:absolute;left:-22px;top:10px;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--v699-trait);background:var(--v699-fond)}',
+'.schema-card.v699-genealogie .schema-v699-pers.cle .schema-v699-point{left:-23px;top:9px;width:11px;height:11px;background:var(--v699-violet);border-color:var(--v699-violet)}',
+'.schema-card.v699-genealogie .schema-v699-nom{font-size:14px}',
+'.schema-card.v699-genealogie .schema-v699-pers.cle .schema-v699-nom{color:var(--v699-violet)}',
+'.schema-card.v699-genealogie .schema-v699-note{font-size:12px;font-style:italic;color:var(--v699-muted)}',
+'.schema-card.v699-genealogie .schema-v699-pers:hover{background:rgba(91,58,135,.10)}',
+'.schema-card.v699-genealogie .schema-v699-pers.dim{opacity:.2}',
+'.schema-card.v699-genealogie .schema-v699-pers.trouve{background:rgba(169,99,31,.16);text-decoration:underline;text-underline-offset:3px}',
+'.schema-card.v699-genealogie .schema-v699-branches{display:grid;grid-template-columns:1fr 1fr;gap:16px}',
+'.schema-card.v699-genealogie .schema-v699-br{border-radius:10px;padding:14px 15px;border:1px solid var(--bord);border-top:4px solid var(--accent)}',
+'.schema-card.v699-genealogie .schema-v699-br.salomon{--accent:var(--v699-or);--bord:var(--v699-or-bord);background:var(--v699-or-fond)}',
+'.schema-card.v699-genealogie .schema-v699-br.nathan{--accent:var(--v699-vert);--bord:var(--v699-vert-bord);background:var(--v699-vert-fond)}',
+'.schema-card.v699-genealogie .schema-v699-br.masque{display:none}',
+'.schema-card.v699-genealogie .schema-v699-br h4{font-size:15px;font-weight:500;color:var(--accent);margin:0 0 2px}',
+'.schema-card.v699-genealogie .schema-v699-br .ref{font-size:11px;font-style:italic;color:var(--v699-muted);margin:0 0 9px}',
+'.schema-card.v699-genealogie .schema-v699-br .schema-v699-lignee{max-height:300px;overflow:auto;scrollbar-width:thin}',
+'.schema-card.v699-genealogie .schema-v699-br .schema-v699-lignee::before{border-left-color:var(--bord)}',
+'.schema-card.v699-genealogie .schema-v699-fiche{border:1px solid var(--v699-trait);border-left:3px solid var(--v699-violet);border-radius:6px;padding:10px 14px;margin:0 0 14px;background:var(--v699-fond);font-size:13px}',
+'.schema-card.v699-genealogie .schema-v699-fiche[hidden]{display:none}',
+'.schema-card.v699-genealogie .schema-v699-fiche b{color:var(--v699-violet)}',
+'.schema-card.v699-genealogie .schema-v699-fiche button{float:right;border:0;background:transparent;color:var(--v699-muted);font-size:17px;cursor:pointer}',
+'.schema-card.v699-genealogie .schema-v699-legende{border-top:1px dashed var(--v699-trait);margin-top:18px;padding-top:9px;font-size:11px;font-style:italic;color:var(--v699-muted);text-align:center}',
+'@media(max-width:760px){.schema-card.v699-genealogie .schema-v699-cols,.schema-card.v699-genealogie .schema-v699-branches{grid-template-columns:1fr}}'
+    ].join('\n');
+  }
+
+  function ligne(liste, src) {
+    var h = '<div class="schema-v699-lignee">';
+    for (var i = 0; i < liste.length; i++) {
+      var it = item(liste[i]);
+      h += '<div class="schema-v699-pers' + (it.cle ? ' cle' : '') + '" tabindex="0" role="button"'
+         + ' data-nom="' + esc(it.nom) + '" data-src="' + esc(src) + '"'
+         + ' data-q="' + esc(norm(it.nom + ' ' + it.note)) + '">'
+         + '<span class="schema-v699-point" aria-hidden="true"></span>'
+         + '<span class="schema-v699-nom">' + esc(it.nom) + '</span>'
+         + (it.note ? '<span class="schema-v699-note">(' + esc(it.note) + ')</span>' : '')
+         + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  function rendu() {
+    var h = '<div class="schema-v699-titre">Généalogie de Jésus</div>'
+          + '<p class="schema-v699-sous">D’Adam à Jésus · les deux lignées de David — présentation interactive</p>'
+          + '<div class="schema-tools v699-bar">'
+          + '<input class="v699-search" type="search" placeholder="Rechercher un nom…" aria-label="Rechercher un nom">'
+          + '<button type="button" class="schema-tool v699-filtre" data-f="all" aria-pressed="true">TOUTES</button>'
+          + '<button type="button" class="schema-tool v699-filtre" data-f="salomon" aria-pressed="false">SALOMON</button>'
+          + '<button type="button" class="schema-tool v699-filtre" data-f="nathan" aria-pressed="false">NATHAN</button>'
+          + '<button type="button" class="schema-tool v699-retour" title="Revenir au schéma d’origine">ARBRE</button>'
+          + '<button type="button" class="schema-tool schema-svg" title="Exporter en SVG">SVG</button>'
+          + '<button type="button" class="schema-tool schema-zoom" title="Ouvrir en plein écran">ZOOM</button>'
+          + '<button type="button" class="schema-tool schema-night" title="Basculer le parchemin en mode nuit">NUIT</button>'
+          + '<span class="schema-v699-compte" aria-live="polite"></span>'
+          + '</div>'
+          + '<div class="schema-v699-fiche" hidden></div><div class="schema-v699-corps">';
+    for (var s = 0; s < SECTIONS.length; s++) {
+      var sec = SECTIONS[s];
+      h += '<section class="schema-v699-sec"><h3>◾ ' + esc(sec.t)
+         + ' <span class="ref">(' + esc(sec.r) + ')</span></h3><div class="schema-v699-corps">'
+         + '<div class="schema-v699-cols"><div>' + ligne(sec.c[0], sec.src) + '</div><div>'
+         + ligne(sec.c[1], sec.src) + '</div></div></div></section>';
+    }
+    h += '<section class="schema-v699-sec"><h3>◾ 3. De David à Jésus : deux branches</h3><div class="schema-v699-corps"><div class="schema-v699-branches">';
+    for (var b = 0; b < BRANCHES.length; b++) {
+      var br = BRANCHES[b];
+      h += '<article class="schema-v699-br ' + br.id + '" data-br="' + br.id + '">'
+         + '<h4>' + esc(br.t) + '</h4><p class="ref">' + esc(br.r) + '</p>'
+         + ligne(br.n, br.src) + '</article>';
+    }
+    h += '</div></div></section><div class="schema-v699-legende">● figure clé · ○ ancêtre · cliquer un nom ouvre sa fiche</div></div>';
+    return h;
+  }
+
+  function traiter(card) {
+    if (!estGenealogie(card)) return false;
+    card.__v699Orig = card.innerHTML;
+    card.classList.add('v699-genealogie');
+    card.setAttribute('data-v699', '1');
+    card.innerHTML = rendu();
+    majCompte(card);
+    return true;
+  }
+  function rendreArbre(card) {
+    if (!card || !card.__v699Orig) return false;
+    card.innerHTML = card.__v699Orig;
+    card.__v699Orig = null;
+    card.classList.remove('v699-genealogie');
+    card.removeAttribute('data-v699');
+    return true;
+  }
+  function majCompte(card) {
+    var c = card.querySelector('.schema-v699-compte');
+    if (!c) return;
+    var ps = card.querySelectorAll('.schema-v699-pers');
+    var t = card.querySelectorAll('.schema-v699-pers.trouve').length;
+    c.textContent = t ? (t + ' trouvé' + (t > 1 ? 's' : '')) : (ps.length + ' noms');
+  }
+  function fiche(card, el) {
+    var p = card.querySelector('.schema-v699-fiche');
+    if (!p || !el) return;
+    var nom = el.getAttribute('data-nom');
+    var f = FICHES[nom] || [];
+    var v = VARIANTES[nom];
+    p.innerHTML = '<button type="button" class="v699-fermer" aria-label="Fermer">&times;</button>'
+      + '<b>' + esc(nom) + '</b> — ' + esc(f[0] || 'Ancêtre mentionné dans la généalogie')
+      + '<br><i>' + esc(f[1] || el.getAttribute('data-src')) + '</i>'
+      + '<br>' + esc(f[2] || (v ? 'Forme biblique : ' + v + '.' : 'Nom tel qu’il apparaît dans la généalogie.'));
+    p.hidden = false;
+  }
+
+  /* ── style ── */
+  try {
+    var st = document.createElement('style');
+    st.id = 'v699-genealogie-css';
+    st.appendChild(document.createTextNode(css()));
+    document.head.appendChild(st);
+  } catch (e) {}
+
+  /* ── délégation ── */
+  document.addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('v699-search')) return;
+    var card = t.closest('.schema-card');
+    if (!card) return;
+    var q = norm(t.value.trim());
+    var ps = card.querySelectorAll('.schema-v699-pers');
+    for (var i = 0; i < ps.length; i++) {
+      var ok = !q || ps[i].getAttribute('data-q').indexOf(q) !== -1;
+      ps[i].classList.toggle('dim', !ok);
+      ps[i].classList.toggle('trouve', !!q && ok);
+    }
+    majCompte(card);
+  }, true);
+
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var card = t.closest('.schema-card.v699-genealogie');
+    if (!card) return;
+    if (t.closest('.v699-retour')) { e.preventDefault(); e.stopPropagation(); rendreArbre(card); return; }
+    if (t.closest('.v699-fermer')) { e.preventDefault(); e.stopPropagation(); var p = card.querySelector('.schema-v699-fiche'); if (p) p.hidden = true; return; }
+    var fil = t.closest('.v699-filtre');
+    if (fil) {
+      e.preventDefault(); e.stopPropagation();
+      var v = fil.getAttribute('data-f');
+      var fs = card.querySelectorAll('.v699-filtre');
+      for (var i = 0; i < fs.length; i++) fs[i].setAttribute('aria-pressed', String(fs[i] === fil));
+      var brs = card.querySelectorAll('.schema-v699-br');
+      for (var j = 0; j < brs.length; j++) brs[j].classList.toggle('masque', v !== 'all' && brs[j].getAttribute('data-br') !== v);
+      majCompte(card);
+      return;
+    }
+    var h3 = t.closest('.schema-v699-sec > h3');
+    if (h3) { e.preventDefault(); e.stopPropagation(); h3.parentNode.classList.toggle('plie'); return; }
+    var pers = t.closest('.schema-v699-pers');
+    if (pers) { e.preventDefault(); e.stopPropagation(); fiche(card, pers); }
+  }, false);
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var t = e.target;
+    if (!t || !t.classList) return;
+    if (t.classList.contains('schema-v699-pers')) { e.preventDefault(); fiche(t.closest('.schema-card'), t); }
+    else if (t.matches && t.matches('.schema-v699-sec > h3')) { e.preventDefault(); t.parentNode.classList.toggle('plie'); }
+  }, true);
+
+  /* ── init + observation des cartes injectées ── */
+  var vu = null; try { vu = new WeakSet(); } catch (e) {}
+  function traiterRoot(root) {
+    var cs = (root && root.querySelectorAll) ? root.querySelectorAll('.schema-card') : document.querySelectorAll('.schema-card');
+    for (var i = 0; i < cs.length; i++) if (!vu || !vu.has(cs[i])) { if (vu) vu.add(cs[i]); traiter(cs[i]); }
+  }
+  function demarrer() {
+    traiterRoot(document);
+    try {
+      var obs = new MutationObserver(function (ms) {
+        for (var i = 0; i < ms.length; i++) {
+          var aj = ms[i].addedNodes;
+          for (var j = 0; j < aj.length; j++) {
+            var n = aj[j];
+            if (!n || n.nodeType !== 1) continue;
+            if (n.classList && n.classList.contains('schema-card')) traiter(n);
+            else traiterRoot(n);
+          }
+        }
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', demarrer);
+  else demarrer();
+  setTimeout(demarrer, 800);
+
+  window.__v699Genealogie = {
+    version: 699,
+    traiter: traiter,
+    estGenealogie: estGenealogie,
+    rendreArbre: rendreArbre,
+    rendu: rendu,
+    css: css,
+    sections: SECTIONS,
+    branches: BRANCHES
+  };
+})();
+</script>
 </body>
 </html>
 </html>
