@@ -13,7 +13,7 @@ const ROOT = process.env.THEO_ROOT || process.cwd();
 const HTML = path.join(ROOT, 'THEOLOGICUS.html');
 // Historique : v690 +1 (paquet .md + routage AUTO), v691 +1 (canaux),
 // v692 +1 (routines), v693 +1 (contrôle MCP borné). v683 a retiré v678.
-const MODULES_ATTENDUS = 140; // v700 — +1 (v700-bascule) //
+const MODULES_ATTENDUS = 141; // v701 — +1 (v701-reprise) //
 
 // Ancres critiques : si l'une manque, l'appli est cassée indépendamment des bancs.
 // (Uniquement des chaînes PRÉSENTES dans le HTML STATIQUE — v598-plus est créé

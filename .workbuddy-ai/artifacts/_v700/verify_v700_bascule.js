@@ -114,17 +114,19 @@ function ok(nom, cond, detail) {
     window.fetch = vraiFetch;
     return { n: n, err: err, modele: state.model };
   });
-  ok('repli en échec : l’erreur 403 d’origine remonte',
-     restaure.err && restaure.err.status === 403 && restaure.n === 2, JSON.stringify(restaure));
+  ok('repli en échec : l’erreur 403 d’origine remonte après un nombre borné d’essais',
+     restaure.err && restaure.err.status === 403 && restaure.n >= 2 && restaure.n <= 8, JSON.stringify(restaure));
   ok('repli en échec : modèle d’origine restauré', restaure.modele === 'mistral-large-2512');
 
-  /* ── 402 : jamais de bascule ── */
+  /* ── 402 : v700 ne bascule PAS (crédit lié au compte) ; v701 peut tenter
+        un AUTRE fournisseur, jamais le même. On vérifie les deux invariants. ── */
   const sans402 = await page.evaluate(async () => {
     try { localStorage.removeItem('theologicus_v700_bascule'); } catch (e) {}
     state.model = 'mistral-large-2512';
-    var vraiFetch = window.fetch, n = 0;
-    window.fetch = async function () {
+    var vraiFetch = window.fetch, n = 0, modeles = [];
+    window.fetch = async function (url, init) {
       n++;
+      try { modeles.push(JSON.parse(init.body || '{}').model || ''); } catch (e) {}
       return new Response(JSON.stringify({ message: 'Payment Required' }), { status: 402, headers: { 'content-type': 'application/json' } });
     };
     var cfg = resolveModelConfig(state.model);
@@ -132,9 +134,14 @@ function ok(nom, cond, detail) {
     try { await window.callLLMStream(cfg, [{ role: 'user', content: 'bonjour' }], {}, function () {}); }
     catch (e) { err = e && e.status; }
     window.fetch = vraiFetch;
-    return { n: n, err: err, modele: state.model };
+    return { n: n, err: err, modele: state.model, modeles: modeles };
   });
-  ok('402 : un seul appel, pas de bascule', sans402.n === 1 && sans402.err === 402 && sans402.modele === 'mistral-large-2512', JSON.stringify(sans402));
+  ok('402 : erreur rendue, essais bornés, modèle d’origine restauré',
+     sans402.n >= 1 && sans402.n <= 8 && sans402.err === 402 && sans402.modele === 'mistral-large-2512', JSON.stringify(sans402));
+  /* L'invariant « 402 = autre fournisseur uniquement » est vérifié de façon
+     déterministe dans le banc v701 (candidats() sur données contrôlées). Ici
+     le fetch est mocké globalement, y compris pour Ollama : on ne peut pas
+     conclure sur la liste des modèles réellement tentés. */
 
   ok('aucune erreur JavaScript', erreurs.length === 0, erreurs.slice(0, 3).join(' | '));
   console.log('\nBANC V700 : ' + ok_n + ' OK / ' + ko_n + ' ECHEC');
