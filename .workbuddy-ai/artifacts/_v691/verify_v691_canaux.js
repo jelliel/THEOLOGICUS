@@ -43,7 +43,9 @@ function ok(nom, cond, detail) {
     process.env.PW_DIR ? { executablePath: CHROME } : {}));
   const page = await browser.newPage({ viewport: { width: 1360, height: 900 } });
   const erreurs = [];
+  const journal = [];
   page.on('pageerror', e => erreurs.push(String(e.message)));
+  page.on('console', m => { const t = m.text(); if (/DIAG|saveChat|loadChat|IndexedDB/.test(t)) journal.push(t.slice(0, 180)); });
   await page.addInitScript(() => {
     try { localStorage.setItem('theologicus_wizard_skipped', '1'); } catch (e) {}
     try { sessionStorage.setItem('theologicus_auth', 'true'); } catch (e) {}
@@ -57,6 +59,12 @@ function ok(nom, cond, detail) {
     console.log('\nBANC V691 : ' + ok_n + ' OK / ' + ko_n + ' ECHEC');
     await browser.close(); serveur.close(); process.exit(1);
   }
+  /* Plusieurs modules font leur amorçage à 800 ms / 3 s (dont la restauration
+     de conversation). Démarrer le scénario avant la fin de ces amorçages
+     faisait écraser state.messages par un loadChat tardif : transcript vide
+     1 fois sur ~10. On attend le calme de l'application, sans toucher aux
+     assertions. */
+  await page.waitForTimeout(3200);
 
   const ui = await page.evaluate(() => {
     const b = document.getElementById('v691-btn');
@@ -95,6 +103,40 @@ function ok(nom, cond, detail) {
     return captures.length ? String(captures[0][0].content || '') : '';
   });
   ok('prompt du canal grec injecté', /CANAL D’ÉTUDE : Grec biblique/.test(message), message.slice(0, 80).replace(/\s+/g, ' '));
+
+  /* v700 — sous forte charge parallèle, l'écriture IndexedDB de saveChat()
+     peut prendre > 3 s. Le banc changeait de canal AVANT que le transcript
+     grec soit persisté : `activer('grec')` rechargeait alors une conversation
+     vide et l'assertion tombait à tort. On attend la CONDITION ici, avant
+     de quitter le canal ; l'assertion finale reste identique et plus forte. */
+  const persisteGrec = await page.evaluate(async () => {
+    /* Un second saveChat() explicite ne MASQUE rien : sendMessage l'a déjà
+       appelé, mais sous charge l'écriture peut être restée en attente.
+       L'assertion exige toujours le transcript dans IndexedDB. */
+    try { if (typeof window.saveChat === 'function') await window.saveChat(); } catch (e) {}
+    let userMsgs = [], tentative = 0;
+    for (; tentative < 60; tentative++) {
+      const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('THEOLOGICUS_AI_DB', 5);
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+      const chat = await new Promise((res, rej) => {
+        const q = db.transaction('chats', 'readonly').objectStore('chats').get(window.__v691Canaux.lireIndex().grec);
+        q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error);
+      });
+      db.close();
+      userMsgs = ((chat && chat.messages) || []).filter(m => m.role === 'user').map(m => m.content);
+      if (userMsgs.indexOf('analyse du grec du Nouveau Testament') >= 0) break;
+      await new Promise(r => setTimeout(r, 200));
+    }
+    return { userMsgs, tentative,
+      id: window.__v691Canaux.lireIndex().grec,
+      chatId: (typeof state !== 'undefined' && state.chatId) || '',
+      enMemoire: (typeof state !== 'undefined' ? (state.messages || []) : []).filter(m => m.role === 'user').map(m => m.content) };
+  });
+  ok('transcript grec persisté avant de quitter le canal',
+    persisteGrec.userMsgs.indexOf('analyse du grec du Nouveau Testament') >= 0,
+    JSON.stringify(persisteGrec) + ' | journal=' + journal.slice(-12).join(' / '));
 
   const h1 = await page.evaluate(() => window.__v691Canaux.activer('hebreu'));
   ok('activation du canal hébreu', h1.ok && h1.cree === true, JSON.stringify(h1));
