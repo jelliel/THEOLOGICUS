@@ -50,10 +50,25 @@
     document.head.appendChild(s);
   } catch (e) {}
 
+  function jauge() {
+    var verts = {}, oranges = {}, rouges = {}, lat = {};
+    try {
+      var c = JSON.parse(localStorage.getItem('theologicus_gauge_last') || 'null');
+      if (c && c.ts && c.res && isFinite(Date.now() - Number(c.ts)) && Date.now() - Number(c.ts) < 10 * 60 * 1000) {
+        c.res.forEach(function (x) {
+          if (!x || !x.v) return;
+          if (x.k === 0) { verts[x.v] = 1; lat[x.v] = Number(x.ms) || 99999; }
+          else if (x.k === 1) oranges[x.v] = 1;
+          else if (x.k === 2) rouges[x.v] = 1;
+        });
+      }
+    } catch (e) {}
+    return { verts: verts, oranges: oranges, rouges: rouges, lat: lat };
+  }
   function candidats(failedId, deja, est402) {
     var V = window.__v700Bascule;
     var tous = V && typeof V.selectionnables === 'function' ? V.selectionnables() : [];
-    var pFailed = prov(failedId), out = [];
+    var pFailed = prov(failedId), out = [], g = jauge();
     for (var i = 0; i < tous.length; i++) {
       var id = tous[i] && tous[i].value;
       if (!id || id === failedId || deja.indexOf(id) !== -1) continue;
@@ -61,16 +76,17 @@
       if (!local) { try { if (typeof _clePourModele !== 'function' || !_clePourModele(id)) continue; } catch (e) { continue; } }
       /* 402 = crédit du COMPTE : ne tenter qu'un AUTRE fournisseur. */
       if (est402 && prov(id) === pFailed) continue;
-      /* Pas d'anti-boucle ICI : la boucle est déjà bornée par MAX et par
-         . Bloquer le modèle choisi précédemment empêcherait la
-         reprise quand CE modèle tombe en panne à son tour. */
-      out.push({ id: id, label: tous[i].label || id, local: local });
+      var score = 0;
+      if (g.verts[id]) score += 120 + Math.max(0, 60 - (g.lat[id] || 99999) / 20);
+      else if (g.oranges[id]) score += 30;
+      else if (g.rouges[id]) score -= 200;
+      if (typeof estModeleIndisponible === 'function' && estModeleIndisponible(id)) score -= 150;
+      if (prov(id) !== pFailed) score += 40;
+      if (/small|flash|nemo|mini|lite/i.test(id)) score += 12;
+      if (local) score -= 80;
+      out.push({ id: id, label: tous[i].label || id, local: local, score: score });
     }
-    out.sort(function (a, b) {
-      var sa = (a.local ? -80 : 0) + (prov(a.id) !== pFailed ? 40 : 0) + (/small|flash|nemo|mini|lite/i.test(a.id) ? 12 : 0);
-      var sb = (b.local ? -80 : 0) + (prov(b.id) !== pFailed ? 40 : 0) + (/small|flash|nemo|mini|lite/i.test(b.id) ? 12 : 0);
-      return sb - sa || String(a.id).localeCompare(String(b.id));
-    });
+    out.sort(function (a, b) { return b.score - a.score || String(a.id).localeCompare(String(b.id)); });
     return out;
   }
   function configDe(id) {
@@ -121,6 +137,7 @@
         var r = await fn.apply(ctx, nouveaux);
         if (streaming && vues) { try { vues.rendu.finish(r); } catch (e) {} }
         poserAnti(origine, choix.id);
+        try { if (typeof oublierModeleIndisponible === 'function') oublierModeleIndisponible(choix.id); } catch (e) {}
         return { valeur: r, id: choix.id, tentative: n + 1 };
       } catch (e2) {
         deja.push(choix.id);
@@ -180,6 +197,7 @@
     codes: CODES,
     reprendre: reprendre,
     candidats: candidats,
+    jauge: jauge,
     bulle: bulle,
     anti: anti
   };
