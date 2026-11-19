@@ -63,7 +63,9 @@
     sys = typeof sys === 'string' ? sys : '';
     var chat = /^(?:Tu es|\[AGENT)/.test(sys);
     var o = opts || {};
-    if (chat && (!o.max_tokens || o.max_tokens <= 4096)) {
+    /* On ne remplace QUE le défaut de chat (4096) : les appels bornés
+       volontairement (700, 800, 1500…) gardent leur valeur. */
+    if (chat && (!o.max_tokens || o.max_tokens === 4096)) {
       o = Object.assign({}, o, { max_tokens: lire() });
     }
     return o;

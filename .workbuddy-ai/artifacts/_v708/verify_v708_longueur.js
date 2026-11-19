@@ -41,6 +41,7 @@ function ok(nom, cond, detail) {
     const V = window.__v708Longueur;
     return {
       chat: V.appliquer([{ role: 'system', content: 'Tu es THEOLOGICUS…' }], { max_tokens: 4096 }).max_tokens,
+      borne: V.appliquer([{ role: 'system', content: 'Tu es THEOLOGICUS…' }], { max_tokens: 700 }).max_tokens,
       agent: V.appliquer([{ role: 'system', content: '[AGENT Test]' }], {}).max_tokens,
       sonde: V.appliquer([{ role: 'user', content: 'ok' }], { max_tokens: 1 }).max_tokens,
       explicite: V.appliquer([{ role: 'system', content: 'Tu es THEOLOGICUS…' }], { max_tokens: 12000 }).max_tokens
@@ -49,6 +50,7 @@ function ok(nom, cond, detail) {
   ok('chat : 4096 devient 8192', appl.chat === 8192, String(appl.chat));
   ok('agent sans max_tokens : 8192 aussi', appl.agent === 8192, String(appl.agent));
   ok('sonde technique max_tokens:1 inchangée', appl.sonde === 1, String(appl.sonde));
+  ok('appel volontairement borné (700) inchangé', appl.borne === 700, String(appl.borne));
   ok('valeur explicitement supérieure respectée', appl.explicite === 12000, String(appl.explicite));
 
   const prompt = await page.evaluate(() => {
