@@ -29,7 +29,7 @@ function ok(nom, cond, detail) {
     console.log('\nBANC V706 : ' + ok_n + ' OK / ' + ko_n + ' ECHEC');
     await browser.close(); process.exit(1);
   }
-  await page.waitForTimeout(1300);
+  await page.waitForTimeout(3000);
 
   /* ── extraction : le préfixe est conservé, y compris sous forme abrégée ── */
   const extraits = await page.evaluate(() => {
@@ -97,7 +97,7 @@ function ok(nom, cond, detail) {
     state.keys = { mistral: 'bench-key-0123456789' };
     state.model = 'mistral-large-2512';
     const avant = (state.messages || []).length;
-    await window.sendMessage('1 Jean 5:7-8 — il y a ainsi trois à témoigner, explique ce verset absent');
+    await Promise.race([window.sendMessage('1 Jean 5:7-8 — il y a ainsi trois à témoigner, explique ce verset absent'),      new Promise(function (_, rej) { setTimeout(function () { rej(new Error('sendMessage bloqué (banc v706)')); }, 25000); })]);
     const messages = (state.messages || []).slice(avant);
     const assistant = messages.filter(m => m.role === 'assistant').pop();
     const txt = document.body.textContent;
